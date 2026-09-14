@@ -3,3 +3,13 @@
 node_modules/
 __pycache__/
 *.pyc
+
+# Agent exhaust: session logs, plans, caches. Configuration is source and is
+# tracked; what a session happened to write is not. These appeared here because
+# the hooks this repo ships wrote them while it was itself the working directory.
+.claude/logs/
+.claude/plans/
+.claude/goals/
+.claude/state/
+.claude/*.local.*
+.claude/.credentials.json
