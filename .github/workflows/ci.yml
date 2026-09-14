@@ -57,6 +57,17 @@ jobs:
       - name: Shell scripts parse
         run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
 
+      # _shared is copied into every plugin that references it, because a
+      # plugin is installed alone and a link into a sibling plugin is broken
+      # for every consumer. The copies must be identical.
+      - name: Shared modules are identical across plugins
+        run: |
+          set -e
+          for p in plugins/kodflow-review plugins/kodflow-devops; do
+            diff -r plugins/kodflow-workflow/skills/_shared "$p/skills/_shared"
+          done
+          echo "_shared mirrors in sync"
+
       # The hooks block, rewrite and log on behalf of every consumer. Each of
       # those behaviours is asserted against the JSON Claude Code actually sends.
       - name: Hook scripts behave

@@ -47,7 +47,7 @@ No arguments. No flags. Auto-detects language and tools.
 **Run `detect-project.sh` to get languages, tools, and build system in ONE call:**
 
 ```bash
-bash ~/.claude/scripts/detect-project.sh
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-project.sh
 ```
 
 This returns JSON with `languages[]`, `build_system.targets[]`, `tools{}`, `project_type`.

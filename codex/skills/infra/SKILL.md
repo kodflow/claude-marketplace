@@ -118,7 +118,7 @@ Safety:
 Before Phase 1.5 (agent dispatch), determine runtime mode:
 
 ```bash
-source "$HOME/.claude/scripts/team-mode-primitives.sh"
+source ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 
@@ -139,7 +139,7 @@ TaskCreate × N (where N ≤ 5, only for present clouds):
 
 ```bash
 # Cloud dispatch via route-agent.sh phase=apply, expand_from=.cloud[]
-ROUTER=~/.claude/scripts/route-agent.sh
+ROUTER="${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/route-agent.sh
 DISPATCH=$(bash "$ROUTER" --skill /infra --phase apply \
   --profile .claude/state/profile.json)
 # Returns one dispatch per cloud in the .cloud[] facet.

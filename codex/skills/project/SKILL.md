@@ -215,4 +215,4 @@ nothing to warm up.
 - `../warmup/SKILL.md` — reads the ledger back at session start
 - `../plan/SKILL.md` — plans must satisfy the ledger
 - `../refine/SKILL.md` — turns a plan into a verifiable goal contract
-- `../review/SKILL.md` — reviews cite constraint IDs when a change violates one
+- the `/review` skill (kodflow-review) — reviews cite constraint IDs when a change violates one

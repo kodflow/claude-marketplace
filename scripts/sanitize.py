@@ -34,7 +34,12 @@ def _load_private_rules():
     for c in cands:
         if not c: continue
         f = pathlib.Path(c)
-        if not f.is_file(): continue
+        if not f.is_file():
+            if c == os.environ.get("SANITIZE_EXTRA_RULES"):
+                # Asked for by name and absent: the check the caller wanted is
+                # not going to happen. Saying "clean" now would be a lie.
+                sys.exit(f"sanitize: SANITIZE_EXTRA_RULES={c!r} does not exist")
+            continue
         n = 0
         for line in f.read_text().splitlines():
             line = line.strip()
@@ -60,13 +65,12 @@ SECRETS = [
     ("private key",  r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----"),
     ("URL creds",    r"://[^/\s:@]+:[^/\s:@]+@"),
 ]
-# A detection *pattern* looks like a secret and is not one. The test is whether
-# the MATCH ITSELF is regex syntax — never whether some word appears elsewhere
-# on the line. The previous version skipped the whole line when it contained
-# "example", "scan", "detect" or "block", so the natural way to document a curl
-# call was also the way to blind the scanner: 10 of 11 planted credentials
-# passed. A word on a line may not disable a class of detection.
-REGEXY = re.compile(r"(\[[A-Za-z0-9\-]+\]|\{\d+(,\d+)?\}|\\[dwsbA-Z]|\.\*|\.\+|\(\?)")
+# There is no "looks like a regex" exemption. A detection *pattern* such as
+# `ghp_[A-Za-z0-9]{36}` never matches the credential shape it describes — the
+# bracket is not an alphanumeric — so it needs no excuse, and every excuse
+# that was tried became a bypass: skipping lines containing "example" hid 10
+# of 11 planted credentials; skipping matches followed by regex syntax let
+# `TOKEN="<live PAT>" # .*` through. A match is a finding. Full stop.
 
 # A credential whose user or password is itself a placeholder is documentation,
 # not a secret. Checked on the matched span rather than the whole line, so a
@@ -102,47 +106,53 @@ def scrub(text):
 
 
 def scrub_residue(text):
-    """Return the rules that still match after scrubbing — the assertion half.
+    """Return the rules that match the text AS IT IS — the assertion half.
 
-    A transformation nobody checks is a transformation nobody knows ran. This
-    is what CI calls, so "the rules were applied" stops being a claim.
+    An earlier version scrubbed a copy and searched the copy, which proved
+    only that the text *could* be cleaned, never that it *was*. The gate asks
+    the second question: is a private shape present in what is about to be
+    published? `scrub()` is for the export step; this is for the check.
     """
-    out = scrub(text)
-    return [pat for pat, _ in SCRUB if re.search(pat, out, re.IGNORECASE)]
+    return [pat for pat, _ in SCRUB if re.search(pat, text, re.IGNORECASE)]
+
+def _hint(match):
+    # Enough to find the line, never enough to use: a scanner that prints the
+    # credential it found into a CI log has created a second leak.
+    return match[:8] + "…" if len(match) > 8 else match
 
 def scan(path, text):
     bad = []
     for i, line in enumerate(text.splitlines(), 1):
         for name, pat in SECRETS:
-            m = re.search(pat, line)
-            if not m:
-                continue
-            # Regex syntax inside the match, or immediately after it, means a
-            # pattern definition — `ghp_[A-Za-z0-9]{36}` and not a live token.
-            span = line[m.start():m.end() + 8]
-            if REGEXY.search(span):
-                continue
-            if name == "URL creds" and _is_placeholder_url(m.group(0)):
-                continue
-            bad.append(f"{path}:{i}: {name}  ->  {m.group(0)[:60]}")
+            # Every match, not the first: an allowed placeholder URL earlier on
+            # the line must not excuse a live one after it.
+            for m in re.finditer(pat, line):
+                if name == "URL creds" and _is_placeholder_url(m.group(0)):
+                    continue
+                bad.append(f"{path}:{i}: {name}  ->  {_hint(m.group(0))}")
     return bad
 
 if __name__ == "__main__":
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
-    findings, residue = [], []
+    if not root.is_dir():
+        sys.exit(f"sanitize: {root} is not a directory — nothing was scanned")
+    findings, residue, unread = [], [], []
     for f in root.rglob("*"):
         if not f.is_file() or ".git/" in str(f): continue
         try: t = f.read_text()
-        except Exception: continue
+        except UnicodeDecodeError: continue          # binary: not text, not scanned
+        except Exception as e: unread.append(f"{f.relative_to(root)}: {e}"); continue
         findings += scan(f.relative_to(root), t)
         if f.name != pathlib.Path(__file__).name:
             for pat in scrub_residue(t):
                 residue.append(f"{f.relative_to(root)}: unscrubbed private pattern {pat!r}")
-    if findings or residue:
+    if findings or residue or unread:
         if findings:
             print("SECRET SCAN FAILED"); [print("  " + x) for x in findings]
         if residue:
             print("PRIVATE-DETAIL SCAN FAILED"); [print("  " + x) for x in residue[:40]]
+        if unread:
+            print("UNREADABLE — not scanned, so not clean"); [print("  " + x) for x in unread]
         sys.exit(1)
     n = sum(1 for _ in root.rglob("*") if _.is_file())
     extra = f" · {PRIVATE_N} private rules from {PRIVATE_SRC}" if PRIVATE_N else ""

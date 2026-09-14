@@ -15,7 +15,7 @@ Run the single-call bootstrap **with an explicit project dir** (cwd may not be a
 
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-CTX="$(bash ~/.claude/scripts/review-context.sh "$PROJECT_DIR")"
+CTX="$(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-context.sh "$PROJECT_DIR")"
 printf '%s\n' "$CTX"
 
 # --- C9: assign the review-wide variables ONCE, here, before any later phase ---
@@ -131,7 +131,7 @@ the verifier later READS. Do NOT self-assert "canary: passed":
 # The artifact path is the LAST stdout line (absolute) — take `| tail -1` exactly as
 # review-eval.sh does, so any progress line printed ahead of it cannot poison the path.
 # Do NOT jq-parse it and do NOT reconstruct the filename ($TS here != the canary's internal timestamp).
-CANARY_ARTIFACT="$(RTK_BYPASS=1 bash ~/.claude/scripts/review-canary.sh \
+CANARY_ARTIFACT="$(RTK_BYPASS=1 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-canary.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "$HEAD" | tail -1)"
 # -> writes <repo>/.claude/review-canary-<ts>.json : {seeded:true, detected:bool, defect, file}
 CANARY_DETECTED="$(jq -r '.detected // false' "$CANARY_ARTIFACT" 2>/dev/null || echo false)"

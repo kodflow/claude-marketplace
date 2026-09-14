@@ -102,8 +102,8 @@ while read -r s; do test -x "$s" || echo "MISSING/NOT-EXECUTABLE $s"; done
 ```
 
 - every hook command resolves to an executable file
-- `~/.claude/scripts/common.sh` exists (shared by the rest)
-- every `~/.claude/scripts/*.sh` passes `bash -n`
+- `kodflow-hooks` is installed (`claude plugin list` names it) and its `hooks/scripts/on-*.sh` pass `bash -n`
+- no `hooks` entry in `settings.json` still points at a `~/.claude/scripts/*.sh` the plugin replaced (`git-guard.sh`, `rtk-rewrite.sh`, `log.sh`, `session-init.sh`, …) — that is a duplicate hook running in parallel
 
 Score: `100 − 25×(missing hook script) − 10×(syntax error)`.
 
@@ -131,7 +131,7 @@ Score: `100 − 30×(parse failure) − 5×(malformed env value)`.
 
 ### 6. Security
 
-- `~/.claude/scripts/git-guard.sh` exists and is executable
+- the `kodflow-hooks` PreToolUse entry resolves to an executable `on-tool.sh` (the git guard lives there)
 - no plaintext credential in a tracked file under `~/.claude/`
 - **no git remote anywhere under the code home embeds a token** —
   `git remote -v` output matching `://[^/]*:[^/]*@` is a leaked credential:

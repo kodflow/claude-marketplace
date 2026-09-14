@@ -5,7 +5,7 @@
 >
 > **The manifest is the proof-of-work.** It is written to
 > **`.claude/review-manifest-{ts}.json`** (`{ts}` = `$(date +%Y%m%dT%H%M%SZ)` UTC). A
-> non-LLM script, `~/.claude/scripts/review-verify-manifest.sh`, recomputes per-file hunks,
+> non-LLM script, `"${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/review-verify-manifest.sh`, recomputes per-file hunks,
 > per-file symbols, `file_class`, and `diff_hash` from `git`, and READS the real canary
 > artifact, and **INVALIDATES the run on any mismatch**. The model
 > may NOT self-attest coverage: an APPROVE without a verifier-passed manifest is an invalid
@@ -273,14 +273,14 @@ define the denominator of its own coverage metric.
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 MANIFEST=".claude/review-manifest-${TS}.json"
 # Step 0: copy canonical facts into $MANIFEST (RTK-safe; do NOT hand-compute):
-RTK_BYPASS=1 bash ~/.claude/scripts/review-verify-manifest.sh \
+RTK_BYPASS=1 bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/review-verify-manifest.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}" --print-facts
 # Step 0.8: REAL canary self-test (C6) — seeds a defect into a scratch copy of a changed
 # code file, detects it, writes {seeded,detected,...}; capture the artifact path:
-CANARY=$(RTK_BYPASS=1 bash ~/.claude/scripts/review-canary.sh \
+CANARY=$(RTK_BYPASS=1 bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/review-canary.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}")
 # ... write $MANIFEST (diff_hash + hunks_total verbatim; canary_artifact="$CANARY") ...
-RTK_BYPASS=1 bash ~/.claude/scripts/review-verify-manifest.sh \
+RTK_BYPASS=1 bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/review-verify-manifest.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}" \
   --manifest "$MANIFEST" --det "$DET"
 echo "verifier exit=$?"           # NONZERO => run is INVALID, regardless of model output
@@ -403,7 +403,7 @@ INCONCLUSIVE. Ask the verifier for the canonical numbers and copy them verbatim:
 ```bash
 # For a PR/branch review use the real head sha; for a local dirty tree use the
 # sentinel HEAD=WORKTREE (reviews uncommitted tracked changes vs $BASE).
-RTK_BYPASS=1 bash ~/.claude/scripts/review-verify-manifest.sh \
+RTK_BYPASS=1 bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/review-verify-manifest.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}" --print-facts
 # -> {"diff_hash":"…","hunks_total":N,"head":"…"}  copy both into the manifest
 ```
@@ -441,7 +441,7 @@ coverage_manifest:                # written to .claude/review-manifest-{ts}.json
 Then invoke the external verifier (must pass):
 
 ```bash
-RTK_BYPASS=1 bash ~/.claude/scripts/review-verify-manifest.sh \
+RTK_BYPASS=1 bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/review-verify-manifest.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}" \
   --manifest ".claude/review-manifest-${TS}.json" --det "$DET"
 VERIFIER_EXIT=$?                  # capture immediately (C8)
