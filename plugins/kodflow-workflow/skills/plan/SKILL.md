@@ -130,7 +130,7 @@ Examples:
 Before Phase 3.0 (Parallelize), determine runtime mode:
 
 ```bash
-source ""${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 

@@ -6,7 +6,7 @@ description: 'DevContainer Environment Update from official template. Profile-aw
   improvements.'
 when_to_use: Use to sync a project's devcontainer with the upstream template — checking what
   drifted, or applying the update.
-argument-hint: '[--check] [--component hooks|skills|agents|lifecycle]'
+argument-hint: '[--check] [--component plugins|hooks|lifecycle|docs|...]'
 model: sonnet
 allowed-tools:
 - Bash(curl:*)
@@ -44,7 +44,7 @@ Updates the DevContainer environment from the official template.
 **Updated components (devcontainer - always):**
 
 - **Hooks** - Claude scripts (format, lint, security, etc.)
-- **Commands** - Slash commands (/git, /search, etc.)
+- **Plugins** - Skills, agents and lifecycle hooks, refreshed from the kodflow marketplace
 - **Agents** - Agent definitions (specialists, executors)
 - **Image-hooks** - Lifecycle hooks embedded in Docker image
 - **Shared-utils** - Shared utilities (utils.sh)
@@ -101,9 +101,8 @@ republish on an existing version string ([#814](https://github.com/devcontainers
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| `hooks` | `.devcontainer/images/.claude/scripts/` | Claude scripts |
-| `commands` | `~/.claude/skills/` | Slash commands |
-| `agents` | `.devcontainer/images/.claude/agents/` | Agent definitions |
+| `plugins` | `claude plugin` (kodflow marketplace) | Skills, agents and lifecycle hooks — the five kodflow plugins, refreshed to the marketplace head |
+| `hooks` | `.devcontainer/images/.claude/scripts/` | The 7 quality scripts behind the git pre-commit gate |
 | `lifecycle` | `.devcontainer/hooks/lifecycle/` | Lifecycle hooks (stubs) |
 | `image-hooks` | `.devcontainer/images/hooks/` | Image-embedded lifecycle hooks |
 | `shared-utils` | `.devcontainer/hooks/shared/utils.sh` | Shared hook utilities |
@@ -148,8 +147,7 @@ Options:
 
 Components:
   hooks        Claude scripts (format, lint...)
-  commands     Slash commands (/git, /search)
-  agents       Agent definitions (specialists)
+  plugins      Skills, agents, lifecycle hooks (kodflow marketplace)
   image-hooks  Lifecycle hooks (image-embedded)
   shared-utils Shared hook utilities (utils.sh)
   p10k         Powerlevel10k config

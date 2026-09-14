@@ -63,7 +63,7 @@ Notice: persistent `TMUX` capability can downgrade to `TEAMS_INPROCESS` runtime 
 Source `"${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/team-mode-primitives.sh` and call `detect_runtime_mode`. Every team-aware skill starts with:
 
 ```bash
-source ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 case "$MODE" in
     TEAMS_TMUX|TEAMS_INPROCESS) : ;;   # go to TEAMS execution

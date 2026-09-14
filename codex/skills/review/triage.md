@@ -257,7 +257,7 @@ question_handling:
 **Branch on runtime mode** (from review.md Execution Mode Detection):
 
 ```bash
-source ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 

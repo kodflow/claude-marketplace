@@ -127,7 +127,7 @@ Safety:
 Before Phase 1.5 (agent dispatch), determine runtime mode:
 
 ```bash
-source ""${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 

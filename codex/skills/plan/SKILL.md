@@ -115,7 +115,7 @@ Examples:
 Before Phase 3.0 (Parallelize), determine runtime mode:
 
 ```bash
-source ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 

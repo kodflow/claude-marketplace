@@ -119,7 +119,7 @@ decompose_workflow:
 
 ```yaml
 incremental_quality:
-  script: ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/pre-commit-quality.sh"
+  script: "${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/pre-commit-quality.sh"
   trigger: "ALWAYS before commit (mandatory)"
   scope: "Only files changed vs base branch (not entire project)"
   parallelism: "lint and test run simultaneously in background"

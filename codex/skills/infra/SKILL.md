@@ -118,7 +118,7 @@ Safety:
 Before Phase 1.5 (agent dispatch), determine runtime mode:
 
 ```bash
-source ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 

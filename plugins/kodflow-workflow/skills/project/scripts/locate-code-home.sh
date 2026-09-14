@@ -18,6 +18,7 @@ emit() { printf '%s=%s\n' "$1" "$2"; }
 if root=$(git rev-parse --show-toplevel 2>/dev/null); then
   emit IN_REPO 1
   emit REPO_ROOT "$root"
+  emit REPO_CWD_IS_ROOT "$([ "$(pwd -P)" = "$(cd "$root" && pwd -P)" ] && echo 1 || echo 0)"
   emit REPO_REMOTE "$(git -C "$root" remote get-url origin 2>/dev/null || echo '')"
   emit REPO_BRANCH "$(git -C "$root" symbolic-ref --quiet --short HEAD 2>/dev/null || echo 'DETACHED')"
   emit REPO_DEFAULT_BRANCH "$(git -C "$root" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
@@ -76,6 +77,9 @@ for c in "${candidates[@]}"; do
 done
 
 emit CANDIDATE_COUNT "$rank"
+# An explicit CLAUDE_CODE_HOME is a decision, not a candidate: it wins even
+# when another directory holds more repositories.
+if [ -n "${CLAUDE_CODE_HOME:-}" ] && [ -d "$CLAUDE_CODE_HOME" ]; then best=$CLAUDE_CODE_HOME; fi
 emit CODE_HOME "${best:-$HOME/Documents}"
 emit CODE_HOME_EXISTS "$([ -d "${best:-}" ] && echo 1 || echo 0)"
 
