@@ -1,0 +1,10 @@
+{
+  "name": "kodflow-hooks",
+  "description": "The lifecycle machinery the other plugins assume: shell-output compression that never rewrites a read whose bytes matter, a git guard, session context loading, quality gates, and structured logging. Wired across 18 events; every hook fails open, because a PreToolUse hook that exits non-zero blocks every shell call in the session.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "license": "MIT"
+}

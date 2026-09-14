@@ -44,7 +44,7 @@ if [ "$DO_CLAUDE" -eq 1 ]; then
     run claude plugin marketplace add "$MARKET_URL" 2>/dev/null \
       && say "marketplace registered" \
       || say "marketplace already registered (or the CLI declined) — continuing"
-    for p in kodflow-workflow kodflow-review kodflow-devops kodflow-specialists; do
+    for p in kodflow-workflow kodflow-review kodflow-devops kodflow-specialists kodflow-hooks; do
       run claude plugin install "$p@kodflow" 2>/dev/null \
         && say "installed $p" || say "$p already installed or unavailable"
     done
