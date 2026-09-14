@@ -198,12 +198,12 @@ feature_staleness_scan:
 
   1_repo_mode:
     action: "Detect whether we are in the template repo or a downstream consumer"
-    script: "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/update-repo-mode.sh"
+    script: "${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/update-repo-mode.sh"
     exports: "REPO_MODE ∈ {template, downstream}"
 
   2_scan:
     action: "Enumerate and classify referenced features"
-    script: "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/update-feature-scan.sh --template-root \"$TEMPLATE_ROOT\""
+    script: "${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/update-feature-scan.sh --template-root \"$TEMPLATE_ROOT\""
     output: |
       One line per feature:
         <ref>|<pinned_version>|<ghcr_digest>|<upstream_install_sha>|<state>
@@ -223,13 +223,13 @@ feature_staleness_scan:
 
 ```bash
 detect_feature_staleness() {
-    export REPO_MODE=$("${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/update-repo-mode.sh")
+    export REPO_MODE=$("${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/update-repo-mode.sh")
     STALE_FEATURES=""
     if [ -n "${TEMPLATE_ROOT:-}" ]; then
         while IFS='|' read -r ref _ver _digest _sha state; do
             [ "$state" = "stale" ] && STALE_FEATURES+="$ref"$'\n'
         done < <(UPDATE_TEMPLATE_ROOT="$TEMPLATE_ROOT" \
-                 "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/update-feature-scan.sh" 2>/dev/null || true)
+                 "${CODEX_HOME:-$HOME/.codex}/skills/_shared/scripts/update-feature-scan.sh" 2>/dev/null || true)
         export STALE_FEATURES
     fi
     local mcp_log="${WORKSPACE_FOLDER:-/workspace}/.claude/logs/mcp-skipped.json"

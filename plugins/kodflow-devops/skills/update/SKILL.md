@@ -6,7 +6,7 @@ description: 'DevContainer Environment Update from official template. Profile-aw
   improvements.'
 when_to_use: Use to sync a project's devcontainer with the upstream template — checking what
   drifted, or applying the update.
-argument-hint: '[--check] [--component hooks|skills|agents|lifecycle]'
+argument-hint: '[--check] [--component plugins|hooks|lifecycle|docs|...]'
 model: sonnet
 allowed-tools:
 - Bash(curl:*)
@@ -44,7 +44,7 @@ Updates the DevContainer environment from the official template.
 **Updated components (devcontainer - always):**
 
 - **Hooks** - Claude scripts (format, lint, security, etc.)
-- **Commands** - Slash commands (/git, /search, etc.)
+- **Plugins** - Skills, agents and lifecycle hooks, refreshed from the kodflow marketplace
 - **Agents** - Agent definitions (specialists, executors)
 - **Image-hooks** - Lifecycle hooks embedded in Docker image
 - **Shared-utils** - Shared utilities (utils.sh)
@@ -147,8 +147,7 @@ Options:
 
 Components:
   hooks        Claude scripts (format, lint...)
-  commands     Slash commands (/git, /search)
-  agents       Agent definitions (specialists)
+  plugins      Skills, agents, lifecycle hooks (kodflow marketplace)
   image-hooks  Lifecycle hooks (image-embedded)
   shared-utils Shared hook utilities (utils.sh)
   p10k         Powerlevel10k config

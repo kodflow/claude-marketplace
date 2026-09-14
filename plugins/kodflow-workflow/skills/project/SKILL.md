@@ -140,7 +140,9 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/project/scripts/locate-code-h
   repository that may not be the project (a monorepo, a dotfiles checkout, a
   code home that is itself a git repository). `AskUserQuestion`: adopt
   `REPO_ROOT`, or create the new project under `CODE_HOME`. Never adopt a
-  parent by default.
+  parent by default. The answer is the **Phase 0 decision**: *adopt* continues
+  as `IN_REPO=1`; *create* continues exactly as `IN_REPO=0` would (Phase 1,
+  then Phase 2 with `CODE_HOME`), whatever the locator printed.
 - `IN_REPO=0` → the code home is `CODE_HOME`. Go to Phase 1.
 
 `CODE_HOME` is picked by evidence (the candidate holding the most git
@@ -152,7 +154,7 @@ projects should live, and create that directory.
 
 ## Phase 1 — Name and owner
 
-Needed only when `IN_REPO=0`.
+Needed when `IN_REPO=0`, or when the Phase 0 decision was *create*.
 
 - Name: `$1` if given, else **ask with `AskUserQuestion`** (one question, header
   `Project`, offering the derived candidates plus free text). Never guess a
@@ -166,7 +168,7 @@ preconditions for each.
 
 | Case | Condition | Outcome |
 |------|-----------|---------|
-| **ADOPT** | `IN_REPO=1`, or `CODE_HOME/<name>` is a checkout of the target | `cd`, fetch, checkout default branch, pull |
+| **ADOPT** | `IN_REPO=1` with `REPO_CWD_IS_ROOT=1`, or the Phase 0 decision was *adopt*, or `CODE_HOME/<name>` is a checkout of the target | `cd`, fetch, checkout default branch, pull |
 | **CLONE** | remote exists, no local copy | clone into `CODE_HOME/<name>` on its default branch |
 | **CREATE** | neither exists | `gh repo create`, clone, initial commit on `main` |
 | **CONFLICT** | `CODE_HOME/<name>` exists but is not that repo | STOP and ask — never overwrite |

@@ -365,18 +365,36 @@ apply_devcontainer_tarball() {
 
     # Skills, agents and lifecycle hooks come from the kodflow marketplace, not
     # from the tarball. A copy under ~/.claude would run beside its plugin twin.
+    local plugins_failed=""
     if command -v claude >/dev/null 2>&1; then
-        claude plugin marketplace update kodflow >/dev/null 2>&1 \
-            || claude plugin marketplace add https://github.com/kodflow/claude-marketplace.git >/dev/null 2>&1 || true
+        if ! claude plugin marketplace update kodflow >/dev/null 2>&1 \
+           && ! claude plugin marketplace add https://github.com/kodflow/claude-marketplace.git >/dev/null 2>&1; then
+            plugins_failed="marketplace"
+        fi
+        local p
         for p in kodflow-workflow kodflow-review kodflow-devops kodflow-specialists kodflow-hooks; do
-            claude plugin update "$p@kodflow" >/dev/null 2>&1 || claude plugin install "$p@kodflow" >/dev/null 2>&1 || true
+            claude plugin update "$p@kodflow" >/dev/null 2>&1 || claude plugin install "$p@kodflow" >/dev/null 2>&1 \
+                || plugins_failed="$plugins_failed $p"
         done
-        echo "  ✓ plugins (kodflow marketplace)"
+        if [ -z "$plugins_failed" ]; then
+            echo "  ✓ plugins (kodflow marketplace)"
+        else
+            echo "  ⚠ plugins: refresh failed for:$plugins_failed (offline?) — run: claude plugin update <name>@kodflow"
+        fi
     else
+        plugins_failed="claude-cli"
         echo "  ⚠ plugins: claude CLI absent — skills, agents and hooks not refreshed"
     fi
-    # Stale copies from a pre-marketplace template: remove, they shadow the plugins.
-    rm -rf "$UPDATE_TARGET/commands" "$UPDATE_TARGET/agents" 2>/dev/null || true
+    # Copies left by a pre-marketplace template shadow their plugin twins, but
+    # ~/.claude/commands and ~/.claude/agents may also hold files the user wrote.
+    # Nothing is deleted: the copies are listed, and the user decides.
+    local legacy
+    for legacy in "$UPDATE_TARGET/commands" "$UPDATE_TARGET/agents"; do
+        if [ -d "$legacy" ] && [ -n "$(ls -A "$legacy" 2>/dev/null)" ]; then
+            echo "  ⚠ $legacy holds $(find "$legacy" -type f | wc -l | tr -d ' ') file(s) that predate the marketplace;"
+            echo "     the plugins ship the same names — review, then remove what is not yours to keep"
+        fi
+    done
 
     # Lifecycle stubs (container only)
     if [ "$CONTEXT" = "container" ] && [ -d "$src/.devcontainer/hooks/lifecycle" ]; then
