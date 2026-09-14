@@ -23,6 +23,7 @@ This skill is split into focused modules for maintainability.
 ├── identity.md      # Phase 0.5: Git identity & GPG validation
 ├── commit.md        # Phases 2.0-7.0: Full --commit workflow
 ├── merge.md         # Full --merge workflow (CI, reviews, auto-fix)
+├── review-threads.md # Reply, resolve, dismiss, refresh the body: GitHub / GitLab / Gerrit
 ├── watch.md         # Full --watch workflow (monitor & fix loop)
 └── guardrails.md    # Safety rules, forbidden actions, timeouts
 ```
@@ -190,10 +191,10 @@ include the new ADR in the PR. Skip for routine changes.
 | 1.0 | Peek | Pin commit SHA, verify PR/MR exists |
 | 2.0 | Status Parsing | Job-level (not overall), MCP-ONLY |
 | 3.0 | CI Monitoring | Exponential backoff, 10min hard timeout |
-| 3.5 | Review Triage | CodeRabbit + Qodo + Codacy + Human |
+| 3.5 | Review Triage | CodeRabbit + Qodo + Codacy + Human — fixed or refuted *on the platform*, see `review-threads.md` |
 | 4.0 | Error Log | Extract actionable info on failure |
 | 5.0 | Auto-fix Loop | 3 attempts max, error categories |
-| 5.5 | PR Regen | Regenerate title/body from final state |
+| 5.5 | PR Regen | Body must describe the head: `<!-- describes: sha -->` differs → regenerate |
 | 6.0 | Merge | Squash merge + branch cleanup |
 
 ---
@@ -212,6 +213,7 @@ include the new ADR in the PR. Skip for routine changes.
 | 2.0 | Collect | Pipeline + Reviews + Prerequisites (parallel) |
 | 3.0 | Dashboard | ASCII status display, 60s refresh |
 | 4.0 | Fix Loop | Circuit breaker (stall detection >10min) |
+| 4.5 | Review Triage | Legitimacy filter, then `review-threads.md`: reply + resolve every thread |
 | 5.0 | Exit | All green → ready for /git --merge |
 
 ---

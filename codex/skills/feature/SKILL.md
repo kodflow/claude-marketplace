@@ -5,7 +5,7 @@ description: Open a piece of feature work and keep its trail. Records the featur
   a GitLab or GitHub issue — then cuts a branch named after the issue so forges and external
   trackers link the two automatically. Run it again on the same subject and it appends the
   new exchange as a comment instead of duplicating anything, so the original understanding
-  and every refinement since stay readable side by side. Use when when starting work on something
+  and every refinement since stay readable side by side. Use when starting work on something
   the project does not do yet, and again each time the discussion sharpens what that thing
   is. For a defect in existing behaviour use /fix instead.
 metadata:
@@ -71,7 +71,7 @@ Chain:  /feature → /search → /challenge → /goal → /git
 ### 0 — Locate
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-tracker.sh
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Resolve the destination per `../_shared/tracker.md` §1, and check whether this

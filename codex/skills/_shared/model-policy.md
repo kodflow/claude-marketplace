@@ -13,7 +13,7 @@ found three weeks later. Nothing in the run reports it.
 ## 1. Resolve, never hardcode
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/detect-models.sh
 ```
 
 **A hardcoded top model is wrong the day a better one ships**, and on the current

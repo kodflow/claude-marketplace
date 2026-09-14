@@ -186,6 +186,10 @@ readiness_checks:
         tool_gitlab: "mcp__gitlab__list_merge_request_notes — check for unresolved threads"
         condition: "No CHANGES_REQUESTED from bots (coderabbit, qodo on GitHub; unresolved threads on GitLab)"
     on_fail: "ABORT — unresolved review findings, run /git --watch to fix"
+    note: |
+      A finding is closed on the platform, not in prose: fixed → reply with the
+      SHA → resolve; refuted → reply with evidence → resolve; stale
+      CHANGES_REQUESTED → dismiss. Commands per platform in review-threads.md.
 
   # ── Check 3: No secrets in diff ────────────────────────────
   secrets_scan:
@@ -204,6 +208,11 @@ readiness_checks:
   # ── Check 4: PR/MR title/body matches actual changes ──────
   pr_conformity:
     action: "Verify PR/MR title follows conventional commit format and reflects the code"
+    head_check: |
+      The body ends with `<!-- describes: <sha> -->`. If that SHA is not HEAD,
+      commits were added after the body was written: regenerate it from
+      `git log base..HEAD` and `git diff --stat`, restamp, `gh pr edit --body-file`.
+      Missing marker → treat as stale. See review-threads.md, Rule 1.
     steps:
       1_get_pr:
         github: "mcp__github__pull_request_read(method: get)"

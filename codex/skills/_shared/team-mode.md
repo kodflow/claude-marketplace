@@ -152,56 +152,18 @@ The collision check skips entries with `access_mode == "read-only"`.
 
 ---
 
-## 5. Registry lifecycle (hook-owned, local, best-effort)
+## 5. Task events are logged, not adjudicated
 
-**File:** `~/.claude/logs/<team-name>/task-registry.jsonl` (append-only, garbage-collected)
+`TaskCreated`, `TaskCompleted` and `TeammateIdle` reach `on-agent.sh`
+(kodflow-hooks), which appends one line per event to
+`.claude/logs/<branch>/session.jsonl` and decides nothing.
 
-Written by `task-created.sh`, updated by `task-completed.sh`, read by `task-created.sh` (collision check) and `teammate-idle.sh` (pending check).
-
-**Stability:** this file is hook-owned and 100% under our control. We do NOT read Claude Code internal paths like `~/.claude/tasks/` or `~/.claude/teams/` (documented as "auto-managed, should not be edited").
-
-### Entry schema
-
-```json
-{
-  "id": "task-001",
-  "team": "my-project",
-  "assignee": "reviewer-security",
-  "subject": "Review JWT handling",
-  "contract": true,
-  "access_mode": "write",
-  "owned_paths": ["src/auth/jwt.go"],
-  "status": "active",
-  "created_at": "2026-04-09T14:30:00Z",
-  "completed_at": null,
-  "idempotency_key": null
-}
-```
-
-### State transitions
-
-```
-(none) ──[task-created.sh]──▶ active
-active ──[task-completed.sh, exit 0]──▶ completed
-active ──[task-completed.sh with {"continue":false}]──▶ abandoned
-active ──[teammate-idle.sh on failure signal]──▶ failed (advisory, no block)
-```
-
-### Collision rule
-
-A new task is rejected only when ALL of the following are true:
-1. New task `access_mode == "write"`
-2. Existing entry has `status == "active"` AND `access_mode == "write"`
-3. Overlapping `owned_paths` (exact string match)
-4. Different `assignee` (self-overlap allowed — same teammate refining)
-
-All other cases: warning or silent pass.
-
-### Garbage collection
-
-On every `task-created.sh` invocation, entries older than 24h AND `status != "active"` are moved to `task-registry.archive.jsonl`. Keeps the active set small.
-
-Uses portable epoch helpers (`epoch_now`, `epoch_from_iso`, `epoch_24h_ago`) from `team-mode-primitives.sh` — works on GNU, BSD, and busybox `date`.
+An earlier version kept a registry (`task-registry.jsonl`) and rejected tasks on
+`owned_paths` collisions. It depended on a capability file nothing wrote and on
+a primitives library the plugin never shipped, so it never ran anywhere it was
+installed. The contract in §4 stays: the **lead** checks it when it writes the
+tasks — write-mode tasks with overlapping `owned_paths` and different assignees
+are a planning error, not something a hook fixes after the fact.
 
 ---
 

@@ -74,11 +74,11 @@ Usage: /warmup [options]
   --help             This help
 
 CLAUDE.md line thresholds:
-  IDEAL       0-150    no action
-  ACCEPTABLE  151-200  fine for a busy directory
-  WARNING     201-250  review at the next pass
-  CRITICAL    251-300  condensation mandatory
-  FORBIDDEN   301+     must be split
+  IDEAL       0-500    no action
+  ACCEPTABLE  501-700  fine for a busy directory
+  WARNING     701-850  review at the next pass
+  CRITICAL    851-1000 condensation mandatory
+  FORBIDDEN   1001+    must be split
 
 Exclusions: .gitignore is authoritative, plus vendor/, node_modules/,
 .git/, bin/, dist/, build/, target/, zig-out/, zig-cache/.
@@ -161,7 +161,9 @@ actually touches that pattern.
 | Delete a CLAUDE.md | **FORBIDDEN** | update and split only |
 | Create a CLAUDE.md in a gitignored directory | **FORBIDDEN** | vendor/, node_modules/, build outputs |
 | Ignore `.gitignore` | **FORBIDDEN** | it is the source of truth for exclusions |
-| CLAUDE.md over 300 lines | **FORBIDDEN** | split it |
+| CLAUDE.md over 1000 lines | **FORBIDDEN** | split it |
+| Finish a task without updating the CLAUDE.md of each directory it changed | **FORBIDDEN** | see *Session end* below |
+| Update a CLAUDE.md in a directory the task did not touch | **FORBIDDEN** | scope is what changed, nothing else |
 | Paste implementation code into a CLAUDE.md | **FORBIDDEN** | context, not code |
 | Restate a superseded constraint as current | **FORBIDDEN** | check the supersede marker |
 | Start the task instead of reporting the briefing | **FORBIDDEN** | warmup loads; it does not act |
@@ -172,16 +174,35 @@ actually touches that pattern.
 ┌────────────┬─────────┬────────────────────────────────────────┐
 │   Level    │ Lines   │ Action                                 │
 ├────────────┼─────────┼────────────────────────────────────────┤
-│ IDEAL      │ 0-150   │ none                                   │
-│ ACCEPTABLE │ 151-200 │ fine for a busy directory              │
-│ WARNING    │ 201-250 │ review at the next pass                │
-│ CRITICAL   │ 251-300 │ condensation MANDATORY                 │
-│ FORBIDDEN  │ 301+    │ split or restructure                   │
+│ IDEAL      │ 0-500   │ none                                   │
+│ ACCEPTABLE │ 501-700 │ fine for a busy directory              │
+│ WARNING    │ 701-850 │ review at the next pass                │
+│ CRITICAL   │ 851-1000│ condensation MANDATORY                 │
+│ FORBIDDEN  │ 1001+   │ split or restructure                   │
 └────────────┴─────────┴────────────────────────────────────────┘
 ```
 
-A ledger that pushes `CLAUDE.md` past 250 lines moves to
+A ledger that pushes `CLAUDE.md` past 850 lines moves to
 `.claude/constraints.md`, leaving only the always-applicable `MUST`s inline.
+
+### Session end — the update is not optional
+
+When a task ends — a turn that finishes the work, a worktree about to be
+merged, a session about to close — the CLAUDE.md of **every directory the task
+changed** is brought up to date, and only those. This is the `--update`
+convention applied to a scope: what changed, why, and what the next session
+must know; no history, no diff narration, under 1000 lines.
+
+```
+for each file edited this session
+    d = nearest directory at or above it that has a CLAUDE.md
+    if d/CLAUDE.md was not edited this session → update it
+no CLAUDE.md anywhere above → create one at the project root (--update)
+```
+
+The `Stop` hook (kodflow-hooks) computes that set from its edit tracker and
+reminds once per directory. A reminder answered with "nothing to update" is
+acceptable only when it says why.
 
 ---
 
