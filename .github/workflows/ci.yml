@@ -1,0 +1,58 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.13' }
+
+      # The repository is public. This is the gate, and it runs before anything
+      # else has a chance to make the tree look fine.
+      # The scanner is tested before it is trusted. It once passed 10 of 11
+      # planted credentials, and nothing said so.
+      - name: The secret scanner actually catches secrets
+        run: python3 scripts/tests/test_sanitize.py
+
+      - name: No credential may reach a public tree
+        run: python3 scripts/sanitize.py .
+
+      - name: No machine- or org-specific detail
+        run: |
+          set -e
+          fail=0
+          # Shapes, not values: a CI rule naming an internal host publishes it.
+          for pat in '/home/[a-z][a-z0-9_-]*/' '/Users/[a-z][a-z0-9_-]*/' \
+                     '\b192\.168\.[0-9]\+\.[0-9]\+\b' '\b10\.[0-9]\+\.[0-9]\+\.[0-9]\+\b'; do
+            if grep -rIn --exclude-dir=.git --exclude=ci.yml -e "$pat" . ; then
+              echo "::error::private detail present: $pat"; fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Manifests parse and reference real paths
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          root = pathlib.Path(".")
+          mk = json.loads((root/".claude-plugin/marketplace.json").read_text())
+          bad = []
+          for p in mk["plugins"]:
+              sub = root / p["source"]["path"]
+              if not (sub/".claude-plugin"/"plugin.json").exists():
+                  bad.append(f"{p['name']}: no plugin.json at {sub}")
+              else:
+                  json.loads((sub/".claude-plugin"/"plugin.json").read_text())
+          print(f"{len(mk['plugins'])} plugins declared")
+          if bad: [print("  " + b) for b in bad]; sys.exit(1)
+          PY
+
+      - name: Skill and agent frontmatter is valid
+        run: |
+          pip install --quiet pyyaml
+          python3 scripts/validate-frontmatter.py .
+
+      - name: Shell scripts parse
+        run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n

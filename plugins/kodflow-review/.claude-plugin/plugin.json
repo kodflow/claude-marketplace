@@ -1,0 +1,10 @@
+{
+  "name": "kodflow-review",
+  "description": "Evidence-bound review and debugging. Findings cite real code and a counterexample; deterministic scanners run for real and their exit codes populate the report; an external non-LLM verifier can invalidate the whole run. Root-cause-first debugging refuses a fix nobody proved.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "license": "MIT"
+}

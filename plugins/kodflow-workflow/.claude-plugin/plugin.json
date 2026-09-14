@@ -1,0 +1,10 @@
+{
+  "name": "kodflow-workflow",
+  "description": "The work loop: open a tracked piece of work, research it, plan it, argue the plan, turn it into an executable contract, ship it. Each skill hands the next exactly what it needs, and every step leaves a trail the next session can read.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "license": "MIT"
+}

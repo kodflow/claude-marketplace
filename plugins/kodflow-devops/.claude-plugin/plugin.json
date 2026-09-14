@@ -1,0 +1,10 @@
+{
+  "name": "kodflow-devops",
+  "description": "Infrastructure, environment health and template sync \u2014 Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "license": "MIT"
+}

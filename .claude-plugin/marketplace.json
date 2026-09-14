@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "kodflow",
+  "description": "An opinionated Claude Code configuration: a work loop that leaves a trail, evidence-bound review, and specialists that check the documentation before they assert anything.",
+  "owner": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "plugins": [
+    {
+      "name": "kodflow-workflow",
+      "description": "The work loop: open a tracked piece of work, research it, plan it, argue the plan, turn it into an executable contract, ship it. Each skill hands the next exactly what it needs, and every step leaves a trail the next session can read.",
+      "author": {
+        "name": "kodflow"
+      },
+      "category": "workflow",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/kodflow/claude-marketplace.git",
+        "path": "plugins/kodflow-workflow"
+      }
+    },
+    {
+      "name": "kodflow-review",
+      "description": "Evidence-bound review and debugging. Findings cite real code and a counterexample; deterministic scanners run for real and their exit codes populate the report; an external non-LLM verifier can invalidate the whole run. Root-cause-first debugging refuses a fix nobody proved.",
+      "author": {
+        "name": "kodflow"
+      },
+      "category": "review",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/kodflow/claude-marketplace.git",
+        "path": "plugins/kodflow-review"
+      }
+    },
+    {
+      "name": "kodflow-devops",
+      "description": "Infrastructure, environment health and template sync — Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
+      "author": {
+        "name": "kodflow"
+      },
+      "category": "devops",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/kodflow/claude-marketplace.git",
+        "path": "plugins/kodflow-devops"
+      }
+    },
+    {
+      "name": "kodflow-specialists",
+      "description": "Language, platform and concern specialists that routing dispatches to. Each verifies an API, a default, a limit or a deprecation against documentation before asserting it, returns what it consulted and what it could not confirm, and tries to break its own finding before reporting it.",
+      "author": {
+        "name": "kodflow"
+      },
+      "category": "agents",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/kodflow/claude-marketplace.git",
+        "path": "plugins/kodflow-specialists"
+      }
+    }
+  ]
+}
