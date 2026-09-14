@@ -3,7 +3,7 @@
 The locator script is the only source of truth for paths:
 
 ```bash
-bash ~/.codex/skills/project/scripts/locate-code-home.sh
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/project/scripts/locate-code-home.sh
 ```
 
 It prints `KEY=VALUE` lines. Read them; do not re-derive any of them by hand.

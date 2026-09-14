@@ -5,7 +5,7 @@
 **Run `review-context.sh` to collect ALL context in ONE call:**
 
 ```bash
-bash ~/.claude/scripts/review-context.sh
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-context.sh
 ```
 
 Returns JSON with: `git{branch, platform, org, repo}`, `diff{files, stats}`, `repo_profile{lint_configs}`, `pr{exists, number}`.
@@ -17,7 +17,7 @@ Use this output for ALL decisions. DO NOT re-run individual git commands.
 ```yaml
 context_detection:
   1_collect:
-    command: "bash ~/.claude/scripts/review-context.sh"
+    command: "bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-context.sh"
     output: "JSON with git context, diff, repo profile, PR detection"
 
   1.5_platform_detection:

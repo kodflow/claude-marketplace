@@ -253,6 +253,11 @@ action_watch:
             UNCLEAR      → needs more context → ask user via AskUserQuestion before acting
         4_record_decision: "Store verdict + justification for each finding"
 
+    # Every verdict ends on the platform: a reply on the thread (fix SHA, or
+    # the refutation with its evidence) and the thread resolved. The exact
+    # calls — GraphQL resolveReviewThread, review dismissal, GitLab
+    # discussions, Gerrit patchsets — are in review-threads.md. Read it
+    # before step 4; a finding answered only in the transcript still blocks.
     # ── Step 4: Fix Legitimate Findings ─────────────────────
     fix_loop:
       flow: |

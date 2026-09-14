@@ -12,7 +12,7 @@ Phases for the `--commit` action after identity validation (Phase 1.0).
 peek_workflow:
   1_collect_all:
     action: "Run git-peek.sh to get identity, branch, status, diff, remote in ONE call"
-    command: "bash ~/.claude/scripts/git-peek.sh"
+    command: "bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/git-peek.sh"
     returns: "JSON with identity, branch, status, head, diff_stats, remote"
     critical_rule: |
       This script replaces 13 sequential git commands.
@@ -119,7 +119,7 @@ decompose_workflow:
 
 ```yaml
 incremental_quality:
-  script: "~/.claude/scripts/pre-commit-quality.sh"
+  script: ""${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/pre-commit-quality.sh"
   trigger: "ALWAYS before commit (mandatory)"
   scope: "Only files changed vs base branch (not entire project)"
   parallelism: "lint and test run simultaneously in background"
@@ -141,7 +141,7 @@ incremental_quality:
     dart: { lint: "dart analyze <changed_files>", test: "dart test" }
 
   execution:
-    command: "bash ~/.claude/scripts/pre-commit-quality.sh main"
+    command: "bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/pre-commit-quality.sh main"
     parallel: true  # lint and test run as background jobs simultaneously
     timeout: 300s
     on_failure: "BLOCK commit — Claude must fix errors before retrying"

@@ -39,6 +39,17 @@ MUST_BLOCK = {
     "aws":             f"AWS_ACCESS_KEY_ID={AWSK}",
 }
 
+# Invariants, not just shapes: each of these was a working bypass once.
+MUST_BLOCK.update({
+    # a regex-looking comment after a live token is not a pattern definition
+    "token-then-regex-comment": f'GITHUB_TOKEN="{PAT}" # .*',
+    # the first URL is a placeholder; the second is not, and must still be seen
+    # (the live halves are joined at runtime so this file itself carries no credential)
+    "second-url-live":  "docs=postgres://user:pass@host/db live=postgres://admin:" + "Hunter2Real@prod.internal/app",
+    # punctuation in a password is not evidence of a pattern
+    "url-pw-with-dotstar": "DATABASE_URL=postgres://admin:" + "Hunter2.*Real@prod.internal/app",
+})
+
 MUST_PASS = {
     # Detection patterns are not secrets; a security skill must be able to ship them.
     "regex-pat":       'SECRETS = [("GitHub PAT", r"ghp_[A-Za-z0-9]{36}\\b")]',

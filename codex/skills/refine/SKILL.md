@@ -218,7 +218,7 @@ Read `../_shared/model-policy.md` and resolve the tiers **before** writing the
 plan:
 
 ```bash
-bash ~/.codex/skills/_shared/scripts/detect-models.sh
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/detect-models.sh
 ```
 
 Every plan carries the allocation, in one line under its constraints:

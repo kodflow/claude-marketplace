@@ -3,8 +3,8 @@ name: comment
 description: Audit and fix code comments across the project or a specific path. Ensures all
   comments explain WHY (not WHAT), functions have proper docstrings with params/types/return,
   and language conventions are respected. Dispatches parallel Haiku workers per file for speed.
-  Use when when comments have drifted from the code, when a reviewer asks for documentation,
-  or before publishing a package whose public API needs docstrings.
+  Use when comments have drifted from the code, when a reviewer asks for documentation, or
+  before publishing a package whose public API needs docstrings.
 metadata:
   short-description: Audit and fix code comments across the project or a specific path
   generated-from: plugins/*/skills/comment
@@ -88,7 +88,7 @@ by a worker that actually knows the convention — not a generic worker
 falling back to "good enough" rules.
 
 ```bash
-ROUTER=~/.claude/scripts/route-agent.sh
+ROUTER="${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/route-agent.sh
 # Per-file dispatch (orchestrator iterates over files)
 DISPATCH=$(bash "$ROUTER" --skill /comment --phase audit-go \
   --profile .claude/state/profile.json)

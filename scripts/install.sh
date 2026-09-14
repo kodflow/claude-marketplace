@@ -44,7 +44,7 @@ if [ "$DO_CLAUDE" -eq 1 ]; then
     run claude plugin marketplace add "$MARKET_URL" 2>/dev/null \
       && say "marketplace registered" \
       || say "marketplace already registered (or the CLI declined) — continuing"
-    for p in kodflow-workflow kodflow-review kodflow-devops kodflow-specialists; do
+    for p in kodflow-workflow kodflow-review kodflow-devops kodflow-specialists kodflow-hooks; do
       run claude plugin install "$p@kodflow" 2>/dev/null \
         && say "installed $p" || say "$p already installed or unavailable"
     done
@@ -68,17 +68,29 @@ if [ "$DO_CODEX" -eq 1 ]; then
   echo "Codex"
   if command -v codex >/dev/null 2>&1; then
     run mkdir -p "$HOME/.codex/skills" "$HOME/.codex/agents"
+    # Stage, then swap. Removing the destination before the copy meant a copy
+    # that failed had already destroyed the previous skill and "done" was
+    # printed regardless. Now nothing is removed until its replacement exists.
+    STAGE=$(mktemp -d) || { echo "cannot create a staging directory" >&2; exit 1; }
+    trap 'rm -rf "$STAGE"' EXIT
+    failed=0
     for d in "$HERE"/codex/skills/*/; do
       [ -d "$d" ] || continue
       n=$(basename "$d")
-      run rm -rf "$HOME/.codex/skills/$n"
-      run cp -r "$d" "$HOME/.codex/skills/$n"
-      say "skill $n"
+      if [ "$CHECK" -eq 1 ]; then say "would: install skill $n"; continue; fi
+      if cp -r "$d" "$STAGE/$n" && rm -rf "$HOME/.codex/skills/$n" && mv "$STAGE/$n" "$HOME/.codex/skills/$n"; then
+        say "skill $n"
+      else
+        say "FAILED skill $n — previous version left in place"; failed=1
+      fi
     done
     for f in "$HERE"/codex/agents/*.toml; do
       [ -f "$f" ] || continue
-      run cp "$f" "$HOME/.codex/agents/$(basename "$f")"
+      if [ "$CHECK" -eq 1 ]; then continue; fi
+      cp "$f" "$STAGE/agent.toml" && mv "$STAGE/agent.toml" "$HOME/.codex/agents/$(basename "$f")" \
+        || { say "FAILED agent $(basename "$f")"; failed=1; }
     done
+    [ "$failed" -eq 0 ] || { echo "install incomplete — see FAILED lines above" >&2; exit 1; }
     c=$(find "$HERE/codex/agents" -name '*.toml' 2>/dev/null | wc -l | tr -d ' ')
     say "$c custom agents"
   else

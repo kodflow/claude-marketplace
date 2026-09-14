@@ -105,7 +105,7 @@ Run the locator once and keep its output; it answers both questions in one shot
 and is the only source of truth for paths.
 
 ```bash
-bash ~/.codex/skills/project/scripts/locate-code-home.sh
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/project/scripts/locate-code-home.sh
 ```
 
 - `IN_REPO=1` → the workspace is `REPO_ROOT`. Go to Phase 2 case **ADOPT**.
@@ -215,4 +215,4 @@ nothing to warm up.
 - `../warmup/SKILL.md` — reads the ledger back at session start
 - `../plan/SKILL.md` — plans must satisfy the ledger
 - `../refine/SKILL.md` — turns a plan into a verifiable goal contract
-- `../review/SKILL.md` — reviews cite constraint IDs when a change violates one
+- the `/review` skill (kodflow-review) — reviews cite constraint IDs when a change violates one

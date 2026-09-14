@@ -50,6 +50,9 @@ Reference document for all safety rules, conventions, and forbidden actions acro
 | Auto-dismiss CodeRabbit without fixing | **FORBIDDEN** | Must fix or justify |
 | Auto-dismiss Qodo P0/P1 without fixing | **FORBIDDEN** | Must address blockers |
 | Post `@coderabbitai resolve` before fixes applied | **FORBIDDEN** | Resolve only after fixing |
+| Refute a finding without evidence in the reply | **FORBIDDEN** | A bare dismissal is re-raised on the next push |
+| Leave a thread resolved with no reply on it | **FORBIDDEN** | The reviewer must see why |
+| Merge with a body that does not describe HEAD | **FORBIDDEN** | `<!-- describes: sha -->` must match (review-threads.md) |
 
 ---
 

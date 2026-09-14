@@ -35,7 +35,7 @@ allowed-tools:
 - AskUserQuestion
 - mcp__context7__*
 - WebFetch(*)
-- Bash(bash ~/.claude/skills/_shared/scripts/detect-models.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh:*)
 - Bash(codex exec:*)
 - Bash(codex doctor:*)
 ---

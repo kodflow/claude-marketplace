@@ -59,11 +59,18 @@ def main(root):
         if tot > 1536: faults.append(f"{rel}: description+when_to_use {tot} > 1536")
         if body.count("\n") > 500: faults.append(f"{rel}: {body.count(chr(10))} lines > 500 guidance")
         # every referenced module must exist beside it
-        for m in re.finditer(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.md)`", body):
+        for m in re.finditer(r"`([A-Za-z0-9_.][A-Za-z0-9_./-]*\.md)`", body):
             ref = m.group(1)
             if ref.startswith(("/", "~")) or "NNNN" in ref or ref in ("CLAUDE.md","README.md","INDEX.md"):
                 continue
-            if not (f.parent / ref).exists() and "/" not in ref:
+            # A bare name is a sibling module; `../x/y.md` is a module in the
+            # same plugin. Both must exist — a plugin is installed on its own,
+            # so `../_shared/team-mode.md` pointing at another plugin is broken
+            # for every consumer. Deeper project-relative paths (`docs/adr/…`)
+            # are examples about the target project and are not checked.
+            if "/" in ref and not ref.startswith("../"):
+                continue
+            if not (f.parent / ref).exists():
                 faults.append(f"{rel}: module link `{ref}` does not resolve")
 
     print(f"{n_a} agents · {n_s} skills checked")

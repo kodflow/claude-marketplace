@@ -5,7 +5,7 @@ description: 'Open a defect and keep its trail. Records the bug where the projec
   — then cuts a branch named after the issue so forges and external trackers link the two.
   Refuses to open a bug with no reproduction: observed versus expected, and the steps that
   show it. Re-running on the same defect appends what was learned as a comment, so the original
-  symptom and the investigation that followed stay readable side by side. Use when when existing
+  symptom and the investigation that followed stay readable side by side. Use when existing
   behaviour is wrong — a crash, a wrong result, a regression, a flaky test. For something
   the project does not do yet, use /feature. To actually find the cause once the bug is opened,
   use /debug.'
@@ -68,7 +68,7 @@ Chain:  /fix → /debug → /challenge → /goal → /git
 ### 0 — Locate
 
 ```bash
-bash ~/.codex/skills/_shared/scripts/detect-tracker.sh
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Destination per `../_shared/tracker.md` §1; existing-subject check per §3.

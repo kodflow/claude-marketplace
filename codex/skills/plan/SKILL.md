@@ -115,7 +115,7 @@ Examples:
 Before Phase 3.0 (Parallelize), determine runtime mode:
 
 ```bash
-source "$HOME/.claude/scripts/team-mode-primitives.sh"
+source ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 
@@ -248,7 +248,7 @@ Read `../_shared/model-policy.md` and resolve the tiers **before** writing the
 plan:
 
 ```bash
-bash ~/.codex/skills/_shared/scripts/detect-models.sh
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/detect-models.sh
 ```
 
 Every plan carries the allocation, in one line under its constraints:

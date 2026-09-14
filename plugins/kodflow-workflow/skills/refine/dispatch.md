@@ -24,14 +24,14 @@ Char-cap stays 4000 in both cases.
 
 ```bash
 # 1. Try router
-ROUTER=~/.claude/scripts/route-agent.sh
+ROUTER="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/route-agent.sh
 DISPATCH=$(bash "$ROUTER" --skill /refine --phase "$LENS" --profile "$PROFILE")
 RC=$?
 
 # 2. Router exit 0 or 10 → use returned dispatch JSON
 # 3. Router exit 20-31 → static fallback (fix #17)
 if [ "$RC" -ge 20 ] && [ "$RC" -le 31 ]; then
-  source ~/.claude/scripts/refine-static-fallback.sh
+  source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/refine-static-fallback.sh
   DISPATCH=$(refine_static_lens "$LENS")
   [ -z "$DISPATCH" ] && {
     # Drop lens; annotate telemetry

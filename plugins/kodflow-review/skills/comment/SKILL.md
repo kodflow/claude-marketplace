@@ -93,7 +93,7 @@ by a worker that actually knows the convention — not a generic worker
 falling back to "good enough" rules.
 
 ```bash
-ROUTER=~/.claude/scripts/route-agent.sh
+ROUTER="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/route-agent.sh
 # Per-file dispatch (orchestrator iterates over files)
 DISPATCH=$(bash "$ROUTER" --skill /comment --phase audit-go \
   --profile .claude/state/profile.json)

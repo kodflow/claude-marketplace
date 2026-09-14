@@ -1,0 +1,50 @@
+{
+  "description": "One script per event, each a fixed sequence: gate, block, transform, observe. Hooks on the same event run in parallel, so the order lives inside the script, not in this file. Every path that is not a deliberate block exits 0.",
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 10 } ] }
+    ],
+    "SessionEnd": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 5 } ] }
+    ],
+    "PreCompact": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 5 } ] }
+    ],
+    "ConfigChange": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 5 } ] }
+    ],
+    "UserPromptSubmit": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-user.sh", "timeout": 5 } ] }
+    ],
+    "Notification": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-user.sh", "timeout": 5 } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 15 } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Glob|Grep|Task|Agent", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 20, "statusMessage": "Formatting…" } ] }
+    ],
+    "PostToolUseFailure": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 5 } ] }
+    ],
+    "SubagentStart": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] }
+    ],
+    "SubagentStop": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] }
+    ],
+    "TaskCreated": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] }
+    ],
+    "TaskCompleted": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] }
+    ],
+    "TeammateIdle": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] }
+    ],
+    "Stop": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-stop.sh", "timeout": 45 } ] }
+    ]
+  }
+}

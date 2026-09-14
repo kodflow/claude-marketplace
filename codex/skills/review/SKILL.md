@@ -137,7 +137,7 @@ Findings come from TWO producer classes, both real agents on disk:
 layer rather than a hand-maintained table that drifts:
 
 ```bash
-bash ~/.claude/scripts/route-agent.sh --skill /review --phase review \
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
   --profile "$PROJECT_DIR/.claude/repo-profile.json"   # reads ~/.codex/agents/routing-table.jsonl
 # --phase review selects the /review rules (language-specialist fanout + protobuf/asn1 route);
 # --profile is the file Phase 0.5 wrote (top-level .languages array). Omitting --phase, or
@@ -166,7 +166,7 @@ Per-extension correctness for the common stacks (corrected names — verified on
 
 Dispatch in parallel. **Execution mode**: read
 `../_shared/team-mode.md`; branch on `detect_runtime_mode` (from
-`~/.claude/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
+`"${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
 Teams) vs `SUBAGENTS` (Task tool). Both paths MUST be schema- and severity-equivalent.
 
 Each producer receives: the repo profile, the file's macro record, its changed
@@ -219,7 +219,7 @@ For high-stakes diffs run the ensemble: findings in >1 pass -> full confidence; 
 Write the coverage manifest, then hand it to the **non-LLM** verifier:
 
 ```bash
-bash ~/.claude/scripts/review-verify-manifest.sh --repo "$REPO" \
+bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
      --base "$BASE" --head "$HEAD" --manifest "$MANIFEST"
 ```
 
@@ -301,7 +301,7 @@ Every module lives beside this file. Read one when you reach its phase.
 | `output.md` | Report layout, flag reference, budget controller |
 | `cyclic.md` | `--loop` correctness gate, patch-ID tracking, guardrails |
 
-External, non-LLM: `~/.claude/scripts/review-verify-manifest.sh` recomputes hunks,
+External, non-LLM: `"${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/review-verify-manifest.sh` recomputes hunks,
 symbols and `diff_hash` from git and validates the tier `.out` files.
 Exit 0 = PASS · 1 = INVALID · 2 = not-approve-eligible · 3 = usage.
 

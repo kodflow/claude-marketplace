@@ -111,7 +111,7 @@ clean_template: 'clean: "no tainted source reaches a sink; secrets/crypto/authZ 
 
 ```yaml
 dimension: idioms
-owner: developer-specialist-{lang}    # routed via ~/.claude/scripts/route-agent.sh (review.md Phase 6)
+owner: developer-specialist-{lang}    # routed via "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/route-agent.sh (review.md Phase 6)
 counterexample: repro                  # idiom footgun -> wrong output; PURE style -> nitpick bucket, no CE
 gate: always (fire only on matching file extensions)
 why: |

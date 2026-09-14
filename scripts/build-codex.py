@@ -28,6 +28,10 @@ NEUTRALISE = [
     (r'Skill\(skill="([a-z-]+)"[^)]*\)', r"the /\1 skill"),
     (r"~/\.claude/skills/",        "~/.codex/skills/"),
     (r"~/\.claude/agents/",        "~/.codex/agents/"),
+    # Plugin-root resolution has no Codex equivalent: skills are installed flat
+    # under ~/.codex/skills, so the fallback must point there, not at ~/.claude.
+    (r'"\$\{CLAUDE_PLUGIN_ROOT:-\$HOME/\.claude\}"/skills/', '"${CODEX_HOME:-$HOME/.codex}"/skills/'),
+    (r'"\$\{CLAUDE_PLUGIN_ROOT:-\$HOME/\.claude\}"/agents/', '"${CODEX_HOME:-$HOME/.codex}"/agents/'),
     (r"\$ARGUMENTS",               "the arguments"),
 ]
 
@@ -70,7 +74,9 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
     if entry.exists():
         fm, body = split(entry.read_text())
         desc = " ".join(str(fm.get("description", "")).split())
-        wtu = re.sub(r"^Use\s+", "", " ".join(str(fm.get("when_to_use", "")).split()))
+        # when_to_use is free text that often already starts with "Use when":
+        # strip that prefix so the join never reads "Use when when".
+        wtu = re.sub(r"^(use\s+)?(when\s+)?", "", " ".join(str(fm.get("when_to_use", "")).split()), flags=re.I)
         if wtu: desc = f"{desc} Use when {wtu}"
         meta = {"short-description": desc.split(".")[0][:80], "generated-from": f"plugins/*/skills/{name}"}
         if fm.get("argument-hint"): meta["argument-hint"] = fm["argument-hint"]

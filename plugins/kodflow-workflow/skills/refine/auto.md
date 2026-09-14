@@ -9,7 +9,7 @@
 
 ```bash
 # Source the frontmatter helper (handles .md-with-YAML correctly)
-source ~/.claude/scripts/frontmatter.sh
+source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/frontmatter.sh
 
 auto_select_lens_depth() {
   local plan_path="$1"

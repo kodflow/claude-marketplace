@@ -1,0 +1,10 @@
+{
+  "name": "kodflow-hooks",
+  "description": "The lifecycle machinery the other plugins assume: shell-output compression that never rewrites a read whose bytes matter, a git guard, session context, a formatter, a turn-end quality gate and one structured log. One script per event (15 events, 5 scripts), each a fixed sequence — gate, block, transform, observe — because hooks on the same event run in parallel and only a single script can order them. Every path that is not a deliberate block exits 0.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "license": "MIT"
+}

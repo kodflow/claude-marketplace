@@ -56,6 +56,20 @@ fi
 section() { awk -v s="$1" '$0 ~ "^##[[:space:]]+" s "([[:space:]]|$)" {f=1;next} /^##[[:space:]]/{f=0} f' "$F"; }
 VERIFY_BLOCK=$(section VERIFY)
 VCOUNT=$(printf '%s' "$VERIFY_BLOCK" | grep -cE '`[^`]+`|[A-Za-z0-9_./-]+:[0-9]+')
+# ACCEPTANCE pairs 1:1 with VERIFY: criterion N is proved by verifier N. A
+# single `true` under VERIFY used to certify any number of criteria.
+ACOUNT=$(section ACCEPTANCE | grep -cE '^[[:space:]]*[0-9]+[.)]')
+VITEMS=$(printf '%s' "$VERIFY_BLOCK" | grep -cE '^[[:space:]]*[0-9]+[.)]')
+VBARE=$(printf '%s' "$VERIFY_BLOCK" | grep -E '^[[:space:]]*[0-9]+[.)]' | grep -cvE '`[^`]+`|[A-Za-z0-9_./-]+:[0-9]+')
+if [ "$ACOUNT" -eq 0 ]; then
+  bad "ACCEPTANCE has no numbered criterion"
+elif [ "$ACOUNT" -ne "$VITEMS" ]; then
+  bad "ACCEPTANCE has ${ACOUNT} criteria but VERIFY has ${VITEMS} — one verifier per criterion, same numbering"
+elif [ "$VBARE" -gt 0 ]; then
+  bad "${VBARE} VERIFY item(s) carry no runnable check (a \`command\` or file:line)"
+else
+  ok "ACCEPTANCE ↔ VERIFY: ${ACOUNT} criteria, each with a verifier"
+fi
 if [ "$VCOUNT" -lt 1 ]; then
   bad "VERIFY carries no runnable check (expected a \`command\` or file:line)"
 else

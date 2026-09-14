@@ -5,7 +5,7 @@ specialists via the router rather than the generic Explore agent.**
 
 ```bash
 # Route once per concept; expand to per-language specialists via agent_template
-ROUTER=~/.claude/scripts/route-agent.sh
+ROUTER="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/route-agent.sh
 DISPATCHES=$(bash "$ROUTER" --skill /search --phase external \
   --profile .claude/state/profile.json)
 
