@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/session-init.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/lifecycle-init.sh",
             "timeout": 10
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/session-end.sh",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/lifecycle-end.sh",
             "timeout": 10
           }
         ]
