@@ -203,7 +203,7 @@ feature_staleness_scan:
 
   2_scan:
     action: "Enumerate and classify referenced features"
-    script: ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/update-feature-scan.sh --template-root \"$TEMPLATE_ROOT\""
+    script: "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/update-feature-scan.sh --template-root \"$TEMPLATE_ROOT\""
     output: |
       One line per feature:
         <ref>|<pinned_version>|<ghcr_digest>|<upstream_install_sha>|<state>
