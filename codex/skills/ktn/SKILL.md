@@ -4,8 +4,8 @@ description: 'Autonomous health-and-heal for the project-linter MCP stack. Dispa
   agents in parallel: each verifies + fixes ONE concern (binary version, mcp.json entry, .claude/settings.json
   hooks, daemon on :7717, phase config). Idempotent: does nothing when the stack is already
   healthy, prompts a session restart only when settings.json was actually modified. Use when:
-  a fresh container starts, a Claude session can''t reach project-linter, hooks misbehave, or
-  you just want a one-command sanity check. Use when when a session cannot reach project-linter,
+  a fresh container starts, a Claude session can''t reach project-linter, hooks misbehave,
+  or you just want a one-command sanity check. Use when when a session cannot reach project-linter,
   its hooks misbehave, a fresh container starts, or you want a one-command sanity check of
   the ktn stack.'
 metadata:

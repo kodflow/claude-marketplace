@@ -1,11 +1,11 @@
 ---
 name: lint
 description: 'Multi-language intelligent linting with RLM decomposition. Auto-detects project
-  language(s) and dispatches to the appropriate workflow. Go projects with project-linter: 148
-  rules across 8 phases with Agent Teams. Other languages: lint-fix-iterate loop with language-specific
-  tools. Makefile-first: uses `make lint` when available. Use when to run the project''s linters
-  and fix what they find. Prefers `make lint` when a Makefile defines it; otherwise detects
-  the language and picks the right toolchain.'
+  language(s) and dispatches to the appropriate workflow. Go projects with project-linter:
+  148 rules across 8 phases with Agent Teams. Other languages: lint-fix-iterate loop with
+  language-specific tools. Makefile-first: uses `make lint` when available. Use when to run
+  the project''s linters and fix what they find. Prefers `make lint` when a Makefile defines
+  it; otherwise detects the language and picks the right toolchain.'
 metadata:
   short-description: Multi-language intelligent linting with RLM decomposition
   generated-from: plugins/*/skills/lint

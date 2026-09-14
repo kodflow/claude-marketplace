@@ -131,7 +131,7 @@ Run the locator once and keep its output; it answers both questions in one shot
 and is the only source of truth for paths.
 
 ```bash
-bash ~/.claude/skills/project/scripts/locate-code-home.sh
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/project/scripts/locate-code-home.sh
 ```
 
 - `IN_REPO=1` → the workspace is `REPO_ROOT`. Go to Phase 2 case **ADOPT**.

@@ -10,7 +10,7 @@ the three skills cannot disagree about where a piece of work lives.
 Run the detector first. It is the only source of truth for paths and forge:
 
 ```bash
-bash ~/.codex/skills/_shared/scripts/detect-tracker.sh
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Then resolve the destination in this order. **Stop at the first that answers.**

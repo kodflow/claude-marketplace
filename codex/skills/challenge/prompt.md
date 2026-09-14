@@ -66,7 +66,7 @@ being true. The validator greps for them and fails the file when they appear
 inside ACCEPTANCE.
 
 **The model allocation line is mandatory.** Resolve it with
-`~/.codex/skills/_shared/scripts/detect-models.sh` and write the resolved id,
+"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh` and write the resolved id,
 not the placeholder. `../_shared/model-policy.md` owns the rule; the validator
 rejects a directive whose CONSTRAINTS carry no `Models:` line, because a plan
 that does not say who runs what will silently run everything on the orchestrator.
@@ -98,7 +98,7 @@ save characters defeats the entire exercise.
 Run the validator. It is a program, not a review:
 
 ```bash
-bash ~/.codex/skills/challenge/scripts/validate-goal-prompt.sh .claude/goals/<slug>.md
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/challenge/scripts/validate-goal-prompt.sh .claude/goals/<slug>.md
 ```
 
 It checks: character count within 400-4000 · all eight sections present · at

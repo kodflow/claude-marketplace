@@ -24,7 +24,7 @@ allowed-tools:
 - TaskUpdate(*)
 - Write(.claude/goals/*.md)
 - mcp__context7__*
-- Bash(bash ~/.claude/skills/_shared/scripts/detect-models.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh:*)
 - Bash(jq:*)
 ---
 
@@ -229,7 +229,7 @@ Read `../_shared/model-policy.md` and resolve the tiers **before** writing the
 plan:
 
 ```bash
-bash ~/.claude/skills/_shared/scripts/detect-models.sh
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh
 ```
 
 Every plan carries the allocation, in one line under its constraints:
