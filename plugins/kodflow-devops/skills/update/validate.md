@@ -185,9 +185,7 @@ validate_hook_scripts() {
 │   │   ├── shared/utils.sh
 │   │   └── lifecycle/*.sh
 │   └── .claude/
-│       ├── agents/*.md
-│       ├── commands/*.md
-│       ├── scripts/*.sh
+│       ├── scripts/*.sh            # 7 quality scripts; skills/agents/hooks: marketplace
 │       └── settings.json
 └── .template-version
 ```
@@ -358,36 +356,27 @@ safe_glob_copy() {
 apply_devcontainer_tarball() {
     local src="$DEVCONTAINER_EXTRACT_DIR"
 
-    # Scripts (hooks)
+    # Quality scripts (the git pre-commit gate)
     if [ -d "$src/.devcontainer/images/.claude/scripts" ]; then
         mkdir -p "$UPDATE_TARGET/scripts"
         safe_glob_copy "$src/.devcontainer/images/.claude/scripts/*.sh" "$UPDATE_TARGET/scripts" "+x"
-        echo "  ✓ hooks"
+        echo "  ✓ hooks (quality scripts)"
     fi
 
-    # Commands (top-level)
-    if [ -d "$src/.devcontainer/images/.claude/commands" ]; then
-        mkdir -p "$UPDATE_TARGET/commands"
-        safe_glob_copy "$src/~/.claude/skills/*.md" "$UPDATE_TARGET/commands"
-        echo "  ✓ commands"
+    # Skills, agents and lifecycle hooks come from the kodflow marketplace, not
+    # from the tarball. A copy under ~/.claude would run beside its plugin twin.
+    if command -v claude >/dev/null 2>&1; then
+        claude plugin marketplace update kodflow >/dev/null 2>&1 \
+            || claude plugin marketplace add https://github.com/kodflow/claude-marketplace.git >/dev/null 2>&1 || true
+        for p in kodflow-workflow kodflow-review kodflow-devops kodflow-specialists kodflow-hooks; do
+            claude plugin update "$p@kodflow" >/dev/null 2>&1 || claude plugin install "$p@kodflow" >/dev/null 2>&1 || true
+        done
+        echo "  ✓ plugins (kodflow marketplace)"
+    else
+        echo "  ⚠ plugins: claude CLI absent — skills, agents and hooks not refreshed"
     fi
-
-    # Command sub-modules (subdirectories)
-    if [ -d "$src/.devcontainer/images/.claude/commands" ]; then
-        while IFS= read -r -d '' subdir; do
-            local rel="${subdir#$src/.devcontainer/images/.claude/}"
-            mkdir -p "$UPDATE_TARGET/$rel"
-            safe_glob_copy "$subdir/*.md" "$UPDATE_TARGET/$rel"
-        done < <(find "$src/.devcontainer/images/.claude/commands" -mindepth 1 -type d -print0 2>/dev/null)
-        echo "  ✓ command sub-modules"
-    fi
-
-    # Agents
-    if [ -d "$src/.devcontainer/images/.claude/agents" ]; then
-        mkdir -p "$UPDATE_TARGET/agents"
-        safe_glob_copy "$src/.devcontainer/images/.claude/agents/*.md" "$UPDATE_TARGET/agents"
-        echo "  ✓ agents"
-    fi
+    # Stale copies from a pre-marketplace template: remove, they shadow the plugins.
+    rm -rf "$UPDATE_TARGET/commands" "$UPDATE_TARGET/agents" 2>/dev/null || true
 
     # Lifecycle stubs (container only)
     if [ "$CONTEXT" = "container" ] && [ -d "$src/.devcontainer/hooks/lifecycle" ]; then

@@ -100,7 +100,8 @@ default is `master` or `develop` must be checked out on *its* default — forcin
 ### CREATE
 
 ```bash
-gh repo create "<owner>/<name>" --private --clone --description "<one line>"
+gh repo create "<owner>/<name>" --<private|public> --clone --description "<one line>"
+#                                ^ --private unless the user passed --public (Phase 1b)
 cd "<CODE_HOME>/<name>"
 git symbolic-ref HEAD refs/heads/main        # only when the repo is still empty
 ```

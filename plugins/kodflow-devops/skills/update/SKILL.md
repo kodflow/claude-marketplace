@@ -101,9 +101,8 @@ republish on an existing version string ([#814](https://github.com/devcontainers
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| `hooks` | `.devcontainer/images/.claude/scripts/` | Claude scripts |
-| `commands` | `~/.claude/skills/` | Slash commands |
-| `agents` | `.devcontainer/images/.claude/agents/` | Agent definitions |
+| `plugins` | `claude plugin` (kodflow marketplace) | Skills, agents and lifecycle hooks — the five kodflow plugins, refreshed to the marketplace head |
+| `hooks` | `.devcontainer/images/.claude/scripts/` | The 7 quality scripts behind the git pre-commit gate |
 | `lifecycle` | `.devcontainer/hooks/lifecycle/` | Lifecycle hooks (stubs) |
 | `image-hooks` | `.devcontainer/images/hooks/` | Image-embedded lifecycle hooks |
 | `shared-utils` | `.devcontainer/hooks/shared/utils.sh` | Shared hook utilities |

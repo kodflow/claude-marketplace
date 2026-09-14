@@ -198,7 +198,7 @@ feature_staleness_scan:
 
   1_repo_mode:
     action: "Detect whether we are in the template repo or a downstream consumer"
-    script: ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/update-repo-mode.sh"
+    script: "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/update-repo-mode.sh"
     exports: "REPO_MODE ∈ {template, downstream}"
 
   2_scan:
@@ -223,13 +223,13 @@ feature_staleness_scan:
 
 ```bash
 detect_feature_staleness() {
-    export REPO_MODE=$(""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/update-repo-mode.sh")
+    export REPO_MODE=$("${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/update-repo-mode.sh")
     STALE_FEATURES=""
     if [ -n "${TEMPLATE_ROOT:-}" ]; then
         while IFS='|' read -r ref _ver _digest _sha state; do
             [ "$state" = "stale" ] && STALE_FEATURES+="$ref"$'\n'
         done < <(UPDATE_TEMPLATE_ROOT="$TEMPLATE_ROOT" \
-                 ""${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/update-feature-scan.sh" 2>/dev/null || true)
+                 "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/update-feature-scan.sh" 2>/dev/null || true)
         export STALE_FEATURES
     fi
     local mcp_log="${WORKSPACE_FOLDER:-/workspace}/.claude/logs/mcp-skipped.json"

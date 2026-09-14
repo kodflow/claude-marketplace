@@ -79,9 +79,8 @@ echo "  ✓ .template-version updated ($DC_COMMIT)"
   Version : def5678
 
   Updated components:
-    ✓ hooks          (scripts)
-    ✓ commands       (slash commands + sub-modules)
-    ✓ agents         (agent definitions)
+    ✓ plugins        (kodflow marketplace: workflow, review, devops, specialists, hooks)
+    ✓ hooks          (7 quality scripts)
     ✓ lifecycle      (delegation stubs)
     ✓ image-hooks    (image-embedded hooks)
     ✓ shared-utils   (utils.sh)
@@ -114,7 +113,7 @@ echo "  ✓ .template-version updated ($DC_COMMIT)"
     - kodflow/infrastructure-template (abc1234)
 
   DevContainer components:
-    ✓ hooks, commands, agents, lifecycle
+    ✓ plugins, hooks, lifecycle
     ✓ image-hooks, shared-utils, p10k, settings
     ✓ compose
 
