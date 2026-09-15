@@ -252,12 +252,15 @@ _claude_sessions_load_foreign() {
   # Scan each owning dir once (cheap, cached), then keep the picked ids in the
   # order the glob gave them: globally newest first.
   local -a apaths aids atitles aages adirs amtimes apdirs
+  # Declared here, not in the loop: a repeated `local` on a parameter that is
+  # already local makes zsh PRINT it as `k=value`, and in a completion widget
+  # that lands straight on the user's command line.
+  local k
   for pdir in ${(k)dirs}; do
     _claude_sessions_reset_arrays
     _claude_sessions_scan "$pdir" $CLAUDE_SESSIONS_ALL_MAX
     aids+=($_cs_ids); atitles+=($_cs_titles); aages+=($_cs_ages)
     adirs+=($_cs_dirs); amtimes+=($_cs_mtimes); apdirs+=($_cs_pdirs)
-    local k
     for k in $_cs_ids; do apaths+=("$pdir/$k.jsonl"); done
   done
   _claude_sessions_reset_arrays
