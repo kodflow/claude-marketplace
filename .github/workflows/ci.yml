@@ -73,6 +73,25 @@ jobs:
       - name: Hook scripts behave
         run: bash scripts/tests/test_hooks.sh
 
+      # A plugin that ships a suite gets it run. Discovered, not listed: a
+      # hand-kept list is how kodflow-shell's 31 assertions sat in the tree
+      # for a day without anything running them.
+      - name: Plugins test themselves
+        run: |
+          set -e
+          ran=0
+          for suite in plugins/*/tests/run.zsh plugins/*/tests/run-tests.sh; do
+            [ -x "$suite" ] || continue
+            echo "--- $suite"
+            case "$suite" in
+              *.zsh) command -v zsh >/dev/null 2>&1 || { sudo apt-get update -qq && sudo apt-get install -y -qq zsh; }
+                     zsh "$suite" ;;
+              *)     bash "$suite" ;;
+            esac
+            ran=$((ran + 1))
+          done
+          echo "$ran plugin suite(s) ran"
+
       # /flow --check trusts this inventory to tell it which skills are live.
       # Its search roots come from the script's own location, so the layouts
       # are the thing that can break: a clone, a cache holding an obsolete
