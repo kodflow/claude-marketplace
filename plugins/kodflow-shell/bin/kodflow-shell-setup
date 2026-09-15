@@ -1,0 +1,208 @@
+#!/bin/sh
+# kodflow-shell-setup — wire this plugin's shell integration into the system.
+#
+# Why a copy and not a symlink into the plugin: plugins install into a
+# versioned cache path (…/cache/kodflow/kodflow-shell/<sha>), so every update
+# creates a new directory and deletes the old one. A link into that path breaks
+# the moment the plugin updates. Instead the content is mirrored into a stable
+# directory and the SessionStart hook re-runs this script at every launch, so
+# `claude plugin update` reaches every terminal at the next `claude`.
+#
+#   kodflow-shell-setup            install or refresh, verbose
+#   kodflow-shell-setup --quiet    same, silent unless something failed (hook)
+#   kodflow-shell-setup --check    report, change nothing
+#   kodflow-shell-setup --uninstall
+set -u
+
+SRC=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+DEST=$CLAUDE_CONFIG_DIR/kodflow-shell
+BINDIR=$HOME/.local/bin
+OMZ_CUSTOM=${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}
+ZSHRC=$HOME/.zshrc
+MARKER='# kodflow-shell'
+
+QUIET=0; CHECK=0; UNINSTALL=0
+for a in "$@"; do
+    case "$a" in
+        --quiet|-q)     QUIET=1 ;;
+        --check|-c)     CHECK=1 ;;
+        --uninstall)    UNINSTALL=1 ;;
+        --help|-h)      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *)              echo "kodflow-shell-setup: option inconnue $a" >&2; exit 2 ;;
+    esac
+done
+
+say()  { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+warn() { printf '%s\n' "$*" >&2; }
+
+# Content hash of what the plugin ships: resync on content change, whatever the
+# path. cksum is POSIX; find -printf is not.
+# Names as well as contents: hashing concatenated bytes alone would miss a file
+# that was removed upstream, or a rename between two identical files.
+stamp_of() {
+    (
+        cd "$1" 2>/dev/null || exit 0
+        for f in bin/* shell/*; do
+            [ -f "$f" ] && { printf '%s\n' "$f"; cat "$f"; }
+        done
+    ) | cksum | cut -d' ' -f1
+}
+
+if [ "$UNINSTALL" -eq 1 ]; then
+    # Only ever unlink what points into our own mirror: someone may have put
+    # another tool's integration at one of these conventional paths, and
+    # uninstalling this plugin is no reason to remove theirs.
+    unlink_ours() {
+        path=$1
+        [ -L "$path" ] || return 0
+        target=$(readlink "$path" 2>/dev/null || echo "")
+        case "$target" in
+            "$DEST"/*)
+                if [ "$CHECK" -eq 1 ]; then say "à délier $path"
+                else rm -f "$path" && say "délié   $path"; fi ;;
+            *)  say "ignoré  $path (ne pointe pas vers $DEST)" ;;
+        esac
+    }
+    for f in super-claude claude-sessions; do unlink_ours "$BINDIR/$f"; done
+    unlink_ours "$OMZ_CUSTOM/kodflow-shell.zsh"
+    if [ -f "$ZSHRC" ] && grep -q "$MARKER" "$ZSHRC" 2>/dev/null; then
+        if [ "$CHECK" -eq 1 ]; then
+            say "à nettoyer $ZSHRC"
+        else
+            tmp=$ZSHRC.kodflow-shell.$$
+            grep -v "$MARKER" "$ZSHRC" > "$tmp" && mv "$tmp" "$ZSHRC" && say "nettoyé $ZSHRC"
+        fi
+    fi
+    if [ "$CHECK" -eq 1 ]; then
+        say "à supprimer $DEST"
+        say "(--check : rien n'a été modifié)"
+    else
+        rm -rf "$DEST" && say "supprimé $DEST"
+        say "kodflow-shell désinstallé. Les sessions Claude ne sont pas touchées."
+    fi
+    exit 0
+fi
+
+# ---------------------------------------------------------------- mirror ----
+src_stamp=$(stamp_of "$SRC")
+dst_stamp=$(cat "$DEST/.stamp" 2>/dev/null || echo none)
+if [ "$src_stamp" = "$dst_stamp" ]; then
+    synced=0
+else
+    if [ "$CHECK" -eq 1 ]; then
+        say "à resynchroniser : $DEST (source $SRC)"
+        synced=1
+    else
+        mkdir -p "$DEST/bin" "$DEST/shell" || { warn "kodflow-shell: $DEST non créable"; exit 1; }
+        cp -f "$SRC"/bin/* "$DEST/bin/" 2>/dev/null || { warn "kodflow-shell: copie bin échouée"; exit 1; }
+        cp -f "$SRC"/shell/* "$DEST/shell/" 2>/dev/null || { warn "kodflow-shell: copie shell échouée"; exit 1; }
+        chmod +x "$DEST"/bin/* 2>/dev/null
+        # A file the plugin no longer ships must not survive in the mirror as a
+        # command that still runs.
+        for d in bin shell; do
+            for f in "$DEST/$d"/*; do
+                [ -e "$f" ] || continue
+                [ -e "$SRC/$d/${f##*/}" ] || { rm -f "$f" && say "retiré  $f (plus livré)"; }
+            done
+        done
+        printf '%s\n' "$src_stamp" > "$DEST/.stamp"
+        printf '%s\n' "$SRC" > "$DEST/.source"
+        say "synchronisé $DEST ← $SRC"
+        synced=1
+    fi
+fi
+[ "$synced" -eq 0 ] && say "à jour  $DEST"
+
+# ------------------------------------------------------------------ PATH ----
+for f in super-claude claude-sessions; do
+    want=$DEST/bin/$f
+    have=$(readlink "$BINDIR/$f" 2>/dev/null || echo "")
+    if [ "$have" = "$want" ]; then
+        say "ok      $BINDIR/$f"
+        continue
+    fi
+    [ "$CHECK" -eq 1 ] && { say "à lier  $BINDIR/$f → $want"; continue; }
+    if [ -e "$BINDIR/$f" ] && [ ! -L "$BINDIR/$f" ]; then
+        warn "kodflow-shell: $BINDIR/$f existe et n'est pas un lien — laissé tel quel"
+        continue
+    fi
+    mkdir -p "$BINDIR" 2>/dev/null
+    ln -sfn "$want" "$BINDIR/$f" && say "lié     $BINDIR/$f → $want"
+done
+
+case ":$PATH:" in
+    *":$BINDIR:"*) ;;
+    *) warn "kodflow-shell: $BINDIR n'est pas dans le PATH — ajoutez-le pour que super-claude soit trouvé" ;;
+esac
+
+# ------------------------------------------------------------------- zsh ----
+# oh-my-zsh sources every $ZSH_CUSTOM/*.zsh on startup, so a link there needs no
+# edit of .zshrc at all. Without oh-my-zsh, one marked line in .zshrc.
+impl=$DEST/shell/claude-sessions.zsh
+if [ -d "$OMZ_CUSTOM" ]; then
+    have=$(readlink "$OMZ_CUSTOM/kodflow-shell.zsh" 2>/dev/null || echo "")
+    if [ "$have" = "$impl" ]; then
+        say "ok      $OMZ_CUSTOM/kodflow-shell.zsh"
+    elif [ "$CHECK" -eq 1 ]; then
+        say "à lier  $OMZ_CUSTOM/kodflow-shell.zsh → $impl"
+    else
+        ln -sfn "$impl" "$OMZ_CUSTOM/kodflow-shell.zsh" && say "lié     $OMZ_CUSTOM/kodflow-shell.zsh → $impl"
+    fi
+elif [ -f "$ZSHRC" ] || [ -n "${ZSH_VERSION:-}" ]; then
+    if grep -q "$MARKER" "$ZSHRC" 2>/dev/null; then
+        say "ok      $ZSHRC"
+    elif [ "$CHECK" -eq 1 ]; then
+        say "à écrire $ZSHRC"
+    else
+        {
+            printf '\n%s — complétion et suggestions des sessions Claude\n' "$MARKER"
+            printf '[ -r "%s" ] && source "%s" %s\n' "$impl" "$impl" "$MARKER"
+        } >> "$ZSHRC" && say "écrit   $ZSHRC"
+    fi
+fi
+
+# -------------------------------------------------------------- migrate ----
+# A shell function named super-claude shadows the command on PATH: the old
+# definition has to go, or the plugin ships updates nobody executes.
+legacy=$HOME/.shell-functions.sh
+if [ -f "$legacy" ] && grep -q '^super-claude()' "$legacy" 2>/dev/null; then
+    if [ "$CHECK" -eq 1 ]; then
+        say "à migrer $legacy (fonction super-claude qui masque la commande)"
+    else
+        cp -f "$legacy" "$legacy.pre-kodflow-shell" 2>/dev/null
+        awk '
+            /^super-claude\(\)/ { inf=1; depth=0 }
+            inf {
+                n=gsub(/{/,"{"); depth+=n
+                m=gsub(/}/,"}"); depth-=m
+                print "# [kodflow-shell] remplacée par la commande du plugin: " $0
+                if (depth<=0 && n+m>0) inf=0
+                next
+            }
+            { print }
+        ' "$legacy" > "$legacy.kodflow.$$" && mv "$legacy.kodflow.$$" "$legacy"
+        say "migré   $legacy (fonction super-claude commentée, sauvegarde .pre-kodflow-shell)"
+    fi
+fi
+# An earlier hand-rolled install sourced ~/.zsh/claude-sessions.zsh from .zshrc.
+if [ -f "$ZSHRC" ] && grep -q '\.zsh/claude-sessions\.zsh' "$ZSHRC" 2>/dev/null; then
+    if [ "$CHECK" -eq 1 ]; then
+        say "à retirer $ZSHRC (ancienne ligne ~/.zsh/claude-sessions.zsh)"
+    else
+        tmp=$ZSHRC.kodflow-shell.$$
+        # The comment block directly above the line belongs to it: drop both,
+        # or every reinstall leaves another orphan paragraph behind.
+        awk '
+            /\.zsh\/claude-sessions\.zsh/ { buf=""; next }
+            /^[[:space:]]*#/               { buf = buf $0 "\n"; next }
+            { printf "%s", buf; buf=""; print }
+            END { printf "%s", buf }
+        ' "$ZSHRC" > "$tmp" && mv "$tmp" "$ZSHRC"
+        say "retiré  ancienne ligne dans $ZSHRC"
+    fi
+fi
+
+say ""
+say "super-claude est une commande, pas un alias : super-claude help"
+exit 0

@@ -17,6 +17,7 @@ cd claude-marketplace && ./scripts/install.sh
 | `kodflow-workflow` | `/project` `/warmup` `/search` `/plan` `/challenge` `/refine` `/git` `/feature` `/fix` `/flow` |
 | `kodflow-review` | `/review` `/debug` `/adr` `/learn` `/lint` |
 | `kodflow-devops` | `/infra` `/audit` `/update` `/ktn` |
+| `kodflow-shell` | `/shell` — and `super-claude` on your PATH |
 | `kodflow-specialists` | 29 language, platform and concern agents |
 
 ## The three ideas worth the install

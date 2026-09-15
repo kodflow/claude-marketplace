@@ -1,0 +1,8 @@
+{
+  "description": "One event. SessionStart re-syncs the shell integration from this plugin into stable paths, so a marketplace update reaches every terminal at the next launch. Never blocks, never speaks unless the sync failed.",
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 10 } ] }
+    ]
+  }
+}
