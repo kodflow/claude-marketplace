@@ -1,0 +1,78 @@
+# kodflow-shell
+
+`super-claude` sur le PATH plutôt qu'un alias, un sélecteur de sessions sur TAB, et un ménage
+qui supprime vraiment une session.
+
+## Installation
+
+```bash
+claude plugin marketplace add kodflow/claude-marketplace
+claude plugin install kodflow-shell@kodflow
+```
+
+Le hook `SessionStart` fait le reste au prochain lancement de `claude` : il copie ce que le
+plugin embarque dans `~/.claude/kodflow-shell/`, lie `super-claude` et `claude-sessions` dans
+`~/.local/bin`, et branche l'implémentation zsh (via `$ZSH_CUSTOM` quand oh-my-zsh est là, une
+ligne marquée dans `.zshrc` sinon). Rien à retaper après une mise à jour du marketplace :
+la même synchronisation se rejoue à chaque lancement. En une ligne, tout de suite, sans
+attendre la prochaine session : `/shell install`.
+
+## Ce que ça donne
+
+```
+super-claude                  une session neuve ici
+super-claude <TAB>            les sessions de ce dossier, puis celles des autres
+super-claude <uuid>           reprend cette session, depuis son dossier d'origine
+super-claude sessions [-a]    la liste, coloriée par âge
+super-claude clean <niveau>   le ménage
+super-claude help             tout
+```
+
+TAB filtre sur les **mots du titre** autant que sur l'id : `super-claude wifi<TAB>` trouve la
+session « Hotspot wifi 5 GHz ». Les titres viennent des enregistrements `ai-title` que Claude
+Code écrit lui-même dans le transcript — ceux que `/resume` affiche — avec, à défaut, le
+premier vrai prompt de la session.
+
+Les suggestions grises de zsh ne proposent plus que des sessions **qui existent encore** : les
+`--resume <uuid>` morts qui traînaient dans l'historique sont filtrés, et une stratégie
+d'autosuggestion les remplace par une session réelle du dossier courant.
+
+## Ménage
+
+| Niveau | Ce qu'il vise |
+|---|---|
+| `red` | les rouges seulement, plus de 7 jours |
+| `warn` | les jaunes et les rouges, plus de 72 heures |
+| `green` | toutes |
+
+`-a` étend à tous les dossiers, `-n` simule. Chaque suppression demande confirmation, Entrée
+vaut oui, `a` accepte les suivantes, `q` arrête.
+
+Une session n'est pas seulement son transcript : `projects/<slug>/<id>/` (les transcripts de
+sous-agents, plusieurs dizaines de Mo), `session-env/<id>`, `file-history/<id>`,
+`tasks/session-<id8>` et `teams/session-<id8>` portent le même id et partent avec elle.
+`exports/` est laissé intact : ces fichiers-là ont été demandés explicitement.
+
+## Réglages
+
+| Variable | Défaut | Effet |
+|---|---|---|
+| `CLAUDE_SESSIONS_FRESH_H` | 72 | en dessous, la session est verte |
+| `CLAUDE_SESSIONS_WARN_D` | 7 | en dessous, jaune ; au-delà, rouge |
+| `CLAUDE_SESSIONS_ALL` | 1 | 0 retire le groupe « autres dossiers » de la complétion |
+| `CLAUDE_SESSIONS_MAX` | 40 | sessions proposées pour le dossier courant |
+| `CLAUDE_SESSIONS_ALL_MAX` | 40 | sessions proposées pour les autres dossiers |
+| `SUPER_CLAUDE_MODEL` | `default` | modèle d'un lancement : `SUPER_CLAUDE_MODEL=opus super-claude` |
+| `NO_COLOR` | — | coupe les couleurs |
+
+Les titres sont mis en cache dans `~/.cache/claude-sessions/`, invalidés par la date du
+transcript : un TAB coûte ~45 ms à chaud, une frappe ~15 ms, même avec des transcripts de 10 Mo.
+
+## Désinstallation
+
+```bash
+claude-sessions --help          # ce que ça fait
+kodflow-shell-setup --uninstall # retire liens, copie et ligne de .zshrc
+```
+
+Les sessions Claude ne sont jamais touchées par la désinstallation.

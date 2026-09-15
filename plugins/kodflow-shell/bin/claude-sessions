@@ -1,0 +1,16 @@
+#!/usr/bin/env zsh
+# claude-sessions — list and clean Claude Code sessions.
+#
+# The implementation lives in ../shell/claude-sessions.zsh, the same file the
+# interactive shell sources for completion: one implementation, two entry
+# points. Sourcing it only defines functions.
+emulate -L zsh
+setopt no_unset
+self=${0:A}
+impl=${self:h:h}/shell/claude-sessions.zsh
+if [[ ! -r $impl ]]; then
+  print -u2 "claude-sessions: implementation introuvable ($impl)"
+  exit 1
+fi
+source $impl
+claude-sessions "$@"

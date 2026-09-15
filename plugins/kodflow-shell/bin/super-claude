@@ -1,0 +1,81 @@
+#!/bin/sh
+# super-claude — claude with the kodflow defaults, as a real command on PATH.
+#
+# It used to be a shell function in ~/.shell-functions.sh. A function is
+# invisible to anything that is not that shell — scripts, cron, another shell,
+# a subprocess — and shadows this file when both exist, which is why the
+# installer comments the old definition out.
+#
+#   super-claude                     start a session here
+#   super-claude <uuid>              resume that session (what TAB inserts)
+#   super-claude sessions [-a]       list sessions, coloured by age
+#   super-claude clean <niveau> [-a] delete old sessions, one Y/n each
+#   super-claude help                the whole thing
+#
+# Always on the account's default model: a `/model` choice persisted in
+# ~/.claude.json (fable, opus…) would otherwise stick to the project forever.
+# Override for one run with SUPER_CLAUDE_MODEL=opus super-claude …
+set -u
+
+CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+export CLAUDE_CONFIG_DIR
+
+mcp_config="$CLAUDE_CONFIG_DIR/mcp.json"
+model="${SUPER_CLAUDE_MODEL:-default}"
+workdir=""
+
+# Housekeeping verbs are handed to claude-sessions (zsh, next to this file).
+case "${1:-}" in
+    sessions|ls|clean|nettoie|help|--help|-h)
+        helper=$(dirname "$0")/claude-sessions
+        [ -x "$helper" ] || helper=claude-sessions
+        if ! command -v "$helper" >/dev/null 2>&1 && [ ! -x "$helper" ]; then
+            echo "super-claude $1: claude-sessions introuvable (plugin kodflow-shell)" >&2
+            exit 1
+        fi
+        verb=$1
+        shift
+        case "$verb" in
+            sessions|ls)        exec "$helper" "$@" ;;
+            help|--help|-h)     exec "$helper" --help ;;
+            *)                  exec "$helper" "$verb" "$@" ;;
+        esac
+        ;;
+esac
+
+# A bare session id as first argument means "resume that session" — that is what
+# the zsh completion inserts. When the session belongs to another directory,
+# claude is run from there: resuming it from here keeps the transcript but gives
+# the conversation the wrong working directory.
+case "${1:-}" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-*-*-*-*)
+        proj="$CLAUDE_CONFIG_DIR/projects"
+        slug=$(pwd | sed 's/[^a-zA-Z0-9]/-/g')
+        if [ -f "$proj/$slug/$1.jsonl" ]; then
+            set -- --resume "$@"
+        else
+            # find, not a glob: zsh aborts a function on a failed glob
+            transcript=$(find "$proj" -maxdepth 2 -name "$1.jsonl" -print -quit 2>/dev/null)
+            if [ -n "$transcript" ]; then
+                workdir=$(head -c 65536 "$transcript" | grep -m1 -o '"cwd":"[^"]*"' | cut -d'"' -f4)
+                if [ -n "$workdir" ] && [ -d "$workdir" ]; then
+                    printf '\033[2m→ %s\033[0m\n' "$workdir" >&2
+                    set -- --resume "$@"
+                else
+                    workdir=""
+                fi
+            fi
+        fi
+        ;;
+esac
+
+if [ -f "$mcp_config" ]; then
+    set -- --permission-mode auto --model "$model" --mcp-config "$mcp_config" "$@"
+else
+    set -- --permission-mode auto --model "$model" "$@"
+fi
+
+if [ -n "$workdir" ]; then
+    cd "$workdir" || exit 1
+fi
+exec claude "$@"

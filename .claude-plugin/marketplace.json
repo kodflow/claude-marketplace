@@ -47,6 +47,19 @@
       }
     },
     {
+      "name": "kodflow-shell",
+      "description": "The shell side of the harness: super-claude as a real command on PATH instead of an alias, a TAB session picker that only offers conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell.",
+      "author": {
+        "name": "kodflow"
+      },
+      "category": "devops",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/kodflow/claude-marketplace.git",
+        "path": "plugins/kodflow-shell"
+      }
+    },
+    {
       "name": "kodflow-specialists",
       "description": "Language, platform and concern specialists that routing dispatches to. Each verifies an API, a default, a limit or a deprecation against documentation before asserting it, returns what it consulted and what it could not confirm, and tries to break its own finding before reporting it.",
       "author": {
