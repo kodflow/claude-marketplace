@@ -176,7 +176,32 @@ pdir=$box/config/projects/${${box}//[^a-zA-Z0-9]/-}-work
 out=$(run_cs $box none "" clean red -n)
 has "les 45 sont vues" "$out" "45 session(s)"
 
-# --- 11. installateur : --check ne modifie rien -----------------------------
+# --- 11. les chargeurs n'écrivent rien sur la sortie standard ---------------
+# Tout ce qu'ils impriment atterrit dans la ligne de commande quand la
+# complétion les appelle. Un `local` répété suffit à salir l'écran.
+print -r -- "silence des chargeurs"
+box=$(new_sandbox silence)
+# Au moins DEUX dossiers étrangers : la fuite ne commence qu'à la deuxième
+# exécution du `local`, donc un seul dossier ne prouverait rien.
+integer n=0
+for d in $box/work $box/work-a $box/work-b $box/work-c; do
+  (( n++ )); mkdir -p $d
+  pdir=$box/config/projects/${d//[^a-zA-Z0-9]/-}
+  mkdir -p $pdir
+  printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"T%d"}\n' "$d" $n \
+    > $pdir/aaaaaaa$n-0000-0000-0000-00000000000$n.jsonl
+done
+noise=$(
+  cd $box/work
+  CLAUDE_CONFIG_DIR=$box/config XDG_CACHE_HOME=$box/cache zsh -f -c "
+    source $ROOT/shell/claude-sessions.zsh
+    _claude_sessions_load
+    _claude_sessions_load_foreign
+  " 2>/dev/null
+)
+is "aucune fuite sur la sortie" "$noise" ""
+
+# --- 12. installateur : --check ne modifie rien -----------------------------
 print -r -- "installateur"
 box=$(new_sandbox setup)
 fakehome=$box/home; mkdir -p $fakehome
@@ -186,7 +211,7 @@ out=$(HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell
 [[ -L $fakehome/.local/bin/super-claude ]] && ok "--check --uninstall ne supprime rien" \
   || ko "--check --uninstall ne supprime rien" "le lien a disparu"
 
-# --- 12. désinstallation : ne touche pas au lien d'un autre -----------------
+# --- 13. désinstallation : ne touche pas au lien d'un autre -----------------
 ln -sfn /bin/true $fakehome/.local/bin/claude-sessions
 out=$(HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell-setup --uninstall 2>&1)
 [[ -L $fakehome/.local/bin/claude-sessions ]] && ok "épargne un lien étranger" \
@@ -194,7 +219,7 @@ out=$(HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell
 [[ ! -e $fakehome/.local/bin/super-claude ]] && ok "retire son propre lien" \
   || ko "retire son propre lien" "encore là"
 
-# --- 13. mise à jour : un fichier retiré en amont disparaît -----------------
+# --- 14. mise à jour : un fichier retiré en amont disparaît -----------------
 box=$(new_sandbox stale)
 fakehome=$box/home; mkdir -p $fakehome
 HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell-setup --quiet >/dev/null 2>&1 || true
