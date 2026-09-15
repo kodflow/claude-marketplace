@@ -20,10 +20,14 @@ ok()   { pass=$((pass+1)); printf '  ok   %s\n' "$1"; }
 bad()  { fail=$((fail+1)); printf '  FAIL %s\n       %s\n' "$1" "$2"; }
 
 # run EVENT TOOL JSON-fragment → sets RC, OUT, ERR
+# agent_id is on every payload on purpose: the root gate stops a mutating call
+# that carries none, so without it nothing below would reach the guard it means
+# to test. The gate's own main-thread cases live in
+# plugins/kodflow-hooks/tests/run-tests.sh.
 run() {
     local ev=$1 tool=$2 frag=$3 script=$4
     local json; json=$(jq -n -c --arg ev "$ev" --arg tool "$tool" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" \
-        --argjson frag "$frag" '{session_id:"sess-1",hook_event_name:$ev,tool_name:$tool,cwd:$cwd,scratchpad_dir:$sp,tool_use_id:"t1"} + $frag')
+        --argjson frag "$frag" '{session_id:"sess-1",hook_event_name:$ev,tool_name:$tool,cwd:$cwd,scratchpad_dir:$sp,tool_use_id:"t1",agent_id:"agt_01",agent_type:"general-purpose"} + $frag')
     OUT=$(printf '%s' "$json" | bash "$S/$script" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err")
 }
 bash_cmd() { run PreToolUse Bash "$(jq -n -c --arg c "$1" '{tool_input:{command:$c}}')" on-tool.sh; }

@@ -20,12 +20,20 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 # One jq call reads every field a branch below may need. @sh single-quotes
 # each value, so a crafted path or command cannot escape into this shell.
-eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "")"' 2>/dev/null)" || exit 0
+eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "") AID=\(.agent_id // "") PMODE=\(.permission_mode // "")"' 2>/dev/null)" || exit 0
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}   # session-scoped state; on-stop.sh reads it
 LIB=${BASH_SOURCE[0]%/*}/lib
+
+# ROOT DISCIPLINE. A PreToolUse payload carries agent_id only when the call
+# comes from inside a subagent; the main thread sends none. That asymmetry is
+# the whole mechanism — it is how a hook tells "root decided" from "a subagent
+# is working". Measured on 855 real events: every PreToolUse carrying agent_id
+# came from a subagent, no main-thread one did.
+ROOT_MAIN=0
+[ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ "$PMODE" != plan ] && [ "${KODFLOW_ROOT:-}" != off ] && ROOT_MAIN=1
 
 # Branch without forking: read .git/HEAD (following a worktree's gitdir file).
 _branch() {
@@ -48,7 +56,7 @@ _log() {
     (
         mkdir -p "$dir" 2>/dev/null || exit 0
         exec 9>>"$dir/.lock"; flock -w 2 9 2>/dev/null
-        printf '%s' "$INPUT" | jq -c --arg b "$BRANCH" -f "$LIB/event.jq" >> "$dir/session.jsonl" 2>/dev/null
+        printf '%s' "$INPUT" | KODFLOW_ROOT_GUARD=${ROOT_GUARD:-} jq -c --arg b "$BRANCH" -f "$LIB/event.jq" >> "$dir/session.jsonl" 2>/dev/null
     ) >/dev/null 2>&1 </dev/null &
 }
 
@@ -57,6 +65,21 @@ _block() {   # $1 = title, rest = lines. Stderr on exit 2 is what Claude reads.
     shift; printf '  %s\n' "$@" >&2
     _log
     exit 2
+}
+
+# BLOCK · root discipline. Root orchestrates: it decides, briefs, dispatches;
+# subagents mutate. The reason string is the only channel back to the model, so
+# it carries the briefing contract and not just the refusal. $1 = escape hatch.
+_root_deny() {
+    ROOT_GUARD=deny
+    _block "BLOCKED — root dispatches, it does not edit" \
+        "This is the main thread. Mutating work goes through a subagent, even a one-line change." \
+        "Brief it with what you ALREADY know, so it does not spend its budget rediscovering the repo:" \
+        "  - the objective, and the C-NNN constraints that apply to it" \
+        "  - the exact paths and line numbers you read, and what you already decided" \
+        "  - the return contract: compact summary to root, full output in a report file under the session scratchpad" \
+        "Name the agent, and send follow-ups to it rather than respawning. See the /root skill." \
+        "$1"
 }
 
 # Split a command line on ; && || | & and newline. Text inside quotes is split
@@ -83,6 +106,68 @@ _seg_name() {
     w=${seg%%[[:space:]]*}; printf '%s' "${w##*/}"
 }
 
+# A git segment that only reads. The subcommand is found past `-C dir`, `-c k=v`
+# and long globals, with the same shape the guard below uses.
+_git_readonly() {
+    local seg=$1 sub args
+    [[ $seg =~ git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+([a-z][a-z-]*)(.*)$ ]] || return 1
+    sub=${BASH_REMATCH[3]}; args=${BASH_REMATCH[4]}
+    case "$sub" in
+        status|log|diff|show|rev-parse|ls-files|ls-tree|ls-remote|describe|blame|shortlog|cat-file|for-each-ref|whatchanged|grep|count-objects|version) return 0 ;;
+        # These list with no argument and mutate as soon as one appears: `git
+        # branch` prints, `git branch x` creates. Only the pure listing forms pass.
+        branch|remote|tag)
+            [[ $args =~ ^([[:space:]]+(-v|-vv|-a|-r|-l|--list|--all|--remotes|--show-current|--verbose|--sort=[^[:space:]]+))*[[:space:]]*$ ]] && return 0
+            return 1 ;;
+        config) [[ $args =~ (^|[[:space:]])(--get|--get-all|--get-regexp|--list|-l)([[:space:]]|$) ]] && return 0; return 1 ;;
+        *) return 1 ;;
+    esac
+}
+
+# A segment that only reads. The allow-list is the safe direction: a command
+# nobody has classified must count as mutating, or the gate leaks on every tool
+# this list has not heard of yet.
+_seg_readonly() {
+    local seg=$1 name
+    name=$(_seg_name "$seg")
+    case "$name" in
+        ls|cat|head|tail|wc|stat|file|du|df|echo|printf|pwd|which|type|basename|dirname|realpath|readlink|tree|\
+        grep|egrep|fgrep|rg|sort|uniq|cut|tr|nl|column|comm|diff|cmp|awk|jq|yq|\
+        date|uname|hostname|id|whoami|uptime|ps|env|true|false|test|\
+        md5sum|sha1sum|sha256sum|base64|xxd|od|strings|man) return 0 ;;
+        # -i is the only sed that touches a file; everything else goes to stdout.
+        sed)  [[ $seg =~ (^|[[:space:]])(-[a-zA-Z]*i|--in-place) ]] && return 1; return 0 ;;
+        # find walks; -delete and -exec are where it stops walking and starts doing.
+        find) case " $seg " in *" -delete "*|*" -exec "*|*" -execdir "*|*" -ok "*|*" -fprintf "*|*" -fls "*) return 1 ;; esac; return 0 ;;
+        git)  _git_readonly "$seg" ;;
+        # A forge CLI reads only when a read verb is present and no write verb is.
+        gh|glab)
+            [[ $seg =~ (^|[[:space:]])(view|list|checks|status)([[:space:]]|$) ]] || return 1
+            [[ $seg =~ (^|[[:space:]])(create|edit|merge|close|delete|comment|review|approve|ready|reopen|clone|fork|run|sync)([[:space:]]|$) ]] && return 1
+            return 0 ;;
+        *)    return 1 ;;
+    esac
+}
+
+# GATE · the main thread may read; writing is delegated. Runs before the git
+# guard because it decides on *who* is calling, which is cheaper than, and
+# prior to, deciding on *what* the call does.
+_root_gate_bash() {
+    local norm=$1 seg mutating=0
+    [ "$ROOT_MAIN" = 1 ] || return 0
+    # ROOT_OK=1 <cmd> is the opt-out, spelled like NO_RTK=: it stays on the line
+    # as an ordinary assignment, and _seg_name already looks past such prefixes.
+    case "$CMD" in ROOT_OK=*) return 0 ;; esac
+    # Any redirection makes a reading line a writing one. Tested on the whole
+    # line, quotes included: a `>` inside a quoted awk program only ever makes
+    # this stricter, and strict is the safe direction here.
+    if [[ $norm == *">"* ]]; then mutating=1
+    else for seg in "${SEGS[@]}"; do _seg_readonly "$seg" || { mutating=1; break; }; done
+    fi
+    [ $mutating -eq 0 ] && return 0
+    _root_deny "Escape hatch: prefix the line with ROOT_OK=1, or set KODFLOW_ROOT=off for the session."
+}
+
 # ============================================================================
 # PreToolUse · Bash
 # ============================================================================
@@ -95,6 +180,9 @@ pre_bash() {
     # Anchoring on `^git` let `cd x && git commit`, `env git push`, `git -C dir
     # commit` and `bash -c "git commit"` through untouched. The match runs on
     # the whole line: a wrapper, a separator, a quote or a path may precede it.
+    _split "$norm"
+    _root_gate_bash "$norm"
+
     local re rest OPS=""
     re="(^|[;&|(\"'\`/]|[[:space:]])(([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*|env|command|exec|sudo|nohup|time|xargs|eval)[[:space:]]+)*git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+(commit|push|rebase|cherry-pick)([[:space:]]|$)"
     rest=$norm
@@ -102,7 +190,6 @@ pre_bash() {
         OPS="$OPS ${BASH_REMATCH[6]}"
         rest=${rest#*"${BASH_REMATCH[0]}"}
     done
-    _split "$norm"
 
     if [ -n "$OPS" ]; then
         # --- BLOCK 1: --no-verify, and -n on a commit segment ---------------
@@ -222,6 +309,7 @@ pre_bash() {
 # PreToolUse · Write / Edit / MultiEdit / NotebookEdit
 # ============================================================================
 pre_edit() {
+    [ "$ROOT_MAIN" = 1 ] && _root_deny "Escape hatch: KODFLOW_ROOT=off disables the discipline for the session."
     [ -n "$FILE" ] || exit 0
 
     # --- BLOCK: protected paths ----------------------------------------------
@@ -342,5 +430,8 @@ case "$EV/$TOOL" in
     PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit)     pre_edit ;;
     PostToolUse/Write|PostToolUse/Edit|PostToolUse/MultiEdit|PostToolUse/NotebookEdit) post_edit ;;
     PostToolUseFailure/*)                                   post_failure ;;
+    # OBSERVE: the other half of the measurement — how often root delegated,
+    # counted against how often it was stopped.
+    PostToolUse/Task|PostToolUse/Agent)                     ROOT_GUARD=dispatch; _log; exit 0 ;;
     *)                                                      _log; exit 0 ;;
 esac
