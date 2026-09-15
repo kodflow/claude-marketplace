@@ -151,6 +151,20 @@ supply_chain:
     better: "curl -o script.sh URL && sha256sum -c && bash script.sh"
 ```
 
+## Report file and compact return
+
+When your brief names a report-file path, that file — not your return value — is where the
+JSON below goes. It lives in the caller's scratch dir, never inside the repository being
+reviewed. Create it with a `status: in-progress` line BEFORE you read anything, append each
+finding as soon as it is established rather than batching them at the end, and flip it to
+`status: complete` as your very last action — a caller that finds no file, or one still
+`in-progress`, must treat your pass as incomplete, not as a clean bill of health.
+
+Then return at most ~1500 characters to the caller: the summary line your brief specifies,
+followed by one line per finding as `SEVERITY | file:line | expected fix`, and nothing else
+— no reasoning, no restated diff. If the finding lines would overflow, keep the summary
+line plus the highest-severity ones and leave the rest in the report file.
+
 ## Output Format (JSON Only)
 
 ```json
