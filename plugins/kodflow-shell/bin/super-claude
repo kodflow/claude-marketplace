@@ -57,13 +57,19 @@ case "${1:-}" in
             # find, not a glob: zsh aborts a function on a failed glob
             transcript=$(find "$proj" -maxdepth 2 -name "$1.jsonl" -print -quit 2>/dev/null)
             if [ -n "$transcript" ]; then
+                # The transcript exists, so this is a resume whatever happens
+                # next. Falling back to "positional prompt" would open a brand
+                # new conversation whose first message is a bare UUID.
                 workdir=$(head -c 65536 "$transcript" | grep -m1 -o '"cwd":"[^"]*"' | cut -d'"' -f4)
                 if [ -n "$workdir" ] && [ -d "$workdir" ]; then
                     printf '\033[2m→ %s\033[0m\n' "$workdir" >&2
-                    set -- --resume "$@"
                 else
+                    if [ -n "$workdir" ]; then
+                        printf '\033[2m(dossier d\047origine %s absent : reprise ici)\033[0m\n' "$workdir" >&2
+                    fi
                     workdir=""
                 fi
+                set -- --resume "$@"
             fi
         fi
         ;;

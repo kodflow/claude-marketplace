@@ -251,18 +251,21 @@ _claude_sessions_load_foreign() {
   for f in $picked; do dirs[${f:h}]=1; done
   # Scan each owning dir once (cheap, cached), then keep the picked ids in the
   # order the glob gave them: globally newest first.
-  local -a aids atitles aages adirs amtimes apdirs
+  local -a apaths aids atitles aages adirs amtimes apdirs
   for pdir in ${(k)dirs}; do
     _claude_sessions_reset_arrays
     _claude_sessions_scan "$pdir" $CLAUDE_SESSIONS_ALL_MAX
     aids+=($_cs_ids); atitles+=($_cs_titles); aages+=($_cs_ages)
     adirs+=($_cs_dirs); amtimes+=($_cs_mtimes); apdirs+=($_cs_pdirs)
+    local k
+    for k in $_cs_ids; do apaths+=("$pdir/$k.jsonl"); done
   done
   _claude_sessions_reset_arrays
   local id i
   for f in $picked; do
     id=${${f:t}%.jsonl}
-    i=${aids[(Ie)$id]}
+    # by full path, not by id: the same id can exist under two project dirs
+    i=${apaths[(Ie)$f]}
     (( i )) || continue
     _cs_ids+=("$id"); _cs_titles+=("$atitles[i]"); _cs_ages+=("$aages[i]")
     _cs_dirs+=("$adirs[i]"); _cs_mtimes+=("$amtimes[i]"); _cs_pdirs+=("$apdirs[i]")
@@ -291,11 +294,15 @@ _claude_sessions_rm() {
   local pdir=$1 id=$2
   [[ -n $pdir && -n $id ]] || return 1
   local root=${CLAUDE_CONFIG_DIR:-$HOME/.claude} short=${id[1,8]}
-  rm -f  -- "$pdir/$id.jsonl"
-  rm -rf -- "$pdir/$id"
-  rm -rf -- "$root/session-env/$id" "$root/file-history/$id"
-  rm -rf -- "$root/tasks/session-$short" "$root/teams/session-$short"
-  rm -f  -- "$CLAUDE_SESSIONS_CACHE/${pdir:t}/$id"
+  local -i rc=0
+  # Every removal counts: reporting "supprimée" for a session whose transcript
+  # survived a permission error would be a lie the caller repeats in its total.
+  rm -f  -- "$pdir/$id.jsonl"                                          || rc=1
+  rm -rf -- "$pdir/$id"                                                || rc=1
+  rm -rf -- "$root/session-env/$id" "$root/file-history/$id"           || rc=1
+  rm -rf -- "$root/tasks/session-$short" "$root/teams/session-$short"  || rc=1
+  rm -f  -- "$CLAUDE_SESSIONS_CACHE/${pdir:t}/$id"                     || rc=1
+  return $rc
 }
 
 # clean <green|warn|red> [-a] [-n]
@@ -317,6 +324,11 @@ _claude_sessions_clean() {
       return 2 ;;
   esac
 
+  # The pickers cap what they offer; the cleaner must see everything, or
+  # `clean green -a` would silently spare exactly the oldest sessions — the
+  # ones it exists to remove. zsh scopes these dynamically, so the loaders
+  # called below see the raised values.
+  local -i CLAUDE_SESSIONS_MAX=1000000 CLAUDE_SESSIONS_ALL_MAX=1000000
   _cs_key= _cs_stamp=0
   local -a ids titles ages dirs mtimes pdirs
   if (( all )); then
@@ -332,7 +344,7 @@ _claude_sessions_clean() {
   local -a sel_ids sel_titles sel_ages sel_dirs sel_pdirs sel_lv
   local -i i lv total=0 sz
   local -a sel_sizes
-  for i in {1..${#ids}}; do
+  for (( i = 1; i <= ${#ids}; i++ )); do
     lv=$(_claude_sessions_level $mtimes[i])
     (( lv >= max_level )) || continue
     sz=$(_claude_sessions_size "$pdirs[i]" "$ids[i]")
@@ -353,8 +365,8 @@ _claude_sessions_clean() {
   print -r -- ""
 
   local reply bulk yes_all=0
-  local -i removed=0 freed=0
-  for i in {1..${#sel_ids}}; do
+  local -i removed=0 freed=0 failed=0
+  for (( i = 1; i <= ${#sel_ids}; i++ )); do
     printf '  %s%s  %4s  %6s  %s%s\n' \
       "$(_claude_sessions_color $sel_lv[i])" "${sel_ids[i][1,8]}" "$sel_ages[i]" \
       "$(_claude_sessions_human $sel_sizes[i])" "$sel_titles[i]" "$(_claude_sessions_reset)"
@@ -394,6 +406,9 @@ _claude_sessions_clean() {
     fi
     if _claude_sessions_rm "$sel_pdirs[i]" "$sel_ids[i]"; then
       (( removed++ )); (( freed += sel_sizes[i] ))
+    else
+      (( failed++ ))
+      print -u2 "  ${sel_ids[i][1,8]} : suppression incomplète (droits ? fichier occupé ?)"
     fi
   done
 
@@ -402,6 +417,7 @@ _claude_sessions_clean() {
     print -r -- "Simulation : ${#sel_ids} session(s), $(_claude_sessions_human $total) libérables."
   else
     print -r -- "$removed session(s) supprimée(s), $(_claude_sessions_human $freed) libéré(s)."
+    (( failed )) && print -u2 "$failed session(s) partiellement supprimée(s) — relancer après avoir corrigé la cause."
   fi
   _cs_key= _cs_stamp=0
   return 0
@@ -463,12 +479,12 @@ claude-sessions() {
   local -a rows
   if (( all )); then
     _claude_sessions_load_foreign
-    for i in {1..${#_cs_ids}}; do
+    for (( i = 1; i <= ${#_cs_ids}; i++ )); do
       rows+=("$_cs_mtimes[i]	$_cs_ids[i]	$_cs_ages[i]	$_cs_dirs[i]	$_cs_titles[i]")
     done
     _cs_key= _cs_stamp=0
     _claude_sessions_load
-    for i in {1..${#_cs_ids}}; do
+    for (( i = 1; i <= ${#_cs_ids}; i++ )); do
       rows+=("$_cs_mtimes[i]	$_cs_ids[i]	$_cs_ages[i]	$_cs_dirs[i]	$_cs_titles[i]")
     done
     local row; local -a f
@@ -489,7 +505,7 @@ claude-sessions() {
   _claude_sessions_reset_arrays
   _claude_sessions_scan "$pdir" $CLAUDE_SESSIONS_MAX
   _cs_key= _cs_stamp=0
-  for i in {1..${#_cs_ids}}; do
+  for (( i = 1; i <= ${#_cs_ids}; i++ )); do
     printf '%s%s  %4s  %s%s\n' "$(_claude_sessions_color $(_claude_sessions_level $_cs_mtimes[i]))" \
       "$_cs_ids[i]" "$_cs_ages[i]" "$_cs_titles[i]" "$(_claude_sessions_reset)"
   done
@@ -512,7 +528,7 @@ _claude_sessions_add() {
   tokens=(${(z)pat})
   rst=$(_claude_sessions_reset)
 
-  for i in {1..${#_cs_ids}}; do
+  for (( i = 1; i <= ${#_cs_ids}; i++ )); do
     hay="${_cs_ids[i]} ${_cs_titles[i]} ${_cs_dirs[i]}"
     hay=${hay:l}
     ok=1
@@ -543,7 +559,7 @@ _claude_sessions_add_verbs() {
   local -a verbs=(clean sessions)
   local -a descs=("nettoyer les vieilles sessions (green|warn|red)" "lister les sessions")
   local i
-  for i in {1..${#verbs}}; do
+  for (( i = 1; i <= ${#verbs}; i++ )); do
     [[ -z $pat || ${verbs[i]} == ${pat}* ]] || continue
     values+=("$verbs[i]")
     display+=("${(r:10:)verbs[i]}  $descs[i]")

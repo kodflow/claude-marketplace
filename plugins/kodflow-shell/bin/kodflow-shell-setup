@@ -38,19 +38,49 @@ warn() { printf '%s\n' "$*" >&2; }
 
 # Content hash of what the plugin ships: resync on content change, whatever the
 # path. cksum is POSIX; find -printf is not.
-stamp_of() { cat "$1"/bin/* "$1"/shell/* 2>/dev/null | cksum | cut -d' ' -f1; }
+# Names as well as contents: hashing concatenated bytes alone would miss a file
+# that was removed upstream, or a rename between two identical files.
+stamp_of() {
+    (
+        cd "$1" 2>/dev/null || exit 0
+        for f in bin/* shell/*; do
+            [ -f "$f" ] && { printf '%s\n' "$f"; cat "$f"; }
+        done
+    ) | cksum | cut -d' ' -f1
+}
 
 if [ "$UNINSTALL" -eq 1 ]; then
-    for f in super-claude claude-sessions; do
-        [ -L "$BINDIR/$f" ] && rm -f "$BINDIR/$f" && say "délié   $BINDIR/$f"
-    done
-    [ -L "$OMZ_CUSTOM/kodflow-shell.zsh" ] && rm -f "$OMZ_CUSTOM/kodflow-shell.zsh" && say "délié   $OMZ_CUSTOM/kodflow-shell.zsh"
+    # Only ever unlink what points into our own mirror: someone may have put
+    # another tool's integration at one of these conventional paths, and
+    # uninstalling this plugin is no reason to remove theirs.
+    unlink_ours() {
+        path=$1
+        [ -L "$path" ] || return 0
+        target=$(readlink "$path" 2>/dev/null || echo "")
+        case "$target" in
+            "$DEST"/*)
+                if [ "$CHECK" -eq 1 ]; then say "à délier $path"
+                else rm -f "$path" && say "délié   $path"; fi ;;
+            *)  say "ignoré  $path (ne pointe pas vers $DEST)" ;;
+        esac
+    }
+    for f in super-claude claude-sessions; do unlink_ours "$BINDIR/$f"; done
+    unlink_ours "$OMZ_CUSTOM/kodflow-shell.zsh"
     if [ -f "$ZSHRC" ] && grep -q "$MARKER" "$ZSHRC" 2>/dev/null; then
-        tmp=$ZSHRC.kodflow-shell.$$
-        grep -v "$MARKER" "$ZSHRC" > "$tmp" && mv "$tmp" "$ZSHRC" && say "nettoyé $ZSHRC"
+        if [ "$CHECK" -eq 1 ]; then
+            say "à nettoyer $ZSHRC"
+        else
+            tmp=$ZSHRC.kodflow-shell.$$
+            grep -v "$MARKER" "$ZSHRC" > "$tmp" && mv "$tmp" "$ZSHRC" && say "nettoyé $ZSHRC"
+        fi
     fi
-    rm -rf "$DEST" && say "supprimé $DEST"
-    say "kodflow-shell désinstallé. Les sessions Claude ne sont pas touchées."
+    if [ "$CHECK" -eq 1 ]; then
+        say "à supprimer $DEST"
+        say "(--check : rien n'a été modifié)"
+    else
+        rm -rf "$DEST" && say "supprimé $DEST"
+        say "kodflow-shell désinstallé. Les sessions Claude ne sont pas touchées."
+    fi
     exit 0
 fi
 
@@ -68,6 +98,14 @@ else
         cp -f "$SRC"/bin/* "$DEST/bin/" 2>/dev/null || { warn "kodflow-shell: copie bin échouée"; exit 1; }
         cp -f "$SRC"/shell/* "$DEST/shell/" 2>/dev/null || { warn "kodflow-shell: copie shell échouée"; exit 1; }
         chmod +x "$DEST"/bin/* 2>/dev/null
+        # A file the plugin no longer ships must not survive in the mirror as a
+        # command that still runs.
+        for d in bin shell; do
+            for f in "$DEST/$d"/*; do
+                [ -e "$f" ] || continue
+                [ -e "$SRC/$d/${f##*/}" ] || { rm -f "$f" && say "retiré  $f (plus livré)"; }
+            done
+        done
         printf '%s\n' "$src_stamp" > "$DEST/.stamp"
         printf '%s\n' "$SRC" > "$DEST/.source"
         say "synchronisé $DEST ← $SRC"

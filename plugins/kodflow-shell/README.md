@@ -68,6 +68,20 @@ sous-agents, plusieurs dizaines de Mo), `session-env/<id>`, `file-history/<id>`,
 Les titres sont mis en cache dans `~/.cache/claude-sessions/`, invalidés par la date du
 transcript : un TAB coûte ~45 ms à chaud, une frappe ~15 ms, même avec des transcripts de 10 Mo.
 
+## Tests
+
+```bash
+./plugins/kodflow-shell/tests/run.zsh        # 30 assertions
+```
+
+Le ménage supprime des choses : la suite couvre les seuils d'âge, la simulation, les deux
+manières dont l'entrée peut se fermer (pipe sans terminal, `^D` sur un pty), Entrée qui vaut
+oui, `a` refusé par défaut puis accepté, la liste exacte de ce qu'une suppression emporte —
+et ce qu'elle épargne —, le plafond d'affichage qui ne doit pas limiter le ménage, et
+l'installateur (`--check` qui n'écrit rien, un lien étranger qu'on n'arrache pas, un fichier
+retiré en amont qui disparaît du miroir). Tout tourne dans un `HOME` et un dossier de
+configuration jetables : la suite ne peut pas voir une vraie session, encore moins la supprimer.
+
 ## Désinstallation
 
 ```bash
