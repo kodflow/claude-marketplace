@@ -25,6 +25,17 @@ for a in "$@"; do
   esac
 done
 say() { printf '  %s\n' "$*"; }
+# The marketplace manifest is the list of plugins. jq when it is there, a plain
+# grep otherwise: this installer runs on machines that have nothing yet.
+plugin_names() {
+  local m=$HERE/.claude-plugin/marketplace.json
+  if command -v jq >/dev/null 2>&1; then
+    jq -r '.plugins[].name' "$m" 2>/dev/null
+  else
+    grep -o '"name"[[:space:]]*:[[:space:]]*"kodflow-[^"]*"' "$m" 2>/dev/null |
+      sed 's/.*"\(kodflow-[^"]*\)"/\1/'
+  fi
+}
 run() { [ "$CHECK" -eq 1 ] && { say "would: $*"; return 0; }; "$@"; }
 
 # ---------------------------------------------------------------- preflight
@@ -44,7 +55,9 @@ if [ "$DO_CLAUDE" -eq 1 ]; then
     run claude plugin marketplace add "$MARKET_URL" 2>/dev/null \
       && say "marketplace registered" \
       || say "marketplace already registered (or the CLI declined) — continuing"
-    for p in kodflow-workflow kodflow-review kodflow-devops kodflow-specialists kodflow-hooks; do
+    # Read from the manifest, never a second hand-kept list: the previous one
+    # silently stopped installing a plugin the day a sixth was added.
+    for p in $(plugin_names); do
       run claude plugin install "$p@kodflow" 2>/dev/null \
         && say "installed $p" || say "$p already installed or unavailable"
     done
