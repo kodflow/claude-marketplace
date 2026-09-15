@@ -63,6 +63,11 @@ for d in (skills_out, agents_out):
     d.mkdir(parents=True, exist_ok=True)
 
 # ---- skills ---------------------------------------------------------------
+# Every path written below is recorded, so whatever is left over afterwards is
+# output whose source is gone. Generating without pruning leaves a deleted
+# skill installed on the Codex side forever, and a diff-based freshness check
+# cannot see it: nothing changed, something merely failed to disappear.
+written = set()
 n_sk = 0
 for src in sorted(ROOT.glob("plugins/*/skills/*")):
     if not src.is_dir(): continue
@@ -83,6 +88,7 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
         entry_text = ("---\n" + yaml.safe_dump(out, sort_keys=False, allow_unicode=True, width=88).rstrip("\n")
                       + "\n---\n" + neutralise(body))
         (dst / "SKILL.md").write_text(entry_text)
+        written.add(dst / "SKILL.md")
         n_sk += 1
     for f in src.rglob("*"):
         if f.is_file() and f.name != "SKILL.md":
@@ -91,6 +97,7 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
             try: tgt.write_text(neutralise(f.read_text()))
             except UnicodeDecodeError: tgt.write_bytes(f.read_bytes())
             if f.suffix == ".sh": tgt.chmod(0o755)
+            written.add(tgt)
 
 # ---- agents ---------------------------------------------------------------
 n_ag = 0
@@ -101,12 +108,26 @@ for src in sorted(ROOT.glob("plugins/*/agents/*.md")):
     desc = " ".join(str(fm.get("description", "")).split())
     instr = neutralise(body).strip()
     (agents_out / f"{name}.toml").write_text(
+        # The marker is what lets the installer tell a file it produced from a
+        # file the user wrote, so it can retire the first and never the second.
+        f'# generated-from: plugins/*/agents/{src.name}\n'
         f'name = "{name}"\n'
         f'description = """{toml_escape(desc)}"""\n'
         f'model = "{model}"\n'
         f'model_reasoning_effort = "{effort}"\n\n'
         f'developer_instructions = """\n{toml_escape(instr)}\n"""\n'
     )
+    written.add(agents_out / f"{name}.toml")
     n_ag += 1
 
-print(f"  codex/skills: {n_sk} · codex/agents: {n_ag}")
+# ---- prune ----------------------------------------------------------------
+n_rm = 0
+for out in (skills_out, agents_out):
+    for f in sorted(out.rglob("*"), reverse=True):
+        if f.is_file() and f not in written:
+            f.unlink(); n_rm += 1
+        elif f.is_dir() and not any(f.iterdir()):
+            f.rmdir()
+
+print(f"  codex/skills: {n_sk} · codex/agents: {n_ag}"
+      + (f" · pruned: {n_rm}" if n_rm else ""))

@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/devops-specialist-hashicorp.md
 name = "devops-specialist-hashicorp"
 description = """HashiCorp stack specialist. Expert in Vault, Consul, Nomad, Packer, and Boundary. Invoked by devops-orchestrator. Returns condensed JSON results with configurations and recommendations."""
 model = "gpt-5.6-sol"

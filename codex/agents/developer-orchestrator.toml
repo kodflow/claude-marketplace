@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-orchestrator.md
 name = "developer-orchestrator"
 description = """Main Developer orchestrator using RLM decomposition. Coordinates code review, refactoring, testing, and development tasks. Handles complex architectural decisions and delegates to specialists. Use for development planning and coordination. Supports both GitHub (PRs) and GitLab (MRs) - auto-detected from git remote."""
 model = "gpt-6-astra"

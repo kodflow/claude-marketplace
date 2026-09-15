@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-executor-security.md
 name = "developer-executor-security"
 description = """Security-focused code analysis executor with deep reasoning capabilities. Performs taint analysis (source → sink), detects OWASP Top 10, hardcoded secrets, injection flaws, crypto issues, and supply chain risks. Returns condensed JSON with taint paths and CWE/OWASP references."""
 model = "gpt-6-astra"

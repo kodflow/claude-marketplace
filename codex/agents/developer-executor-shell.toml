@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-executor-shell.md
 name = "developer-executor-shell"
 description = """Shell script, Dockerfile, and CI/CD safety analyzer. Detects dangerous patterns, missing safeguards, and configuration issues. Uses deterministic pattern matching for efficient detection. Returns condensed JSON results."""
 model = "gpt-5.6-luna"

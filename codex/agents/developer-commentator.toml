@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-commentator.md
 name = "developer-commentator"
 description = """Orchestrate comprehensive code comment auditing across a project. Dispatches Haiku workers per file to ensure all comments explain WHY (not WHAT), all functions have proper docstrings with params/types/return, and language conventions are respected."""
 model = "gpt-6-astra"

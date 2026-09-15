@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/os-specialist-ubuntu.md
 name = "os-specialist-ubuntu"
 description = """Ubuntu specialist agent. Expert in apt/snap, systemd, PPAs, Ubuntu Pro, and LTS release cycles. Queries official Ubuntu documentation for version-specific accuracy. Returns condensed JSON only."""
 model = "gpt-5.6-luna"

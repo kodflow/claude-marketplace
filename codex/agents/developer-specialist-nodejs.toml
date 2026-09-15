@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-nodejs.md
 name = "developer-specialist-nodejs"
 description = """Node.js/TypeScript specialist agent. Expert in modern ECMAScript, TypeScript strict mode, async patterns, and npm ecosystem. Enforces academic-level code quality with ESLint, Prettier, and comprehensive type safety. Returns structured analysis and recommendations."""
 model = "gpt-5.6-sol"

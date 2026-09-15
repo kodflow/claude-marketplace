@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-zig.md
 name = "developer-specialist-zig"
 description = """Zig specialist — comptime, allocator discipline, error unions, the 0.15 std.Io Writer/Reader interfaces, and the build.zig module graph. Routed when a project contains build.zig, build.zig.zon, or *.zig sources. Returns structured analysis with the exact zig commands run."""
 model = "gpt-5.6-sol"

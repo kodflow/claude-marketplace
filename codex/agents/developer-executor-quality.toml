@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-executor-quality.md
 name = "developer-executor-quality"
 description = """Code quality analysis executor. Detects complexity issues, code smells, style violations, and maintainability problems. Invoked by developer-specialist-review. Returns condensed JSON results with commendations."""
 model = "gpt-5.6-luna"

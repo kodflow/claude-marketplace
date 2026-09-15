@@ -90,6 +90,28 @@ if [ "$DO_CODEX" -eq 1 ]; then
       cp "$f" "$STAGE/agent.toml" && mv "$STAGE/agent.toml" "$HOME/.codex/agents/$(basename "$f")" \
         || { say "FAILED agent $(basename "$f")"; failed=1; }
     done
+    # Retire what this repository used to ship and no longer does. Copying
+    # only what exists leaves a deleted skill installed and discoverable for
+    # ever — the user goes on typing a command the project has dropped.
+    # Nothing is removed unless it carries the generator's marker, so a skill
+    # or agent the user wrote themselves is never a candidate.
+    for d in "$HOME"/.codex/skills/*/; do
+      [ -d "$d" ] || continue
+      n=$(basename "$d")
+      [ -d "$HERE/codex/skills/$n" ] && continue
+      grep -q 'generated-from: plugins/\*/skills/' "$d/SKILL.md" 2>/dev/null || continue
+      if [ "$CHECK" -eq 1 ]; then say "would: retire skill $n (no longer shipped)"; continue; fi
+      run rm -rf "$d" && say "retired skill $n (no longer shipped)"
+    done
+    for f in "$HOME"/.codex/agents/*.toml; do
+      [ -f "$f" ] || continue
+      b=$(basename "$f")
+      [ -f "$HERE/codex/agents/$b" ] && continue
+      head -1 "$f" | grep -q '^# generated-from: plugins/\*/agents/' || continue
+      if [ "$CHECK" -eq 1 ]; then say "would: retire agent $b (no longer shipped)"; continue; fi
+      run rm -f "$f" && say "retired agent $b (no longer shipped)"
+    done
+
     [ "$failed" -eq 0 ] || { echo "install incomplete — see FAILED lines above" >&2; exit 1; }
     c=$(find "$HERE/codex/agents" -name '*.toml' 2>/dev/null | wc -l | tr -d ' ')
     say "$c custom agents"

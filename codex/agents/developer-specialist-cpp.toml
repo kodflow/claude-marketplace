@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-cpp.md
 name = "developer-specialist-cpp"
 description = """C++ specialist agent. Expert in C++23/26, concepts, coroutines, ranges, and modules. Enforces academic-level code quality with Clang-Tidy, AddressSanitizer, and comprehensive testing. Returns structured analysis and recommendations."""
 model = "gpt-5.6-sol"

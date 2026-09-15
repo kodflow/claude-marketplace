@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-c.md
 name = "developer-specialist-c"
 description = """C specialist agent. Expert in memory safety, undefined behavior prevention, and modern C23 features. Enforces academic-level code quality with clang-tidy, valgrind, and strict compiler warnings. Returns structured analysis."""
 model = "gpt-5.6-sol"

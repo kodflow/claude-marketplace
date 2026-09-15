@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-executor-correctness.md
 name = "developer-executor-correctness"
 description = """Algorithmic correctness analyzer. Detects invariant violations, state machine issues, concurrency bugs, off-by-one errors, and error surfacing problems. Returns condensed JSON with counterexamples and fix patches. Uses Correctness Oracle Framework for systematic detection."""
 model = "gpt-5.6-sol"

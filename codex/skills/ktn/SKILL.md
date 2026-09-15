@@ -11,7 +11,7 @@ description: 'Autonomous health-and-heal for the project-linter MCP stack. Dispa
 metadata:
   short-description: Autonomous health-and-heal for the project-linter MCP stack
   generated-from: plugins/*/skills/ktn
-  argument-hint: '[--check] [--phases <spec>] [--scope <diff|all>] [--restart]'
+  argument-hint: '[--check] [--phases <spec>] [--scope <diff|full|show>] [--restart] [--uninstall]'
 ---
 
 # /ktn — Autonomous project-linter MCP Lifecycle

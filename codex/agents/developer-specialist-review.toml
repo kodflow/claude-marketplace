@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-review.md
 name = "developer-specialist-review"
 description = """Code review specialist using RLM decomposition. Coordinates 5 sub-agents (correctness, security, design, quality, shell) for comprehensive analysis. Dispatches sub-agents in parallel via Task tool to avoid context accumulation. Supports both GitHub PRs and GitLab MRs (auto-detected from git remote). Output is LOCAL ONLY - generates /plan file for /refine → /goal execution."""
 model = "gpt-5.6-sol"

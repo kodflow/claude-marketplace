@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-go.md
 name = "developer-specialist-go"
 description = """Go specialist agent. Expert in idiomatic Go, concurrency patterns, error handling, and standard library. Enforces academic-level code quality with golangci-lint, race detection, and comprehensive testing. Returns structured analysis."""
 model = "gpt-5.6-sol"
