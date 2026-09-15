@@ -32,7 +32,12 @@ MEMORY_BLOCK = re.compile(r"persistent,?\s+file-based memory|file-based memory (
 # The date is the point: an exemption with no date is permanent wearing a
 # temporary face. An entry that is stale — file gone, or already under budget —
 # is itself a finding, so the list cannot outlive the reasons in it.
-SKILL_SIZE_ALLOWLIST: dict[str, str] = {}
+SKILL_SIZE_ALLOWLIST: dict[str, str] = {
+    "plugins/kodflow-review/skills/review/SKILL.md":
+        "2026-09-15: 21263 after the report-file and compact-return contracts, which cost 1504 "
+        "and reclaimed 756 by cutting duplicated prose. Below budget again only by dropping the "
+        "per-extension specialist table, which is what makes the routing decidable.",
+}
 
 ALLOWLIST_REASON = re.compile(r"^(\d{4}-\d{2}-\d{2}): \S")
 
