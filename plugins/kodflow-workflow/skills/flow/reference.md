@@ -12,7 +12,7 @@ Index, by lane:
 | load | `/warmup` |
 | research | `/search` |
 | design | `/plan` `/challenge` `/refine` |
-| verify | `/review` `/debug` `/lint` `/comment` |
+| verify | `/review` `/debug` `/lint` |
 | ship | `/git` `/adr` |
 | keep | `/learn` |
 | machine | `/audit` `/update` `/ktn` `/infra` |
@@ -244,26 +244,6 @@ thrashing.
 | after | — |
 | then | — |
 | gate | `make lint` short-circuits everything: if the Makefile has the target, it runs and the language-specific path is skipped entirely. |
-
----
-
-## /comment
-
-`kodflow-review` · opus · **Audit and fix comments, one worker per file**
-
-**Type** `/comment [path] [--check] [--lang <l1,l2>]`
-
-| | |
-|---|---|
-| reads | the target path, falling back to `/workspace/src/` then `/workspace/` |
-| writes | comments and docstrings, in place — except under `--check`, which reports and writes nothing |
-| after | — |
-| then | — |
-
-The skill itself audits nothing: it validates the target, makes one call to
-`developer-commentator`, and presents what comes back. The work is a fan-out of
-one worker per file. The rule enforced is WHY, never WHAT, plus params, types
-and return on every docstring.
 
 ---
 

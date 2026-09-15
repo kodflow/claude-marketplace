@@ -99,7 +99,6 @@ The whole thing. Default view.
   ( the proof gate returns the run to isolation rather than waving it through
   /review --loop     converges on correctness, not on tone
   /lint              `make lint` if the Makefile has it, else the toolchain, to zero
-  /comment [path]    one worker per file, in parallel — WHY, never WHAT
 
 
   WHAT OUTLIVES THE SESSION
@@ -196,7 +195,6 @@ The whole thing. Default view.
   ( the proof gate returns the run to isolation rather than waving it through
   /review --loop    converges on correctness, not on tone
   /lint             `make lint` if the Makefile has it, else the toolchain
-  /comment [path]   one worker per file, in parallel -- WHY, never WHAT
 
 
   WHAT OUTLIVES THE SESSION
@@ -537,7 +535,6 @@ dispatched in one message.
   /challenge   three fixed lenses + every specialist the plan's evidence matches
   /feature  /fix   every specialist the technology matches — mandatory
   /plan        developer-orchestrator as lead, four explorers
-  /comment     developer-commentator ──▶ one worker per file, in parallel
   /infra       devops-orchestrator ──▶ infrastructure + security, always
   /ktn         devops-executor-linux ×5, in ONE wave
 
@@ -559,6 +556,7 @@ dispatched in one message.
   ◆ never dispatch to an agent that is not in that table.
 
   developer-commentator (opus) ──▶ developer-commentator-worker ×N, background
+  ◆ no skill opens these two — invoke them by name
 
   DEVOPS
   ─────────────────────────────────────────────────────────────────────────────
@@ -584,7 +582,6 @@ dispatched in one message.
   /challenge  three fixed lenses + every specialist the plan's evidence matches
   /feature /fix   every specialist the technology matches -- mandatory
   /plan       developer-orchestrator as lead, four explorers
-  /comment    developer-commentator --> one worker per file, in parallel
   /infra      devops-orchestrator --> infrastructure + security, always
   /ktn        devops-executor-linux x5, in ONE wave
 
@@ -606,6 +603,7 @@ dispatched in one message.
   <> never dispatch to an agent that is not in that table.
 
   developer-commentator (opus) --> developer-commentator-worker xN, background
+  <> no skill opens these two -- invoke them by name
 
   DEVOPS
   ------------------------------------------------------------------------------
