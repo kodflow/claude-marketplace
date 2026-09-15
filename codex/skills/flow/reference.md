@@ -200,7 +200,7 @@ Review threads are answered on the platform, not in the terminal.
 | | |
 |---|---|
 | reads | every changed file and every changed hunk · the constraint ledger · the real output of linters, SAST, SCA, secret, IaC and build/test runs |
-| writes | `.claude/plans/review-fixes-<ts>.md` · `.claude/review-manifest-<ts>.json` · edits a plan in place with a backup under `.claude/plans/.history/` |
+| writes | `.claude/plans/review-fixes-<ts>.md` · `$SCRATCH/review-manifest-<ts>.json` · edits a plan in place with a backup under `.claude/plans/.history/` |
 | after | `/plan` · `/git` |
 | then | `/refine` then `/goal` — that is the cycle |
 | gate | an **external, non-LLM verifier** recomputes hunks and symbols from git and invalidates the run on a mismatch. That is what makes a fake pass mechanically detectable. |

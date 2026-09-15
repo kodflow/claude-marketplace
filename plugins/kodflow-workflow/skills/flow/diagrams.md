@@ -68,7 +68,7 @@ The whole thing. Default view.
                │
                ▼
   /review [PR | MR | --local]       .claude/plans/review-fixes-<ts>.md
-  │ macro on every file, micro      .claude/review-manifest-<ts>.json
+  │ macro on every file, micro      $SCRATCH/review-manifest-<ts>.json
   │ on every changed hunk           ──▶ /refine ──▶ /goal   (the cycle)
   ◆ an external, non-LLM verifier recomputes the manifest from git
   ◆ and VOIDS the whole run on a mismatch. That is the anti-fake-pass.
@@ -164,7 +164,7 @@ The whole thing. Default view.
               |
               v
   /review [PR | MR | --local]      .claude/plans/review-fixes-<ts>.md
-  | macro on every file, micro     .claude/review-manifest-<ts>.json
+  | macro on every file, micro     $SCRATCH/review-manifest-<ts>.json
   | on every changed hunk          --> /refine --> /goal   (the cycle)
   <> an external, non-LLM verifier recomputes the manifest from git
   <> and VOIDS the whole run on a mismatch. That is the anti-fake-pass.
@@ -321,7 +321,7 @@ skills barely call each other, they hand each other files.
                      .claude/contexts/<slug>.md            /review  /goal
 
   /review          .claude/plans/review-fixes-<ts>.md    /refine ──▶ /goal
-                     .claude/review-manifest-<ts>.json   an external non-LLM
+                     $SCRATCH/review-manifest-<ts>.json  an external non-LLM
                      edits the plan in place, keeping    verifier — it can VOID it
                      a backup under .history/
 
@@ -373,7 +373,7 @@ skills barely call each other, they hand each other files.
                      .claude/contexts/<slug>.md           /review  /goal
 
   /review          .claude/plans/review-fixes-<ts>.md   /refine -> /goal
-                     .claude/review-manifest-<ts>.json  an external non-LLM
+                     $SCRATCH/review-manifest-<ts>.json an external non-LLM
                      edits the plan in place, keeping   verifier can VOID it
                      a backup under .history/
 

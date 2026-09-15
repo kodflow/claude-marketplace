@@ -21,8 +21,10 @@
 #                    [--out-dir <dir>]
 #
 # Guarantees:
-#   * NEVER mutates a tracked source file — only a temp scratch copy + the
-#     artifact under <out-dir> (default <repo>/.claude, the agent scratchpad).
+#   * NEVER mutates a tracked source file, and never writes inside the repo:
+#     an artifact dropped in the worktree shows up as `??` in the very
+#     `git status` the review reads and folds itself into the diff under
+#     review. <out-dir> defaults to a temp dir; /review passes its own.
 #   * Exits 0 even when there is nothing to seed (writes a seeded=false
 #     artifact); a shallow/unresolvable BASE degrades gracefully (C13).
 # ============================================================================
@@ -56,7 +58,7 @@ done
 [ -d "$REPO" ] || die "repo dir does not exist: $REPO"
 git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1 || die "not a git repo: $REPO"
 
-OUT_DIR="${OUT_DIR:-$REPO/.claude}"
+OUT_DIR="${OUT_DIR:-$(mktemp -d "${TMPDIR:-/tmp}/review-canary.XXXXXX")}"
 mkdir -p "$OUT_DIR"
 
 TS="$(date -u +%Y%m%dT%H%M%SZ)"

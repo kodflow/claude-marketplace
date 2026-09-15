@@ -43,6 +43,37 @@ script validates — length, an unticked task list, a runnable check per
 acceptance criterion, no vague verbs, no placeholders. A directive that would
 let a run report success at 60% does not ship.
 
+## Pinning a version for a project or a team
+
+`install.sh` follows the tip of `main`, which is right on your own machine and
+wrong for a team: a plugin update lands the moment someone opens the project,
+possibly mid-sprint. A repository can register the marketplace at a fixed git
+ref in its own `.claude/settings.json` — a tag, a branch or a commit sha —
+so everyone working on it runs the same revision until that file changes:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "kodflow": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/kodflow/claude-marketplace.git",
+        "ref": "4eeb32f3b9cacea4696faf549fb4a80b6760eedd"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "kodflow-workflow@kodflow": true,
+    "kodflow-review@kodflow": true
+  }
+}
+```
+
+Pin when a change to the skills would be a change to the work — a release
+branch, a shared CI image, an audit whose findings have to be reproducible —
+and leave it unpinned everywhere else, where getting the fix the day it lands
+is the reason to install from a marketplace at all.
+
 ## Both CLIs, one source
 
 `codex/` is **generated** from `plugins/` by `scripts/build-codex.py`, not

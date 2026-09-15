@@ -208,7 +208,7 @@ layer rather than a hand-maintained table that drifts:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
-  --profile "$PROJECT_DIR/.claude/repo-profile.json"   # reads ~/.claude/agents/routing-table.jsonl
+  --profile "$SCRATCH/repo-profile.json"               # reads ~/.claude/agents/routing-table.jsonl
 # --phase review selects the /review rules (language-specialist fanout + protobuf/asn1 route);
 # --profile is the file Phase 0.5 wrote (top-level .languages array). Omitting --phase, or
 # pointing at a non-existent profile, makes route-agent.sh exit 2/20 on every run.
