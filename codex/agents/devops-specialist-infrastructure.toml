@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/devops-specialist-infrastructure.md
 name = "devops-specialist-infrastructure"
 description = """Infrastructure as Code specialist sub-agent. Expert in Terraform, OpenTofu, and cloud provisioning. Invoked by devops-orchestrator. Returns condensed JSON results with plans and warnings."""
 model = "gpt-5.6-sol"

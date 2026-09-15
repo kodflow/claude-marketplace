@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/devops-specialist-docker.md
 name = "devops-specialist-docker"
 description = """Docker container specialist. Expert in Dockerfile optimization, Docker Compose, container security, and image management. Invoked by devops-orchestrator for containerization tasks."""
 model = "gpt-5.6-sol"

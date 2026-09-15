@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-python.md
 name = "developer-specialist-python"
 description = """Python specialist agent. Expert in modern Python 3.14+, type hints, async patterns, and PEP standards. Enforces academic-level code quality with mypy strict, ruff, and pytest. Returns structured analysis and recommendations."""
 model = "gpt-5.6-sol"

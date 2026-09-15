@@ -80,6 +80,12 @@ jobs:
       - name: The flow inventory reads every shipped layout
         run: bash scripts/tests/test_flow_inventory.sh
 
+      # Pruning is invisible to the freshness check below: a generator that
+      # stopped deleting produces no diff, it just leaves a dropped skill
+      # installed for ever. So it is exercised against a seeded fixture.
+      - name: The generator retires output whose source is gone
+        run: python3 scripts/tests/test_build_codex.py
+
       # codex/ is generated from plugins/. A hand-edit there, or a source edit
       # that nobody regenerated, ships two versions of the same skill.
       - name: The codex tree matches its sources

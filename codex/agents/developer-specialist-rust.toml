@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-rust.md
 name = "developer-specialist-rust"
 description = """Rust specialist agent. Expert in ownership, lifetimes, async patterns, and unsafe code. Enforces academic-level code quality with clippy pedantic, rustfmt, and comprehensive testing. Returns structured analysis and recommendations."""
 model = "gpt-5.6-sol"

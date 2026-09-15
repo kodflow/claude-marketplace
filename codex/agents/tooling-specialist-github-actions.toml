@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/tooling-specialist-github-actions.md
 name = "tooling-specialist-github-actions"
 description = """GitHub Actions specialist — workflows under `.github/workflows/`, composite/reusable actions, matrix builds, supply-chain hardening (pinned SHAs, OIDC, least-privilege tokens). Routed when the project uses GitHub CI."""
 model = "gpt-5.6-sol"

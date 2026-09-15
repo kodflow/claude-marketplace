@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-executor-design.md
 name = "developer-executor-design"
 description = """Design pattern and architecture analyzer. Detects antipatterns, DDD violations, layering issues, and SOLID principle violations. Consults ~/.claude/docs/ for patterns and cross-references with official documentation. Returns condensed JSON with pattern references and fix recommendations."""
 model = "gpt-5.6-sol"

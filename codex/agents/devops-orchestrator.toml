@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/devops-orchestrator.md
 name = "devops-orchestrator"
 description = """Main DevOps/DevSecOps/FinOps orchestrator using RLM decomposition. Coordinates specialized sub-agents for infrastructure, security, cost, software, sysadmin, and cloud operations. Dispatches sub-agents in parallel via Task tool. Supports both GitHub (PRs) and GitLab (MRs) - auto-detected from git remote."""
 model = "gpt-6-astra"

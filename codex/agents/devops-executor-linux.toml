@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/devops-executor-linux.md
 name = "devops-executor-linux"
 description = """Linux system administration router + executor. Detects distro from /etc/os-release and dispatches to the appropriate os-specialist-{distro} agent. Falls back to generic Linux handling for unknown distros. Invoked by devops-orchestrator for Linux operations."""
 model = "gpt-5.6-luna"

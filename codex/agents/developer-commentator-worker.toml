@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-commentator-worker.md
 name = "developer-commentator-worker"
 description = """Audit and fix code comments in a single file. Ensures comments explain WHY not WHAT, functions have proper docstrings with params/types/return, and language conventions are followed. Returns structured JSON."""
 model = "gpt-5.6-luna"

@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/developer-specialist-react.md
 name = "developer-specialist-react"
 description = """React 19 specialist — JSX/TSX, hooks, React Server Components, Suspense boundaries, Concurrent Mode. Routed when a node project declares a `react` dependency."""
 model = "gpt-5.6-sol"

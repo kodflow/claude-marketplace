@@ -108,6 +108,9 @@ for src in sorted(ROOT.glob("plugins/*/agents/*.md")):
     desc = " ".join(str(fm.get("description", "")).split())
     instr = neutralise(body).strip()
     (agents_out / f"{name}.toml").write_text(
+        # The marker is what lets the installer tell a file it produced from a
+        # file the user wrote, so it can retire the first and never the second.
+        f'# generated-from: plugins/*/agents/{src.name}\n'
         f'name = "{name}"\n'
         f'description = """{toml_escape(desc)}"""\n'
         f'model = "{model}"\n'

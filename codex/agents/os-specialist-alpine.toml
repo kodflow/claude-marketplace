@@ -1,3 +1,4 @@
+# generated-from: plugins/*/agents/os-specialist-alpine.md
 name = "os-specialist-alpine"
 description = """Alpine Linux specialist agent. Expert in apk, OpenRC/s6, musl libc, BusyBox, and minimal container images. Queries official Alpine wiki for version-specific accuracy. Returns condensed JSON only."""
 model = "gpt-5.6-luna"
