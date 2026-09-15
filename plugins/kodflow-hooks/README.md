@@ -65,7 +65,10 @@ because the inverse leaks on every command it has not heard of yet; any `>`,
 Three ways out, because a gate with no way out is a gate that gets ripped out:
 `ROOT_OK=1` on a line, `KODFLOW_ROOT=off` for the session, and plan mode, where
 the gate never fires. It fails open on every anomaly like the rest of these
-hooks. The reason string carries the briefing contract — the `/root` skill in
+hooks — and on two edges worth naming, because both are asserted rather than
+assumed: a payload that names no tool is not this hook's business and exits `0`
+whatever sits in `tool_input`, and an `agent_id` that is present but empty is
+the main thread, not a subagent. The reason string carries the briefing contract — the `/root` skill in
 `kodflow-workflow` is the long form.
 
 `lib/format.sh` is the formatter table (sourced lazily, never registered) and
