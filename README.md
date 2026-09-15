@@ -57,12 +57,17 @@ result parses and that no private detail survived.
 ## What a session pays to have this installed
 
 `scripts/check-context-cost.py` reports the standing cost of the catalogue:
-agents that pin neither `model` nor `effort` (they inherit the user's session
-setting, `xhigh` included, on every spawn), descriptions over 350 characters
-(loaded into every session, used or not), a `SKILL.md` over 20 000 characters,
-memory blocks copied out of the harness, and cross-plugin references written
-bare — a backticked `debug` in a kodflow-workflow skill resolves to whatever
-`debug` the user has installed locally, so it is written `kodflow-review:debug`.
+agents that leave `model` or `effort` unpinned, descriptions over 350
+characters (loaded into every session, used or not), a `SKILL.md` over 20 000
+characters, memory blocks copied out of the harness, and cross-plugin
+references written bare — a backticked `debug` in a kodflow-workflow skill or
+agent resolves to whatever `debug` the user has installed locally, so it is
+written `kodflow-review:debug`.
+
+An agent is reported when **either** `model` or `effort` is unpinned, so both
+have to be pinned explicitly, and pinned means a real value: an empty
+`effort:`, a `null` and a `~` are all unpinned. Whichever field is missing
+inherits the user's session setting, `xhigh` included, on every spawn.
 
 Findings are warnings and CI stays green. A check gates the build only once it
 is named in `COST_CHECKS_STRICT` (comma-separated, or `all`), which is what

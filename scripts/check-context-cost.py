@@ -15,7 +15,7 @@ clean for it:
     COST_CHECKS_STRICT=model_effort,skill_size python3 scripts/check-context-cost.py .
     COST_CHECKS_STRICT=all python3 scripts/check-context-cost.py .
 """
-import os, pathlib, re, sys
+import datetime, os, pathlib, re, sys
 
 CHECKS = ("model_effort", "description_budget", "skill_size", "memory_block", "plugin_prefix")
 
@@ -34,7 +34,7 @@ MEMORY_BLOCK = re.compile(r"persistent,?\s+file-based memory|file-based memory (
 # is itself a finding, so the list cannot outlive the reasons in it.
 SKILL_SIZE_ALLOWLIST: dict[str, str] = {}
 
-ALLOWLIST_REASON = re.compile(r"^\d{4}-\d{2}-\d{2}: \S")
+ALLOWLIST_REASON = re.compile(r"^(\d{4}-\d{2}-\d{2}): \S")
 
 FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
@@ -77,7 +77,37 @@ def scalar(fm, key):
 
 
 def pinned(fm, key):
-    return re.search(rf"^{re.escape(key)}:\s*\S", fm, re.M) is not None
+    """Whether the key carries a real value, not merely a line.
+
+    `effort:` with nothing after it, `effort: null`, `effort: ~` and a value
+    that is only a trailing comment are all the key present and unset — which
+    is the emptiest way of pinning nothing, and precisely what this check
+    exists to catch. Proving the line is there proves nothing.
+
+    The comment is stripped after `scalar` has already unquoted, so a value of
+    literally `"#1"` would read as empty; no model or effort is spelt that way.
+    """
+    value = scalar(fm, key)
+    if value is None:
+        return False
+    value = re.sub(r"(?:^|\s)#.*$", "", value).strip()
+    return value != "" and value.lower() not in ("null", "~")
+
+
+def dated(reason):
+    """Whether an allowlist entry opens with a real calendar date and a reason.
+
+    The shape is not the point, the date is: `2026-13-45` matches the pattern
+    and names no day, so an entry carrying it would look reviewed while being
+    exactly the undated exemption the format exists to forbid.
+    """
+    if not (m := ALLOWLIST_REASON.match(reason)):
+        return False
+    try:
+        datetime.date.fromisoformat(m.group(1))
+    except ValueError:
+        return False
+    return True
 
 
 def code_tokens(text):
@@ -151,7 +181,7 @@ def check(root):
 
     for rel, reason in sorted(SKILL_SIZE_ALLOWLIST.items()):
         path = root / rel
-        if not ALLOWLIST_REASON.match(reason):
+        if not dated(reason):
             found.append(("skill_size", rel, "allowlisted without a 'YYYY-MM-DD: reason' entry"))
         elif not path.is_file():
             found.append(("skill_size", rel, "allowlisted but the file is gone"))
@@ -161,7 +191,9 @@ def check(root):
     # A bare `debug` in a kodflow-workflow skill resolves to whatever `debug`
     # the user happens to have installed, which is how a session silently runs
     # someone else's skill. Only the owning plugin may write the name bare.
-    for pname, f in skills:
+    # Agent bodies are read into a session the same way and name each other the
+    # same way, so the rule that only covered skills left half the tree unread.
+    for pname, f in agents + skills:
         text, seen = f.read_text(), set()
         for token in code_tokens(text):
             if m := PREFIXED.match(token):
