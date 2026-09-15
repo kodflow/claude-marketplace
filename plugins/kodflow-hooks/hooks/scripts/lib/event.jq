@@ -52,7 +52,11 @@ def response_of($t; $r):
   agent_type: .agent_type,
   agent_id: .agent_id,
   tool_use_id: .tool_use_id,
-  tool_name: .tool_name }
+  tool_name: .tool_name,
+  # Set by on-tool.sh on the two events that measure the root discipline:
+  # "deny" when root was stopped, "dispatch" when it delegated. Read from
+  # the environment so the other four scripts need no new argument.
+  root_guard: (($ENV.KODFLOW_ROOT_GUARD // "") | if . == "" then null else . end) }
 + (if .tool_name then
      {tool_input: input_of(.tool_name; (.tool_input // {})),
       tool_response: (if .tool_response then response_of(.tool_name; .tool_response) else null end)}
