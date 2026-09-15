@@ -72,3 +72,18 @@ jobs:
       # those behaviours is asserted against the JSON Claude Code actually sends.
       - name: Hook scripts behave
         run: bash scripts/tests/test_hooks.sh
+
+      # /flow --check trusts this inventory to tell it which skills are live.
+      # Its search roots come from the script's own location, so the layouts
+      # are the thing that can break: a clone, a cache holding an obsolete
+      # revision, a flat Codex home, and any of them under a path with a space.
+      - name: The flow inventory reads every shipped layout
+        run: bash scripts/tests/test_flow_inventory.sh
+
+      # codex/ is generated from plugins/. A hand-edit there, or a source edit
+      # that nobody regenerated, ships two versions of the same skill.
+      - name: The codex tree matches its sources
+        run: |
+          python3 scripts/build-codex.py
+          git diff --exit-code -- codex/ \
+            || { echo "::error::codex/ is stale — run scripts/build-codex.py"; exit 1; }

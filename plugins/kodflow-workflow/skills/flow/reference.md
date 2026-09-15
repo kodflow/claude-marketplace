@@ -30,7 +30,7 @@ Index, by lane:
 | | |
 |---|---|
 | reads | the whole conversation, re-read at Phase 4 · an existing `## Constraints` section · `gh api user/orgs` |
-| writes | `CLAUDE.md` `## Constraints` (append-only `C-NNN`) · `.claude/constraints.md` on overflow · `.gitignore` · the repo, branch and first commit |
+| writes | `CLAUDE.md` `## Constraints` (append-only `C-NNN`) · `.claude/constraints.md` on overflow · `.gitignore` · the bootstrap tree. **CREATE only** also makes the repo and the first commit on `main`; ADOPT checks out and pulls, CLONE clones — neither commits. |
 | after | nothing — this is an entry point |
 | then | `/warmup` (automatic, on adopt or clone) · `/adr` (automatic, when a supersede is architectural) |
 | gate | Phase 2 is a four-way switch — adopt, clone, create, **conflict**. A conflicting directory is a dead stop: never overwritten, never re-initialised. A dirty or detached tree stops before any checkout. |
@@ -87,7 +87,7 @@ loop that stops the base rotting.
 | | |
 |---|---|
 | reads | `.claude/contexts/<slug>.md` · the constraint ledger · the codebase, through four parallel explorers |
-| writes | `.claude/plans/<slug>.md` — it survives a compaction, so `/goal` can find it on disk |
+| writes | `.claude/plans/<slug>.md` **and** `.claude/contexts/<slug>.md` (Phase 5) — both survive a compaction, so `/goal` can find them on disk |
 | after | `/search` |
 | then | `/review` (the plan gate) · `/refine` · `/goal` · `/adr` · `/challenge` |
 | gate | **ExitPlanMode is terminal.** Every outgoing edge sits behind your approval, and `--auto` skips the four question checkpoints but never this one. `/plan` does not implement. |
@@ -123,7 +123,7 @@ marked, not accepted.
 
 `kodflow-workflow` · opus · **Turn a plan or a sentence into a binary contract**
 
-**Type** `/refine <slug> | "<description>" [--bare] [--full <slug>] [--lenses N]`
+**Type** `/refine <slug> | "<description>" [--bare] [--full <slug>] [--lenses light|full]`
 
 | | |
 |---|---|
@@ -251,12 +251,12 @@ thrashing.
 
 `kodflow-review` · opus · **Audit and fix comments, one worker per file**
 
-**Type** `/comment [path] [--dry-run]`
+**Type** `/comment [path] [--check] [--lang <l1,l2>]`
 
 | | |
 |---|---|
-| reads | the target path, defaulting to the source tree |
-| writes | comments and docstrings, in place |
+| reads | the target path, falling back to `/workspace/src/` then `/workspace/` |
+| writes | comments and docstrings, in place — except under `--check`, which reports and writes nothing |
 | after | — |
 | then | — |
 
@@ -314,7 +314,7 @@ out before you are ever asked.
 | | |
 |---|---|
 | reads | every skill, agent, hook, script and MCP server, plus knowledge-base freshness |
-| writes | a dashboard in the transcript, and nothing else |
+| writes | a dashboard in the transcript. `--fix` also repairs the mechanically unambiguous faults: a missing directory, a stale index, a non-executable hook. |
 | after | — |
 | then | `/search --refresh` — the remediation it prints for expired documents |
 | gate | a dimension it could not check is reported as skipped, not as passing |
@@ -343,7 +343,7 @@ Seven dimensions, each scored, each naming the specific files at fault.
 
 `kodflow-devops` · opus · **Heal the project-linter MCP stack**
 
-**Type** `/ktn [--check] [--phases <spec>] [--scope <diff|all>] [--restart]`
+**Type** `/ktn [--check] [--phases <spec>] [--scope <diff|full|show>] [--restart] [--uninstall]`
 
 | | |
 |---|---|

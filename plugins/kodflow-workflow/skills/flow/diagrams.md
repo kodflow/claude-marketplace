@@ -320,7 +320,7 @@ skills barely call each other, they hand each other files.
                      expired: not evidence
 
   /plan            .claude/plans/<slug>.md               /challenge  /refine
-                                                         /review  /goal
+                     .claude/contexts/<slug>.md            /review  /goal
 
   /review          .claude/plans/review-fixes-<ts>.md    /refine ──▶ /goal
                      .claude/review-manifest-<ts>.json   an external non-LLM
@@ -372,7 +372,7 @@ skills barely call each other, they hand each other files.
                      expired: not evidence
 
   /plan            .claude/plans/<slug>.md              /challenge  /refine
-                                                        /review  /goal
+                     .claude/contexts/<slug>.md           /review  /goal
 
   /review          .claude/plans/review-fixes-<ts>.md   /refine -> /goal
                      .claude/review-manifest-<ts>.json  an external non-LLM
