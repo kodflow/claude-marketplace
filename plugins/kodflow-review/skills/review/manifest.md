@@ -4,7 +4,8 @@
 > and **Phase 8** (Coverage Manifest + external verifier) of `/review`.
 >
 > **The manifest is the proof-of-work.** It is written to
-> **`.claude/review-manifest-{ts}.json`** (`{ts}` = `$(date +%Y%m%dT%H%M%SZ)` UTC). A
+> **`$SCRATCH/review-manifest-{ts}.json`** (`{ts}` = `$(date +%Y%m%dT%H%M%SZ)` UTC) — the
+> per-run scratchpad bound in Phase 0, never the worktree the run is reviewing. A
 > non-LLM script, `"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-verify-manifest.sh`, recomputes per-file hunks,
 > per-file symbols, `file_class`, and `diff_hash` from `git`, and READS the real canary
 > artifact, and **INVALIDATES the run on any mismatch**. The model
@@ -170,11 +171,11 @@ The Judge writes its outcomes back into the manifest: demoted findings carry
 
 ## 4. Coverage Manifest JSON Schema (Phase 8)
 
-Written to **`.claude/review-manifest-{ts}.json`**. Compact form: counts + ranges, never
+Written to **`$SCRATCH/review-manifest-{ts}.json`**. Compact form: counts + ranges, never
 full source echoes. Every field below is required unless marked optional.
 
 ```yaml
-coverage_manifest:                 # .claude/review-manifest-{ts}.json
+coverage_manifest:                 # $SCRATCH/review-manifest-{ts}.json
   diff_hash: <sha256>              # COPY from `review-verify-manifest.sh --print-facts`
                                    # (canonical, RTK-safe diff). Verifier recomputes; mismatch => INVALID
   base: <sha>                      # $BASE commit
@@ -271,14 +272,14 @@ define the denominator of its own coverage metric.
 
 ```bash
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
-MANIFEST=".claude/review-manifest-${TS}.json"
+MANIFEST="$SCRATCH/review-manifest-${TS}.json"
 # Step 0: copy canonical facts into $MANIFEST (RTK-safe; do NOT hand-compute):
 RTK_BYPASS=1 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-verify-manifest.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}" --print-facts
 # Step 0.8: REAL canary self-test (C6) — seeds a defect into a scratch copy of a changed
 # code file, detects it, writes {seeded,detected,...}; capture the artifact path:
 CANARY=$(RTK_BYPASS=1 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-canary.sh \
-  --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}")
+  --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}" --out-dir "$SCRATCH")
 # ... write $MANIFEST (diff_hash + hunks_total verbatim; canary_artifact="$CANARY") ...
 RTK_BYPASS=1 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-verify-manifest.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}" \
@@ -363,7 +364,7 @@ validity_rules:                    # verbatim from the binding spec Phase 8
 
 | Mechanism | Defeated theater |
 |-----------|------------------|
-| Manifest written to `.claude/review-manifest-{ts}.json` | "I reviewed it" with no record |
+| Manifest written to `$SCRATCH/review-manifest-{ts}.json` | "I reviewed it" with no record |
 | External non-LLM verifier gates APPROVE | model self-attesting its own coverage |
 | Check 1 (diff_hash) | no-op / re-emitted-summary runs |
 | Check 2 (per-file symbol superset + anti-paste) | claiming inspection of un-opened functions; pasting the diff into one string |
@@ -409,11 +410,11 @@ RTK_BYPASS=1 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/
 ```
 
 ```yaml
-coverage_manifest:                # written to .claude/review-manifest-{ts}.json
+coverage_manifest:                # written to $SCRATCH/review-manifest-{ts}.json
   diff_hash: <sha>                # COPY from --print-facts (canonical, RTK-safe)
   base: <sha>  head: <sha|WORKTREE>
   canary: passed|failed           # mirrors canary_artifact.detected
-  canary_artifact: ".claude/review-canary-<ts>.json"   # C6: REAL artifact path; verifier READS it and requires detected==true
+  canary_artifact: "$SCRATCH/review-canary-<ts>.json"   # C6: REAL artifact path; verifier READS it and requires detected==true
   hunks_total: <n>                # COPY from --print-facts; verifier re-asserts
   files:
     - path: <file>
@@ -443,7 +444,7 @@ Then invoke the external verifier (must pass):
 ```bash
 RTK_BYPASS=1 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-verify-manifest.sh \
   --repo "$PROJECT_DIR" --base "$BASE" --head "${HEAD:-WORKTREE}" \
-  --manifest ".claude/review-manifest-${TS}.json" --det "$DET"
+  --manifest "$SCRATCH/review-manifest-${TS}.json" --det "$DET"
 VERIFIER_EXIT=$?                  # capture immediately (C8)
 
 # C8: HARD-BRANCH on the exit code. Never narrate it and proceed to APPROVE.

@@ -1,8 +1,8 @@
 # /review — Phases 0-2: setup
 
 Runs first and **binds the review-wide variables every later phase depends on**:
-`$REPO`, `$BASE`, `$HEAD`, `$CHANGED_FILES`, and the routing profile. Nothing
-downstream is valid until these are set here, once.
+`$REPO`, `$BASE`, `$HEAD`, `$CHANGED_FILES`, `$SCRATCH`, and the routing profile.
+Nothing downstream is valid until these are set here, once.
 
 `$HEAD` is the `WORKTREE` sentinel for a dirty-tree review and a real sha for a
 PR or branch — Phases 3.5, 3.7 and 8 all read it, so it must be bound exactly
@@ -15,16 +15,23 @@ Run the single-call bootstrap **with an explicit project dir** (cwd may not be a
 
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+# A brand-new file is invisible to `git diff`, so the change under review would reach no
+# reviewer at all. Intent-to-add indexes no content and leaves the commit to the user, and
+# it runs before anything diffs, so Phase 8 and the verifier still see one index state.
+git -C "$PROJECT_DIR" add -N . 2>/dev/null || true
 CTX="$(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-context.sh "$PROJECT_DIR")"
 printf '%s\n' "$CTX"
 
 # --- C9: assign the review-wide variables ONCE, here, before any later phase ---
 # Derive BASE/HEAD/CHANGED_FILES from the review-context.sh JSON (fall back to git).
-mkdir -p "$PROJECT_DIR/.claude"
 BASE="$(printf '%s' "$CTX" | jq -r '.git.base // .git.default_branch // empty')"
 HEAD="$(printf '%s' "$CTX" | jq -r '.git.head // empty')"
 CHANGED_FILES="$(printf '%s' "$CTX" | jq -r '.diff.files[]?.path // .diff.files[]? // empty')"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
+# Everything this run writes for itself lands here, never under $PROJECT_DIR: a file
+# dropped in the worktree shows up as `??` in the very `git status` the review reads and
+# folds itself into the diff, so the run ends up reviewing its own paperwork.
+SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/review-${TS}.XXXXXX")"
 
 # Resolve BASE if the JSON did not carry it (PR base, else merge-base vs default branch).
 [ -z "$BASE" ] && BASE="$(git -C "$PROJECT_DIR" merge-base HEAD "origin/$(git -C "$PROJECT_DIR" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' || echo main)" 2>/dev/null || true)"
@@ -46,8 +53,8 @@ Use its JSON (`git{platform,org,repo,branch,default_branch,base,head}`, `diff{fi
 re-run individual git commands. If the JSON shows an empty diff or non-repo dir, STOP and
 report "no reviewable diff in <dir>" — do not fabricate findings.
 
-`$BASE`, `$HEAD`, `$CHANGED_FILES`, `$TS` are now bound and consumed unchanged by Phases
-3.5, 3.7, 8 (manifest + verifier). Later phases MUST NOT redefine them.
+`$BASE`, `$HEAD`, `$CHANGED_FILES`, `$TS`, `$SCRATCH` are now bound and consumed unchanged
+by Phases 3.5, 3.7, 8 (manifest + verifier). Later phases MUST NOT redefine them.
 
 Full setup instructions: **read `dispatch.md`** (Phases 0, 0.5,
 1, 1.5). Feedback/questions: **read `triage.md`**.
@@ -62,10 +69,10 @@ architecture/ownership when cached).
 ```bash
 # Materialize the routing profile (C7). Top-level .languages is required by route-agent.sh.
 printf '%s' "$CTX" | jq '.repo_profile // {languages: []}' \
-  > "$PROJECT_DIR/.claude/repo-profile.json"
+  > "$SCRATCH/repo-profile.json"
 # Guarantee the contract even if repo_profile was absent/empty.
-jq -e '.languages | type == "array"' "$PROJECT_DIR/.claude/repo-profile.json" >/dev/null 2>&1 \
-  || printf '{"languages":[]}\n' > "$PROJECT_DIR/.claude/repo-profile.json"
+jq -e '.languages | type == "array"' "$SCRATCH/repo-profile.json" >/dev/null 2>&1 \
+  || printf '{"languages":[]}\n' > "$SCRATCH/repo-profile.json"
 ```
 
 This file is the `--profile` argument consumed verbatim by Phase 6's `route-agent.sh`
@@ -132,8 +139,8 @@ the verifier later READS. Do NOT self-assert "canary: passed":
 # review-eval.sh does, so any progress line printed ahead of it cannot poison the path.
 # Do NOT jq-parse it and do NOT reconstruct the filename ($TS here != the canary's internal timestamp).
 CANARY_ARTIFACT="$(RTK_BYPASS=1 bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-canary.sh \
-  --repo "$PROJECT_DIR" --base "$BASE" --head "$HEAD" | tail -1)"
-# -> writes <repo>/.claude/review-canary-<ts>.json : {seeded:true, detected:bool, defect, file}
+  --repo "$PROJECT_DIR" --base "$BASE" --head "$HEAD" --out-dir "$SCRATCH" | tail -1)"
+# -> writes $SCRATCH/review-canary-<ts>.json : {seeded:true, detected:bool, defect, file}
 CANARY_DETECTED="$(jq -r '.detected // false' "$CANARY_ARTIFACT" 2>/dev/null || echo false)"
 ```
 

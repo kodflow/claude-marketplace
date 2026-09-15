@@ -13,7 +13,7 @@ mention rule applied to the draft text). Generates:
   Confirmed findings (by severity×confidence), **Needs-Verification tier (gating)**,
   nitpicks bucket, tier-status table (from `.out`), verifier result, coverage-manifest
   summary, suppression appendix.
-- `.claude/review-manifest-{ts}.json` (machine, verifier-checked).
+- `$SCRATCH/review-manifest-{ts}.json` (machine, verifier-checked).
 - `.claude/plans/review-fixes-{timestamp}.md` for `/refine` -> `/goal`.
 
 Synthesis details: **read `synthesis.md`**.
