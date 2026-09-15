@@ -54,6 +54,18 @@ jobs:
           pip install --quiet pyyaml
           python3 scripts/validate-frontmatter.py .
 
+      # Context cost, not correctness: pinned model/effort, description and
+      # SKILL.md budgets, copied memory blocks, bare cross-plugin references.
+      # Every finding is a warning until a check is named in COST_CHECKS_STRICT,
+      # so this step stays green while the catalogue is still dirty — a gate
+      # that starts red is a gate people learn to skip. Tested before trusted,
+      # like the secret scanner: a budget nobody measured measures nothing.
+      - name: The cost guardrails hold
+        run: python3 scripts/tests/test_context_cost.py
+
+      - name: What the catalogue costs every session
+        run: python3 scripts/check-context-cost.py .
+
       - name: Shell scripts parse
         run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
 
