@@ -48,7 +48,7 @@
     },
     {
       "name": "kodflow-shell",
-      "description": "The shell side of the harness: super-claude as a real command on PATH instead of an alias, a TAB session picker that only offers conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell.",
+      "description": "The shell side of the harness: super-claude as a real command on PATH instead of an alias, a TAB session picker that only offers conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell. The same hook installs the status-line binary from its releases when it is missing, so a marketplace update is all it takes to get it.",
       "author": {
         "name": "kodflow"
       },

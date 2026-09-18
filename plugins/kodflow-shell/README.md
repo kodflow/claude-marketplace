@@ -1,7 +1,7 @@
 # kodflow-shell
 
-`super-claude` sur le PATH plutôt qu'un alias, un sélecteur de sessions sur TAB, et un ménage
-qui supprime vraiment une session.
+`super-claude` sur le PATH plutôt qu'un alias, un sélecteur de sessions sur TAB, un ménage
+qui supprime vraiment une session, et la status line installée sans rien télécharger à la main.
 
 ## Installation
 
@@ -16,6 +16,21 @@ plugin embarque dans `~/.claude/kodflow-shell/`, lie `super-claude` et `claude-s
 ligne marquée dans `.zshrc` sinon). Rien à retaper après une mise à jour du marketplace :
 la même synchronisation se rejoue à chaque lancement. En une ligne, tout de suite, sans
 attendre la prochaine session : `/shell install`.
+
+Le même hook installe **`status-line`** s'il manque : il récupère la release qui correspond à
+la plateforme, vérifie sa somme de contrôle, la pose dans `~/.local/bin` et renseigne
+`statusLine` dans `settings.json`.
+
+Deux choses qu'il ne fait pas, volontairement. Il ne réécrit jamais un `statusLine` déjà
+configuré vers autre chose — c'est un choix, pas un défaut à corriger. Et il ne re-télécharge
+pas à chaque lancement : le binaire consulte les releases lui-même une fois par heure et se
+remplace, donc vérifier ici doublerait ce travail et cognerait l'API pour rien.
+
+```bash
+kodflow-statusline-setup --check       # ce qui est installé, et où pointe le réglage
+kodflow-statusline-setup --force       # réinstaller par-dessus
+kodflow-statusline-setup --uninstall   # retirer le binaire, et le réglage s'il est à nous
+```
 
 ## Ce que ça donne
 

@@ -18,8 +18,19 @@ if command -v jq >/dev/null 2>&1 && [ -n "$INPUT" ]; then
 fi
 
 ERR=$("$SETUP" --quiet 2>&1 >/dev/null)
+
+# The status line binary is installed the same way and on the same event, so a
+# marketplace update reaches every terminal at the next launch. It is a separate
+# script because it fetches a release asset rather than mirroring plugin files,
+# and because a network failure there must not touch the shell integration.
+STATUSLINE=$ROOT/bin/kodflow-statusline-setup
+if [ -x "$STATUSLINE" ]; then
+    SL_ERR=$("$STATUSLINE" --quiet 2>&1 >/dev/null)
+    [ -n "$SL_ERR" ] && ERR=$(printf '%s\n%s' "$ERR" "$SL_ERR")
+fi
+
 if [ -n "$ERR" ] && command -v jq >/dev/null 2>&1; then
-    jq -n -c --arg c "kodflow-shell: l'intégration shell n'a pas pu être synchronisée — $ERR" \
+    jq -n -c --arg c "kodflow-shell: synchronisation incomplète — $ERR" \
        '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$c}}' 2>/dev/null
 fi
 exit 0
