@@ -1,0 +1,153 @@
+#!/bin/sh
+# kodflow-statusline-setup — install and wire kodflow/status-line.
+#
+# Unlike the shell integration, the binary is not shipped inside the plugin: it
+# is a per-platform release asset. So this script downloads it once into a
+# stable path and points the Claude Code `statusLine` setting at it.
+#
+# Updates are not this script's job. The binary checks GitHub for a newer
+# release once an hour and replaces itself, so re-downloading here on every
+# launch would duplicate that work and hammer the API. This only ever installs
+# what is missing.
+#
+#   kodflow-statusline-setup            install if missing, verbose
+#   kodflow-statusline-setup --quiet    same, silent unless something failed
+#   kodflow-statusline-setup --check    report, change nothing
+#   kodflow-statusline-setup --force    reinstall even if present
+#   kodflow-statusline-setup --uninstall
+set -u
+
+REPO=kodflow/status-line
+BIN_NAME=status-line
+BINDIR=$HOME/.local/bin
+TARGET=$BINDIR/$BIN_NAME
+CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+SETTINGS=$CLAUDE_CONFIG_DIR/settings.json
+
+QUIET=0; CHECK=0; FORCE=0; UNINSTALL=0
+for a in "$@"; do
+    case "$a" in
+        --quiet|-q)     QUIET=1 ;;
+        --check|-c)     CHECK=1 ;;
+        --force|-f)     FORCE=1 ;;
+        --uninstall)    UNINSTALL=1 ;;
+        --help|-h)      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *)              echo "kodflow-statusline-setup: option inconnue $a" >&2; exit 2 ;;
+    esac
+done
+
+say()  { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+warn() { printf '%s\n' "$*" >&2; }
+
+# ── uninstall ───────────────────────────────────────────────────────────────
+if [ "$UNINSTALL" -eq 1 ]; then
+    # Only unpoint the setting when it points at our own binary: the user may
+    # have configured another status line since, and that is theirs to keep.
+    if [ -f "$SETTINGS" ] && command -v jq >/dev/null 2>&1; then
+        current=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null)
+        case "$current" in
+            "$TARGET"|"$TARGET "*)
+                tmp=$(mktemp) || exit 1
+                jq 'del(.statusLine)' "$SETTINGS" > "$tmp" 2>/dev/null &&
+                    mv "$tmp" "$SETTINGS" && say "statusLine retiré de settings.json"
+                rm -f "$tmp" 2>/dev/null
+                ;;
+        esac
+    fi
+    [ -f "$TARGET" ] && rm -f "$TARGET" && say "$TARGET supprimé"
+    exit 0
+fi
+
+# ── platform ────────────────────────────────────────────────────────────────
+case "$(uname -s)" in
+    Darwin)  os=darwin ;;
+    Linux)   os=linux ;;
+    *)       warn "kodflow-statusline: plateforme non gérée ($(uname -s))"; exit 0 ;;
+esac
+case "$(uname -m)" in
+    x86_64|amd64)   arch=amd64 ;;
+    arm64|aarch64)  arch=arm64 ;;
+    *)              warn "kodflow-statusline: architecture non gérée ($(uname -m))"; exit 0 ;;
+esac
+ASSET=$BIN_NAME-$os-$arch
+
+# ── report ──────────────────────────────────────────────────────────────────
+if [ "$CHECK" -eq 1 ]; then
+    if [ -x "$TARGET" ]; then
+        printf 'binaire   : %s (%s)\n' "$TARGET" "$("$TARGET" --version 2>/dev/null || echo 'version inconnue')"
+    else
+        printf 'binaire   : absent\n'
+    fi
+    if [ -f "$SETTINGS" ] && command -v jq >/dev/null 2>&1; then
+        printf 'statusLine: %s\n' "$(jq -r '.statusLine.command // "non configuré"' "$SETTINGS" 2>/dev/null)"
+    fi
+    printf 'asset     : %s\n' "$ASSET"
+    exit 0
+fi
+
+# ── install ─────────────────────────────────────────────────────────────────
+# The binary updates itself hourly, so a present binary is already current.
+if [ -x "$TARGET" ] && [ "$FORCE" -eq 0 ]; then
+    installed=1
+else
+    installed=0
+    command -v curl >/dev/null 2>&1 || { warn "kodflow-statusline: curl est requis"; exit 0; }
+    mkdir -p "$BINDIR" 2>/dev/null || { warn "kodflow-statusline: $BINDIR non créable"; exit 0; }
+
+    url=https://github.com/$REPO/releases/latest/download/$ASSET
+    tmp=$(mktemp) || exit 0
+    if ! curl -fsSL --max-time 60 "$url" -o "$tmp" 2>/dev/null; then
+        rm -f "$tmp"
+        warn "kodflow-statusline: téléchargement impossible ($url)"
+        exit 0
+    fi
+
+    # Verify the published checksum when both it and a hasher are available.
+    # A silently corrupted download would be installed as the status line and
+    # fail on every redraw, which is far harder to diagnose than a failed fetch.
+    sum_url=$url.sha256
+    sum_tmp=$(mktemp) || sum_tmp=""
+    if [ -n "$sum_tmp" ] && curl -fsSL --max-time 30 "$sum_url" -o "$sum_tmp" 2>/dev/null; then
+        expected=$(cut -d' ' -f1 < "$sum_tmp" 2>/dev/null)
+        if command -v sha256sum >/dev/null 2>&1; then
+            actual=$(sha256sum "$tmp" 2>/dev/null | cut -d' ' -f1)
+        elif command -v shasum >/dev/null 2>&1; then
+            actual=$(shasum -a 256 "$tmp" 2>/dev/null | cut -d' ' -f1)
+        else
+            actual=$expected
+        fi
+        if [ -n "$expected" ] && [ "$expected" != "$actual" ]; then
+            rm -f "$tmp" "$sum_tmp"
+            warn "kodflow-statusline: somme de contrôle invalide, installation annulée"
+            exit 0
+        fi
+    fi
+    rm -f "$sum_tmp" 2>/dev/null
+
+    chmod +x "$tmp" 2>/dev/null
+    mv "$tmp" "$TARGET" 2>/dev/null || { rm -f "$tmp"; warn "kodflow-statusline: écriture impossible"; exit 0; }
+    say "status-line installé dans $TARGET"
+fi
+
+# ── wire the setting ────────────────────────────────────────────────────────
+# Never overwrite a status line the user chose. Only fill an empty setting, or
+# refresh one that already points at this same binary.
+command -v jq >/dev/null 2>&1 || exit 0
+mkdir -p "$CLAUDE_CONFIG_DIR" 2>/dev/null
+[ -f "$SETTINGS" ] || printf '{}\n' > "$SETTINGS"
+
+current=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null)
+case "$current" in
+    "")             ;;
+    "$TARGET")      exit 0 ;;
+    *)              [ "$installed" -eq 1 ] && exit 0 ;;
+esac
+
+tmp=$(mktemp) || exit 0
+if jq --arg cmd "$TARGET" '.statusLine = {type:"command", command:$cmd}' "$SETTINGS" > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$SETTINGS" && say "statusLine configuré sur $TARGET"
+else
+    rm -f "$tmp"
+    warn "kodflow-statusline: settings.json non modifiable"
+fi
+exit 0
