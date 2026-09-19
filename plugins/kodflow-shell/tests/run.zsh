@@ -9,6 +9,17 @@ emulate -L zsh
 setopt no_unset
 
 ROOT=${0:A:h:h}
+
+# Anything that can point the installer outside the sandbox is neutralised here,
+# once, for the whole suite.
+#
+# HOME alone is not enough: kodflow-shell-setup resolves the oh-my-zsh custom
+# directory as ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}, so a ZSH_CUSTOM inherited
+# from the developer's own shell wins over the fake HOME — and the suite then
+# rewrites the real integration it was supposed to be isolated from. That is not
+# hypothetical: it happened, and it left a symlink into a deleted sandbox where
+# the working one had been, breaking every new terminal until it was repaired.
+unset ZSH_CUSTOM ZSH ZDOTDIR 2>/dev/null
 VERBOSE=0; [[ ${1:-} == -v ]] && VERBOSE=1
 zmodload zsh/datetime
 zmodload zsh/zpty
@@ -26,13 +37,33 @@ hasnt(){ [[ $2 != *"$3"* ]] && ok "$1" || ko "$1" "[$3] présent dans [$2]" }
 # --- fixtures ---------------------------------------------------------------
 # One sandbox per test: CLAUDE_CONFIG_DIR points into it, so the project slug,
 # the session state and the cache all live under it.
-SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/kodflow-shell-tests.XXXXXX")
+# :A resolves the path the way the shell will report it from $PWD after a cd.
+# Without it, macOS hands back a TMPDIR ending in a slash, mktemp doubles it,
+# and the project slug the fixtures are written under ("…T--box-work") stops
+# matching the one claude-sessions derives from $PWD ("…T-box-work") — so every
+# fixture lands in a directory the program never reads.
+SANDBOX=${$(mktemp -d "${TMPDIR:-/tmp}/kodflow-shell-tests.XXXXXX"):A}
 trap 'rm -rf -- "$SANDBOX"' EXIT INT TERM
 
 new_sandbox() {
   local box=$SANDBOX/$1
   mkdir -p $box/config $box/work
   print -r -- $box
+}
+
+# age_file <days> <file> — backdate a file.
+#
+# `touch -d "N days ago"` is GNU coreutils only: the BSD touch on macOS rejects
+# that spelling, so every age-dependent test failed there. `touch -t` takes an
+# absolute stamp both implementations understand.
+#
+# The local is named `file`, never `path`: in zsh `path` is tied to `PATH`, so
+# assigning it would replace the command search path with this one filename and
+# every external command after it would vanish.
+age_file() {
+  local days=$1 file=$2 when
+  when=$(( EPOCHSECONDS - days * 86400 ))
+  touch -t "$(strftime '%Y%m%d%H%M.%S' $when)" $file
 }
 
 # make_session <box> <id> <days old> [title]
@@ -45,8 +76,20 @@ make_session() {
   printf '{"type":"user","cwd":"%s","message":{"content":"bonjour"}}\n{"type":"ai-title","aiTitle":"%s"}\n' \
     "$work" "$title" > $pdir/$id.jsonl
   print -n "xxxxxxxxxx" > $pdir/$id/subagents/sub.jsonl
-  touch -d "$days days ago" $pdir/$id.jsonl
+  age_file $days $pdir/$id.jsonl
   print -r -- $pdir
+}
+
+# run_setup <fakehome> [args...] — the installer, confined.
+#
+# Sets every variable it reads to somewhere inside the sandbox. ZSH_CUSTOM and
+# ZDOTDIR especially: they are absolute paths that would otherwise survive the
+# fake HOME and send the installer at the developer's own files.
+run_setup() {
+  local fh=$1; shift
+  HOME=$fh CLAUDE_CONFIG_DIR=$fh/.claude ZSH_CUSTOM=$fh/.oh-my-zsh/custom \
+    ZDOTDIR=$fh XDG_CACHE_HOME=$fh/cache \
+    $ROOT/bin/kodflow-shell-setup "$@"
 }
 
 # run_cs <box> <stdin-mode: none|pty> <input> <args...>
@@ -205,15 +248,15 @@ is "aucune fuite sur la sortie" "$noise" ""
 print -r -- "installateur"
 box=$(new_sandbox setup)
 fakehome=$box/home; mkdir -p $fakehome
-HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell-setup --quiet >/dev/null 2>&1 || true
+run_setup $fakehome --quiet >/dev/null 2>&1 || true
 [[ -L $fakehome/.local/bin/super-claude ]] && ok "installe le lien" || ko "installe le lien" "absent"
-out=$(HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell-setup --check --uninstall 2>&1)
+out=$(run_setup $fakehome --check --uninstall 2>&1)
 [[ -L $fakehome/.local/bin/super-claude ]] && ok "--check --uninstall ne supprime rien" \
   || ko "--check --uninstall ne supprime rien" "le lien a disparu"
 
 # --- 13. désinstallation : ne touche pas au lien d'un autre -----------------
 ln -sfn /bin/true $fakehome/.local/bin/claude-sessions
-out=$(HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell-setup --uninstall 2>&1)
+out=$(run_setup $fakehome --uninstall 2>&1)
 [[ -L $fakehome/.local/bin/claude-sessions ]] && ok "épargne un lien étranger" \
   || ko "épargne un lien étranger" "supprimé"
 [[ ! -e $fakehome/.local/bin/super-claude ]] && ok "retire son propre lien" \
@@ -222,10 +265,10 @@ out=$(HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell
 # --- 14. mise à jour : un fichier retiré en amont disparaît -----------------
 box=$(new_sandbox stale)
 fakehome=$box/home; mkdir -p $fakehome
-HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell-setup --quiet >/dev/null 2>&1 || true
+run_setup $fakehome --quiet >/dev/null 2>&1 || true
 print -n 'obsolete' > $fakehome/.claude/kodflow-shell/bin/vieux-outil
 print -n 'x' >> $fakehome/.claude/kodflow-shell/.stamp     # force la resynchro
-HOME=$fakehome CLAUDE_CONFIG_DIR=$fakehome/.claude $ROOT/bin/kodflow-shell-setup --quiet >/dev/null 2>&1 || true
+run_setup $fakehome --quiet >/dev/null 2>&1 || true
 [[ ! -e $fakehome/.claude/kodflow-shell/bin/vieux-outil ]] && ok "purge un fichier qui n'est plus livré" \
   || ko "purge un fichier qui n'est plus livré" "encore présent"
 
