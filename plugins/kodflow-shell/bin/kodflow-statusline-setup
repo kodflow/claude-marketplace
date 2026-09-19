@@ -141,17 +141,21 @@ else
 fi
 
 # ── wire the setting ────────────────────────────────────────────────────────
-# Never overwrite a status line the user chose. Only fill an empty setting, or
-# refresh one that already points at this same binary.
+# Never overwrite a status line the user chose, --force included: that flag
+# reinstalls the binary, which is this script's business, and says nothing
+# about a setting that points somewhere else, which is not.
 command -v jq >/dev/null 2>&1 || exit 0
 mkdir -p "$CLAUDE_CONFIG_DIR" 2>/dev/null
 [ -f "$SETTINGS" ] || printf '{}\n' > "$SETTINGS"
 
 current=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null)
 case "$current" in
+    # Nothing configured: ours to fill
     "")             ;;
+    # Already us: nothing to do
     "$TARGET")      exit 0 ;;
-    *)              [ "$installed" -eq 1 ] && exit 0 ;;
+    # Someone else's status line: leave it alone, whatever the flags
+    *)              say "statusLine déjà configuré sur $current — inchangé"; exit 0 ;;
 esac
 
 tmp=$(mktemp) || exit 0
