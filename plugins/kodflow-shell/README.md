@@ -21,6 +21,10 @@ Le même hook installe **`status-line`** s'il manque : il récupère la release 
 la plateforme, vérifie sa somme de contrôle, la pose dans `~/.local/bin` et renseigne
 `statusLine` dans `settings.json`.
 
+macOS, Linux et Windows, en amd64 comme en arm64. Un shell Windows arrive ici par Git Bash,
+MSYS2 ou Cygwin — qui annoncent leur propre noyau et non « Windows » — et récupère le `.exe` ;
+WSL annonce Linux et prend le binaire Linux, ce qui est correct.
+
 Deux choses qu'il ne fait pas, volontairement. Il ne réécrit jamais un `statusLine` déjà
 configuré vers autre chose — c'est un choix, pas un défaut à corriger. Et il ne re-télécharge
 pas à chaque lancement : le binaire consulte les releases lui-même une fois par heure et se
