@@ -20,7 +20,6 @@ set -u
 REPO=kodflow/status-line
 BIN_NAME=status-line
 BINDIR=$HOME/.local/bin
-TARGET=$BINDIR/$BIN_NAME
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SETTINGS=$CLAUDE_CONFIG_DIR/settings.json
 
@@ -38,6 +37,31 @@ done
 
 say()  { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 warn() { printf '%s\n' "$*" >&2; }
+
+# ── platform ────────────────────────────────────────────────────────────────
+# Resolved before anything else: the installed file is named differently on
+# Windows, so --check and --uninstall need it too.
+#
+# A Windows shell reaches this script through Git Bash, MSYS2 or Cygwin, which
+# all report their own kernel name rather than "Windows". WSL reports Linux and
+# wants the Linux binary, which is what it already gets.
+case "$(uname -s 2>/dev/null)" in
+    Darwin)                 os=darwin ;;
+    Linux)                  os=linux ;;
+    MINGW*|MSYS*|CYGWIN*)   os=windows ;;
+    *)                      warn "kodflow-statusline: plateforme non gérée ($(uname -s 2>/dev/null))"; exit 0 ;;
+esac
+case "$(uname -m 2>/dev/null)" in
+    x86_64|amd64)           arch=amd64 ;;
+    arm64|aarch64|armv8*)   arch=arm64 ;;
+    *)                      warn "kodflow-statusline: architecture non gérée ($(uname -m 2>/dev/null))"; exit 0 ;;
+esac
+
+# Windows assets and the installed file both carry the extension
+EXT=
+[ "$os" = windows ] && EXT=.exe
+ASSET=$BIN_NAME-$os-$arch$EXT
+TARGET=$BINDIR/$BIN_NAME$EXT
 
 # ── uninstall ───────────────────────────────────────────────────────────────
 if [ "$UNINSTALL" -eq 1 ]; then
@@ -57,19 +81,6 @@ if [ "$UNINSTALL" -eq 1 ]; then
     [ -f "$TARGET" ] && rm -f "$TARGET" && say "$TARGET supprimé"
     exit 0
 fi
-
-# ── platform ────────────────────────────────────────────────────────────────
-case "$(uname -s)" in
-    Darwin)  os=darwin ;;
-    Linux)   os=linux ;;
-    *)       warn "kodflow-statusline: plateforme non gérée ($(uname -s))"; exit 0 ;;
-esac
-case "$(uname -m)" in
-    x86_64|amd64)   arch=amd64 ;;
-    arm64|aarch64)  arch=arm64 ;;
-    *)              warn "kodflow-statusline: architecture non gérée ($(uname -m))"; exit 0 ;;
-esac
-ASSET=$BIN_NAME-$os-$arch
 
 # ── report ──────────────────────────────────────────────────────────────────
 if [ "$CHECK" -eq 1 ]; then
