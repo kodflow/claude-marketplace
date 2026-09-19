@@ -1,8 +1,9 @@
 # kodflow-hooks
 
 The lifecycle machinery the other kodflow plugins assume: shell-output
-compression that never rewrites a read whose bytes matter, a git guard, session
-context, a formatter, a turn-end quality gate, and one structured log.
+compression that never rewrites a read whose bytes matter, a git guard, the root
+discipline, session context, a formatter, a turn-end quality gate, and one
+structured log.
 
 ## One script per event
 
@@ -29,8 +30,8 @@ fails by accident blocks every shell call of the session.
 
 | Event | Script | Gate | Block | Transform | Observe |
 |-------|--------|------|-------|-----------|---------|
-| `PreToolUse` · Bash | `on-tool.sh` | no guarded git op on the line | `--no-verify`/`-n` · AI attribution or `.claude/` path in the message · credential shapes in the staged blobs · forced push inside a compound line | `--force` → `--force-with-lease` · `rtk rewrite` unless a segment must stay byte-exact | log |
-| `PreToolUse` · Write/Edit | `on-tool.sh` | no file path | protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
+| `PreToolUse` · Bash | `on-tool.sh` | main thread, and the line is not read-only · no guarded git op on the line | root mutating from the main thread · `--no-verify`/`-n` · AI attribution or `.claude/` path in the message · credential shapes in the staged blobs · forced push inside a compound line | `--force` → `--force-with-lease` · `rtk rewrite` unless a segment must stay byte-exact | log |
+| `PreToolUse` · Write/Edit | `on-tool.sh` | main thread · no file path | root mutating from the main thread · protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
 | `PostToolUse` · other | `on-tool.sh` | — | — | — | log |
 | `PostToolUseFailure` | `on-tool.sh` | — | — | — | remediation hint · log (error redacted) |
@@ -45,6 +46,31 @@ fails by accident blocks every shell call of the session.
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
 | `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory | bell · log |
 
+## The root discipline
+
+Root — the main thread — decides, briefs and dispatches; subagents do the work,
+including the one-line change. The gate is mechanical, not advisory: a
+`PreToolUse` payload carries `agent_id` only when the call comes from inside a
+subagent, so a mutating call with no `agent_id` is root's own hand and is
+refused. Measured on 855 real events before it was written: every `PreToolUse`
+carrying `agent_id` came from a subagent, and no main-thread one did.
+
+Denied from the main thread: `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, and
+any `Bash` line that is not read-only. A line is read-only when **every** segment
+of it is — the same split on `;`, `&&`, `||`, `|` and `&` the git guard uses, so
+one mutating segment condemns the line. The classification is an allow-list,
+because the inverse leaks on every command it has not heard of yet; any `>`,
+`>>` or `tee` makes a line mutating whatever else is on it.
+
+Three ways out, because a gate with no way out is a gate that gets ripped out:
+`ROOT_OK=1` on a line, `KODFLOW_ROOT=off` for the session, and plan mode, where
+the gate never fires. It fails open on every anomaly like the rest of these
+hooks — and on two edges worth naming, because both are asserted rather than
+assumed: a payload that names no tool is not this hook's business and exits `0`
+whatever sits in `tool_input`, and an `agent_id` that is present but empty is
+the main thread, not a subagent. The reason string carries the briefing contract — the `/root` skill in
+`kodflow-workflow` is the long form.
+
 `lib/format.sh` is the formatter table (sourced lazily, never registered) and
 `lib/event.jq` is the one sanitization policy behind every log line.
 
@@ -55,6 +81,15 @@ the same jq program. Tool inputs are allow-listed per tool — a `Read` keeps it
 path, never its content; a `Bash` keeps 500 characters of command and 2000 of
 output — and every string is clipped, then redacted (`token=`, `api_key=`,
 `Bearer`, provider token prefixes). `/learn` reads it. It is gitignored.
+
+Two events carry a `root_guard` tag, so the cost of the root discipline can be
+counted per session rather than argued about — `deny` when root was stopped,
+`dispatch` when it delegated:
+
+```bash
+L=.claude/logs/$(git branch --show-current | tr / _)/session.jsonl
+grep -c '"root_guard":"deny"' "$L"; grep -c '"root_guard":"dispatch"' "$L"
+```
 
 ## What was removed, and why
 
@@ -98,14 +133,23 @@ the transform. Logging is a detached subshell and no longer on the path.
 | `KTN_LINTER_PORT` (default 7717) | where a project-linter server listens; nothing is called when the port is closed |
 | `KTN_PRE_PHASES`, `KTN_STOP_PHASES` | linter phases at edit time and at turn end |
 | `NO_RTK=` prefix on a command | that line is never rewritten |
+| `ROOT_OK=1` prefix on a command | that line is exempt from the root discipline |
+| `KODFLOW_ROOT=off` | the root discipline is off for the session |
 
 ## Tests
 
 ```
 bash scripts/tests/test_hooks.sh
+bash plugins/kodflow-hooks/tests/run-tests.sh
 ```
 
 Fifty-odd cases in a throwaway repository: every block, every rewrite, the
 fidelity guard, the tracker fed a file name that is also a shell command, the
 redaction of every persisted string, the Stop reminder firing once, and every
-script fed garbage or nothing and exiting 0.
+script fed garbage or nothing and exiting 0. Its payloads all carry an
+`agent_id`: they exercise the guards a subagent meets, which is where they now
+apply.
+
+The second suite is the root discipline itself — both sides of the `agent_id`
+asymmetry, the read-only classification, every escape hatch, the fail-open
+paths, and the two log tags being countable.
