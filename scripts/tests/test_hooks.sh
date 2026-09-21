@@ -145,7 +145,7 @@ printf '{"id":"2","subject":"Ship it","status":"in_progress"}' > "$TD/2.json"
 printf '{"id":"3","subject":"Later","status":"pending"}' > "$TD/3.json"
 rm -f "$T/tmp/sp/stop-count"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#2 Ship it \\(in_progress\\)") and test("#3 Later \\(pending\\)") and (test("Done one") | not)' >/dev/null 2>&1 \
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#2 Ship it \\(in_progress, via TaskUpdate\\)") and test("#3 Later \\(pending") and (test("Done one") | not)' >/dev/null 2>&1 \
     && ok "open tasks are named, finished ones are not" || bad "open tasks nudge" "$OUT"
 [ "$(printf '%s\n' "$OUT" | grep -c '^{')" -le 1 ] && ok "still exactly one JSON document" || bad "single document" "$OUT"
 rm -f "$T/tmp/sp/stop-count"
@@ -162,6 +162,45 @@ OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",ho
     | CLAUDE_CODE_ENABLE_TODO_TOOLS=0 bash "$S/on-stop.sh" 2>/dev/null)
 nudged && bad "tools off" "$OUT" || ok "nothing is asked when the task tools are off"
 rm -rf "$TD" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
+
+echo "== Stop · open tasks of the tasks MCP, main agent only"
+MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"
+printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Main open","status":"in_progress"},
+  {"id":"2","agent":"a1b2","subject":"Sub open","status":"pending"},
+  {"id":"3","agent":"main","subject":"Main done","status":"completed"}]}' > "$MS/tasks.json"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#1 Main open \\(in_progress, via task_update\\)") and (test("Sub open") | not) and (test("Main done") | not)' >/dev/null 2>&1 \
+    && ok "the main agent's open MCP tasks are named, a subagent's are not" || bad "mcp tasks nudge" "$OUT"
+rm -f "$T/tmp/sp/stop-count"
+OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}' \
+    | CLAUDE_CODE_ENABLE_TODO_TOOLS=0 bash "$S/on-stop.sh" 2>/dev/null)
+nudged && bad "mcp nudge once" "$OUT" || ok "MCP tasks follow the same once-per-set rule, tools off or not"
+rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
+
+echo "== PreToolUse · task tools"
+run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_create '{"tool_input":{"subject":"x","_agent":"forged"}}' on-tool.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .subject == "x" and ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \
+    && ok "main agent call: session and agent written in, forged value overridden" || bad "task injection" "$OUT"
+run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_update '{"tool_input":{"id":"1"},"agent_id":"a1b2"}' on-tool.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput._agent == "a1b2"' >/dev/null 2>&1 \
+    && ok "subagent call is attributed to its agent_id" || bad "subagent attribution" "$OUT"
+run PreToolUse TaskCreate '{"tool_input":{"subject":"x","description":"y"}}' on-tool.sh
+expect_rc "built-in TaskCreate refused" 2
+printf '%s' "$ERR" | grep -q 'task_create' && ok "the refusal points at the MCP tools" || bad "refusal text" "$ERR"
+run PreToolUse TodoWrite '{"tool_input":{"todos":[]}}' on-tool.sh
+expect_rc "built-in TodoWrite refused" 2
+
+echo "== SubagentStart / SubagentStop · running agents registry"
+AG=$T/home/.claude/kodflow/sessions/sess-1/agents.json
+run SubagentStart "" '{"agent_id":"a1","agent_type":"Explore"}' on-agent.sh
+run SubagentStart "" '{"agent_id":"a2","agent_type":"Plan"}' on-agent.sh
+jq -e '[.agents[] | select(.stopped == null)] | length == 2' "$AG" >/dev/null 2>&1 && ok "two started subagents are running" || bad "agents start" "$(cat "$AG" 2>/dev/null)"
+run SubagentStop "" '{"agent_id":"a1","agent_type":"Explore","stop_hook_active":false}' on-agent.sh
+jq -e '(.agents.a1.stopped != null) and (.agents.a2.stopped == null) and .agents.a2.type == "Plan"' "$AG" >/dev/null 2>&1 \
+    && ok "a stopped subagent is marked, the other keeps running" || bad "agents stop" "$(cat "$AG" 2>/dev/null)"
+run SubagentStop "" '{"agent_id":"a2","stop_hook_active":true}' on-agent.sh
+jq -e '.agents.a2.stopped == null' "$AG" >/dev/null 2>&1 && ok "a subagent continued by a stop hook is still running" || bad "active stop" "$(cat "$AG")"
+rm -rf "$T/home/.claude/kodflow"
 
 echo "== UserPromptSubmit / SessionStart / agents"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
