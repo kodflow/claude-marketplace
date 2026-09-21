@@ -6,7 +6,7 @@ set +e
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
-eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") AGENT=\(.agent_type // "") ACTIVE=\(.stop_hook_active // false) MATE=\(.teammate_name // "")"' 2>/dev/null)" || exit 0
+eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") AGENT=\(.agent_type // "") AID=\(.agent_id // "") ACTIVE=\(.stop_hook_active // false) MATE=\(.teammate_name // "")"' 2>/dev/null)" || exit 0
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
@@ -33,8 +33,27 @@ _log() {
     ) >/dev/null 2>&1 </dev/null &
 }
 
+# The running subagents of the session, for the status line and the task
+# view: <config>/kodflow/sessions/<session>/agents.json, next to the task list
+# the tasks MCP keeps. Start and stop can race, so every write holds the lock.
+_agents() {   # $1 = start|stop
+    [ -n "$AID" ] || return 0
+    local dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
+    (
+        mkdir -p "$dir" 2>/dev/null || exit 0
+        exec 9>>"$dir/.lock"; flock -w 2 9 2>/dev/null
+        local f=$dir/agents.json cur='{"agents":{}}'
+        [ -s "$f" ] && cur=$(cat "$f" 2>/dev/null)
+        printf '%s' "$cur" | jq -c --arg id "$AID" --arg type "$AGENT" --arg ev "$1" --argjson now "$(date +%s)" '
+            .agents //= {} |
+            if $ev == "start" then .agents[$id] = {type:$type, started:$now, stopped:null}
+            else .agents[$id].stopped = $now end' > "$f.tmp" 2>/dev/null && mv -f "$f.tmp" "$f"
+    ) >/dev/null 2>&1 </dev/null
+}
+
 case "$EV" in
 SubagentStart)
+    _agents start
     _branch
     jq -n -c --arg c "## Subagent context (kodflow-hooks)
 Branch: $BRANCH · agent: ${AGENT:-unknown}
@@ -47,6 +66,7 @@ Branch: $BRANCH · agent: ${AGENT:-unknown}
 
 SubagentStop)
     [ "$ACTIVE" = true ] && exit 0      # already continuing because of a stop hook
+    _agents stop
     _log ;;
 
 TeammateIdle|TaskCreated|TaskCompleted)

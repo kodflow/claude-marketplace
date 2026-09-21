@@ -30,6 +30,7 @@ fails by accident blocks every shell call of the session.
 | Event | Script | Gate | Block | Transform | Observe |
 |-------|--------|------|-------|-----------|---------|
 | `PreToolUse` · Bash | `on-tool.sh` | no guarded git op on the line | `--no-verify`/`-n` · AI attribution or `.claude/` path in the message · credential shapes in the staged blobs · forced push inside a compound line | `--force` → `--force-with-lease` · `rtk rewrite` unless a segment must stay byte-exact | log |
+| `PreToolUse` · task tools | `on-tool.sh` | — | built-in `TaskCreate`/`TodoWrite`: their chat panel duplicates the status line, the refusal points at the MCP | the MCP call gets `_session` and `_agent` (the caller's `agent_id`, else `main`), overriding the model | log |
 | `PreToolUse` · Write/Edit | `on-tool.sh` | no file path | protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
 | `PostToolUse` · other | `on-tool.sh` | — | — | — | log |
@@ -40,13 +41,33 @@ fails by accident blocks every shell call of the session.
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
 | `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal as context | reset the Stop loop counter · log |
 | `Notification` | `on-user.sh` | — | — | bell (`terminalSequence`) on idle, permission and elicitation prompts | log |
-| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent | log |
-| `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | log |
+| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent | running-agents registry · log |
+| `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the tasks still open in the session list, once per open set (skipped when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off) | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open (tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set | bell · log |
 
 `lib/format.sh` is the formatter table (sourced lazily, never registered) and
 `lib/event.jq` is the one sanitization policy behind every log line.
+
+## The task list (MCP)
+
+`mcp/tasks.py`, declared in `.mcp.json`: a standard-library Python MCP server
+(`task_create`, `task_update`, `task_list`) that keeps the session task list
+in `<config>/kodflow/sessions/<session>/tasks.json`, `<config>` being
+`CLAUDE_CONFIG_DIR` or `~/.claude`. It replaces the built-in task tools, whose
+panel in the chat duplicates the status line.
+
+- **One list per agent.** An MCP server cannot tell who calls it; `on-tool.sh`
+  writes `_session` and `_agent` into every call. The status line and the Stop
+  reminder read the main agent's entries only.
+- **Subjects of 40 characters at most**, refused beyond: they are shown in
+  full on the status line.
+- **Running subagents** are recorded next to it, in `agents.json`, by the
+  `SubagentStart`/`SubagentStop` hooks.
+- Without the hook, the session is found through the parent Claude Code
+  process (`<config>/sessions/<pid>.json`) and every call belongs to `main`.
+
+`tests/run-tests.sh` drives the server over stdio.
 
 ## What the log is
 

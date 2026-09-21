@@ -113,30 +113,37 @@ if [ -n "$edited" ]; then
 }Before finishing, update the CLAUDE.md of each directory you changed this session (warmup --update convention: what changed and why, no history, at most 1000 lines; leave it as is only if nothing a future session needs has changed, and say so):$due"
 fi
 
-# Open tasks: the task tools keep one JSON file per task under
-# <config>/tasks/<list>/, the list being CLAUDE_CODE_TASK_LIST_ID or
-# session-<first 8 chars of the session id>. A task left pending or in
-# progress after the work is done stays on the status line for good, so the
-# turn is asked to settle it. Once per state of the open set: a task that
-# genuinely waits on the user is not re-asked every turn. Skipped when the
-# tools are switched off, since nothing could then update the list.
+# Open tasks of the main agent. A task left pending or in progress after the
+# work is done stays on the status line for good, so the turn is asked to
+# settle it. Two sources: the tasks MCP of this plugin
+# (<config>/kodflow/sessions/<session>/tasks.json, the main agent's entries),
+# and the built-in tools' one-file-per-task list under <config>/tasks/<list>/
+# (list = CLAUDE_CODE_TASK_LIST_ID or session-<first 8 chars of the session
+# id>), read unless those tools are switched off. Once per state of the open
+# set: a task that genuinely waits on the user is not re-asked every turn.
+cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+open=""
+mcp_tasks=$cfg/kodflow/sessions/$SID/tasks.json
+[ -s "$mcp_tasks" ] && open=$(jq -r '.tasks[]? | select((.agent // "main") == "main")
+    | select(.status == "pending" or .status == "in_progress") | "\(.id)\t\(.status)\t\(.subject)\ttask_update"' \
+    "$mcp_tasks" 2>/dev/null)
 case "${CLAUDE_CODE_ENABLE_TODO_TOOLS:-}" in 0|false|no|off) ;; *)
     list=${CLAUDE_CODE_TASK_LIST_ID:-session-${SID:0:8}}
-    tasks_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/tasks/${list//[^A-Za-z0-9_-]/-}
-    open=""
-    compgen -G "$tasks_dir/*.json" >/dev/null 2>&1 && open=$(jq -r \
-        'select(.status == "pending" or .status == "in_progress") | "\(.id)\t\(.status)\t\(.subject)"' \
-        "$tasks_dir"/*.json 2>/dev/null | sort -n)
-    if [ -n "$open" ]; then
-        sig=$(printf '%s' "$open" | cksum | cut -d' ' -f1)
-        if ! grep -qxF "$sig" "$STATE/tasks-nudged" 2>/dev/null; then
-            printf '%s\n' "$sig" >> "$STATE/tasks-nudged"
-            due=$(printf '%s\n' "$open" | awk -F'\t' '{printf "\n  - #%s %s (%s)", $1, $3, $2}')
-            ctx="${ctx:+$ctx
-}Tasks still open in this session's list. Mark each one completed if its work is done, deleted if it no longer applies; leave it open only if it genuinely waits on the user, and say so:$due"
-        fi
-    fi
+    tasks_dir=$cfg/tasks/${list//[^A-Za-z0-9_-]/-}
+    compgen -G "$tasks_dir/*.json" >/dev/null 2>&1 && open="${open:+$open
+}$(jq -r 'select(.status == "pending" or .status == "in_progress") | "\(.id)\t\(.status)\t\(.subject)\tTaskUpdate"' \
+        "$tasks_dir"/*.json 2>/dev/null)"
 ;; esac
+open=$(printf '%s\n' "$open" | grep -v '^$' | sort -n)
+if [ -n "$open" ]; then
+    sig=$(printf '%s' "$open" | cksum | cut -d' ' -f1)
+    if ! grep -qxF "$sig" "$STATE/tasks-nudged" 2>/dev/null; then
+        printf '%s\n' "$sig" >> "$STATE/tasks-nudged"
+        due=$(printf '%s\n' "$open" | awk -F'\t' '{printf "\n  - #%s %s (%s, via %s)", $1, $3, $2, $4}')
+        ctx="${ctx:+$ctx
+}Tasks still open in your task list. Mark each one completed if its work is done, deleted if it no longer applies; leave it open only if it genuinely waits on the user, and say so:$due"
+    fi
+fi
 
 # Hooks have no terminal: the bell travels in the JSON, alongside the
 # feedback, so the document stays single.

@@ -219,6 +219,30 @@ pre_bash() {
 }
 
 # ============================================================================
+# PreToolUse · task list (the plugin's tasks MCP, and the built-in tools)
+# ============================================================================
+# An MCP server cannot tell which session or which subagent is calling; this
+# hook can. Both are written into the call, overriding whatever the model put
+# there, so each agent owns its own list and the status line can show the
+# main agent's alone.
+pre_tasks() {
+    jq -c '{hookSpecificOutput:{hookEventName:"PreToolUse",
+            updatedInput:(.tool_input + {_session:(.session_id // "default"), _agent:(.agent_id // "main")})}}' \
+        <<<"$INPUT" 2>/dev/null
+    _log
+    exit 0
+}
+
+# The built-in task tools draw their own panel in the chat, a second copy of
+# the list the status line already shows. Send the model to the MCP instead.
+pre_builtin_tasks() {
+    _block "USE THE KODFLOW TASK TOOLS" \
+        "$TOOL draws a second task list in the chat. Use the kodflow tasks MCP instead:" \
+        "task_create (subject: 40 characters at most), task_update (id, status), task_list." \
+        "They carry the same statuses: pending, in_progress, completed, deleted."
+}
+
+# ============================================================================
 # PreToolUse · Write / Edit / MultiEdit / NotebookEdit
 # ============================================================================
 pre_edit() {
@@ -339,6 +363,8 @@ post_failure() {
 # ============================================================================
 case "$EV/$TOOL" in
     PreToolUse/Bash)                                        pre_bash ;;
+    PreToolUse/mcp__*tasks__task_create|PreToolUse/mcp__*tasks__task_update|PreToolUse/mcp__*tasks__task_list) pre_tasks ;;
+    PreToolUse/TaskCreate|PreToolUse/TodoWrite)             pre_builtin_tasks ;;
     PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit)     pre_edit ;;
     PostToolUse/Write|PostToolUse/Edit|PostToolUse/MultiEdit|PostToolUse/NotebookEdit) post_edit ;;
     PostToolUseFailure/*)                                   post_failure ;;
