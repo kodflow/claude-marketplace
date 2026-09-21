@@ -9,6 +9,7 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 S=$ROOT/plugins/kodflow-hooks/hooks/scripts
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export CLAUDE_PROJECT_DIR=$T/repo HOME=$T/home TMPDIR=$T/tmp CLAUDE_CONFIG_DIR=$T/home/.claude
+unset CLAUDE_CODE_ENABLE_TODO_TOOLS CLAUDE_CODE_TASK_LIST_ID   # inherited values would change what is asserted
 mkdir -p "$T/repo" "$T/home" "$T/tmp" "$T/tmp/sp"
 cd "$T" || exit 1
 git -C "$T/repo" init -q -b feat/test
