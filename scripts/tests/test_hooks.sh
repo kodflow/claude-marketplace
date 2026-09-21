@@ -8,7 +8,7 @@ set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 S=$ROOT/plugins/kodflow-hooks/hooks/scripts
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-export CLAUDE_PROJECT_DIR=$T/repo HOME=$T/home TMPDIR=$T/tmp
+export CLAUDE_PROJECT_DIR=$T/repo HOME=$T/home TMPDIR=$T/tmp CLAUDE_CONFIG_DIR=$T/home/.claude
 mkdir -p "$T/repo" "$T/home" "$T/tmp" "$T/tmp/sp"
 cd "$T" || exit 1
 git -C "$T/repo" init -q -b feat/test
@@ -134,6 +134,34 @@ nudged && bad "updated claude.md" "$OUT" || ok "a CLAUDE.md edited this session 
 rm -f "$T/tmp/sp/claudemd-nudged"
 run Stop "" '{"stop_hook_active":true}' on-stop.sh
 [ -z "$OUT" ] && [ "$RC" -eq 0 ] && ok "stop_hook_active short-circuits" || bad "stop_hook_active" "$OUT"
+
+echo "== Stop · open tasks reminder"
+TD=$T/home/.claude/tasks/session-sess-1; mkdir -p "$TD"
+: > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+printf '{"id":"1","subject":"Done one","status":"completed"}' > "$TD/1.json"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+nudged && bad "finished list" "$OUT" || ok "a finished list asks for nothing"
+printf '{"id":"2","subject":"Ship it","status":"in_progress"}' > "$TD/2.json"
+printf '{"id":"3","subject":"Later","status":"pending"}' > "$TD/3.json"
+rm -f "$T/tmp/sp/stop-count"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#2 Ship it \\(in_progress\\)") and test("#3 Later \\(pending\\)") and (test("Done one") | not)' >/dev/null 2>&1 \
+    && ok "open tasks are named, finished ones are not" || bad "open tasks nudge" "$OUT"
+[ "$(printf '%s\n' "$OUT" | grep -c '^{')" -le 1 ] && ok "still exactly one JSON document" || bad "single document" "$OUT"
+rm -f "$T/tmp/sp/stop-count"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+nudged && bad "tasks nudge once" "$OUT" || ok "the same open set is not reported twice"
+printf '{"id":"2","subject":"Ship it","status":"completed"}' > "$TD/2.json"
+rm -f "$T/tmp/sp/stop-count"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#3 Later")' >/dev/null 2>&1 \
+    && ok "a changed open set is reported again" || bad "changed set" "$OUT"
+printf '{"id":"4","subject":"New","status":"pending"}' > "$TD/4.json"
+rm -f "$T/tmp/sp/stop-count"
+OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}' \
+    | CLAUDE_CODE_ENABLE_TODO_TOOLS=0 bash "$S/on-stop.sh" 2>/dev/null)
+nudged && bad "tools off" "$OUT" || ok "nothing is asked when the task tools are off"
+rm -rf "$TD" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
 
 echo "== UserPromptSubmit / SessionStart / agents"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
