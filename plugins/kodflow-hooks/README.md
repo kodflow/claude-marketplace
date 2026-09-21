@@ -43,7 +43,7 @@ fails by accident blocks every shell call of the session.
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent | log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the tasks still open in the session list, once per open set (skipped when `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off) | bell · log |
 
 `lib/format.sh` is the formatter table (sourced lazily, never registered) and
 `lib/event.jq` is the one sanitization policy behind every log line.
