@@ -10,6 +10,10 @@ S=$ROOT/plugins/kodflow-hooks/hooks/scripts
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export CLAUDE_PROJECT_DIR=$T/repo HOME=$T/home TMPDIR=$T/tmp CLAUDE_CONFIG_DIR=$T/home/.claude
 unset CLAUDE_CODE_ENABLE_TODO_TOOLS CLAUDE_CODE_TASK_LIST_ID   # inherited values would change what is asserted
+# The reviewer gate (main thread reads, reviews and merges; subagents produce)
+# would stop most main-thread payloads below before the guard they test. It
+# is off here and covered on its own in plugins/kodflow-hooks/tests/test_root_gate.sh.
+export KODFLOW_ROOT=off
 mkdir -p "$T/repo" "$T/home" "$T/tmp" "$T/tmp/sp"
 cd "$T" || exit 1
 git -C "$T/repo" init -q -b feat/test
@@ -288,7 +292,7 @@ run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -q 'TRIAGE this message' && ok "the triage directive is injected with no tasks.json" || bad "triage" "$OUT"
 printf '%s' "$C" | grep -q 'Epics:' && bad "no state without tasks.json" "$C" || ok "no epic state without tasks.json"
-printf '%s' "$C" | grep -q 'task_create always names its epic' && printf '%s' "$C" | grep -q 'epic=0' \
+printf '%s' "$C" | grep -q 'task_create always names its epic' && printf '%s' "$C" | grep -q '0 for none, no default' \
     && ok "the directive says the epic is mandatory, 0 for none" || bad "epic mandatory" "$C"
 [ "${#C}" -lt 900 ] && ok "the injected context stays under 900 characters (${#C})" || bad "context size" "${#C}"
 MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"

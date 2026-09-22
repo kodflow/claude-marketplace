@@ -1,8 +1,9 @@
 # kodflow-hooks
 
 The lifecycle machinery the other kodflow plugins assume: shell-output
-compression that never rewrites a read whose bytes matter, a git guard, session
-context, a formatter, a turn-end quality gate, and one structured log.
+compression that never rewrites a read whose bytes matter, a git guard, the
+reviewer gate (the main thread reviews, subagents produce), session context, a
+formatter, a turn-end quality gate, and one structured log.
 
 ## One script per event
 
@@ -29,22 +30,79 @@ fails by accident blocks every shell call of the session.
 
 | Event | Script | Gate | Block | Transform | Observe |
 |-------|--------|------|-------|-----------|---------|
-| `PreToolUse` · Bash | `on-tool.sh` | no guarded git op on the line | `--no-verify`/`-n` · AI attribution or `.claude/` path in the message · credential shapes in the staged blobs · forced push inside a compound line | `--force` → `--force-with-lease` · `rtk rewrite` unless a segment must stay byte-exact | log |
+| `PreToolUse` · Bash | `on-tool.sh` | main thread and a line that is not read-only · no guarded git op on the line | the main thread producing (reviewer gate) · `--no-verify`/`-n` · AI attribution or `.claude/` path in the message · credential shapes in the staged blobs · forced push inside a compound line | `--force` → `--force-with-lease` · `rtk rewrite` unless a segment must stay byte-exact | log |
 | `PreToolUse` · task tools | `on-tool.sh` | — | built-in `TaskCreate`/`TodoWrite`: their chat panel duplicates the status line, the refusal points at the MCP | the MCP call (`task_create`/`update`/`list`/`epic`/`focus`) gets `_session` and `_agent` (the caller's `agent_id`, else `main`), overriding the model | log |
-| `PreToolUse` · Write/Edit | `on-tool.sh` | no file path | protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
+| `PreToolUse` · Write/Edit | `on-tool.sh` | main thread outside its memory and the Claude configuration · no file path | the main thread producing (reviewer gate) · protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
+| `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | subagent, or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) | — | log |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
+| `PostToolUse` · Task/Agent | `on-tool.sh` | — | — | — | log tagged `root_guard: dispatch` |
 | `PostToolUse` · other | `on-tool.sh` | — | — | — | log |
 | `PostToolUseFailure` | `on-tool.sh` | — | — | — | remediation hint · log (error redacted) |
 | `SessionStart` | `on-session.sh` | — | — | post-compaction rules on `compact` · a warning when rtk is absent | log |
 | `SessionEnd` | `on-session.sh` | — | — | — | one log line with the session's event count (1.5 s budget) |
 | `PreCompact` | `on-session.sh` | — | — | — | log |
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
-| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists · the triage directive, always | reset the Stop loop counter · log |
+| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists · the triage directive, always, with the epic mandatory on `task_create` · the reviewer line (dispatch or message the epic's subagent, do not produce) unless `KODFLOW_ROOT=off` | reset the Stop loop counter · log |
 | `Notification` | `on-user.sh` | — | — | bell (`terminalSequence`) on idle, permission and elicitation prompts | log |
-| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent | running-agents registry, with the main agent's active epic at start · log |
+| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · a main-agent task `in_progress` on an epic no running subagent is attributed to (the main thread producing), every turn, unless `KODFLOW_ROOT=off` | bell · log |
+
+## Main thread = reviewer
+
+The user's rule: the main thread triages, manages epics and tasks, dispatches,
+reviews, merges after the user's OK, and informs — it produces nothing. Every
+epic is carried by at least one subagent working in its own git worktree
+(`~/Documents/worktrees/<repo>-<epic-slug>`) that delivers through a PR.
+
+The gate is mechanical. A `PreToolUse` payload carries `agent_id` only when the
+call comes from inside a subagent (measured on 855 real events: every one
+carrying it came from a subagent, no main-thread one did), so a call without
+it is the main thread's own hand. Subagents are never gated.
+
+What the main thread keeps:
+
+| Area | Allowed |
+|------|---------|
+| Reading | `Read`, `Glob`, `Grep`, `LS`, `ToolSearch`, `AskUserQuestion`, `WebFetch`, `WebSearch`, and any tool this script does not handle |
+| Orchestration | the task tools, `Agent`, `SendMessage`, `ListAgents` |
+| Read-only Bash | `git status/log/diff/show/fetch/rev-parse/blame/…`, `git branch/tag/remote/worktree/stash` listing forms, `git config --get`; `gh pr view/checks/list/diff/status`, `gh run view/list/watch`, `gh issue/repo/release/workflow` views, `gh api` as a GET (no `-X` other than GET, no `-f/-F/--input`), the `glab` equivalents; `ls cat head tail grep rg find wc jq stat date ps pgrep sed awk sort diff …` (no `sed -i`, `find -delete/-exec`, `sort -o`) |
+| Verification | `go test/vet`, `make` with test/lint/check targets only, `bash`/`zsh` on a test suite or `bash -n`, `shellcheck`, `python -m unittest/pytest`, a Python test file, `npm test`, `cargo test/clippy/check` |
+| Merge, review, tracker | `gh pr merge`, `glab mr merge`, the GitHub/GitLab MCP merge tools; reviews, comments and issues (`gh pr review/comment`, `gh issue create/comment/edit`, the MCP equivalents) |
+| Its memory and the configuration | `Write`/`Edit` on `<config>/projects/*/memory/*`, `<config>/settings.json`, `<config>/settings.local.json`, `<config>/CLAUDE.md`, `~/CLAUDE.md` (`<config>` = `CLAUDE_CONFIG_DIR` or `~/.claude`; a path with `..` is refused); `claude plugin …`, `claude mcp …` |
+
+Everything else — code, repositories, branches, pull requests, installs — is
+refused with the briefing contract: the epic (focused before dispatching, so
+the subagent is attributed to it), the objective and the C-NNN constraints,
+the paths and lines already read, the return contract (PR number, verified
+versus assumed), and `SendMessage` to the epic's subagent when there is one.
+
+Bash is classified by allow-list: a command nobody classified is producing.
+The line is scanned once with quotes understood (a `>` or `;` inside quotes is
+text; unbalanced quotes are unclassifiable), split on `;`, `&&`, `||`, `|`,
+`&`, newlines and subshells, and command or process substitutions become
+segments of their own. One producing segment condemns the line, and any
+redirection other than to `/dev/null` or between descriptors makes a line
+producing.
+
+The Stop rule closes the other side: a main-agent task `in_progress` on an
+epic with no running subagent attributed to it (`agents.json` `epic`, not
+stopped, started less than 12 h ago) means the main thread is doing the work;
+it is flagged every turn — dispatch a subagent for the epic, or set the task
+back to `pending`/`waiting`.
+
+Ways out, because a gate with none gets ripped out: `ROOT_OK=1` leading a
+Bash line, `KODFLOW_ROOT=off` in the environment for the session (gate, Stop
+rule and reviewer line all off), and plan mode, where the gate never fires.
+Every anomaly — no jq, no awk, a malformed payload, an empty command — fails
+open. Each denial is logged with `root_guard: deny` and each dispatch with
+`root_guard: dispatch`, so the cost of the discipline can be counted:
+
+```bash
+L=.claude/logs/$(git branch --show-current | tr / _)/session.jsonl
+grep -c '"root_guard":"deny"' "$L"; grep -c '"root_guard":"dispatch"' "$L"
+```
 
 `lib/format.sh` is the formatter table (sourced lazily, never registered) and
 `lib/event.jq` is the one sanitization policy behind every log line.
@@ -102,7 +160,8 @@ pill per open epic of the main agent.
   Glob, Grep, LS, ToolSearch and AskUserQuestion — the message is filed in the
   task list before anything is done about it. Subagents are not gated. The
   `PreToolUse` matcher is the catch-all for this; tools the script does not
-  handle are decided without jq (~10 ms).
+  handle are decided without jq (~6 ms per call, measured, the reviewer gate
+  included).
 - **Limits:** task subjects 40 characters, epic titles 20, refused beyond:
   they are shown in full on the status line.
 - **v1 files** (one epic per agent, a dict) are read as v2 and rewritten by
@@ -165,11 +224,14 @@ the transform. Logging is a detached subshell and no longer on the path.
 | `KTN_LINTER_PORT` (default 7717) | where a project-linter server listens; nothing is called when the port is closed |
 | `KTN_PRE_PHASES`, `KTN_STOP_PHASES` | linter phases at edit time and at turn end |
 | `NO_RTK=` prefix on a command | that line is never rewritten |
+| `ROOT_OK=1` prefix on a command | that line is exempt from the reviewer gate |
+| `KODFLOW_ROOT=off` | the reviewer gate, its Stop rule and its prompt line are off for the session |
 
 ## Tests
 
 ```
 bash scripts/tests/test_hooks.sh
+bash plugins/kodflow-hooks/tests/run-tests.sh   # tasks MCP + reviewer gate
 ```
 
 A hundred cases in a throwaway repository: every block, every rewrite, the
@@ -177,3 +239,11 @@ fidelity guard, the tracker fed a file name that is also a shell command, the
 redaction of every persisted string, the Stop reminder firing once, the task rules on the active epic only, the
 triage and epic state injected with each prompt, and every
 script fed garbage or nothing and exiting 0.
+
+`test_hooks.sh` runs with `KODFLOW_ROOT=off` so its main-thread payloads reach
+the guard they test. The reviewer gate has its own suite,
+`tests/test_root_gate.sh` (run by `tests/run-tests.sh`): the allow/deny
+matrix, compound lines, redirections and substitutions, the escapes, the
+subagent never gated, memory and configuration writes, merges, the forge MCP
+tools, the Stop rule with and without a subagent on the epic, and the
+log tags.

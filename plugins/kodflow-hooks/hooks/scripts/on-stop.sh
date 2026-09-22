@@ -179,6 +179,28 @@ if [ -s "$mcp_tasks" ]; then
         ctx="${ctx:+$ctx
 }$n_busy tasks are in progress for $workers worker(s) (you and ${running:-0} running subagent(s)): $busy_list. One task per worker: set every task nobody is working on right now to completed, pending or waiting."
     fi
+
+    # The main thread reviews; it does not produce. Every epic under way is
+    # carried by a subagent in its own worktree, so a main-agent task in
+    # progress on an epic no running subagent is attributed to (agents.json
+    # `epic`, recorded at SubagentStart from the active epic) means main is
+    # doing the work itself. Every turn until corrected, like the rules above.
+    # KODFLOW_ROOT=off turns it off with the PreToolUse gate.
+    if [ "${KODFLOW_ROOT:-}" != off ]; then
+        covered="[]"
+        [ -s "$agents_file" ] && covered=$(jq -c --argjson cut "$(( $(date +%s) - 43200 ))" \
+            '[.agents // {} | .[] | select(type == "object" and .stopped == null and (.started // 0) >= $cut) | (.epic // 0)] | unique' \
+            "$agents_file" 2>/dev/null)
+        [[ $covered == \[*\] ]] || covered="[]"
+        producing=$(jq -r --argjson cov "$covered" '.tasks[]? | objects
+            | select((.agent // "main") == "main" and .status == "in_progress")
+            | (.epic // 0) as $e | select(any($cov[]; . == $e) | not)
+            | "  - #\(.id) \(.subject): " + (if $e == 0 then "dispatch a subagent in a worktree for it" else "dispatch a subagent in a worktree for epic #\($e)" end)
+              + ", or set #\(.id) back to pending/waiting"' "$mcp_tasks" 2>/dev/null)
+        [ -n "$producing" ] && ctx="${ctx:+$ctx
+}The main thread reviews, it does not produce, and these tasks are in progress with no running subagent on their epic (task_focus the epic before dispatching, so the subagent is attributed to it; SendMessage its subagent if one is already on it):
+$producing"
+    fi
 fi
 
 # Hooks have no terminal: the bell travels in the JSON, alongside the
