@@ -198,7 +198,30 @@ stale && bad "subagent list" "$OUT" || ok "a subagent's list is not the main age
 printf '%s' '{"epics":{"main":{"id":2,"title":"New"}},"tasks":[{"id":"1","agent":"main","epic":1,"subject":"Old epic left open","status":"pending"},{"id":"2","agent":"main","epic":2,"subject":"New work","status":"in_progress"}]}' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | (test("Old epic") | not) and test("New work")' >/dev/null 2>&1 \
-    && ok "only the current epic is reminded" || bad "epic filter" "$OUT"
+    && ok "only the current epic is reminded (v1 file)" || bad "epic filter" "$OUT"
+
+echo "== Stop · v2 epics: the active epic only"
+V2='{"version":2,"next_id":6,"next_epic":3,"active":{"main":2},
+  "epics":[{"id":1,"agent":"main","title":"Other","created":1,"touched":1},{"id":2,"agent":"main","title":"Active","created":1,"touched":2}],
+  "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Other epic todo","status":"pending"},
+           {"id":"2","agent":"main","epic":2,"subject":"Active doing","status":"in_progress"},
+           {"id":"3","agent":"main","epic":0,"subject":"Loose todo","status":"pending"}]}'
+printf '%s' "$V2" > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("Active doing") and (test("Other epic todo") | not) and (test("Loose todo") | not)' >/dev/null 2>&1 \
+    && ok "reminder: the active epic's tasks, not another open epic's nor epic 0's" || bad "v2 reminder" "$OUT"
+stale && bad "v2 truthful" "$OUT" || ok "an open epic with pending work does not flag an active epic in progress"
+printf '%s' "$V2" | jq -c '.tasks[1].status = "completed" | .tasks += [{"id":"4","agent":"main","epic":2,"subject":"Active next","status":"pending"}]' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+stale && ok "truthfulness: the active epic with work left and nothing under way is flagged" || bad "v2 stale" "$OUT"
+printf '%s' "$V2" | jq -c '.active = {}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("Loose todo") and (test("Active doing") | not)' >/dev/null 2>&1 \
+    && ok "no active epic: the tasks with no epic are the ones checked" || bad "epic 0 fallback" "$OUT"
+printf '{"epics":7,"active":"x","tasks":[1,' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+[ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] \
+    && ok "a malformed tasks.json: Stop still exits 0 with one document" || bad "stop malformed" "rc=$RC $OUT"
 rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
 
 echo "== PreToolUse · task tools"
@@ -211,6 +234,11 @@ printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput._agent == "a1b2"' >
 run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_epic '{"tool_input":{"title":"SDK"}}' on-tool.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \
     && ok "task_epic gets the session and agent too" || bad "epic injection" "$OUT"
+run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_focus '{"tool_input":{"epic":"2"},"agent_id":"a9"}' on-tool.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .epic == "2" and ._session == "sess-1" and ._agent == "a9"' >/dev/null 2>&1 \
+    && ok "task_focus gets the session and agent too" || bad "focus injection" "$OUT"
+grep -q 'task_(create|update|list|epic|focus)' "$ROOT/plugins/kodflow-hooks/hooks/hooks.json" \
+    && ok "the PreToolUse matcher lists task_focus" || bad "matcher" "task_focus missing from hooks.json"
 run PreToolUse TaskCreate '{"tool_input":{"subject":"x","description":"y"}}' on-tool.sh
 expect_rc "built-in TaskCreate refused" 2
 printf '%s' "$ERR" | grep -q 'task_create' && ok "the refusal points at the MCP tools" || bad "refusal text" "$ERR"
@@ -230,6 +258,46 @@ jq -e '.agents | has("ghost") | not' "$AG" >/dev/null 2>&1 \
     && ok "a stop with no matching start adds no phantom entry" || bad "phantom stop" "$(cat "$AG" 2>/dev/null)"
 run SubagentStop "" '{"agent_id":"a2","stop_hook_active":true}' on-agent.sh
 jq -e '.agents.a2.stopped == null' "$AG" >/dev/null 2>&1 && ok "a subagent continued by a stop hook is still running" || bad "active stop" "$(cat "$AG")"
+jq -e '.agents.a1.epic == 0' "$AG" >/dev/null 2>&1 && ok "no tasks.json: the subagent is recorded on epic 0" || bad "agent epic 0" "$(cat "$AG")"
+printf '%s' '{"version":2,"active":{"main":4},"epics":[{"id":4,"agent":"main","title":"E"}],"tasks":[]}' > "${AG%/*}/tasks.json"
+run SubagentStart "" '{"agent_id":"a3","agent_type":"Explore"}' on-agent.sh
+jq -e '.agents.a3.epic == 4' "$AG" >/dev/null 2>&1 && ok "SubagentStart records the main agent's active epic" || bad "agent epic" "$(cat "$AG")"
+printf 'garbage' > "${AG%/*}/tasks.json"
+run SubagentStart "" '{"agent_id":"a4","agent_type":"Explore"}' on-agent.sh
+jq -e '.agents.a4.epic == 0' "$AG" >/dev/null 2>&1 && [ "$RC" -eq 0 ] \
+    && ok "a malformed tasks.json records epic 0 and fails open" || bad "agent epic malformed" "$(cat "$AG")"
+rm -rf "$T/home/.claude/kodflow"
+
+echo "== UserPromptSubmit · triage and epic state"
+ctx_of() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+C=$(ctx_of)
+printf '%s' "$C" | grep -q 'TRIAGE this message' && ok "the triage directive is injected with no tasks.json" || bad "triage" "$OUT"
+printf '%s' "$C" | grep -q 'Epics:' && bad "no state without tasks.json" "$C" || ok "no epic state without tasks.json"
+[ "${#C}" -lt 900 ] && ok "the injected context stays under 900 characters (${#C})" || bad "context size" "${#C}"
+MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"
+printf '%s' '{"version":2,"active":{"main":2},
+  "epics":[{"id":1,"agent":"main","title":"api-gateway","touched":5},{"id":2,"agent":"main","title":"SDK status-line","touched":9},
+           {"id":3,"agent":"main","title":"Finished","touched":9},{"id":7,"agent":"a1","title":"Sub epic","touched":9}],
+  "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Fix daemon","status":"pending"},
+           {"id":"2","agent":"main","epic":2,"subject":"Port renderer","status":"completed"},
+           {"id":"3","agent":"main","epic":2,"subject":"Freeze renders","status":"in_progress"},
+           {"id":"4","agent":"main","epic":3,"subject":"Old","status":"completed"},
+           {"id":"5","agent":"main","epic":0,"subject":"Loose","status":"pending"}]}' > "$MS/tasks.json"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+C=$(ctx_of)
+printf '%s' "$C" | grep -qF 'Epics: active #2 SDK status-line 1/2, in progress #3 Freeze renders · other open: #1 api-gateway 0/1 · no epic: 1 open task(s)' \
+    && ok "epic state: active epic with its task in progress, other open epics, loose tasks" || bad "epic state" "$C"
+printf '%s' "$C" | grep -q 'Finished\|Sub epic' && bad "closed/other agent epics hidden" "$C" || ok "completed epics and subagent epics are left out"
+printf '%s' "$C" | grep -q 'TRIAGE' && ok "triage still injected alongside the state" || bad "triage with state" "$C"
+[ "${#C}" -lt 900 ] && ok "context with the epic state stays under 900 characters (${#C})" || bad "context size" "${#C}"
+printf '%s' '{"version":1,"epics":{"main":{"id":1,"title":"Legacy"}},"tasks":[{"id":"1","agent":"main","epic":1,"subject":"T","status":"pending"}]}' > "$MS/tasks.json"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+ctx_of | grep -qF 'Epics: active #1 Legacy 0/1' && ok "a v1 tasks.json is read as v2" || bad "v1 state" "$OUT"
+printf '{"tasks":[' > "$MS/tasks.json"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+[ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] && ctx_of | grep -q TRIAGE && ! ctx_of | grep -q 'Epics:' \
+    && ok "a malformed tasks.json: one document, triage kept, state left out" || bad "user malformed" "rc=$RC $OUT"
 rm -rf "$T/home/.claude/kodflow"
 
 echo "== UserPromptSubmit / SessionStart / agents"

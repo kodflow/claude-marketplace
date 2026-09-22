@@ -30,7 +30,7 @@ fails by accident blocks every shell call of the session.
 | Event | Script | Gate | Block | Transform | Observe |
 |-------|--------|------|-------|-----------|---------|
 | `PreToolUse` · Bash | `on-tool.sh` | no guarded git op on the line | `--no-verify`/`-n` · AI attribution or `.claude/` path in the message · credential shapes in the staged blobs · forced push inside a compound line | `--force` → `--force-with-lease` · `rtk rewrite` unless a segment must stay byte-exact | log |
-| `PreToolUse` · task tools | `on-tool.sh` | — | built-in `TaskCreate`/`TodoWrite`: their chat panel duplicates the status line, the refusal points at the MCP | the MCP call gets `_session` and `_agent` (the caller's `agent_id`, else `main`), overriding the model | log |
+| `PreToolUse` · task tools | `on-tool.sh` | — | built-in `TaskCreate`/`TodoWrite`: their chat panel duplicates the status line, the refusal points at the MCP | the MCP call (`task_create`/`update`/`list`/`epic`/`focus`) gets `_session` and `_agent` (the caller's `agent_id`, else `main`), overriding the model | log |
 | `PreToolUse` · Write/Edit | `on-tool.sh` | no file path | protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
 | `PostToolUse` · other | `on-tool.sh` | — | — | — | log |
@@ -39,39 +39,58 @@ fails by accident blocks every shell call of the session.
 | `SessionEnd` | `on-session.sh` | — | — | — | one log line with the session's event count (1.5 s budget) |
 | `PreCompact` | `on-session.sh` | — | — | — | log |
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
-| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal as context | reset the Stop loop counter · log |
+| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists · the triage directive, always | reset the Stop loop counter · log |
 | `Notification` | `on-user.sh` | — | — | bell (`terminalSequence`) on idle, permission and elicitation prompts | log |
-| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent | running-agents registry · log |
+| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open (tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · a list with tasks to do but none `in_progress` or `waiting`, every turn until corrected | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected | bell · log |
 
 `lib/format.sh` is the formatter table (sourced lazily, never registered) and
 `lib/event.jq` is the one sanitization policy behind every log line.
+`lib/epics.jq` is the hooks' read side of `tasks.json` (v1 or v2, malformed
+read as empty), shared by `on-user.sh`, `on-agent.sh` and `on-stop.sh`.
 
 ## The task list (MCP)
 
 `mcp/tasks.py`, declared in `.mcp.json`: a standard-library Python MCP server
-(`task_create`, `task_update`, `task_epic`, `task_list`) that keeps the session task list
-in `<config>/kodflow/sessions/<session>/tasks.json`, `<config>` being
-`CLAUDE_CONFIG_DIR` or `~/.claude`. It replaces the built-in task tools, whose
-panel in the chat duplicates the status line.
+(`task_create`, `task_update`, `task_epic`, `task_focus`, `task_list`) that
+keeps the session task list in `<config>/kodflow/sessions/<session>/tasks.json`,
+`<config>` being `CLAUDE_CONFIG_DIR` or `~/.claude`. It replaces the built-in
+task tools, whose panel in the chat duplicates the status line. The file
+format (version 2) is a contract shared with the status line, which draws one
+pill per open epic of the main agent.
 
 - **One list per agent.** An MCP server cannot tell who calls it; `on-tool.sh`
   writes `_session` and `_agent` into every call. The status line and the Stop
-  reminder read the main agent's entries only.
+  rules read the main agent's entries only.
 - **Statuses:** `pending`, `in_progress`, `waiting` (blocked on the user: a
   decision, an approval, an answer), `completed`, `deleted`. The list must say
-  what is true now; the Stop hook flags tasks to do with none in progress or
-  waiting on every turn until it does.
-- **Epics:** `task_epic(title)` starts a new subject with its own list; the
-  status line, `task_list` and the Stop hook see the current epic only, so a
-  new subject never becomes the tail of an unrelated list. Refused while the
-  current epic has tasks not completed: nothing disappears unsettled.
-- **Subjects of 40 characters at most**, refused beyond: they are shown in
-  full on the status line.
+  what is true now; the Stop hook flags an active epic with tasks to do and
+  none in progress or waiting, on every turn until it does.
+- **Epics, several open at once.** An epic is one subject with its own tasks
+  and its own pill. `task_epic(title)` opens one and makes it **active**; the
+  others stay open. `task_focus(epic)` (id or exact title) switches the active
+  epic back to an open one. `task_create` goes to the active epic unless
+  `epic` names another; with no active epic a task has epic `0`. An epic is
+  open while a task of it is not completed, or while it is active and still
+  empty; completed epics cannot be focused, and `task_epic` with the title of
+  an open epic focuses it instead of duplicating it. `task_list` shows the
+  active epic's tasks, one `#id title done/total` line per other open epic,
+  then the tasks with no epic. Each create, update and focus stamps the
+  epic's `touched`, which orders the pills.
+- **Triage.** `UserPromptSubmit` injects the epic state and a directive to
+  sort every message before acting: new work for an open epic (create it
+  there, focus when starting), context on the task in progress (apply, no new
+  task), a change to a completed task (`Rework #N: …` in its epic), a new
+  subject (`task_epic`), or plain discussion (nothing).
+- **Limits:** task subjects 40 characters, epic titles 20, refused beyond:
+  they are shown in full on the status line.
+- **v1 files** (one epic per agent, a dict) are read as v2 and rewritten by
+  the next change; the hooks read both shapes.
 - **Running subagents** are recorded next to it, in `agents.json`, by the
-  `SubagentStart`/`SubagentStop` hooks.
+  `SubagentStart`/`SubagentStop` hooks, each with the main agent's active epic
+  at its start (`0` when none), so the status line counts it on that pill.
 - Without the hook, the session is found through the parent Claude Code
   process (`<config>/sessions/<pid>.json`) and every call belongs to `main`.
 
@@ -134,7 +153,8 @@ the transform. Logging is a detached subshell and no longer on the path.
 bash scripts/tests/test_hooks.sh
 ```
 
-Fifty-odd cases in a throwaway repository: every block, every rewrite, the
+A hundred cases in a throwaway repository: every block, every rewrite, the
 fidelity guard, the tracker fed a file name that is also a shell command, the
-redaction of every persisted string, the Stop reminder firing once, and every
+redaction of every persisted string, the Stop reminder firing once, the task rules on the active epic only, the
+triage and epic state injected with each prompt, and every
 script fed garbage or nothing and exiting 0.

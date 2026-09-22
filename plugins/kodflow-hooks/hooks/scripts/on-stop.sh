@@ -124,9 +124,11 @@ fi
 cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 open=""
 mcp_tasks=$cfg/kodflow/sessions/$SID/tasks.json
-# Only the main agent's current epic: a finished subject is not this turn's.
-mcp_epic='(.epics.main.id // 0) as $e | .tasks[]? | select((.agent // "main") == "main" and (.epic // 0) == $e)'
-[ -s "$mcp_tasks" ] && open=$(jq -r "$mcp_epic"' | select(.status == "pending" or .status == "in_progress") | "\(.id)\t\(.status)\t\(.subject)\ttask_update"' \
+# Only the main agent's active epic (its tasks with no epic when none is
+# active): the other open epics are not this turn's subject. lib/epics.jq
+# reads v1 and v2 files alike and turns a malformed one into an empty list.
+mcp_epic='include "epics"; v2 | active_tasks("main")'
+[ -s "$mcp_tasks" ] && open=$(jq -r -L "$LIB" "$mcp_epic"' | select(.status == "pending" or .status == "in_progress") | "\(.id)\t\(.status)\t\(.subject)\ttask_update"' \
     "$mcp_tasks" 2>/dev/null)
 case "${CLAUDE_CODE_ENABLE_TODO_TOOLS:-}" in 0|false|no|off) ;; *)
     list=${CLAUDE_CODE_TASK_LIST_ID:-session-${SID:0:8}}
@@ -152,7 +154,7 @@ fi
 # every turn until the list is corrected — it asks for one status change, not
 # for a decision the user owes — and the loop guard above still caps a turn.
 if [ -s "$mcp_tasks" ]; then
-    counts=$(jq -r "[$mcp_epic | .status]"' | "\(map(select(. == "pending")) | length) \(map(select(. == "in_progress")) | length) \(map(select(. == "waiting")) | length)"' \
+    counts=$(jq -r -L "$LIB" 'include "epics"; v2 | [active_tasks("main") | .status] | "\(map(select(. == "pending")) | length) \(map(select(. == "in_progress")) | length) \(map(select(. == "waiting")) | length)"' \
         "$mcp_tasks" 2>/dev/null)
     read -r n_pending n_active n_waiting <<<"${counts:-0 0 0}"
     if [ "${n_pending:-0}" -gt 0 ] && [ "${n_active:-0}" -eq 0 ] && [ "${n_waiting:-0}" -eq 0 ]; then

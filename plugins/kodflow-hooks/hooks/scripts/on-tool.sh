@@ -238,8 +238,8 @@ pre_tasks() {
 pre_builtin_tasks() {
     _block "USE THE KODFLOW TASK TOOLS" \
         "$TOOL draws a second task list in the chat. Use the kodflow tasks MCP instead:" \
-        "task_create (subject: 40 characters at most), task_update (id, status), task_list." \
-        "They carry the same statuses: pending, in_progress, completed, deleted."
+        "task_create (subject: 40 characters at most), task_update (id, status), task_list," \
+        "task_epic / task_focus (one epic per subject). Statuses: pending, in_progress, waiting, completed, deleted."
 }
 
 # ============================================================================
@@ -363,7 +363,7 @@ post_failure() {
 # ============================================================================
 case "$EV/$TOOL" in
     PreToolUse/Bash)                                        pre_bash ;;
-    PreToolUse/mcp__*tasks__task_create|PreToolUse/mcp__*tasks__task_update|PreToolUse/mcp__*tasks__task_list|PreToolUse/mcp__*tasks__task_epic) pre_tasks ;;
+    PreToolUse/mcp__*tasks__task_create|PreToolUse/mcp__*tasks__task_update|PreToolUse/mcp__*tasks__task_list|PreToolUse/mcp__*tasks__task_epic|PreToolUse/mcp__*tasks__task_focus) pre_tasks ;;
     PreToolUse/TaskCreate|PreToolUse/TodoWrite)             pre_builtin_tasks ;;
     PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit)     pre_edit ;;
     PostToolUse/Write|PostToolUse/Edit|PostToolUse/MultiEdit|PostToolUse/NotebookEdit) post_edit ;;
