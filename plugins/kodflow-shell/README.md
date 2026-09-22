@@ -19,7 +19,10 @@ attendre la prochaine session : `/shell install`.
 
 Le même hook installe **`status-line`** s'il manque : il récupère la release qui correspond à
 la plateforme, vérifie sa somme de contrôle, la pose dans `~/.local/bin` et renseigne
-`statusLine` dans `settings.json`.
+`statusLine` dans `settings.json`, avec `refreshInterval: 1` : la tâche en cours pulse une
+seconde sur deux, et l'hôte ne redessine sinon que sur ses propres évènements. Sur une
+status line déjà à nous (par chemin ou par nom), il n'ajoute que ce réglage, et garde un
+intervalle que l'utilisateur a choisi.
 
 macOS, Linux et Windows, en amd64 comme en arm64. Un shell Windows arrive ici par Git Bash,
 MSYS2 ou Cygwin — qui annoncent leur propre noyau et non « Windows » — et récupère le `.exe` ;
