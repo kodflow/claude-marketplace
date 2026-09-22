@@ -84,6 +84,11 @@ pill per open epic of the main agent.
   there, focus when starting), context on the task in progress (apply, no new
   task), a change to a completed task (`Rework #N: …` in its epic), a new
   subject (`task_epic`), or plain discussion (nothing).
+- **Session start review.** On `startup`, `resume`, `clear` and `compact`,
+  `SessionStart` lists the main agent's open tasks of every epic
+  (`lib/review.jq`) and asks to reconcile them first — an `in_progress` left
+  by the previous run is not work in progress — and raises the triage gate,
+  so nothing is done before the list is true again.
 - **Triage gate.** Every user message raises `triage-pending`; until a task
   tool is called, `PreToolUse` refuses the main agent every tool but Read,
   Glob, Grep, LS, ToolSearch and AskUserQuestion — the message is filed in the

@@ -316,6 +316,28 @@ run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh
 [ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "tools this script ignores leave at once" || bad "fast exit" "rc=$RC out=$OUT"
 rm -f "$T/tmp/sp/triage-pending"
 
+echo "== SessionStart · review the task list left open"
+RS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$RS"; rm -f "$T/tmp/sp/triage-pending"
+printf '%s' '{"version":2,"epics":[{"id":1,"agent":"main","title":"SDK"}],"active":{"main":1},"tasks":[
+  {"id":"1","agent":"main","epic":1,"subject":"Stale work","status":"in_progress"},
+  {"id":"2","agent":"main","epic":1,"subject":"Done work","status":"completed"},
+  {"id":"3","agent":"main","epic":0,"subject":"Loose","status":"pending"},
+  {"id":"4","agent":"a1","epic":0,"subject":"Sub","status":"pending"}]}' > "$RS/tasks.json"
+run SessionStart "" '{"source":"resume"}' on-session.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("SESSION START") and test("#1 \\[in_progress\\] Stale work") and test("#3 \\[pending\\] Loose") and (test("Done work") | not) and (test("Sub") | not)' >/dev/null 2>&1 \
+    && ok "resume lists the main agent's open tasks, finished and subagent ones left out" || bad "session review" "$OUT"
+[ -f "$T/tmp/sp/triage-pending" ] && ok "resume holds acting tools until the list is reviewed" || bad "review gate" "flag absent"
+rm -f "$T/tmp/sp/triage-pending"
+run SessionStart "" '{"source":"compact"}' on-session.sh
+[ "$(printf '%s\n' "$OUT" | grep -c '^{')" -eq 1 ] && printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("SESSION START") and test("POST-COMPACTION")' >/dev/null 2>&1 \
+    && ok "compact: review and standing rules in one document" || bad "compact review" "$OUT"
+printf '%s' '{"version":2,"epics":[],"active":{},"tasks":[{"id":"1","agent":"main","epic":0,"subject":"x","status":"completed"}]}' > "$RS/tasks.json"
+rm -f "$T/tmp/sp/triage-pending"; run SessionStart "" '{"source":"resume"}' on-session.sh
+[ ! -f "$T/tmp/sp/triage-pending" ] && ! printf '%s' "$OUT" | grep -q 'SESSION START' && ok "nothing open: no review, no gate" || bad "empty review" "$OUT"
+printf '%s' '{"tasks":' > "$RS/tasks.json"
+run SessionStart "" '{"source":"resume"}' on-session.sh; expect_rc "a malformed task file fails open" 0
+rm -rf "$RS" "$T/tmp/sp/triage-pending"
+
 echo "== UserPromptSubmit / SessionStart / agents"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("feat/test")' >/dev/null 2>&1 && ok "branch injected with the prompt" || bad "prompt context" "$OUT"
