@@ -195,6 +195,10 @@ stale && bad "in progress accepted" "$OUT" || ok "a task in progress makes the l
 printf '%s' '{"tasks":[{"id":"1","agent":"a1","subject":"Sub only","status":"pending"}]}' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 stale && bad "subagent list" "$OUT" || ok "a subagent's list is not the main agent's to correct"
+printf '%s' '{"epics":{"main":{"id":2,"title":"New"}},"tasks":[{"id":"1","agent":"main","epic":1,"subject":"Old epic left open","status":"pending"},{"id":"2","agent":"main","epic":2,"subject":"New work","status":"in_progress"}]}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | (test("Old epic") | not) and test("New work")' >/dev/null 2>&1 \
+    && ok "only the current epic is reminded" || bad "epic filter" "$OUT"
 rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
 
 echo "== PreToolUse · task tools"
@@ -204,6 +208,9 @@ printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .subject == "x" a
 run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_update '{"tool_input":{"id":"1"},"agent_id":"a1b2"}' on-tool.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput._agent == "a1b2"' >/dev/null 2>&1 \
     && ok "subagent call is attributed to its agent_id" || bad "subagent attribution" "$OUT"
+run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_epic '{"tool_input":{"title":"SDK"}}' on-tool.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \
+    && ok "task_epic gets the session and agent too" || bad "epic injection" "$OUT"
 run PreToolUse TaskCreate '{"tool_input":{"subject":"x","description":"y"}}' on-tool.sh
 expect_rc "built-in TaskCreate refused" 2
 printf '%s' "$ERR" | grep -q 'task_create' && ok "the refusal points at the MCP tools" || bad "refusal text" "$ERR"

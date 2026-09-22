@@ -57,7 +57,7 @@ class TasksServer(unittest.TestCase):
         self.assertIn("tools", init["capabilities"])
         self.s.notify("notifications/initialized")
         names = [t["name"] for t in self.s.request("tools/list")["result"]["tools"]]
-        self.assertEqual(names, ["task_create", "task_update", "task_list"])
+        self.assertEqual(names, ["task_create", "task_update", "task_epic", "task_list"])
         self.assertIn("error", self.s.request("nope"))
 
     def test_lifecycle(self):
@@ -78,6 +78,28 @@ class TasksServer(unittest.TestCase):
         out = self.s.call("task_update", id="1", status="waiting", _session="s1")
         self.assertFalse(out.get("isError"), out)
         self.assertEqual(self.state()["tasks"][0]["status"], "waiting")
+
+    def test_epics_keep_subjects_apart(self):
+        self.s.call("task_create", subject="Old work", _session="s1")
+        refused = self.s.call("task_epic", title="SDK rewrite", _session="s1")
+        self.assertTrue(refused.get("isError"), "an open task must be settled before a new epic")
+        self.assertIn("Old work", refused["content"][0]["text"])
+        self.s.call("task_update", id="1", status="completed", _session="s1")
+        started = self.s.call("task_epic", title="SDK rewrite", _session="s1")
+        self.assertFalse(started.get("isError"), started)
+        self.s.call("task_create", subject="Freeze golden renders", _session="s1")
+        listed = self.s.call("task_list", _session="s1")["content"][0]["text"]
+        self.assertIn("Epic: SDK rewrite", listed)
+        self.assertIn("Freeze golden renders", listed)
+        self.assertNotIn("Old work", listed, "the previous epic is out of the list")
+        data = self.state()
+        self.assertEqual(data["epics"]["main"], {"id": 1, "title": "SDK rewrite"})
+        self.assertEqual([t.get("epic", 0) for t in data["tasks"]], [0, 1])
+
+    def test_epics_are_per_agent(self):
+        self.s.call("task_epic", title="Main subject", _session="s1", _agent="main")
+        self.s.call("task_create", subject="Sub work", _session="s1", _agent="a1")
+        self.assertEqual(self.state()["tasks"][0]["epic"], 0, "a subagent keeps its own epic")
 
     def test_long_subject_is_refused(self):
         out = self.s.call("task_create", subject="x" * 41, _session="s1")

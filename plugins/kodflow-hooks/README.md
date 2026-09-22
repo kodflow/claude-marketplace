@@ -52,7 +52,7 @@ fails by accident blocks every shell call of the session.
 ## The task list (MCP)
 
 `mcp/tasks.py`, declared in `.mcp.json`: a standard-library Python MCP server
-(`task_create`, `task_update`, `task_list`) that keeps the session task list
+(`task_create`, `task_update`, `task_epic`, `task_list`) that keeps the session task list
 in `<config>/kodflow/sessions/<session>/tasks.json`, `<config>` being
 `CLAUDE_CONFIG_DIR` or `~/.claude`. It replaces the built-in task tools, whose
 panel in the chat duplicates the status line.
@@ -64,6 +64,10 @@ panel in the chat duplicates the status line.
   decision, an approval, an answer), `completed`, `deleted`. The list must say
   what is true now; the Stop hook flags tasks to do with none in progress or
   waiting on every turn until it does.
+- **Epics:** `task_epic(title)` starts a new subject with its own list; the
+  status line, `task_list` and the Stop hook see the current epic only, so a
+  new subject never becomes the tail of an unrelated list. Refused while the
+  current epic has tasks not completed: nothing disappears unsettled.
 - **Subjects of 40 characters at most**, refused beyond: they are shown in
   full on the status line.
 - **Running subagents** are recorded next to it, in `agents.json`, by the

@@ -363,7 +363,7 @@ post_failure() {
 # ============================================================================
 case "$EV/$TOOL" in
     PreToolUse/Bash)                                        pre_bash ;;
-    PreToolUse/mcp__*tasks__task_create|PreToolUse/mcp__*tasks__task_update|PreToolUse/mcp__*tasks__task_list) pre_tasks ;;
+    PreToolUse/mcp__*tasks__task_create|PreToolUse/mcp__*tasks__task_update|PreToolUse/mcp__*tasks__task_list|PreToolUse/mcp__*tasks__task_epic) pre_tasks ;;
     PreToolUse/TaskCreate|PreToolUse/TodoWrite)             pre_builtin_tasks ;;
     PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit)     pre_edit ;;
     PostToolUse/Write|PostToolUse/Edit|PostToolUse/MultiEdit|PostToolUse/NotebookEdit) post_edit ;;

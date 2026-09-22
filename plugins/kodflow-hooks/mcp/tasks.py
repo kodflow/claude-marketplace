@@ -110,6 +110,7 @@ def task_create(store, agent, args):
         task = {
             "id": str(data["next_id"]), "agent": agent, "subject": subject,
             "description": args.get("description") or "", "status": "pending",
+            "epic": current_epic(data, agent),
             "created": int(time.time()), "updated": int(time.time()),
         }
         data["next_id"] += 1
@@ -148,11 +149,47 @@ def task_update(store, agent, args):
     return store.mutate(change)
 
 
+def current_epic(data, agent):
+    """Return the id of the agent's current epic, 0 before its first one."""
+    return (data.get("epics") or {}).get(agent, {}).get("id", 0)
+
+
+def epic_tasks(data, agent):
+    """Return the agent's tasks that belong to its current epic."""
+    epic = current_epic(data, agent)
+    return [t for t in data["tasks"] if t.get("agent", MAIN) == agent and t.get("epic", 0) == epic]
+
+
 def task_list(store, agent, _args):
-    tasks = [t for t in store.read()["tasks"] if t.get("agent", MAIN) == agent]
+    data = store.read()
+    tasks = epic_tasks(data, agent)
+    title = (data.get("epics") or {}).get(agent, {}).get("title")
+    head = "Epic: %s\n" % title if title else ""
     if not tasks:
-        return "No tasks."
-    return "\n".join("#%s [%s] %s" % (t["id"], t["status"], t["subject"]) for t in tasks)
+        return head + "No tasks."
+    return head + "\n".join("#%s [%s] %s" % (t["id"], t["status"], t["subject"]) for t in tasks)
+
+
+def task_epic(store, agent, args):
+    title = check_subject(args.get("title"))
+
+    def change(data):
+        # A new subject may not bury unfinished work: the previous epic's list
+        # disappears from the status line, so it must be settled first
+        left = [t for t in epic_tasks(data, agent) if t["status"] != "completed"]
+        if left:
+            raise ValueError(
+                "the current epic still has open tasks; complete them, delete them, or keep working on them "
+                "before starting a new epic: " + ", ".join("#%s %s (%s)" % (t["id"], t["subject"], t["status"])
+                                                          for t in left))
+        data.setdefault("epics", {})
+        data["next_epic"] = data.get("next_epic", 1)
+        data["epics"][agent] = {"id": data["next_epic"], "title": title}
+        data["next_epic"] += 1
+        return data["epics"][agent]["id"]
+
+    store.mutate(change)
+    return "Epic started: %s — new tasks now belong to it, the status line counts them alone." % title
 
 
 HIDDEN = {
@@ -189,13 +226,24 @@ TOOLS = [
         }, **HIDDEN), "required": ["id"]},
     },
     {
+        "name": "task_epic",
+        "description": (
+            "Start a new epic: a separate subject with its own task list, counted on its own on the user's "
+            "status line. Use it when the work turns to another subject rather than appending its tasks to an "
+            "unrelated list. Refused while the current epic still has open tasks: settle them first. title: at "
+            "most 40 characters, a noun phrase for the subject (\"SDK rewrite of status-line\")."),
+        "inputSchema": {"type": "object", "properties": dict({
+            "title": {"type": "string", "maxLength": MAX_SUBJECT, "description": "Subject of the epic, 40 characters at most."},
+        }, **HIDDEN), "required": ["title"]},
+    },
+    {
         "name": "task_list",
-        "description": "List your tasks with their ids and statuses.",
+        "description": "List the tasks of your current epic with their ids and statuses.",
         "inputSchema": {"type": "object", "properties": dict(HIDDEN)},
     },
 ]
 
-HANDLERS = {"task_create": task_create, "task_update": task_update, "task_list": task_list}
+HANDLERS = {"task_create": task_create, "task_update": task_update, "task_list": task_list, "task_epic": task_epic}
 
 
 def call_tool(params):
