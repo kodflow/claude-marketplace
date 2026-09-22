@@ -394,7 +394,8 @@ if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$STATE/triage-pending" ]; th
         *)
             _block "TRIAGE FIRST — file this message in the task list" \
                 "Before acting, classify the user's message with the kodflow task tools:" \
-                "new work for an open epic → task_create(epic=id) · new subject → task_epic(title)" \
+                "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)" \
+                "task_create always names its epic (epic=0 for none): there is no default." \
                 "context on the task in progress → task_update it · rework of a completed task → task_create \"Rework #N: …\"" \
                 "a question that needs no task → task_list (acknowledges the triage)." \
                 "Reading (Read, Grep, Glob) and ToolSearch stay allowed meanwhile." ;;

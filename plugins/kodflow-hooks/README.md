@@ -71,8 +71,12 @@ pill per open epic of the main agent.
 - **Epics, several open at once.** An epic is one subject with its own tasks
   and its own pill. `task_epic(title)` opens one and makes it **active**; the
   others stay open. `task_focus(epic)` (id or exact title) switches the active
-  epic back to an open one. `task_create` goes to the active epic unless
-  `epic` names another; with no active epic a task has epic `0`. An epic is
+  epic back to an open one. `task_create` **requires** `epic`: the id of one
+  of the caller's epics, or `0` for a task outside any epic. There is no
+  default — a task that silently followed the active epic is how work got
+  filed under the wrong subject — so a call without it is refused with the
+  caller's open epics (the active one marked) and the syntax; an unknown id,
+  or another agent's epic, is refused the same way. An epic is
   open while a task of it is not completed, or while it is active and still
   empty; completed epics cannot be focused, and `task_epic` with the title of
   an open epic focuses it instead of duplicating it. `task_list` shows the
@@ -80,8 +84,8 @@ pill per open epic of the main agent.
   then the tasks with no epic. Each create, update and focus stamps the
   epic's `touched`, which orders the pills.
 - **Triage.** `UserPromptSubmit` injects the epic state and a directive to
-  sort every message before acting: new work for an open epic (create it
-  there, focus when starting), context on the task in progress (apply, no new
+  sort every message before acting, every `task_create` naming its epic:
+  new work for an open epic (create it there, focus when starting), context on the task in progress (apply, no new
   task), a change to a completed task (`Rework #N: …` in its epic), a new
   subject (`task_epic`), or plain discussion (nothing).
 - **One task in progress per worker.** The main agent may have one task

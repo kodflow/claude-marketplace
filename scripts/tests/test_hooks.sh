@@ -288,6 +288,8 @@ run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -q 'TRIAGE this message' && ok "the triage directive is injected with no tasks.json" || bad "triage" "$OUT"
 printf '%s' "$C" | grep -q 'Epics:' && bad "no state without tasks.json" "$C" || ok "no epic state without tasks.json"
+printf '%s' "$C" | grep -q 'task_create always names its epic' && printf '%s' "$C" | grep -q 'epic=0' \
+    && ok "the directive says the epic is mandatory, 0 for none" || bad "epic mandatory" "$C"
 [ "${#C}" -lt 900 ] && ok "the injected context stays under 900 characters (${#C})" || bad "context size" "${#C}"
 MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"
 printf '%s' '{"version":2,"active":{"main":2},

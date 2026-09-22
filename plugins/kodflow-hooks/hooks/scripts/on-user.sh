@@ -79,11 +79,11 @@ UserPromptSubmit)
     # progress does not become a new task and a new subject does not become
     # the tail of an unrelated epic. The tasks MCP ships in this plugin, so
     # the directive is always there. Kept short: it rides on every prompt.
-    ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools):
+    ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools). task_create always names its epic: epic=id, or epic=0 for none; there is no default.
 - new work for an open epic: task_create(epic=id), task_focus it when you start it
 - context on the in_progress task: apply it, no new task
 - change to a completed task: task_create \"Rework #N: ...\" in that task's epic
-- new subject: task_epic(title, 20 chars max)
+- new subject: task_epic(title, 20 chars max), then task_create(epic=its id)
 - question or discussion: no task
 Keep statuses true: in_progress while working, waiting when blocked on the user, completed once verified."
     jq -n -c --arg c "$ctx" '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$c}}' 2>/dev/null

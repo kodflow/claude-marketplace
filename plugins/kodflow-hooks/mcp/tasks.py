@@ -2,7 +2,8 @@
 """tasks.py — MCP server holding the session task list, one list per agent.
 
 Tasks are grouped in epics, one per subject. An agent can have several epics
-open at once; one of them is active and receives new tasks. The file format
+open at once; one of them is active (the one being worked on). Every task
+names its epic when it is created — there is no default. The file format
 (version 2) is a contract shared with the status line, which draws one pill
 per open epic of the main agent.
 
@@ -209,7 +210,13 @@ def describe_open(data, agent):
     epics = open_epics(data, agent)
     if not epics:
         return "no epic is open"
-    return "open epics: " + ", ".join("#%d %s" % (e["id"], e["title"]) for e in epics)
+    active = active_epic(data, agent)
+    return "open epics: " + ", ".join("#%d %s%s" % (e["id"], e["title"], " (active)" if e["id"] == active else "")
+                                      for e in epics)
+
+
+EPIC_SYNTAX = ("task_create(subject, epic=<id>) files the task in one of your epics; epic=0 files it outside "
+               "any epic; task_epic(title) opens a new epic first.")
 
 
 def task_create(store, agent, args):
@@ -217,12 +224,15 @@ def task_create(store, agent, args):
     wanted = args.get("epic")
 
     def change(data):
+        # No default epic: a task that silently lands in whatever epic happens
+        # to be active is how work gets filed under the wrong subject. The
+        # caller names the epic every time, 0 included.
         if wanted is None or str(wanted).strip() == "":
-            epic_id = active_epic(data, agent)
-        else:
-            epic_id = parse_epic_id(wanted)
-            if epic_id is None or (epic_id != 0 and not find_epic(data, agent, epic_id)):
-                raise ValueError("no epic %s for this agent; %s" % (wanted, describe_open(data, agent)))
+            raise ValueError("epic is required: name the epic this task belongs to; %s. %s"
+                             % (describe_open(data, agent), EPIC_SYNTAX))
+        epic_id = parse_epic_id(wanted)
+        if epic_id is None or (epic_id != 0 and not find_epic(data, agent, epic_id)):
+            raise ValueError("no epic %s for this agent; %s. %s" % (wanted, describe_open(data, agent), EPIC_SYNTAX))
         now = int(time.time())
         task = {
             "id": str(data["next_id"]), "agent": agent, "epic": epic_id, "subject": subject,
@@ -356,7 +366,8 @@ def task_epic(store, agent, args):
         data["active"][agent] = epic["id"]
         others = [e for e in open_epics(data, agent) if e["id"] != epic["id"]]
         tail = (" Still open: " + ", ".join("#%d %s" % (e["id"], e["title"]) for e in others) + ".") if others else ""
-        return "Epic #%d %s opened and active: new tasks go to it.%s" % (epic["id"], title, tail)
+        return ("Epic #%d %s opened and active: file its tasks with task_create(epic=%d).%s"
+                % (epic["id"], title, epic["id"], tail))
 
     return store.mutate(change)
 
@@ -378,7 +389,8 @@ def task_focus(store, agent, args):
         data["active"][agent] = epic["id"]
         epic["touched"] = int(time.time())
         done, total = progress(data, agent, epic["id"])
-        return "Epic #%d %s is now active (%d/%d): new tasks go to it." % (epic["id"], epic["title"], done, total)
+        return ("Epic #%d %s is now active (%d/%d): file its tasks with task_create(epic=%d)."
+                % (epic["id"], epic["title"], done, total, epic["id"]))
 
     return store.mutate(change)
 
@@ -389,8 +401,8 @@ HIDDEN = {
 }
 
 WORKFLOW = (
-    " Work is grouped in epics, one per subject; several can be open at once, one is active and new tasks go "
-    "to it. The user's status line shows every open epic live, so the list must say what is true at every "
+    " Work is grouped in epics, one per subject; several can be open at once, one is active (the one being "
+    "worked on) and every task names its epic explicitly. The user's status line shows every open epic live, so the list must say what is true at every "
     "moment: in_progress while you work on a task, waiting while it is blocked on the user, completed as soon "
     "as it is done and verified.")
 
@@ -399,16 +411,19 @@ TOOLS = [
         "name": "task_create",
         "description": (
             "Add a task. Use tasks for work with three or more distinct steps, or when the user lists several "
-            "things to do; skip them for a single trivial change. It goes to the active epic unless epic names "
-            "another open one (then task_focus that epic when you start it); a change to an already completed "
-            "task is a new task \"Rework #N: ...\" in that task's epic. subject: at most 40 characters, "
+            "things to do; skip them for a single trivial change. epic is REQUIRED, there is no default: the id "
+            "of the epic the task belongs to (task_list, or the Epics line given with each prompt, lists them), "
+            "or 0 for a task outside any epic; open a new subject with task_epic first. task_focus the epic when "
+            "you start its work. A change to an already completed task is a new task \"Rework #N: ...\" in that "
+            "task's epic. subject: at most 40 characters, "
             "imperative, no final punctuation (\"Add the effort gauge\"); detail goes in description. New tasks "
             "start pending." + WORKFLOW),
         "inputSchema": {"type": "object", "properties": dict({
             "subject": {"type": "string", "maxLength": MAX_SUBJECT, "description": "Short imperative title, 40 characters at most."},
             "description": {"type": "string", "description": "What needs to be done."},
-            "epic": {"type": "integer", "description": "Epic id; defaults to the active epic."},
-        }, **HIDDEN), "required": ["subject"]},
+            "epic": {"type": "integer", "minimum": 0,
+                     "description": "Required. Id of one of your epics, or 0 for no epic. No default."},
+        }, **HIDDEN), "required": ["subject", "epic"]},
     },
     {
         "name": "task_update",
@@ -442,8 +457,8 @@ TOOLS = [
     {
         "name": "task_focus",
         "description": (
-            "Make an open epic the active one, by id or exact title, when the work turns back to it: new tasks "
-            "then go to it and the status line expands it. Completed epics cannot be focused; open a new one "
+            "Make an open epic the active one, by id or exact title, when the work turns back to it: the status "
+            "line expands it. Completed epics cannot be focused; open a new one "
             "with task_epic." + WORKFLOW),
         "inputSchema": {"type": "object", "properties": dict({
             "epic": {"type": "string", "description": "Epic id (\"3\" or \"#3\") or its exact title."},
