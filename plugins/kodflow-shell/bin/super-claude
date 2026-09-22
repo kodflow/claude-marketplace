@@ -20,6 +20,16 @@ set -u
 CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 export CLAUDE_CONFIG_DIR
 
+# Some networks drop one of glibc's parallel A/AAAA DNS replies, and every
+# API call then waits out the resolver timeout. single-request-reopen sends
+# the two queries one after the other on a fresh socket. Appended, never
+# duplicated, so a caller's own RES_OPTIONS survives.
+case " ${RES_OPTIONS:-} " in
+    *" single-request-reopen "*) ;;
+    *) RES_OPTIONS="${RES_OPTIONS:+$RES_OPTIONS }single-request-reopen" ;;
+esac
+export RES_OPTIONS
+
 mcp_config="$CLAUDE_CONFIG_DIR/mcp.json"
 model="${SUPER_CLAUDE_MODEL:-default}"
 workdir=""
