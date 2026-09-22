@@ -20,7 +20,7 @@
       { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-user.sh", "timeout": 5 } ] }
     ],
     "PreToolUse": [
-      { "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__.*tasks__task_(create|update|list|epic|focus)", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 15 } ] }
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 15 } ] }
     ],
     "PostToolUse": [
       { "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Glob|Grep|Task|Agent", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 20, "statusMessage": "Formatting…" } ] }

@@ -38,6 +38,9 @@ UserPromptSubmit)
     # A new prompt means the user is back in control: the Stop hook's loop
     # counter starts over.
     rm -f -- "$STATE/stop-count" 2>/dev/null
+    # Every message is triaged into the task list before anything is done
+    # about it: on-tool.sh refuses acting tools until a task tool clears this.
+    mkdir -p "$STATE" 2>/dev/null && : > "$STATE/triage-pending" 2>/dev/null
 
     # TRANSFORM: where we are. Branch, and the newest plan and goal so a
     # resumed or compacted session picks the task back up.

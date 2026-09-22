@@ -237,8 +237,8 @@ printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | ._session == "ses
 run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_focus '{"tool_input":{"epic":"2"},"agent_id":"a9"}' on-tool.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .epic == "2" and ._session == "sess-1" and ._agent == "a9"' >/dev/null 2>&1 \
     && ok "task_focus gets the session and agent too" || bad "focus injection" "$OUT"
-grep -q 'task_(create|update|list|epic|focus)' "$ROOT/plugins/kodflow-hooks/hooks/hooks.json" \
-    && ok "the PreToolUse matcher lists task_focus" || bad "matcher" "task_focus missing from hooks.json"
+jq -e '.hooks.PreToolUse | length == 1 and .[0].matcher == ""' "$ROOT/plugins/kodflow-hooks/hooks/hooks.json" >/dev/null 2>&1 \
+    && ok "the PreToolUse matcher sees every tool (triage gate, task tools included)" || bad "matcher" "PreToolUse matcher is not the catch-all"
 run PreToolUse TaskCreate '{"tool_input":{"subject":"x","description":"y"}}' on-tool.sh
 expect_rc "built-in TaskCreate refused" 2
 printf '%s' "$ERR" | grep -q 'task_create' && ok "the refusal points at the MCP tools" || bad "refusal text" "$ERR"
@@ -299,6 +299,22 @@ run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] && ctx_of | grep -q TRIAGE && ! ctx_of | grep -q 'Epics:' \
     && ok "a malformed tasks.json: one document, triage kept, state left out" || bad "user malformed" "rc=$RC $OUT"
 rm -rf "$T/home/.claude/kodflow"
+
+echo "== Triage gate · file the message before acting"
+rm -f "$T/tmp/sp/triage-pending"
+run UserPromptSubmit "" '{"prompt":"fais un truc"}' on-user.sh
+[ -f "$T/tmp/sp/triage-pending" ] && ok "a new prompt raises the triage flag" || bad "triage flag" "absent"
+bash_cmd 'ls';                                                        expect_rc "acting before triage is refused" 2
+printf '%s' "$ERR" | grep -q 'TRIAGE FIRST' && ok "the refusal says to triage first" || bad "triage message" "$ERR"
+run PreToolUse Read '{"tool_input":{"file_path":"/etc/hostname"}}' on-tool.sh; expect_rc "reading stays allowed" 0
+run PreToolUse ToolSearch '{"tool_input":{"query":"x"}}' on-tool.sh;        expect_rc "loading tools stays allowed" 0
+run PreToolUse Bash '{"tool_input":{"command":"ls"},"agent_id":"a1"}' on-tool.sh; expect_rc "a subagent is not gated" 0
+run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_list '{"tool_input":{}}' on-tool.sh
+[ ! -f "$T/tmp/sp/triage-pending" ] && ok "a task tool call lowers the flag" || bad "flag lowered" "still there"
+bash_cmd 'ls';                                                        expect_rc "acting after triage is allowed" 0
+run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh
+[ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "tools this script ignores leave at once" || bad "fast exit" "rc=$RC out=$OUT"
+rm -f "$T/tmp/sp/triage-pending"
 
 echo "== UserPromptSubmit / SessionStart / agents"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
