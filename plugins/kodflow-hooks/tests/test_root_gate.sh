@@ -1,12 +1,13 @@
 #!/bin/bash
-# test_root_gate.sh — the reviewer gate: the main thread triages, dispatches,
-# reviews and merges; subagents produce. Every case feeds on-tool.sh (or
+# test_root_gate.sh — the delegation gate: code in a git repository is
+# produced by subagents; the main thread triages, dispatches, reviews, merges. Every case feeds on-tool.sh (or
 # on-stop.sh) the JSON the harness would send and asserts on the exit code,
 # the one channel the gate answers on.
 #
 # The distinction under test is a single field: a PreToolUse payload carries
 # agent_id only when the call comes from inside a subagent. A payload without
-# one is the main thread, which may read and verify but not produce.
+# one is the main thread, which keeps every permission (it is also the
+# workstation's sysadmin) except producing code in a git repository.
 set -u
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 S=$ROOT/plugins/kodflow-hooks/hooks/scripts
@@ -39,137 +40,113 @@ AGENT='{"agent_id":"agt_01","agent_type":"general-purpose"}'
 SRC=$T/repo/src/main.rs
 CFG=$T/home/.claude
 
-echo "== the main thread may not produce"
-run "$(file "$SRC")";                                       expect_rc "main-thread Write denied" 2
-run "$(file "$SRC" Edit)";                                  expect_rc "main-thread Edit denied" 2
-run "$(file "$SRC" MultiEdit)";                             expect_rc "main-thread MultiEdit denied" 2
-# NotebookEdit carries notebook_path, not file_path: a gate placed after the
-# file_path test would never see one.
-run "$(payload NotebookEdit '{"notebook_path":"/tmp/n.ipynb"}')"
-expect_rc "main-thread NotebookEdit denied" 2
+OUTSIDE=$T/etc/app.conf; mkdir -p "$T/etc"
+# a worktree's .git is a file, not a directory: the walk must see it too
+WT=$T/wt; mkdir -p "$WT/pkg"; printf 'gitdir: %s\n' "$T/repo/.git/worktrees/wt" > "$WT/.git"
 
-echo "== a subagent is never gated"
-run "$(file "$SRC" Write "$AGENT")";                        expect_rc "the same Write carrying agent_id allowed" 0
-run "$(cmd 'npm install' "$AGENT")";                        expect_rc "a producing command from a subagent allowed" 0
-run "$(cmd 'echo x > f && rm -rf build' "$AGENT")";         expect_rc "a redirection from a subagent allowed" 0
-run "$(payload mcp__github__push_files '{}' "$AGENT")";     expect_rc "a forge write from a subagent allowed" 0
+echo "== writes inside a git work tree are refused"
+run "$(file "$SRC")";                                       expect_rc "Write in a repo denied (new subdirectory)" 2
+run "$(file "$T/repo/a.txt" Edit)";                         expect_rc "Edit in a repo denied" 2
+run "$(file "$T/repo/a.txt" MultiEdit)";                    expect_rc "MultiEdit in a repo denied" 2
+run "$(payload NotebookEdit "$(jq -n -c --arg f "$T/repo/n.ipynb" '{notebook_path:$f}')")"
+expect_rc "NotebookEdit in a repo denied (notebook_path)" 2
+run "$(file "$WT/pkg/x.go")";                               expect_rc "a worktree (gitdir file) is a repo too" 2
+run "$(file "src/rel.go")";                                 expect_rc "a relative path is resolved against cwd" 2
+run "$(file "$T/etc/../repo/sneak.go")";                    expect_rc "a .. path that lands in a repo denied" 2
 
-echo "== the denial carries the briefing contract"
-run "$(file "$SRC")"
-for w in 'subagent' 'worktree' 'PR' 'line numbers' 'task_focus' 'SendMessage' 'KODFLOW_ROOT=off'; do
-    printf '%s' "$ERR" | grep -q "$w" && ok "the reason names: $w" || bad "reason: $w" "$ERR"
-done
-run "$(cmd 'npm install')"
-printf '%s' "$ERR" | grep -q 'ROOT_OK=1' && ok "a Bash denial names the per-line hatch" || bad "reason: ROOT_OK" "$ERR"
-printf '%s' "$ERR" | grep -q 'Refused segment: npm install' && ok "a Bash denial names the segment" || bad "reason: segment" "$ERR"
-
-echo "== memory and Claude configuration stay writable"
-for f in "$CFG/projects/-home-x/memory/MEMORY.md" "$CFG/projects/-home-x/memory/note.md" \
-         "$CFG/settings.json" "$CFG/settings.local.json" "$CFG/CLAUDE.md" "$HOME/CLAUDE.md"; do
+echo "== writes outside repositories are allowed: the main thread is the sysadmin"
+run "$(file "$OUTSIDE")";                                   expect_rc "Write outside a repo allowed" 0
+run "$(file "$HOME/.local/bin/tool" Edit)";                 expect_rc "Edit in ~/.local/bin allowed" 0
+run "$(file "$T/repo/../etc/x.conf")";                      expect_rc "a .. path that leaves the repo allowed" 0
+for f in "$CFG/projects/-home-x/memory/MEMORY.md" "$CFG/settings.json" "$CFG/settings.local.json" "$CFG/CLAUDE.md" "$HOME/CLAUDE.md"; do
     run "$(file "$f" Edit)"; expect_rc "allowed: ${f#"$T"/}" 0
 done
-for f in "$CFG/projects/-home-x/memory/../../../settings.sh" "$CFG/agents/x.md" "$CFG/projects/-home-x/transcript.jsonl" \
-         "$T/repo/CLAUDE.md" "$CFG/settings.json.bak" "$HOME/.bashrc"; do
-    run "$(file "$f")"; expect_rc "denied: ${f#"$T"/}" 2
-done
+# memory and configuration stay writable even when the config dir is a repo
+git -C "$CFG" init -q
+run "$(file "$CFG/projects/-home-x/memory/note.md")";       expect_rc "memory inside a repo still allowed" 0
+run "$(file "$CFG/settings.json" Edit)";                    expect_rc "settings inside a repo still allowed" 0
+run "$(file "$CFG/agents/x.md")";                           expect_rc "other files of that repo denied" 2
+rm -rf "$CFG/.git"
 
-echo "== reading is allowed"
-for c in 'git status' 'git log --oneline -5' 'git diff HEAD' 'git show HEAD:a.txt' 'git fetch -q origin' \
-         'git -C /x fetch origin && git -C /x log --oneline -3' 'git branch' 'git branch -a' 'git worktree list' \
-         'git remote -v' 'git config --get user.email' 'git rev-parse HEAD' 'git stash list' \
-         'gh pr view 12' 'gh pr checks 12 --watch' 'gh pr list --state open' 'gh pr diff 12' \
-         'gh run view 123 --log-failed' 'gh run list -L 5' 'gh run watch 123' 'gh api repos/o/r/pulls/1' \
-         'gh api -X GET repos/o/r/issues' 'gh -R o/r pr view 3' \
-         'ls -la' 'cat a.txt' 'head -5 a.txt' 'tail -n 3 a.txt' 'grep -rn foo .' 'rg -n "a|b" .' \
-         'find . -name "*.sh"' 'wc -l a.txt' 'jq . a.json' 'stat a.txt' 'date +%s' 'ps aux' 'pgrep -f claude' \
-         'sed -n 1,5p a.txt' 'cat a.txt | grep x | head -3' 'ls 2>/dev/null' 'git status 2>&1 | head' \
-         'cd /x && git status' 'command -v jq' 'echo "a > b; c"' "jq '.a > 1' f.json" \
-         'for f in *.sh; do bash -n "$f"; done' 'ls ${HOME}' 'git log $(git merge-base HEAD main)..HEAD' \
-         'rtk git status' 'timeout 5 git status' 'find . -name x | xargs grep -n y'; do
-    run "$(cmd "$c")"; expect_rc "allowed: $c" 0
-done
+echo "== a subagent is never gated"
+run "$(file "$SRC" Write "$AGENT")";                        expect_rc "a Write in a repo from a subagent allowed" 0
+run "$(cmd 'git push origin feat/x' "$AGENT")";             expect_rc "git push from a subagent allowed" 0
+run "$(cmd 'gh pr create --fill' "$AGENT")";                expect_rc "gh pr create from a subagent allowed" 0
+run "$(payload mcp__github__push_files '{}' "$AGENT")";     expect_rc "a forge write from a subagent allowed" 0
 
-echo "== tests and checks are allowed: a reviewer verifies"
-for c in 'go test ./...' 'go vet ./...' 'make test' 'make lint' 'make -C sub check' 'make test-unit lint' \
-         'bash scripts/tests/test_hooks.sh' 'bash plugins/kodflow-hooks/tests/run-tests.sh' 'bash -n on-tool.sh' \
-         'shellcheck -S error x.sh' 'python3 -m unittest -v test_x' 'python3 -m pytest -q' \
-         'python3 scripts/tests/test_sanitize.py' 'timeout 120 go test -race ./...' 'npm test' 'cargo test'; do
+echo "== the denial says what to do"
+run "$(file "$SRC")"
+for w in 'repository' 'subagent' 'SendMessage' 'worktree' 'PR' 'ROOT_OK=1'; do
+    printf '%s' "$ERR" | grep -q "$w" && ok "the reason names: $w" || bad "reason: $w" "$ERR"
+done
+[ "$(printf '%s\n' "$ERR" | wc -l)" -le 8 ] && ok "the reason is short" || bad "reason length" "$ERR"
+
+echo "== Bash: everything but repository production is allowed"
+for c in 'sg ai -c "sudo apt update && sudo apt upgrade -y"' 'sudo systemctl restart nginx' 'apt install -y jq' \
+         'nmcli dev wifi list' 'install -m755 bin/x ~/.local/bin/x' 'rm -rf /tmp/x' 'cp a b' 'mv a b' 'mkdir -p x' \
+         'echo x > /etc/app.conf' 'ls >> log.txt' 'curl -o f https://x' 'some-unknown-tool --flag' 'npm install' \
+         'python3 -c "print(1)"' 'sed -i s/a/b/ /etc/hosts' 'git status' 'git log --oneline -5' 'git fetch -q origin' \
+         'git diff HEAD' 'git pull --ff-only' 'git checkout main' 'git stash' 'git reset HEAD~1' 'git merge-base a b' \
+         'git worktree list' 'git worktree remove ../w' 'gh pr view 3' 'gh pr checks 3 --watch' 'gh pr list' \
+         'gh api repos/o/r/pulls/1' 'go test ./...' 'make test' 'echo "git log"' 'grep -rn "pr create" .' \
+         'claude plugin update kodflow-hooks@kodflow'; do
     run "$(cmd "$c")"; expect_rc "allowed: $c" 0
 done
 
 echo "== merging is allowed, after the user's OK"
 run "$(cmd 'gh pr merge 12 --squash --delete-branch')";          expect_rc "gh pr merge allowed" 0
+run "$(cmd 'glab mr merge 4')";                                  expect_rc "glab mr merge allowed" 0
 run "$(payload mcp__github__merge_pull_request '{}')";            expect_rc "GitHub MCP merge allowed" 0
 run "$(payload mcp__gitlab__merge_merge_request '{}')";           expect_rc "GitLab MCP merge allowed" 0
-run "$(payload mcp__github__pull_request_read '{}')";             expect_rc "GitHub MCP read allowed" 0
-run "$(payload mcp__github__add_issue_comment '{}')";             expect_rc "GitHub MCP comment allowed (informing)" 0
-for c in 'gh pr review 1 --approve' 'gh pr comment 1 -b x' 'gh issue create -t x -b y' 'gh issue comment 3 -b x'; do
-    run "$(cmd "$c")"; expect_rc "allowed (review, tracker): $c" 0
-done
 
-echo "== Claude configuration commands are allowed"
-run "$(cmd 'claude plugin update kodflow-hooks@kodflow')";       expect_rc "claude plugin allowed" 0
-run "$(cmd 'claude mcp list')";                                  expect_rc "claude mcp allowed" 0
-
-echo "== producing is denied, whatever it looks like"
-for c in 'npm install' 'git push origin main' 'git commit -m "feat: x"' 'git checkout -b x' 'git branch -D old' \
-         'git worktree add ../w -b x' 'git stash' 'git merge main' 'git remote add o u' 'git config user.name x' \
-         'rm -rf build' 'mkdir -p x' 'touch f' 'cp a b' 'mv a b' 'chmod +x run.sh' 'sed -i s/a/b/ a.txt' \
-         'find . -name "*.tmp" -delete' 'find . -exec rm {} ;' 'python3 setup.py install' 'python3 -c "import os"' \
-         'pip install x' 'apt install x' 'sg ai -c "sudo apt update"' 'curl -o f https://x' \
-         'gh pr create --fill' 'gh pr edit 1 --title x' 'gh pr close 1' 'gh pr checkout 1' 'gh release create v1' \
-         'gh api -X POST repos/o/r/issues' 'gh api repos/o/r/issues -f title=x' 'gh repo clone o/r' \
-         'make' 'make build' 'make install test' 'go build ./...' 'go mod tidy' 'bash deploy.sh' 'sh -c "rm x"' \
-         'sort -o out.txt a.txt' 'xargs rm' 'eval "$X"' 'tee out.txt' 'claude --dangerously-skip-permissions'; do
+echo "== Bash: the git and forge operations that produce into a repository are refused"
+G=git
+for c in "$G commit -m 'feat: x'" "$G push origin main" "$G rebase main" "$G cherry-pick abc" "$G merge main" \
+         "$G am < p.patch" "$G apply p.diff" "$G revert HEAD" "$G reset --hard origin/main" "$G reset -q --hard" \
+         "$G worktree add ../w -b x" 'gh pr create --fill' 'gh -R o/r pr create -t x' 'glab mr create'; do
     run "$(cmd "$c")"; expect_rc "denied: $c" 2
 done
+
+echo "== wrapped forms are found anywhere on the line"
+for c in "cd /x && $G commit -m 'feat: x'" "$G -C /x push" "$G -c user.name=x commit -m y" "env GIT_X=1 $G push" \
+         "bash -c \"$G commit -m x\"" "sudo $G push" "$G status; $G merge main" "ls | xargs $G apply" \
+         "$G --no-pager rebase -i main" "$G status"$'\n'"$G push" 'true && gh pr create --fill'; do
+    run "$(cmd "$c")"; expect_rc "denied: $c" 2
+done
+run "$(cmd "$G commit -m x")"
+printf '%s' "$ERR" | grep -q "$G commit" && ok "the reason names the operation" || bad "reason: op" "$ERR"
+
+echo "== forge MCP tools"
+run "$(payload mcp__github__pull_request_read '{}')";             expect_rc "GitHub MCP read allowed" 0
+run "$(payload mcp__github__add_issue_comment '{}')";             expect_rc "GitHub MCP comment allowed" 0
+run "$(payload mcp__github__pull_request_review_write '{}')";     expect_rc "GitHub MCP review allowed" 0
+run "$(payload mcp__github__issue_write '{}')";                   expect_rc "GitHub MCP issue allowed" 0
 run "$(payload mcp__github__create_or_update_file '{}')";        expect_rc "GitHub MCP file write denied" 2
 run "$(payload mcp__github__push_files '{}')";                   expect_rc "GitHub MCP push denied" 2
-run "$(payload mcp__github__create_pull_request '{}')";          expect_rc "GitHub MCP PR creation denied (the subagent delivers)" 2
-run "$(payload mcp__gitlab__create_branch '{}')";                expect_rc "GitLab MCP branch denied" 2
+run "$(payload mcp__github__create_branch '{}')";                expect_rc "GitHub MCP branch denied" 2
+run "$(payload mcp__github__create_pull_request '{}')";          expect_rc "GitHub MCP PR creation denied" 2
+run "$(payload mcp__gitlab__create_merge_request '{}')";         expect_rc "GitLab MCP MR creation denied" 2
 run "$(payload mcp__GitKraken__git_commit '{}')";                expect_rc "GitKraken commit denied" 2
 run "$(payload mcp__github__some_future_write '{}')";            expect_rc "an unclassified forge tool is denied" 2
 
-echo "== redirections and compound lines"
-run "$(cmd 'echo x > f')";                          expect_rc "redirection denied" 2
-run "$(cmd 'ls -la >> log.txt')";                   expect_rc "appending redirection denied" 2
-run "$(cmd 'git status 2>err.txt')";                expect_rc "stderr to a file denied" 2
-run "$(cmd 'ls &> out')";                           expect_rc "&> to a file denied" 2
-run "$(cmd 'ls | tee out.txt')";                    expect_rc "tee denied" 2
-run "$(cmd 'cat a.txt && sed -i s/a/b/ a.txt')";    expect_rc "a producing segment after && denied" 2
-run "$(cmd 'git status; rm -f a.txt')";             expect_rc "a producing segment after ; denied" 2
-run "$(cmd 'git status || rm -f a.txt')";           expect_rc "a producing segment after || denied" 2
-run "$(cmd 'ls & rm -f a.txt')";                    expect_rc "a producing segment after & denied" 2
-run "$(cmd $'git status\nrm -f a.txt')";            expect_rc "a producing second line denied" 2
-run "$(cmd 'echo $(rm -f a.txt)')";                 expect_rc "a producing command substitution denied" 2
-run "$(cmd 'echo `rm -f a.txt`')";                  expect_rc "a producing backtick substitution denied" 2
-run "$(cmd 'echo "$(rm -f a.txt)"')";               expect_rc "a substitution inside double quotes denied" 2
-run "$(cmd '(cd x && rm y)')";                      expect_rc "a producing subshell denied" 2
-run "$(cmd 'diff <(ls) <(rm x)')";                  expect_rc "a producing process substitution denied" 2
-run "$(cmd "echo 'a\"' > f \"b\"")";               expect_rc "mixed quotes cannot hide a redirection" 2
-run "$(cmd "echo 'unbalanced")";                    expect_rc "unbalanced quotes are unclassifiable: denied" 2
-run "$(cmd 'if true; then rm x; fi')";              expect_rc "a producing branch of an if denied" 2
-run "$(cmd 'cat a.txt | grep x')";                  expect_rc "an all-reading pipeline allowed" 0
-
-echo "== the escape hatches"
-run "$(cmd 'ROOT_OK=1 npm install')";               expect_rc "ROOT_OK=1 opts the line out" 0
-run "$(cmd 'ROOT_OK=1 echo x > f')";                expect_rc "ROOT_OK=1 covers a redirection too" 0
-run "$(cmd 'NO_RTK= ROOT_OK=1 npm install')";       expect_rc "ROOT_OK=1 after another prefix" 0
-run "$(cmd 'npm install ROOT_OK=1')";               expect_rc "ROOT_OK=1 elsewhere on the line is not a hatch" 2
-run "$(cmd 'npm install')" KODFLOW_ROOT=off;        expect_rc "KODFLOW_ROOT=off disables the session" 0
+echo "== the escapes"
+run "$(cmd "ROOT_OK=1 $G commit -m 'fix: x'")";     expect_rc "ROOT_OK=1 opts the line out" 0
+run "$(cmd "NO_RTK= ROOT_OK=1 $G push")";           expect_rc "ROOT_OK=1 after another prefix" 0
+run "$(cmd "$G push ROOT_OK=1")";                   expect_rc "ROOT_OK=1 elsewhere on the line is not a hatch" 2
+run "$(cmd "$G push")" KODFLOW_ROOT=off;            expect_rc "KODFLOW_ROOT=off disables the session (Bash)" 0
 run "$(file "$SRC")" KODFLOW_ROOT=off;              expect_rc "KODFLOW_ROOT=off covers the edit tools" 0
 run "$(payload mcp__github__push_files '{}')" KODFLOW_ROOT=off; expect_rc "KODFLOW_ROOT=off covers the forge tools" 0
-run "$(cmd 'npm install' '{"permission_mode":"plan"}')"
+run "$(cmd "$G commit -m x" '{"permission_mode":"plan"}')"
 expect_rc "plan mode is untouched" 0
 run "$(file "$SRC" Write '{"permission_mode":"plan"}')"
 expect_rc "plan mode is untouched for the edit tools" 0
 
 echo "== the rest of the hook still applies behind the gate"
-run "$(cmd 'git commit --no-verify -m "feat: x"' "$AGENT")"; expect_rc "a subagent still meets the git guard" 2
+run "$(cmd "$G commit --no-verify -m 'feat: x'" "$AGENT")"; expect_rc "a subagent still meets the git guard" 2
 run "$(file "$T/repo/node_modules/x.js" Edit "$AGENT")";     expect_rc "a subagent still meets the protected paths" 2
+run "$(file "$OUTSIDE.lock")";                               expect_rc "the main thread still meets the protected paths" 2
 run "$(payload WebSearch '{"query":"x"}')";                    expect_rc "a tool the gate does not know leaves at once" 0
 run "$(payload Agent '{"prompt":"x"}')";                       expect_rc "dispatching is allowed" 0
-run "$(payload SendMessage '{"to":"x","message":"y"}')";       expect_rc "messaging a subagent is allowed" 0
 
 echo "== the gate fails open"
 printf 'not json' | bash "$S/on-tool.sh" >/dev/null 2>&1
@@ -177,13 +154,11 @@ printf 'not json' | bash "$S/on-tool.sh" >/dev/null 2>&1
 printf '' | bash "$S/on-tool.sh" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "an empty payload exits 0" || bad "empty payload" "it did not exit 0"
 run "$(payload Bash '{}')";                         expect_rc "a Bash call with no command allowed" 0
-# Without jq the hook cannot read the payload, so it must not judge it. bash is
-# named absolutely: an empty PATH would otherwise fail to find the shell itself.
+run "$(payload Write '{}')";                        expect_rc "a Write with no path allowed" 0
 printf '%s' "$(file "$SRC")" | env PATH=/nonexistent /bin/bash "$S/on-tool.sh" >/dev/null 2>&1
 [ $? -eq 0 ] && ok "no jq on PATH fails open" || bad "no jq" "it did not exit 0"
-run "$(jq -n -c --arg cwd "$T/repo" '{session_id:"sess-root",hook_event_name:"PostToolUse",tool_name:"Bash",cwd:$cwd,tool_input:{command:"npm install"}}')"
-expect_rc "a producing PostToolUse is out of scope" 0
-# agent_id present but empty is still the main thread.
+run "$(jq -n -c --arg cwd "$T/repo" --arg c "$G push" '{session_id:"sess-root",hook_event_name:"PostToolUse",tool_name:"Bash",cwd:$cwd,tool_input:{command:$c}}')"
+expect_rc "a PostToolUse is out of scope" 0
 run "$(file "$SRC" Write '{"agent_id":""}')";       expect_rc "an empty agent_id is the main thread" 2
 run "$(file "$SRC" Write '{"agent_id":null}')";     expect_rc "a null agent_id is the main thread" 2
 
@@ -191,7 +166,7 @@ echo "== the cost of the discipline is countable"
 L=$T/repo/.claude/logs/feat_root/session.jsonl
 sleep 0.6; rm -f "$L"
 run "$(file "$SRC")"
-run "$(cmd 'npm install')"
+run "$(cmd "$G push")"
 run "$(jq -n -c --arg cwd "$T/repo" '{session_id:"sess-root",hook_event_name:"PostToolUse",tool_name:"Agent",cwd:$cwd,tool_input:{description:"port the guard",subagent_type:"general-purpose"}}')"
 sleep 0.6
 [ "$(grep -c '"root_guard":"deny"' "$L" 2>/dev/null)" = 2 ] \
@@ -229,7 +204,7 @@ printf 'garbage' > "$MS/tasks.json"; printf 'garbage' > "$MS/agents.json"
 stop; [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] && ! producing \
     && ok "malformed files: one document, no flag" || bad "stop: malformed" "$OUT"
 
-echo "== UserPromptSubmit · the directive says main reviews"
+echo "== UserPromptSubmit · the directive says code is delegated"
 user() { OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-root",hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"hi"}' \
     | env "$@" bash "$S/on-user.sh" 2>/dev/null); C=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null); }
 printf '%s' '{"version":2,"active":{"main":2},
@@ -238,12 +213,12 @@ printf '%s' '{"version":2,"active":{"main":2},
            {"id":"3","agent":"main","epic":2,"subject":"Freeze golden renders now","status":"in_progress"},
            {"id":"5","agent":"main","epic":0,"subject":"Loose","status":"pending"}]}' > "$MS/tasks.json"
 user
-printf '%s' "$C" | grep -q 'dispatch a subagent' && printf '%s' "$C" | grep -q 'do not produce' \
+printf '%s' "$C" | grep -q 'dispatch a subagent' && printf '%s' "$C" | grep -q 'do not write it' \
     && ok "the directive sends the work to a subagent" || bad "directive" "$C"
 printf '%s' "$C" | grep -q 'Epics: active #2' && [ "${#C}" -lt 900 ] \
     && ok "with the epic state it stays under 900 characters (${#C})" || bad "directive size" "${#C}: $C"
 user KODFLOW_ROOT=off
-printf '%s' "$C" | grep -q 'do not produce' && bad "directive off" "$C" || ok "KODFLOW_ROOT=off drops the reviewer line"
+printf '%s' "$C" | grep -q 'do not write it' && bad "directive off" "$C" || ok "KODFLOW_ROOT=off drops the reviewer line"
 printf '%s' "$C" | grep -q 'TRIAGE' && ok "the triage directive stays when the gate is off" || bad "triage off" "$C"
 OUT=$(jq -n -c --arg cwd "$T/repo" '{session_id:"sess-root",hook_event_name:"SubagentStart",cwd:$cwd,agent_id:"a9",agent_type:"general-purpose"}' | bash "$S/on-agent.sh" 2>/dev/null)
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("own git worktree") and test("PR")' >/dev/null 2>&1 \

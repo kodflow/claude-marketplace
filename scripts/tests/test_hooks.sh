@@ -10,7 +10,7 @@ S=$ROOT/plugins/kodflow-hooks/hooks/scripts
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export CLAUDE_PROJECT_DIR=$T/repo HOME=$T/home TMPDIR=$T/tmp CLAUDE_CONFIG_DIR=$T/home/.claude
 unset CLAUDE_CODE_ENABLE_TODO_TOOLS CLAUDE_CODE_TASK_LIST_ID   # inherited values would change what is asserted
-# The reviewer gate (main thread reads, reviews and merges; subagents produce)
+# The delegation gate (the main thread does not produce code in a repository)
 # would stop most main-thread payloads below before the guard they test. It
 # is off here and covered on its own in plugins/kodflow-hooks/tests/test_root_gate.sh.
 export KODFLOW_ROOT=off

@@ -17,7 +17,7 @@ set +e
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 
-# REVIEWER GATE · forge MCP tools. Pure bash, so the fast path below can use
+# DELEGATION GATE · forge MCP tools. Pure bash, so the fast path below can use
 # it without jq. The main thread reads the forge, merges, and talks on the
 # tracker and in reviews; it does not push content, branches or pull requests
 # — that is a subagent's delivery. Allow-list: a tool nobody classified is
@@ -56,7 +56,7 @@ _forge_ok() {
 # sees every call, and one jq start costs ~30 ms on a slow CPU: the tools this
 # script does not handle are decided with bash regexes alone. They leave at
 # once unless the triage gate applies, in which case the full path below
-# refuses them. A forge write from the main thread (reviewer gate, above) is
+# refuses them. A forge write from the main thread (delegation gate, above) is
 # the one other case that goes on to the full path.
 if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_name\":\ ?\"([^\"]+)\" ]]; then
     fp_tool=${BASH_REMATCH[1]}
@@ -87,7 +87,7 @@ PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}   # session-scoped state; on-stop.sh reads it
 LIB=${BASH_SOURCE[0]%/*}/lib
 
-# REVIEWER GATE. A PreToolUse payload carries agent_id only when the call
+# DELEGATION GATE. A PreToolUse payload carries agent_id only when the call
 # comes from inside a subagent; the main thread sends none (measured on 855
 # real events: every PreToolUse carrying agent_id came from a subagent, no
 # main-thread one did). That asymmetry is the whole mechanism. Plan mode
@@ -152,239 +152,73 @@ _seg_name() {
 }
 
 # ============================================================================
-# Reviewer gate · the main thread triages, dispatches, reviews and merges
+# Delegation gate · code in a git repository is produced by a subagent
 # ============================================================================
-# The user's rule: the main thread produces nothing. It files messages,
-# manages epics and tasks, dispatches, reviews, merges after the user's OK and
-# informs; every epic is carried by a subagent in its own git worktree that
-# delivers through a PR. The denial is the only channel back to the model, so
-# it carries the briefing contract, not just the refusal. $1 = escape hatch.
+# The user's rule: the main thread triages, dispatches, reviews and merges
+# after the user's OK; code production in a git repository is delegated to a
+# subagent working in its own worktree and delivering through a PR. The main
+# thread keeps every other permission — it is also the workstation's sysadmin
+# (sudo, apt, systemctl, files outside repositories, configuration). So the
+# gate refuses exactly two things: a write inside a git work tree, and the git
+# or forge operations that produce into a repository.
 _root_deny() {
     ROOT_GUARD=deny
-    _block "BLOCKED — the main thread reviews, it does not produce" \
-        "Main triages, manages epics and tasks, dispatches, reviews, merges after the user's OK, and informs." \
-        "Code, repositories and installs go through a subagent in its own git worktree" \
-        "(~/Documents/worktrees/<repo>-<epic-slug>) that delivers through a PR. Brief it with what you know:" \
-        "  - the epic (task_focus it before dispatching, so the subagent is attributed to it) and its task ids" \
-        "  - the objective, and the C-NNN constraints that apply to it" \
-        "  - the exact paths and line numbers you read, and what is already decided" \
-        "  - the return contract: PR number, what was verified versus assumed, a compact summary" \
-        "An epic that already has a subagent: SendMessage it rather than starting another." \
-        "Still yours: reading, read-only git/gh, tests and checks, gh pr merge, your memory and the Claude configuration." \
-        "$@"
+    _block "BLOCKED — code production in a repository is delegated" \
+        "$1" \
+        "Dispatch the epic's subagent (task_focus the epic first), or SendMessage it if it is running;" \
+        "it works in its own worktree (~/Documents/worktrees/<repo>-<epic-slug>) and delivers through a PR." \
+        "A genuine exception: prefix the Bash line with ROOT_OK=1 (KODFLOW_ROOT=off turns the gate off)."
 }
 
-# A git segment that only reads (or fetches). The subcommand is found past
-# `-C dir`, `-c k=v` and long globals, with the same shape the guard below uses.
-_git_readonly() {
-    local seg=$1 sub args
-    [[ $seg =~ ^[^[:space:]]+([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+([a-z][a-z-]*)(.*)$ ]] || return 1
-    sub=${BASH_REMATCH[3]}; args=${BASH_REMATCH[4]}
-    case "$sub" in
-        status|log|show|fetch|rev-parse|ls-files|ls-tree|ls-remote|describe|blame|shortlog|cat-file|for-each-ref|\
-        whatchanged|grep|count-objects|version|merge-base|rev-list|name-rev|check-ignore|help) return 0 ;;
-        diff) [[ $args =~ --output ]] && return 1; return 0 ;;
-        reflog) [[ $args =~ (^|[[:space:]])(expire|delete)([[:space:]]|$) ]] && return 1; return 0 ;;
-        # These list with no argument and mutate as soon as one appears: `git
-        # branch` prints, `git branch x` creates. Only the listing forms pass.
-        branch|tag)
-            [[ $args =~ ^([[:space:]]+(-v|-vv|-a|-r|-l|--list|--all|--remotes|--show-current|--verbose|--merged|--no-merged|--contains|--sort=[^[:space:]]+|--format=[^[:space:]]+))*[[:space:]]*$ ]] ;;
-        remote) [[ $args =~ ^[[:space:]]*(-v|--verbose|show([[:space:]].*)?|get-url([[:space:]].*)?)?[[:space:]]*$ ]] ;;
-        worktree) [[ $args =~ ^[[:space:]]+list([[:space:]]|$) ]] ;;
-        stash) [[ $args =~ ^[[:space:]]+(list|show)([[:space:]]|$) ]] ;;
-        config) [[ $args =~ (^|[[:space:]])(--get|--get-all|--get-regexp|--list|-l)([[:space:]]|$) ]] ;;
-        *) return 1 ;;
-    esac
-}
-
-# gh / glab: the read verbs, `pr merge` / `mr merge` (the user merges through
-# the main thread, after their OK), reviews, issues and comments (the same
-# set the forge MCP tools leave to it), and `api` as a GET.
-_forge_cli_ok() {
-    local seg=$1 area verb
-    [[ $seg =~ ^[^[:space:]]+([[:space:]]+(-R|--repo)[[:space:]]+[^[:space:]]+)*[[:space:]]+([a-z-]+)([[:space:]]+([a-z-]+))? ]] || return 1
-    area=${BASH_REMATCH[3]}; verb=${BASH_REMATCH[5]}
-    case "$area" in
-        api)
-            [[ $seg =~ (^|[[:space:]])(-f|-F|--field|--raw-field|--input)([[:space:]=]|$) ]] && return 1
-            if [[ $seg =~ (^|[[:space:]])(-X|--method)[[:space:]=]*([A-Za-z]+) ]]; then
-                [ "${BASH_REMATCH[3]^^}" = GET ] || return 1
-            fi
-            return 0 ;;
-        search|status) return 0 ;;
-    esac
-    case "$area/$verb" in
-        pr/view|pr/checks|pr/list|pr/diff|pr/status|pr/merge|run/view|run/list|run/watch|issue/view|issue/list|\
-        issue/status|repo/view|release/view|release/list|workflow/view|workflow/list|auth/status|\
-        pr/review|pr/comment|issue/create|issue/comment|issue/edit|\
-        mr/view|mr/list|mr/diff|mr/merge|mr/approve|mr/note|issue/note|ci/view|ci/list|ci/status|ci/trace) return 0 ;;
-    esac
-    return 1
-}
-
-# make: only verification targets, and at least one of them. `make` alone
-# runs the default target, usually a build.
-_make_ok() {
-    local tok skip=0 n=0
-    set -f
-    for tok in $1; do
-        [ $skip -eq 1 ] && { skip=0; continue; }
-        case "$tok" in
-            make|*/make) ;;
-            -C|-f|-j|-l|-o|-W) skip=1 ;;
-            -*|*=*) ;;
-            test|tests|lint|check|vet|typecheck|fmt-check|format-check|test[-_:]*|lint[-_:]*|check[-_:]*) n=$((n + 1)) ;;
-            *) set +f; return 1 ;;
-        esac
-    done
-    set +f
-    [ $n -gt 0 ]
-}
-
-# The script a shell runs: `bash -n` parses only; otherwise the script must
-# be a test suite (a tests/ directory, test_*.sh, *_test.sh, run-tests.sh).
-_shell_ok() {
-    local tok first=""
-    set -f
-    for tok in $1; do
-        case "$tok" in bash|sh|zsh|*/bash|*/sh|*/zsh) continue ;; -n) set +f; return 0 ;; -*) continue ;; esac
-        first=$tok; break
-    done
-    set +f
-    case "$first" in */tests/*|tests/*|*/test/*|test/*|test_*.sh|*/test_*.sh|*_test.sh|run-tests.sh|*/run-tests.sh) return 0 ;; esac
-    return 1
-}
-
-# One segment that only reads, or only verifies. The allow-list is the safe
-# direction: a command nobody classified counts as producing.
-_root_seg_ok() {
-    local seg=$1 w name next
-    # Shell keywords are transparent; wrappers are looked past.
-    while :; do
-        seg=${seg#"${seg%%[![:space:]]*}"}
-        w=${seg%%[[:space:]]*}
-        case "$w" in
-            if|then|else|elif|do|while|until|'!'|'{'|time|env|command|builtin|nohup|exec|sudo|[A-Za-z_]*=*)
-                [ "$w" = command ] && [[ $seg =~ ^command[[:space:]]+-[vV]([[:space:]]|$) ]] && return 0
-                next=${seg#*[[:space:]]}; [ "$next" = "$seg" ] && break; seg=$next ;;
-            timeout|xargs)
-                # past the wrapper's own options and, for timeout, the duration
-                next=${seg#*[[:space:]]}; [ "$next" = "$seg" ] && return 1; seg=$next
-                while :; do
-                    seg=${seg#"${seg%%[![:space:]]*}"}; w=${seg%%[[:space:]]*}
-                    case "$w" in
-                        -I|-n|-P|-L|-d|-E|-s|-k|--signal|--kill-after) seg=${seg#*[[:space:]]}; seg=${seg#"${seg%%[![:space:]]*}"}; seg=${seg#*[[:space:]]} ;;
-                        -*) seg=${seg#*[[:space:]]} ;;
-                        [0-9]*) seg=${seg#*[[:space:]]} ;;
-                        *) break ;;
-                    esac
-                    [ -n "$seg" ] || return 1
-                done ;;
-            *) break ;;
-        esac
-    done
-    w=${seg%%[[:space:]]*}; name=${w##*/}
-    case "$name" in
-        ""|fi|done|esac|'}'|for|cd|pushd|popd|export|true|false|:|test|'['|'[['|']]'|\
-        echo|printf|pwd|ls|cat|head|tail|wc|stat|file|du|df|lsblk|free|which|type|basename|dirname|realpath|readlink|\
-        grep|egrep|fgrep|rg|uniq|cut|tr|nl|column|comm|diff|cmp|jq|date|uname|hostname|id|whoami|uptime|ps|pgrep|\
-        printenv|md5sum|sha1sum|sha256sum|sha512sum|cksum|base64|xxd|od|strings|man|sleep|shellcheck|pytest) return 0 ;;
-        [A-Za-z_]*=*) return 0 ;;
-        sort|tree) [[ $seg =~ (^|[[:space:]])(-o|--output)([[:space:]=]|$) ]] && return 1; return 0 ;;
-        sed|awk|gawk|yq) [[ $seg =~ (^|[[:space:]])(-[a-zA-Z]*i[a-zA-Z]*|--in-place|--inplace)([[:space:]=]|$) ]] && return 1; return 0 ;;
-        find) case " $seg " in *" -delete "*|*" -exec "*|*" -execdir "*|*" -ok "*|*" -okdir "*|*" -fprint"*|*" -fls "*) return 1 ;; esac; return 0 ;;
-        git) _git_readonly "$seg" ;;
-        gh|glab) _forge_cli_ok "$seg" ;;
-        go) [[ $seg =~ ^[^[:space:]]+[[:space:]]+(test|vet|version|env|list|doc)([[:space:]]|$) ]] ;;
-        cargo) [[ $seg =~ ^[^[:space:]]+[[:space:]]+(test|clippy|check|--version)([[:space:]]|$) ]] ;;
-        npm) [[ $seg =~ ^[^[:space:]]+[[:space:]]+(test|ls|view|run[[:space:]]+(test|lint|check|typecheck)[^[:space:]]*)([[:space:]]|$) ]] ;;
-        make) _make_ok "$seg" ;;
-        python|python3)
-            [[ $seg =~ ^[^[:space:]]+[[:space:]]+(-m[[:space:]]*(unittest|pytest)|--version|-V)([[:space:]]|$) ]] && return 0
-            [[ $seg =~ ^[^[:space:]]+[[:space:]]+([^[:space:]-][^[:space:]]*) ]] || return 1
-            case "${BASH_REMATCH[1]}" in */tests/*|tests/*|test_*.py|*/test_*.py) return 0 ;; esac
-            return 1 ;;
-        bash|sh|zsh) _shell_ok "$seg" ;;
-        claude) [[ $seg =~ ^[^[:space:]]+[[:space:]]+(plugin|mcp|--version|-v)([[:space:]]|$) ]] ;;
-        systemctl) [[ $seg =~ (^|[[:space:]])(status|is-active|is-enabled|is-failed|list-units|list-timers|show|cat)([[:space:]]|$) ]] ;;
-        journalctl) [[ $seg =~ --(vacuum|rotate|flush) ]] && return 1; return 0 ;;
-        docker) [[ $seg =~ ^[^[:space:]]+[[:space:]]+(ps|images|logs|inspect|version|info)([[:space:]]|$) ]] ;;
-        *) return 1 ;;
-    esac
-}
-
-# Quote-aware pass over a command line, in one awk: quoted text becomes Q so
-# a `>` or `;` inside quotes is not read as shell syntax, and a command
-# substitution inside double quotes — which runs — becomes a segment of its
-# own that nothing classifies. Unbalanced quotes (a heredoc body, a typo) are
-# unclassifiable, so they count as producing too.
-_root_scan() {
-    printf '%s' "$1" | awk 'BEGIN { RS = "\001" } {
-        s = $0; n = length(s); st = 0; out = ""; sub_dq = 0
-        for (i = 1; i <= n; i++) {
-            c = substr(s, i, 1)
-            if (st == 0) {
-                if (c == "\\") { out = out c substr(s, i + 1, 1); i++; continue }
-                if (c == "\047") { st = 1; out = out "Q"; continue }
-                if (c == "\"") { st = 2; out = out "Q"; continue }
-                out = out c
-            } else if (st == 1) {
-                if (c == "\047") st = 0
-            } else {
-                if (c == "\\") { i++; continue }
-                if (c == "\"") { st = 0; continue }
-                if (c == "`" || (c == "$" && substr(s, i + 1, 1) == "(")) sub_dq = 1
-            }
-        }
-        printf "%s", out
-        if (sub_dq) printf "\n__substitution__"
-        if (st != 0) printf "\n__unbalanced__"
-    }' 2>/dev/null
-}
-
-# GATE · a main-thread Bash line passes only when every segment reads or
-# verifies. Any redirection other than to /dev/null or between descriptors
-# makes the line producing, and one producing segment condemns the line.
+# GATE · Bash. Only the operations that produce into a repository, found
+# anywhere on the line with the attribution guard's shape: past a separator,
+# a quote (bash -c "…"), VAR= and wrapper prefixes, and git's -C/-c/long
+# globals. Everything else — sudo, installs, redirections, unknown
+# commands — is the main thread's own business.
 _root_gate_bash() {
     [ "$ROOT_MAIN" = 1 ] || return 0
-    # ROOT_OK=1 <cmd> is the per-line opt-out, spelled like NO_RTK=.
     [[ $CMD =~ ^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*ROOT_OK=1([[:space:]]|$) ]] && return 0
-    command -v awk >/dev/null 2>&1 || return 0
-    local q seg
-    q=$(_root_scan "$1")
-    [ -n "$q" ] || return 0
-    while [[ $q =~ ([0-9]*\>\&([0-9]+|-)|\&\>[[:space:]]*/dev/null|[0-9]*\>\>?[[:space:]]*/dev/null) ]]; do
-        q=${q/"${BASH_REMATCH[0]}"/ }
-    done
-    [[ $q == *">"* ]] && _root_deny "Escape hatch: prefix the line with ROOT_OK=1, or set KODFLOW_ROOT=off for the session."
-    while [[ $q =~ \$\{[A-Za-z_][A-Za-z0-9_]*\} ]]; do q=${q/"${BASH_REMATCH[0]}"/\$V}; done
-    # Command and process substitutions, innermost first: the inner command
-    # becomes a line of its own, the outer one keeps a placeholder word.
-    local inner="" p nl=$'\n' re_sub='(\$\(|<\(|>\()([^()]*)\)' re_bt='`([^`]*)`'
-    while [[ $q =~ $re_sub ]]; do inner+=$nl${BASH_REMATCH[2]}; q=${q/"${BASH_REMATCH[0]}"/V}; done
-    while [[ $q =~ $re_bt ]]; do inner+=$nl${BASH_REMATCH[1]}; q=${q/"${BASH_REMATCH[0]}"/V}; done
-    q+=$inner
-    # What is left of ( ) and ` is a subshell or something unparsed: split there.
-    for p in '(' ')' '`'; do q=${q//"$p"/$nl}; done
-    _split "$q"
-    for seg in "${SEGS[@]}"; do
-        _root_seg_ok "$seg" || _root_deny "Escape hatch: prefix the line with ROOT_OK=1, or set KODFLOW_ROOT=off for the session." \
-            "Refused segment: ${seg:0:120}"
-    done
+    local pre re_git re_forge
+    pre="(^|[;&|(\"'\`/]|[[:space:]])(([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*|env|command|exec|sudo|nohup|time|xargs|eval)[[:space:]]+)*"
+    re_git="${pre}git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+(commit|push|rebase|cherry-pick|merge|am|apply|revert|worktree[[:space:]]+add|reset[^;&|]*[[:space:]]--hard)([[:space:]]|$)"
+    re_forge="${pre}(gh|glab)([[:space:]]+(-R|--repo)[[:space:]]+[^[:space:]]+)*[[:space:]]+(pr|mr)[[:space:]]+create([[:space:]]|$)"
+    if [[ $1 =~ $re_git ]]; then
+        _root_deny "git ${BASH_REMATCH[6]%%[[:space:]]*} from the main thread produces into a repository."
+    elif [[ $1 =~ $re_forge ]]; then
+        _root_deny "${BASH_REMATCH[4]} ${BASH_REMATCH[7]} create from the main thread: opening the PR is the subagent's delivery."
+    fi
 }
 
-# GATE · a main-thread Write/Edit only on its own memory and the Claude
-# configuration. A path with a .. component is never trusted.
+# GATE · Write/Edit. Refused only inside a git work tree: the file's
+# directory and its parents are walked up looking for .git (a directory, or
+# the gitdir file of a worktree or submodule) — plain tests, no exec. The path
+# is normalised lexically first so /repo/x/../../tmp/f is judged as /tmp/f.
+# The main thread's memory and the Claude configuration stay writable even
+# when they live inside a repository.
 _root_gate_edit() {
     [ "$ROOT_MAIN" = 1 ] || return 0
-    local f=${FILE:-$NB} cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+    local f=${FILE:-$NB} cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude} part d
+    [ -n "$f" ] || return 0
+    [[ $f = /* ]] || f=${CWD:-$PWD}/$f
+    local -a out=()
+    local IFS=/
+    set -f
+    for part in $f; do
+        case "$part" in ""|.) ;; ..) [ ${#out[@]} -gt 0 ] && unset 'out[${#out[@]}-1]' ;; *) out+=("$part") ;; esac
+    done
+    set +f
+    f="/${out[*]}"
+    unset IFS
     cfg=${cfg%/}
     case "$f" in
-        */../*|*/..|*/./*) ;;
         "$cfg"/projects/*/memory/*|"$cfg"/settings.json|"$cfg"/settings.local.json|"$cfg"/CLAUDE.md|"$HOME"/CLAUDE.md) return 0 ;;
     esac
-    _root_deny "Allowed here: $cfg/projects/*/memory/, $cfg/settings.json, settings.local.json, $cfg/CLAUDE.md, ~/CLAUDE.md." \
-        "Escape hatch: KODFLOW_ROOT=off disables the gate for the session."
+    d=${f%/*}
+    while :; do
+        [ -e "${d:-}/.git" ] && _root_deny "$f is inside the git work tree ${d:-/}."
+        [ -z "$d" ] && break
+        d=${d%/*}
+    done
 }
 
 # ============================================================================
@@ -695,8 +529,7 @@ case "$EV/$TOOL" in
     PreToolUse/Bash|PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit|PreToolUse/TaskCreate|PreToolUse/TodoWrite|PreToolUse/mcp__*tasks__task_*) ;;
     PreToolUse/mcp__github__*|PreToolUse/mcp__gitlab__*|PreToolUse/mcp__GitKraken__*)
         [ "$ROOT_MAIN" = 1 ] && ! _forge_ok "$TOOL" && _root_deny \
-            "Forge tools left to the main thread: reads, merge, issues and comments, reviews." \
-            "Escape hatch: KODFLOW_ROOT=off disables the gate for the session."
+            "$TOOL writes into a repository (files, branches, pull requests); reads, reviews, comments, issues and merges stay allowed."
         exit 0 ;;
     PreToolUse/*) exit 0 ;;
 esac

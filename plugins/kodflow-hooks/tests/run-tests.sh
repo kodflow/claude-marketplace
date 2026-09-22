@@ -1,6 +1,6 @@
 #!/bin/bash
 # run-tests.sh — kodflow-hooks' own suite (the hook scripts are covered by
-# scripts/tests/test_hooks.sh at the repository root, the reviewer gate by
+# scripts/tests/test_hooks.sh at the repository root, the delegation gate by
 # test_root_gate.sh here).
 set -e
 cd "$(dirname "$0")"

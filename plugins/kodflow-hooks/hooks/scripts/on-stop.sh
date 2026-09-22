@@ -180,7 +180,7 @@ if [ -s "$mcp_tasks" ]; then
 }$n_busy tasks are in progress for $workers worker(s) (you and ${running:-0} running subagent(s)): $busy_list. One task per worker: set every task nobody is working on right now to completed, pending or waiting."
     fi
 
-    # The main thread reviews; it does not produce. Every epic under way is
+    # The main thread delegates; it does not do the epic itself. Every epic under way is
     # carried by a subagent in its own worktree, so a main-agent task in
     # progress on an epic no running subagent is attributed to (agents.json
     # `epic`, recorded at SubagentStart from the active epic) means main is
@@ -198,7 +198,7 @@ if [ -s "$mcp_tasks" ]; then
             | "  - #\(.id) \(.subject): " + (if $e == 0 then "dispatch a subagent in a worktree for it" else "dispatch a subagent in a worktree for epic #\($e)" end)
               + ", or set #\(.id) back to pending/waiting"' "$mcp_tasks" 2>/dev/null)
         [ -n "$producing" ] && ctx="${ctx:+$ctx
-}The main thread reviews, it does not produce, and these tasks are in progress with no running subagent on their epic (task_focus the epic before dispatching, so the subagent is attributed to it; SendMessage its subagent if one is already on it):
+}The main thread delegates the work of an epic to a subagent, and these tasks are in progress with no running subagent on their epic (task_focus the epic before dispatching, so the subagent is attributed to it; SendMessage its subagent if one is already on it):
 $producing"
     fi
 fi

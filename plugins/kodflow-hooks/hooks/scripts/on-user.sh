@@ -85,10 +85,10 @@ UserPromptSubmit)
 - change to a completed task: task_create \"Rework #N: ...\" in its epic
 - new subject: task_epic(title, 20 chars max), then task_create(epic=its id)
 - question or discussion: no task"
-    # The main thread reviews, it does not produce (the PreToolUse gate of
+    # Code in a repository is delegated to subagents (the PreToolUse gate of
     # on-tool.sh and the Stop rule enforce it); off with KODFLOW_ROOT=off.
     [ "${KODFLOW_ROOT:-}" != off ] && ctx="$ctx
-Then dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not produce."
+Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it."
     ctx="$ctx
 Keep statuses true: in_progress while worked on, waiting when blocked on the user, completed once verified."
     jq -n -c --arg c "$ctx" '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$c}}' 2>/dev/null

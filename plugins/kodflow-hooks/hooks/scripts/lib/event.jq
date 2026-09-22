@@ -53,7 +53,7 @@ def response_of($t; $r):
   agent_id: .agent_id,
   tool_use_id: .tool_use_id,
   tool_name: .tool_name,
-  # Set by on-tool.sh on the two events that measure the reviewer gate:
+  # Set by on-tool.sh on the two events that measure the delegation gate:
   # "deny" when the main thread was stopped, "dispatch" when it delegated.
   # Read from the environment so the other scripts need no new argument.
   root_guard: (($ENV.KODFLOW_ROOT_GUARD // "") | if . == "" then null else . end) }
