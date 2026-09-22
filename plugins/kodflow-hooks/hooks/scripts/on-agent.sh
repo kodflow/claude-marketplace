@@ -33,6 +33,8 @@ _log() {
     ) >/dev/null 2>&1 </dev/null &
 }
 
+# Internal helper agents emit SubagentStop with no SubagentStart; a stop only
+# updates an agent already recorded, so they leave no phantom entry.
 # The running subagents of the session, for the status line and the task
 # view: <config>/kodflow/sessions/<session>/agents.json, next to the task list
 # the tasks MCP keeps. Start and stop can race, so every write holds the lock.
@@ -47,7 +49,7 @@ _agents() {   # $1 = start|stop
         printf '%s' "$cur" | jq -c --arg id "$AID" --arg type "$AGENT" --arg ev "$1" --argjson now "$(date +%s)" '
             .agents //= {} |
             if $ev == "start" then .agents[$id] = {type:$type, started:$now, stopped:null}
-            else .agents[$id].stopped = $now end' > "$f.tmp" 2>/dev/null && mv -f "$f.tmp" "$f"
+            elif .agents[$id] then .agents[$id].stopped = $now else . end' > "$f.tmp" 2>/dev/null && mv -f "$f.tmp" "$f"
     ) >/dev/null 2>&1 </dev/null
 }
 

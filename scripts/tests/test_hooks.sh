@@ -9,6 +9,7 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 S=$ROOT/plugins/kodflow-hooks/hooks/scripts
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export CLAUDE_PROJECT_DIR=$T/repo HOME=$T/home TMPDIR=$T/tmp CLAUDE_CONFIG_DIR=$T/home/.claude
+unset CLAUDE_CODE_ENABLE_TODO_TOOLS CLAUDE_CODE_TASK_LIST_ID   # inherited values would change what is asserted
 mkdir -p "$T/repo" "$T/home" "$T/tmp" "$T/tmp/sp"
 cd "$T" || exit 1
 git -C "$T/repo" init -q -b feat/test
@@ -198,6 +199,9 @@ jq -e '[.agents[] | select(.stopped == null)] | length == 2' "$AG" >/dev/null 2>
 run SubagentStop "" '{"agent_id":"a1","agent_type":"Explore","stop_hook_active":false}' on-agent.sh
 jq -e '(.agents.a1.stopped != null) and (.agents.a2.stopped == null) and .agents.a2.type == "Plan"' "$AG" >/dev/null 2>&1 \
     && ok "a stopped subagent is marked, the other keeps running" || bad "agents stop" "$(cat "$AG" 2>/dev/null)"
+run SubagentStop "" '{"agent_id":"ghost","agent_type":"","stop_hook_active":false}' on-agent.sh
+jq -e '.agents | has("ghost") | not' "$AG" >/dev/null 2>&1 \
+    && ok "a stop with no matching start adds no phantom entry" || bad "phantom stop" "$(cat "$AG" 2>/dev/null)"
 run SubagentStop "" '{"agent_id":"a2","stop_hook_active":true}' on-agent.sh
 jq -e '.agents.a2.stopped == null' "$AG" >/dev/null 2>&1 && ok "a subagent continued by a stop hook is still running" || bad "active stop" "$(cat "$AG")"
 rm -rf "$T/home/.claude/kodflow"
