@@ -44,7 +44,7 @@ fails by accident blocks every shell call of the session.
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent | running-agents registry · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open (tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open (tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · a list with tasks to do but none `in_progress` or `waiting`, every turn until corrected | bell · log |
 
 `lib/format.sh` is the formatter table (sourced lazily, never registered) and
 `lib/event.jq` is the one sanitization policy behind every log line.
@@ -60,6 +60,10 @@ panel in the chat duplicates the status line.
 - **One list per agent.** An MCP server cannot tell who calls it; `on-tool.sh`
   writes `_session` and `_agent` into every call. The status line and the Stop
   reminder read the main agent's entries only.
+- **Statuses:** `pending`, `in_progress`, `waiting` (blocked on the user: a
+  decision, an approval, an answer), `completed`, `deleted`. The list must say
+  what is true now; the Stop hook flags tasks to do with none in progress or
+  waiting on every turn until it does.
 - **Subjects of 40 characters at most**, refused beyond: they are shown in
   full on the status line.
 - **Running subagents** are recorded next to it, in `agents.json`, by the

@@ -23,7 +23,7 @@ import time
 
 PROTOCOL = "2025-06-18"
 MAX_SUBJECT = 40
-STATUSES = ("pending", "in_progress", "completed", "deleted")
+STATUSES = ("pending", "in_progress", "waiting", "completed", "deleted")
 MAIN = "main"
 
 try:  # POSIX advisory locking; Windows runs unlocked, one writer per session
@@ -176,9 +176,11 @@ TOOLS = [
     {
         "name": "task_update",
         "description": (
-            "Update one of your tasks. Set in_progress before starting it, completed as soon as its work is "
-            "done and verified, deleted when it no longer applies. Never leave a finished task open: the status "
-            "line shows the list until every task is settled."),
+            "Update one of your tasks. The list must show the real state at every moment, it is read live on "
+            "the user's status line: set in_progress before starting a task, completed as soon as its work is "
+            "done and verified, waiting when it is blocked on the user (a decision, an approval, an answer), "
+            "deleted when it no longer applies. Never end a turn with tasks left to do but none in_progress or "
+            "waiting: either one is under way, or they wait on the user and say so."),
         "inputSchema": {"type": "object", "properties": dict({
             "id": {"type": "string", "description": "Task id, as returned by task_create."},
             "status": {"type": "string", "enum": list(STATUSES)},

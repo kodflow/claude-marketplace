@@ -73,6 +73,12 @@ class TasksServer(unittest.TestCase):
         self.s.call("task_create", subject="Next", _session="s1")
         self.assertEqual(self.state()["tasks"][-1]["id"], "3", "ids are never reused")
 
+    def test_waiting_status(self):
+        self.s.call("task_create", subject="Await the go", _session="s1")
+        out = self.s.call("task_update", id="1", status="waiting", _session="s1")
+        self.assertFalse(out.get("isError"), out)
+        self.assertEqual(self.state()["tasks"][0]["status"], "waiting")
+
     def test_long_subject_is_refused(self):
         out = self.s.call("task_create", subject="x" * 41, _session="s1")
         self.assertTrue(out.get("isError"))

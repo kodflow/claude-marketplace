@@ -178,6 +178,25 @@ OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",ho
 nudged && bad "mcp nudge once" "$OUT" || ok "MCP tasks follow the same once-per-set rule, tools off or not"
 rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
 
+echo "== Stop · a task list must say what is true now"
+mkdir -p "$MS"
+stale() { printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("none in progress or waiting")' >/dev/null 2>&1; }
+printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Done","status":"completed"},{"id":"2","agent":"main","subject":"Next","status":"pending"}]}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+stale && ok "work left, nothing in progress or waiting: flagged" || bad "stale list" "$OUT"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+stale && ok "flagged again on the next turn until corrected" || bad "stale list repeat" "$OUT"
+printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Wait","status":"waiting"},{"id":"2","agent":"main","subject":"Next","status":"pending"}]}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+stale && bad "waiting accepted" "$OUT" || ok "a task waiting on the user makes the list truthful"
+printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Doing","status":"in_progress"},{"id":"2","agent":"main","subject":"Next","status":"pending"},{"id":"3","agent":"a1","subject":"Sub","status":"pending"}]}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+stale && bad "in progress accepted" "$OUT" || ok "a task in progress makes the list truthful"
+printf '%s' '{"tasks":[{"id":"1","agent":"a1","subject":"Sub only","status":"pending"}]}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+stale && bad "subagent list" "$OUT" || ok "a subagent's list is not the main agent's to correct"
+rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
+
 echo "== PreToolUse · task tools"
 run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_create '{"tool_input":{"subject":"x","_agent":"forged"}}' on-tool.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .subject == "x" and ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \
