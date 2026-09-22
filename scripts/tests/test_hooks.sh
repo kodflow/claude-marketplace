@@ -224,6 +224,20 @@ rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.s
     && ok "a malformed tasks.json: Stop still exits 0 with one document" || bad "stop malformed" "rc=$RC $OUT"
 rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
 
+echo "== Stop · one task in progress per worker"
+mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+printf '%s' '{"version":2,"epics":[{"id":1,"agent":"main","title":"A"},{"id":2,"agent":"main","title":"B"}],"active":{"main":1},"tasks":[
+  {"id":"1","agent":"main","epic":1,"subject":"One","status":"in_progress"},
+  {"id":"2","agent":"main","epic":2,"subject":"Two","status":"in_progress"},
+  {"id":"3","agent":"a1","epic":0,"subject":"Sub","status":"in_progress"}]}' > "$MS/tasks.json"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("2 tasks are in progress for 1 worker") and test("#2 Two") and (test("Sub") | not)' >/dev/null 2>&1 \
+    && ok "two tasks in progress, no subagent: flagged across epics" || bad "cap flag" "$OUT"
+printf '{"agents":{"a1":{"type":"Explore","started":%s,"stopped":null}}}' "$(date +%s)" > "$MS/agents.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | grep -q 'tasks are in progress for' && bad "cap with subagent" "$OUT" || ok "a running subagent covers the second task"
+rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+
 echo "== PreToolUse · task tools"
 run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_create '{"tool_input":{"subject":"x","_agent":"forged"}}' on-tool.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .subject == "x" and ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \

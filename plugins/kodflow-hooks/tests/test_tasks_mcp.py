@@ -238,6 +238,35 @@ class TasksServer(unittest.TestCase):
         self.s.call("task_create", subject="Sub work", _session="s1", _agent="a1")
         self.assertEqual(self.state()["tasks"][0]["epic"], 0, "a subagent keeps its own epic")
 
+    def agents(self, session, running):
+        d = os.path.join(self.tmp.name, "kodflow", "sessions", session)
+        os.makedirs(d, exist_ok=True)
+        now = int(__import__("time").time())
+        with open(os.path.join(d, "agents.json"), "w", encoding="utf-8") as fh:
+            json.dump({"agents": {"a%d" % i: {"type": "Explore", "started": now, "stopped": None}
+                                  for i in range(running)}}, fh)
+
+    def test_one_task_in_progress_per_worker(self):
+        for subject in ("First", "Second", "Third"):
+            self.s.call("task_create", subject=subject, _session="s1")
+        self.assertFalse(self.s.call("task_update", id="1", status="in_progress", _session="s1").get("isError"))
+        refused = self.s.call("task_update", id="2", status="in_progress", _session="s1")
+        self.assertTrue(refused.get("isError"), "a lone main agent has one worker")
+        self.assertIn("#1 First", refused["content"][0]["text"])
+        self.agents("s1", 1)
+        self.assertFalse(self.s.call("task_update", id="2", status="in_progress", _session="s1").get("isError"),
+                         "a running subagent adds one worker")
+        self.assertTrue(self.s.call("task_update", id="3", status="in_progress", _session="s1").get("isError"))
+        self.assertFalse(self.s.call("task_update", id="1", status="in_progress", _session="s1").get("isError"),
+                         "re-asserting a task already in progress is not a new start")
+
+    def test_a_subagent_has_one_task_in_progress(self):
+        self.agents("s1", 3)
+        for subject in ("Sub one", "Sub two"):
+            self.s.call("task_create", subject=subject, _session="s1", _agent="a1")
+        self.s.call("task_update", id="1", status="in_progress", _session="s1", _agent="a1")
+        self.assertTrue(self.s.call("task_update", id="2", status="in_progress", _session="s1", _agent="a1").get("isError"))
+
     def test_long_subject_is_refused(self):
         out = self.s.call("task_create", subject="x" * 41, _session="s1")
         self.assertTrue(out.get("isError"))

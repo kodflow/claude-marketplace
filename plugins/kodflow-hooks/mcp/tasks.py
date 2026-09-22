@@ -242,6 +242,31 @@ def task_create(store, agent, args):
     return store.mutate(change)
 
 
+STALE_AGENT = 12 * 3600  # a subagent with no stop for this long was lost with its session
+
+
+def running_subagents(store):
+    """Count the subagents of the session still running (agents.json, hooks)."""
+    try:
+        with open(os.path.join(store.dir, "agents.json"), encoding="utf-8") as fh:
+            agents = json.load(fh).get("agents") or {}
+    except (OSError, ValueError, AttributeError):
+        return 0
+    cutoff = time.time() - STALE_AGENT
+    return sum(1 for a in agents.values()
+               if isinstance(a, dict) and a.get("stopped") is None and (a.get("started") or 0) >= cutoff)
+
+
+def in_progress_cap(store, agent):
+    """How many tasks an agent may have in progress: one per worker.
+
+    A subagent is one worker. The main agent is one worker plus every
+    subagent it has running: a task handed to a subagent is in progress
+    while that subagent works, and only then.
+    """
+    return 1 + running_subagents(store) if agent == MAIN else 1
+
+
 def task_update(store, agent, args):
     task_id = str(args.get("id") or "").strip().lstrip("#")
     status = args.get("status")
@@ -258,6 +283,20 @@ def task_update(store, agent, args):
                 if status == "deleted":
                     del data["tasks"][idx]
                     return "Task #%s deleted" % task_id
+                # One task in progress per worker: an amber cell on the status
+                # line must mean someone is on it right now
+                if status == "in_progress" and task.get("status") != "in_progress":
+                    busy = [t for t in data["tasks"] if t.get("agent", MAIN) == agent
+                            and t.get("status") == "in_progress" and t["id"] != task_id]
+                    cap = in_progress_cap(store, agent)
+                    if len(busy) >= cap:
+                        workers = "you" if cap == 1 else "you and %d running subagent(s)" % (cap - 1)
+                        raise ValueError(
+                            "cannot start #%s: %d task(s) already in progress (%s) for %d worker(s), %s. "
+                            "One task per worker: complete it, or set the one nobody is on to pending or "
+                            "waiting; to run this one in parallel, start a subagent for it first, then mark "
+                            "it in_progress." % (task_id, len(busy), ", ".join("#%s %s" % (t["id"], t["subject"])
+                                                                              for t in busy), cap, workers))
                 if status:
                     task["status"] = status
                 if subject:
@@ -377,7 +416,10 @@ TOOLS = [
             "Update one of your tasks: set in_progress before starting it, completed as soon as its work is done "
             "and verified, waiting when it is blocked on the user (a decision, an approval, an answer), deleted "
             "when it no longer applies. Never end a turn with tasks left to do but none in_progress or waiting: "
-            "either one is under way, or they wait on the user and say so."),
+            "either one is under way, or they wait on the user and say so. One task in_progress per worker: you "
+            "may have one, plus one per running subagent (each subagent works on exactly one task); switching "
+            "to another task means setting the current one back to pending first, and a task handed to a "
+            "subagent goes in_progress once that subagent has started. Extra in_progress calls are refused."),
         "inputSchema": {"type": "object", "properties": dict({
             "id": {"type": "string", "description": "Task id, as returned by task_create."},
             "status": {"type": "string", "enum": list(STATUSES)},

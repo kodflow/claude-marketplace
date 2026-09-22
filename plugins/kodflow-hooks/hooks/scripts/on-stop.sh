@@ -161,6 +161,24 @@ if [ -s "$mcp_tasks" ]; then
         ctx="${ctx:+$ctx
 }Your task list shows $n_pending task(s) to do and none in progress or waiting, which cannot be true. Set the one you are working on to in_progress, or set the ones blocked on the user (a decision, an approval, an answer) to waiting."
     fi
+
+    # One task in progress per worker, across every epic: the main agent is
+    # one worker, each running subagent another. More amber cells than
+    # workers means some task is shown as moving while nobody is on it —
+    # typically a subagent finished and its task was never closed.
+    busy=$(jq -r '[.tasks[]? | select((.agent // "main") == "main" and .status == "in_progress") | "#\(.id) \(.subject)"] | "\(length)\t\(join(", "))"' \
+        "$mcp_tasks" 2>/dev/null)
+    n_busy=${busy%%$'\t'*}; busy_list=${busy#*$'\t'}
+    agents_file=${mcp_tasks%/*}/agents.json
+    running=0
+    [ -s "$agents_file" ] && running=$(jq -r --argjson cut "$(( $(date +%s) - 43200 ))" \
+        '[.agents // {} | .[] | select(type == "object" and .stopped == null and (.started // 0) >= $cut)] | length' \
+        "$agents_file" 2>/dev/null)
+    workers=$(( 1 + ${running:-0} ))
+    if [ "${n_busy:-0}" -gt "$workers" ] 2>/dev/null; then
+        ctx="${ctx:+$ctx
+}$n_busy tasks are in progress for $workers worker(s) (you and ${running:-0} running subagent(s)): $busy_list. One task per worker: set every task nobody is working on right now to completed, pending or waiting."
+    fi
 fi
 
 # Hooks have no terminal: the bell travels in the JSON, alongside the

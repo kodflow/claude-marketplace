@@ -84,6 +84,10 @@ pill per open epic of the main agent.
   there, focus when starting), context on the task in progress (apply, no new
   task), a change to a completed task (`Rework #N: …` in its epic), a new
   subject (`task_epic`), or plain discussion (nothing).
+- **One task in progress per worker.** The main agent may have one task
+  `in_progress` plus one per running subagent (`agents.json`); a subagent
+  has one. `task_update` refuses an extra start, and the Stop hook flags more
+  tasks in progress than workers, across every epic, on every turn.
 - **Session start review.** On `startup`, `resume`, `clear` and `compact`,
   `SessionStart` lists the main agent's open tasks of every epic
   (`lib/review.jq`) and asks to reconcile them first — an `in_progress` left
