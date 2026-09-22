@@ -84,6 +84,12 @@ pill per open epic of the main agent.
   there, focus when starting), context on the task in progress (apply, no new
   task), a change to a completed task (`Rework #N: …` in its epic), a new
   subject (`task_epic`), or plain discussion (nothing).
+- **Triage gate.** Every user message raises `triage-pending`; until a task
+  tool is called, `PreToolUse` refuses the main agent every tool but Read,
+  Glob, Grep, LS, ToolSearch and AskUserQuestion — the message is filed in the
+  task list before anything is done about it. Subagents are not gated. The
+  `PreToolUse` matcher is the catch-all for this; tools the script does not
+  handle are decided without jq (~10 ms).
 - **Limits:** task subjects 40 characters, epic titles 20, refused beyond:
   they are shown in full on the status line.
 - **v1 files** (one epic per agent, a dict) are read as v2 and rewritten by
