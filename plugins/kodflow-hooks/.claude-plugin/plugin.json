@@ -1,6 +1,6 @@
 {
   "name": "kodflow-hooks",
-  "description": "The lifecycle machinery the other plugins assume: shell-output compression that never rewrites a read whose bytes matter, a git guard, session context, a formatter, a turn-end quality gate, one structured log, and the session task list as an MCP server that keeps each agent's tasks apart for the status line. One script per event (15 events, 5 scripts), each a fixed sequence — gate, block, transform, observe — because hooks on the same event run in parallel and only a single script can order them. Every path that is not a deliberate block exits 0.",
+  "description": "The lifecycle machinery the other plugins assume: shell-output compression that never rewrites a read whose bytes matter, a git guard, a delegation gate (code in a git repository is produced by subagents, the main thread reviews and merges), session context, a formatter, a turn-end quality gate, one structured log, and the session task list as an MCP server that keeps each agent's tasks apart for the status line. One script per event (15 events, 5 scripts), each a fixed sequence — gate, block, transform, observe — because hooks on the same event run in parallel and only a single script can order them. Every path that is not a deliberate block exits 0.",
   "author": {
     "name": "kodflow",
     "url": "https://github.com/kodflow"

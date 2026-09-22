@@ -10,6 +10,10 @@ S=$ROOT/plugins/kodflow-hooks/hooks/scripts
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export CLAUDE_PROJECT_DIR=$T/repo HOME=$T/home TMPDIR=$T/tmp CLAUDE_CONFIG_DIR=$T/home/.claude
 unset CLAUDE_CODE_ENABLE_TODO_TOOLS CLAUDE_CODE_TASK_LIST_ID   # inherited values would change what is asserted
+# The delegation gate (the main thread does not produce code in a repository)
+# would stop most main-thread payloads below before the guard they test. It
+# is off here and covered on its own in plugins/kodflow-hooks/tests/test_root_gate.sh.
+export KODFLOW_ROOT=off
 mkdir -p "$T/repo" "$T/home" "$T/tmp" "$T/tmp/sp"
 cd "$T" || exit 1
 git -C "$T/repo" init -q -b feat/test
@@ -224,6 +228,20 @@ rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.s
     && ok "a malformed tasks.json: Stop still exits 0 with one document" || bad "stop malformed" "rc=$RC $OUT"
 rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
 
+echo "== Stop · one task in progress per worker"
+mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+printf '%s' '{"version":2,"epics":[{"id":1,"agent":"main","title":"A"},{"id":2,"agent":"main","title":"B"}],"active":{"main":1},"tasks":[
+  {"id":"1","agent":"main","epic":1,"subject":"One","status":"in_progress"},
+  {"id":"2","agent":"main","epic":2,"subject":"Two","status":"in_progress"},
+  {"id":"3","agent":"a1","epic":0,"subject":"Sub","status":"in_progress"}]}' > "$MS/tasks.json"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("2 tasks are in progress for 1 worker") and test("#2 Two") and (test("Sub") | not)' >/dev/null 2>&1 \
+    && ok "two tasks in progress, no subagent: flagged across epics" || bad "cap flag" "$OUT"
+printf '{"agents":{"a1":{"type":"Explore","started":%s,"stopped":null}}}' "$(date +%s)" > "$MS/agents.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | grep -q 'tasks are in progress for' && bad "cap with subagent" "$OUT" || ok "a running subagent covers the second task"
+rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+
 echo "== PreToolUse · task tools"
 run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_create '{"tool_input":{"subject":"x","_agent":"forged"}}' on-tool.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .subject == "x" and ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \
@@ -274,6 +292,8 @@ run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -q 'TRIAGE this message' && ok "the triage directive is injected with no tasks.json" || bad "triage" "$OUT"
 printf '%s' "$C" | grep -q 'Epics:' && bad "no state without tasks.json" "$C" || ok "no epic state without tasks.json"
+printf '%s' "$C" | grep -q 'task_create always names its epic' && printf '%s' "$C" | grep -q '0 for none, no default' \
+    && ok "the directive says the epic is mandatory, 0 for none" || bad "epic mandatory" "$C"
 [ "${#C}" -lt 900 ] && ok "the injected context stays under 900 characters (${#C})" || bad "context size" "${#C}"
 MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"
 printf '%s' '{"version":2,"active":{"main":2},

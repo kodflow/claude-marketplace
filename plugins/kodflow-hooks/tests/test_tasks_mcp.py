@@ -61,20 +61,20 @@ class TasksServer(unittest.TestCase):
         self.assertIn("error", self.s.request("nope"))
 
     def test_lifecycle(self):
-        out = self.s.call("task_create", subject="Add the gauge", description="d", _session="s1", _agent="main")
+        out = self.s.call("task_create", subject="Add the gauge", epic=0, description="d", _session="s1", _agent="main")
         self.assertEqual(out["content"][0]["text"], "Task #1 created: Add the gauge")
-        self.s.call("task_create", subject="Ship it", _session="s1")
+        self.s.call("task_create", subject="Ship it", epic=0, _session="s1")
         self.s.call("task_update", id="1", status="in_progress", _session="s1")
         tasks = self.state()["tasks"]
         self.assertEqual([(t["id"], t["status"], t["agent"]) for t in tasks],
                          [("1", "in_progress", "main"), ("2", "pending", "main")])
         self.s.call("task_update", id="#2", status="deleted", _session="s1")
         self.assertEqual([t["id"] for t in self.state()["tasks"]], ["1"])
-        self.s.call("task_create", subject="Next", _session="s1")
+        self.s.call("task_create", subject="Next", epic=0, _session="s1")
         self.assertEqual(self.state()["tasks"][-1]["id"], "3", "ids are never reused")
 
     def test_waiting_status(self):
-        self.s.call("task_create", subject="Await the go", _session="s1")
+        self.s.call("task_create", subject="Await the go", epic=0, _session="s1")
         out = self.s.call("task_update", id="1", status="waiting", _session="s1")
         self.assertFalse(out.get("isError"), out)
         self.assertEqual(self.state()["tasks"][0]["status"], "waiting")
@@ -86,10 +86,10 @@ class TasksServer(unittest.TestCase):
         return next(e for e in self.state(session)["epics"] if e["id"] == eid)
 
     def test_epics_v2_lifecycle(self):
-        self.s.call("task_create", subject="Loose work", _session="s1")
+        self.s.call("task_create", subject="Loose work", epic=0, _session="s1")
         started = self.s.call("task_epic", title="SDK rewrite", _session="s1")
         self.assertFalse(started.get("isError"), "an open task no longer blocks a new epic")
-        self.s.call("task_create", subject="Freeze golden renders", _session="s1")
+        self.s.call("task_create", subject="Freeze golden renders", epic=1, _session="s1")
         data = self.state()
         self.assertEqual(data["version"], 2)
         self.assertEqual(data["active"], {"main": 1})
@@ -106,11 +106,11 @@ class TasksServer(unittest.TestCase):
 
     def test_several_open_epics_and_focus(self):
         self.s.call("task_epic", title="SDK status-line", _session="s1")
-        self.s.call("task_create", subject="Port the renderer", _session="s1")
+        self.s.call("task_create", subject="Port the renderer", epic=1, _session="s1")
         self.s.call("task_epic", title="api-gateway", _session="s1")
-        self.s.call("task_create", subject="Fix the daemon", _session="s1")
+        self.s.call("task_create", subject="Fix the daemon", epic=2, _session="s1")
         self.s.call("task_update", id="2", status="completed", _session="s1")
-        self.s.call("task_create", subject="Ship", _session="s1")
+        self.s.call("task_create", subject="Ship", epic=2, _session="s1")
         data = self.state()
         self.assertEqual(data["active"]["main"], 2)
         self.assertEqual([t["epic"] for t in data["tasks"]], [1, 2, 2])
@@ -124,12 +124,12 @@ class TasksServer(unittest.TestCase):
         out = self.s.call("task_focus", epic="api-gateway", _session="s1")
         self.assertFalse(out.get("isError"), out)
         self.assertEqual(self.state()["active"]["main"], 2)
-        self.s.call("task_create", subject="Next", _session="s1")
-        self.assertEqual(self.state()["tasks"][-1]["epic"], 2, "new tasks follow the focus")
+        self.s.call("task_create", subject="Next", epic=2, _session="s1")
+        self.assertEqual(self.state()["tasks"][-1]["epic"], 2)
 
     def test_focus_refuses_unknown_and_closed(self):
         self.s.call("task_epic", title="Done soon", _session="s1")
-        self.s.call("task_create", subject="Only task", _session="s1")
+        self.s.call("task_create", subject="Only task", epic=1, _session="s1")
         self.s.call("task_update", id="1", status="completed", _session="s1")
         self.s.call("task_epic", title="Other", _session="s1")
         closed = self.s.call("task_focus", epic="1", _session="s1")
@@ -158,7 +158,7 @@ class TasksServer(unittest.TestCase):
 
     def test_rework_of_completed_task_reopens_its_epic(self):
         self.s.call("task_epic", title="Shipped", _session="s1")
-        self.s.call("task_create", subject="Build it", _session="s1")
+        self.s.call("task_create", subject="Build it", epic=1, _session="s1")
         self.s.call("task_update", id="1", status="completed", _session="s1")
         self.s.call("task_epic", title="Next thing", _session="s1")
         self.s.call("task_create", subject="Rework #1: tweak", epic=1, _session="s1")
@@ -173,7 +173,7 @@ class TasksServer(unittest.TestCase):
 
     def test_same_title_focuses_the_open_epic(self):
         self.s.call("task_epic", title="Alpha", _session="s1")
-        self.s.call("task_create", subject="Work", _session="s1")
+        self.s.call("task_create", subject="Work", epic=1, _session="s1")
         self.s.call("task_epic", title="Beta", _session="s1")
         out = self.s.call("task_epic", title="Alpha", _session="s1")
         self.assertIn("already open", self.text(out))
@@ -197,7 +197,7 @@ class TasksServer(unittest.TestCase):
                                  {"id": "2", "agent": "main", "epic": 1, "subject": "In epic", "status": "pending"}]}, fh)
         listed = self.text(self.s.call("task_list", _session="s1"))
         self.assertIn("Epic #1: Old subject (active, 0/1)", listed)
-        self.s.call("task_create", subject="After", _session="s1")
+        self.s.call("task_create", subject="After", epic=1, _session="s1")
         data = self.state()
         self.assertEqual(data["version"], 2)
         self.assertEqual(data["active"], {"main": 1, "a1": 5})
@@ -209,7 +209,7 @@ class TasksServer(unittest.TestCase):
 
     def test_touched_follows_activity(self):
         self.s.call("task_epic", title="A", _session="s1")
-        self.s.call("task_create", subject="Work", _session="s1")
+        self.s.call("task_create", subject="Work", epic=1, _session="s1")
         path = os.path.join(self.tmp.name, "kodflow", "sessions", "s1", "tasks.json")
         data = self.state()
         data["epics"][0]["touched"] = 1
@@ -221,7 +221,7 @@ class TasksServer(unittest.TestCase):
         data["epics"][0]["touched"] = 1
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh)
-        self.s.call("task_create", subject="More", _session="s1")
+        self.s.call("task_create", subject="More", epic=1, _session="s1")
         self.assertGreater(self.epic(1)["touched"], 1, "task_create touches the epic")
 
     def test_malformed_file_is_recovered(self):
@@ -229,23 +229,55 @@ class TasksServer(unittest.TestCase):
         os.makedirs(d)
         with open(os.path.join(d, "tasks.json"), "w", encoding="utf-8") as fh:
             fh.write('{"epics": 3, "active": [], "tasks": "x"')
-        out = self.s.call("task_create", subject="Fresh", _session="s1")
+        out = self.s.call("task_create", subject="Fresh", epic=0, _session="s1")
         self.assertFalse(out.get("isError"), out)
         self.assertEqual(self.state()["tasks"][0]["subject"], "Fresh")
 
     def test_epics_are_per_agent(self):
         self.s.call("task_epic", title="Main subject", _session="s1", _agent="main")
-        self.s.call("task_create", subject="Sub work", _session="s1", _agent="a1")
+        refused = self.s.call("task_create", subject="Sub work", epic=1, _session="s1", _agent="a1")
+        self.assertTrue(refused.get("isError"), "the main agent's epic is not a subagent's")
+        self.assertIn("no epic is open", self.text(refused))
+        self.s.call("task_create", subject="Sub work", epic=0, _session="s1", _agent="a1")
         self.assertEqual(self.state()["tasks"][0]["epic"], 0, "a subagent keeps its own epic")
 
+    def agents(self, session, running):
+        d = os.path.join(self.tmp.name, "kodflow", "sessions", session)
+        os.makedirs(d, exist_ok=True)
+        now = int(__import__("time").time())
+        with open(os.path.join(d, "agents.json"), "w", encoding="utf-8") as fh:
+            json.dump({"agents": {"a%d" % i: {"type": "Explore", "started": now, "stopped": None}
+                                  for i in range(running)}}, fh)
+
+    def test_one_task_in_progress_per_worker(self):
+        for subject in ("First", "Second", "Third"):
+            self.s.call("task_create", subject=subject, epic=0, _session="s1")
+        self.assertFalse(self.s.call("task_update", id="1", status="in_progress", _session="s1").get("isError"))
+        refused = self.s.call("task_update", id="2", status="in_progress", _session="s1")
+        self.assertTrue(refused.get("isError"), "a lone main agent has one worker")
+        self.assertIn("#1 First", refused["content"][0]["text"])
+        self.agents("s1", 1)
+        self.assertFalse(self.s.call("task_update", id="2", status="in_progress", _session="s1").get("isError"),
+                         "a running subagent adds one worker")
+        self.assertTrue(self.s.call("task_update", id="3", status="in_progress", _session="s1").get("isError"))
+        self.assertFalse(self.s.call("task_update", id="1", status="in_progress", _session="s1").get("isError"),
+                         "re-asserting a task already in progress is not a new start")
+
+    def test_a_subagent_has_one_task_in_progress(self):
+        self.agents("s1", 3)
+        for subject in ("Sub one", "Sub two"):
+            self.s.call("task_create", subject=subject, epic=0, _session="s1", _agent="a1")
+        self.s.call("task_update", id="1", status="in_progress", _session="s1", _agent="a1")
+        self.assertTrue(self.s.call("task_update", id="2", status="in_progress", _session="s1", _agent="a1").get("isError"))
+
     def test_long_subject_is_refused(self):
-        out = self.s.call("task_create", subject="x" * 41, _session="s1")
+        out = self.s.call("task_create", subject="x" * 41, epic=0, _session="s1")
         self.assertTrue(out.get("isError"))
         self.assertIn("41 characters", out["content"][0]["text"])
 
     def test_agents_keep_separate_lists(self):
-        self.s.call("task_create", subject="Main work", _session="s1", _agent="main")
-        self.s.call("task_create", subject="Sub work", _session="s1", _agent="a8b9904c")
+        self.s.call("task_create", subject="Main work", epic=0, _session="s1", _agent="main")
+        self.s.call("task_create", subject="Sub work", epic=0, _session="s1", _agent="a8b9904c")
         listed = self.s.call("task_list", _session="s1", _agent="a8b9904c")["content"][0]["text"]
         self.assertIn("Sub work", listed)
         self.assertNotIn("Main work", listed)
@@ -257,10 +289,60 @@ class TasksServer(unittest.TestCase):
         self.assertTrue(self.s.call("task_update", id="9", status="completed", _session="s1").get("isError"))
 
     def test_sessions_are_isolated(self):
-        self.s.call("task_create", subject="In one", _session="s1")
-        self.s.call("task_create", subject="In two", _session="s2")
+        self.s.call("task_create", subject="In one", epic=0, _session="s1")
+        self.s.call("task_create", subject="In two", epic=0, _session="s2")
         self.assertEqual(self.state("s1")["tasks"][0]["subject"], "In one")
         self.assertEqual(self.state("s2")["tasks"][0]["subject"], "In two")
+
+    def test_epic_is_required(self):
+        self.s.call("task_epic", title="Alpha", _session="s1")
+        self.s.call("task_create", subject="Alpha work", epic=1, _session="s1")
+        self.s.call("task_epic", title="Beta", _session="s1")
+        missing = self.s.call("task_create", subject="Where does it go", _session="s1")
+        self.assertTrue(missing.get("isError"), "no silent default to the active epic")
+        text = self.text(missing)
+        self.assertIn("epic is required", text)
+        self.assertIn("#2 Beta (active)", text, "the caller's open epics are listed, the active one marked")
+        self.assertIn("#1 Alpha", text)
+        self.assertIn("epic=0", text, "the refusal gives the syntax")
+        self.assertEqual(len(self.state()["tasks"]), 1, "a refused create writes no task")
+        blank = self.s.call("task_create", subject="Blank epic", epic="", _session="s1")
+        self.assertTrue(blank.get("isError"))
+
+    def test_epic_zero_is_no_epic(self):
+        self.s.call("task_epic", title="Alpha", _session="s1")
+        out = self.s.call("task_create", subject="Loose", epic=0, _session="s1")
+        self.assertFalse(out.get("isError"), out)
+        self.assertEqual(self.state()["tasks"][0]["epic"], 0, "epic 0 is accepted even with an active epic")
+
+    def test_unknown_epic_is_refused(self):
+        self.s.call("task_epic", title="Alpha", _session="s1")
+        for wanted in (9, "#9", "nope", -1):
+            out = self.s.call("task_create", subject="Lost", epic=wanted, _session="s1")
+            self.assertTrue(out.get("isError"), wanted)
+            self.assertIn("#1 Alpha (active)", self.text(out))
+        self.assertEqual(self.state()["tasks"], [])
+        out = self.s.call("task_create", subject="Found", epic="#1", _session="s1")
+        self.assertFalse(out.get("isError"), "a #-prefixed id is still an id")
+
+    def test_subagent_uses_its_own_epics(self):
+        self.s.call("task_epic", title="Main epic", _session="s1")
+        self.s.call("task_epic", title="Sub epic", _session="s1", _agent="a1")
+        missing = self.text(self.s.call("task_create", subject="Sub task", _session="s1", _agent="a1"))
+        self.assertIn("#2 Sub epic (active)", missing, "a subagent is shown its own epics")
+        self.assertNotIn("Main epic", missing, "and not the main agent's")
+        out = self.s.call("task_create", subject="Sub task", epic=2, _session="s1", _agent="a1")
+        self.assertFalse(out.get("isError"), out)
+        self.assertTrue(self.s.call("task_create", subject="Steal", epic=1, _session="s1", _agent="a1").get("isError"),
+                        "the main agent's epic is refused to a subagent")
+        self.assertTrue(self.s.call("task_create", subject="Steal", epic=2, _session="s1").get("isError"),
+                        "and a subagent's epic to the main agent")
+
+    def test_schema_requires_epic(self):
+        tools = {t["name"]: t for t in self.s.request("tools/list")["result"]["tools"]}
+        schema = tools["task_create"]["inputSchema"]
+        self.assertEqual(schema["required"], ["subject", "epic"])
+        self.assertIn("REQUIRED", tools["task_create"]["description"])
 
 
 if __name__ == "__main__":

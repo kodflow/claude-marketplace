@@ -17,21 +17,62 @@ set +e
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 
+# DELEGATION GATE · forge MCP tools. Pure bash, so the fast path below can use
+# it without jq. The main thread reads the forge, merges, and talks on the
+# tracker and in reviews; it does not push content, branches or pull requests
+# — that is a subagent's delivery. Allow-list: a tool nobody classified is
+# refused, because a new write tool must not slip through by being new.
+_forge_ok() {
+    local t=$1
+    case "$t" in
+        mcp__github__*)
+            t=${t#mcp__github__}
+            case "$t" in
+                get_*|list_*|search_*|*_read|merge_pull_request|issue_write|sub_issue_write|add_issue_comment|\
+                pull_request_review_write|add_comment_to_pending_review|add_reply_to_pull_request_comment) return 0 ;;
+            esac ;;
+        mcp__gitlab__*)
+            t=${t#mcp__gitlab__}
+            case "$t" in
+                get_*|list_*|search_*|verify_*|download_*|my_issues|mr_discussions|merge_merge_request|\
+                approve_merge_request|unapprove_merge_request|create_issue|update_issue|create_issue_link|\
+                create_note|create_issue_note|update_issue_note|create_merge_request_note|update_merge_request_note|\
+                create_merge_request_thread|create_merge_request_discussion_note|update_merge_request_discussion_note|\
+                resolve_merge_request_thread|*draft_note|bulk_publish_draft_notes) return 0 ;;
+            esac ;;
+        mcp__GitKraken__*)
+            t=${t#mcp__GitKraken__}
+            case "$t" in
+                git_log_or_diff|git_blame|git_status|git_graph|git_fetch|gitkraken_workspace_list|gitlens_launchpad|\
+                issues_get_detail|issues_assigned_to_me|pull_request_assigned_to_me|pull_request_get_detail|\
+                pull_request_get_comments|repository_get_file_content) return 0 ;;
+            esac ;;
+        *) return 0 ;;
+    esac
+    return 1
+}
+
 # FAST PATH, no jq. The PreToolUse matcher is the catch-all so the triage gate
 # sees every call, and one jq start costs ~30 ms on a slow CPU: the tools this
 # script does not handle are decided with bash regexes alone. They leave at
 # once unless the triage gate applies, in which case the full path below
-# refuses them.
+# refuses them. A forge write from the main thread (delegation gate, above) is
+# the one other case that goes on to the full path.
 if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_name\":\ ?\"([^\"]+)\" ]]; then
-    case "${BASH_REMATCH[1]}" in
+    fp_tool=${BASH_REMATCH[1]}
+    case "$fp_tool" in
         Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__*tasks__task_*) ;;
         Read|Glob|Grep|LS|ToolSearch|AskUserQuestion) exit 0 ;;
         *)
             [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]] && exit 0
+            fp_gate=0
+            if [ "${KODFLOW_ROOT:-}" != off ] && ! [[ $INPUT =~ \"permission_mode\":\ ?\"plan\" ]] && ! _forge_ok "$fp_tool"; then
+                fp_gate=1
+            fi
             fp_dir=""; fp_sid=""
             [[ $INPUT =~ \"scratchpad_dir\":\ ?\"([^\"]*)\" ]] && fp_dir=${BASH_REMATCH[1]}
             [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && fp_sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
-            [ -f "${fp_dir:-${TMPDIR:-/tmp}/claude-hooks-${fp_sid:-default}}/triage-pending" ] || exit 0 ;;
+            [ $fp_gate -eq 1 ] || [ -f "${fp_dir:-${TMPDIR:-/tmp}/claude-hooks-${fp_sid:-default}}/triage-pending" ] || exit 0 ;;
     esac
 fi
 
@@ -39,12 +80,20 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 # One jq call reads every field a branch below may need. @sh single-quotes
 # each value, so a crafted path or command cannot escape into this shell.
-eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "") AID=\(.agent_id // "")"' 2>/dev/null)" || exit 0
+eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "") AID=\(.agent_id // "") PMODE=\(.permission_mode // "") NB=\(.tool_input.notebook_path // "")"' 2>/dev/null)" || exit 0
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}   # session-scoped state; on-stop.sh reads it
 LIB=${BASH_SOURCE[0]%/*}/lib
+
+# DELEGATION GATE. A PreToolUse payload carries agent_id only when the call
+# comes from inside a subagent; the main thread sends none (measured on 855
+# real events: every PreToolUse carrying agent_id came from a subagent, no
+# main-thread one did). That asymmetry is the whole mechanism. Plan mode
+# mutates nothing, and KODFLOW_ROOT=off turns the gate off for the session.
+ROOT_MAIN=0
+[ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ "$PMODE" != plan ] && [ "${KODFLOW_ROOT:-}" != off ] && ROOT_MAIN=1
 
 # Branch without forking: read .git/HEAD (following a worktree's gitdir file).
 _branch() {
@@ -67,7 +116,7 @@ _log() {
     (
         mkdir -p "$dir" 2>/dev/null || exit 0
         exec 9>>"$dir/.lock"; flock -w 2 9 2>/dev/null
-        printf '%s' "$INPUT" | jq -c --arg b "$BRANCH" -f "$LIB/event.jq" >> "$dir/session.jsonl" 2>/dev/null
+        printf '%s' "$INPUT" | KODFLOW_ROOT_GUARD=${ROOT_GUARD:-} jq -c --arg b "$BRANCH" -f "$LIB/event.jq" >> "$dir/session.jsonl" 2>/dev/null
     ) >/dev/null 2>&1 </dev/null &
 }
 
@@ -103,12 +152,83 @@ _seg_name() {
 }
 
 # ============================================================================
+# Delegation gate · code in a git repository is produced by a subagent
+# ============================================================================
+# The user's rule: the main thread triages, dispatches, reviews and merges
+# after the user's OK; code production in a git repository is delegated to a
+# subagent working in its own worktree and delivering through a PR. The main
+# thread keeps every other permission — it is also the workstation's sysadmin
+# (sudo, apt, systemctl, files outside repositories, configuration). So the
+# gate refuses exactly two things: a write inside a git work tree, and the git
+# or forge operations that produce into a repository.
+_root_deny() {
+    ROOT_GUARD=deny
+    _block "BLOCKED — code production in a repository is delegated" \
+        "$1" \
+        "Dispatch the epic's subagent (task_focus the epic first), or SendMessage it if it is running;" \
+        "it works in its own worktree (~/Documents/worktrees/<repo>-<epic-slug>) and delivers through a PR." \
+        "A genuine exception: prefix the Bash line with ROOT_OK=1 (KODFLOW_ROOT=off turns the gate off)."
+}
+
+# GATE · Bash. Only the operations that produce into a repository, found
+# anywhere on the line with the attribution guard's shape: past a separator,
+# a quote (bash -c "…"), VAR= and wrapper prefixes, and git's -C/-c/long
+# globals. Everything else — sudo, installs, redirections, unknown
+# commands — is the main thread's own business.
+_root_gate_bash() {
+    [ "$ROOT_MAIN" = 1 ] || return 0
+    [[ $CMD =~ ^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*ROOT_OK=1([[:space:]]|$) ]] && return 0
+    local pre re_git re_forge
+    pre="(^|[;&|(\"'\`/]|[[:space:]])(([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*|env|command|exec|sudo|nohup|time|xargs|eval)[[:space:]]+)*"
+    re_git="${pre}git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+(commit|push|rebase|cherry-pick|merge|am|apply|revert|worktree[[:space:]]+add|reset[^;&|]*[[:space:]]--hard)([[:space:]]|$)"
+    re_forge="${pre}(gh|glab)([[:space:]]+(-R|--repo)[[:space:]]+[^[:space:]]+)*[[:space:]]+(pr|mr)[[:space:]]+create([[:space:]]|$)"
+    if [[ $1 =~ $re_git ]]; then
+        _root_deny "git ${BASH_REMATCH[6]%%[[:space:]]*} from the main thread produces into a repository."
+    elif [[ $1 =~ $re_forge ]]; then
+        _root_deny "${BASH_REMATCH[4]} ${BASH_REMATCH[7]} create from the main thread: opening the PR is the subagent's delivery."
+    fi
+}
+
+# GATE · Write/Edit. Refused only inside a git work tree: the file's
+# directory and its parents are walked up looking for .git (a directory, or
+# the gitdir file of a worktree or submodule) — plain tests, no exec. The path
+# is normalised lexically first so /repo/x/../../tmp/f is judged as /tmp/f.
+# The main thread's memory and the Claude configuration stay writable even
+# when they live inside a repository.
+_root_gate_edit() {
+    [ "$ROOT_MAIN" = 1 ] || return 0
+    local f=${FILE:-$NB} cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude} part d
+    [ -n "$f" ] || return 0
+    [[ $f = /* ]] || f=${CWD:-$PWD}/$f
+    local -a out=()
+    local IFS=/
+    set -f
+    for part in $f; do
+        case "$part" in ""|.) ;; ..) [ ${#out[@]} -gt 0 ] && unset 'out[${#out[@]}-1]' ;; *) out+=("$part") ;; esac
+    done
+    set +f
+    f="/${out[*]}"
+    unset IFS
+    cfg=${cfg%/}
+    case "$f" in
+        "$cfg"/projects/*/memory/*|"$cfg"/settings.json|"$cfg"/settings.local.json|"$cfg"/CLAUDE.md|"$HOME"/CLAUDE.md) return 0 ;;
+    esac
+    d=${f%/*}
+    while :; do
+        [ -e "${d:-}/.git" ] && _root_deny "$f is inside the git work tree ${d:-/}."
+        [ -z "$d" ] && break
+        d=${d%/*}
+    done
+}
+
+# ============================================================================
 # PreToolUse · Bash
 # ============================================================================
 pre_bash() {
     [ -n "$CMD" ] || exit 0
     local norm=$CMD
     case "$norm" in "rtk proxy "*) norm=${norm#rtk proxy } ;; "rtk "*) norm=${norm#rtk } ;; esac
+    _root_gate_bash "$norm"
 
     # --- GATE: which guarded git operations appear, anywhere on the line ---
     # Anchoring on `^git` let `cd x && git commit`, `env git push`, `git -C dir
@@ -265,6 +385,7 @@ pre_builtin_tasks() {
 # PreToolUse · Write / Edit / MultiEdit / NotebookEdit
 # ============================================================================
 pre_edit() {
+    _root_gate_edit
     [ -n "$FILE" ] || exit 0
 
     # --- BLOCK: protected paths ----------------------------------------------
@@ -394,7 +515,8 @@ if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$STATE/triage-pending" ]; th
         *)
             _block "TRIAGE FIRST — file this message in the task list" \
                 "Before acting, classify the user's message with the kodflow task tools:" \
-                "new work for an open epic → task_create(epic=id) · new subject → task_epic(title)" \
+                "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)" \
+                "task_create always names its epic (epic=0 for none): there is no default." \
                 "context on the task in progress → task_update it · rework of a completed task → task_create \"Rework #N: …\"" \
                 "a question that needs no task → task_list (acknowledges the triage)." \
                 "Reading (Read, Grep, Glob) and ToolSearch stay allowed meanwhile." ;;
@@ -405,6 +527,10 @@ fi
 # matcher is wide only so the triage gate above sees every call.
 case "$EV/$TOOL" in
     PreToolUse/Bash|PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit|PreToolUse/TaskCreate|PreToolUse/TodoWrite|PreToolUse/mcp__*tasks__task_*) ;;
+    PreToolUse/mcp__github__*|PreToolUse/mcp__gitlab__*|PreToolUse/mcp__GitKraken__*)
+        [ "$ROOT_MAIN" = 1 ] && ! _forge_ok "$TOOL" && _root_deny \
+            "$TOOL writes into a repository (files, branches, pull requests); reads, reviews, comments, issues and merges stay allowed."
+        exit 0 ;;
     PreToolUse/*) exit 0 ;;
 esac
 
@@ -418,5 +544,8 @@ case "$EV/$TOOL" in
     PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit)     pre_edit ;;
     PostToolUse/Write|PostToolUse/Edit|PostToolUse/MultiEdit|PostToolUse/NotebookEdit) post_edit ;;
     PostToolUseFailure/*)                                   post_failure ;;
+    # OBSERVE: the other half of the measurement — how often the main thread
+    # delegated, counted against how often it was stopped.
+    PostToolUse/Task|PostToolUse/Agent)                     ROOT_GUARD=dispatch; _log; exit 0 ;;
     *)                                                      _log; exit 0 ;;
 esac
