@@ -148,19 +148,26 @@ command -v jq >/dev/null 2>&1 || exit 0
 mkdir -p "$CLAUDE_CONFIG_DIR" 2>/dev/null
 [ -f "$SETTINGS" ] || printf '{}\n' > "$SETTINGS"
 
+# The task in progress pulses on alternate seconds, and the host only redraws
+# on its own events unless refreshInterval asks it to: 1 second, its minimum.
+# Added to a status line that is ours; a value the user set is kept.
 current=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null)
 case "$current" in
     # Nothing configured: ours to fill
-    "")             ;;
-    # Already us: nothing to do
-    "$TARGET")      exit 0 ;;
+    "")             filter='.statusLine = {type:"command", command:$cmd, refreshInterval:1}'
+                    done_msg="statusLine configuré sur $TARGET" ;;
+    # Already us, by path or by name on PATH: only the refresh may be missing
+    "$TARGET"|"$BIN_NAME"|"$BIN_NAME$EXT")
+                    jq -e '.statusLine.refreshInterval' "$SETTINGS" >/dev/null 2>&1 && exit 0
+                    filter='.statusLine.refreshInterval = 1'
+                    done_msg="statusLine : rafraîchissement toutes les secondes activé" ;;
     # Someone else's status line: leave it alone, whatever the flags
     *)              say "statusLine déjà configuré sur $current — inchangé"; exit 0 ;;
 esac
 
 tmp=$(mktemp) || exit 0
-if jq --arg cmd "$TARGET" '.statusLine = {type:"command", command:$cmd}' "$SETTINGS" > "$tmp" 2>/dev/null; then
-    mv "$tmp" "$SETTINGS" && say "statusLine configuré sur $TARGET"
+if jq --arg cmd "$TARGET" "$filter" "$SETTINGS" > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$SETTINGS" && say "$done_msg"
 else
     rm -f "$tmp"
     warn "kodflow-statusline: settings.json non modifiable"

@@ -272,6 +272,37 @@ run_setup $fakehome --quiet >/dev/null 2>&1 || true
 [[ ! -e $fakehome/.claude/kodflow-shell/bin/vieux-outil ]] && ok "purge un fichier qui n'est plus livré" \
   || ko "purge un fichier qui n'est plus livré" "encore présent"
 
+# --- 15. status line : câblage de settings.json -----------------------------
+# Le binaire est déjà là (exécutable factice) : aucun téléchargement, seul le
+# câblage de settings.json est exercé.
+print -r -- "status line"
+run_sl() {
+  local fh=$1; shift
+  HOME=$fh CLAUDE_CONFIG_DIR=$fh/.claude $ROOT/bin/kodflow-statusline-setup --quiet "$@"
+}
+box=$(new_sandbox statusline)
+fakehome=$box/home; mkdir -p $fakehome/.local/bin $fakehome/.claude
+print '#!/bin/sh' > $fakehome/.local/bin/status-line; chmod +x $fakehome/.local/bin/status-line
+sl=$fakehome/.claude/settings.json
+
+print '{}' > $sl
+run_sl $fakehome >/dev/null 2>&1 || true
+is "configure la commande" "$(jq -r .statusLine.command $sl)" "$fakehome/.local/bin/status-line"
+is "rafraîchit toutes les secondes" "$(jq -r .statusLine.refreshInterval $sl)" "1"
+
+print '{"statusLine":{"type":"command","command":"status-line"}}' > $sl
+run_sl $fakehome >/dev/null 2>&1 || true
+is "ajoute le rafraîchissement à une commande par nom" "$(jq -r .statusLine.refreshInterval $sl)" "1"
+is "garde la commande par nom" "$(jq -r .statusLine.command $sl)" "status-line"
+
+print '{"statusLine":{"type":"command","command":"status-line","refreshInterval":5}}' > $sl
+run_sl $fakehome >/dev/null 2>&1 || true
+is "garde un intervalle choisi" "$(jq -r .statusLine.refreshInterval $sl)" "5"
+
+print '{"statusLine":{"type":"command","command":"/opt/autre"}}' > $sl
+run_sl $fakehome >/dev/null 2>&1 || true
+is "ne touche pas une status line étrangère" "$(jq -c .statusLine $sl)" '{"type":"command","command":"/opt/autre"}'
+
 # --- bilan ------------------------------------------------------------------
 print -r -- ""
 print -r -- "$PASS réussis, $FAIL échoués"
