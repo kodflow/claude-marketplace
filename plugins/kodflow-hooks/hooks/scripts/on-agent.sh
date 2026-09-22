@@ -44,11 +44,18 @@ _agents() {   # $1 = start|stop
     (
         mkdir -p "$dir" 2>/dev/null || exit 0
         exec 9>>"$dir/.lock"; flock -w 2 9 2>/dev/null
-        local f=$dir/agents.json cur='{"agents":{}}'
+        local f=$dir/agents.json cur='{"agents":{}}' epic=0
         [ -s "$f" ] && cur=$(cat "$f" 2>/dev/null)
-        printf '%s' "$cur" | jq -c --arg id "$AID" --arg type "$AGENT" --arg ev "$1" --argjson now "$(date +%s)" '
+        # The epic the main agent is on when the subagent starts: the status
+        # line counts the subagent on that epic's pill. Same lock as the
+        # tasks MCP, so the read is consistent; anything unreadable is 0.
+        if [ "$1" = start ] && [ -s "$dir/tasks.json" ]; then
+            epic=$(jq -L "$LIB" 'include "epics"; v2 | active("main")' "$dir/tasks.json" 2>/dev/null)
+            [[ $epic =~ ^[0-9]+$ ]] || epic=0
+        fi
+        printf '%s' "$cur" | jq -c --arg id "$AID" --arg type "$AGENT" --arg ev "$1" --argjson now "$(date +%s)" --argjson epic "$epic" '
             .agents //= {} |
-            if $ev == "start" then .agents[$id] = {type:$type, started:$now, stopped:null}
+            if $ev == "start" then .agents[$id] = {type:$type, started:$now, stopped:null, epic:$epic}
             elif .agents[$id] then .agents[$id].stopped = $now else . end' > "$f.tmp" 2>/dev/null && mv -f "$f.tmp" "$f"
     ) >/dev/null 2>&1 </dev/null
 }

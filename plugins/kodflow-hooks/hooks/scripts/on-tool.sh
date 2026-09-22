@@ -16,11 +16,30 @@
 set +e
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
+
+# FAST PATH, no jq. The PreToolUse matcher is the catch-all so the triage gate
+# sees every call, and one jq start costs ~30 ms on a slow CPU: the tools this
+# script does not handle are decided with bash regexes alone. They leave at
+# once unless the triage gate applies, in which case the full path below
+# refuses them.
+if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_name\":\ ?\"([^\"]+)\" ]]; then
+    case "${BASH_REMATCH[1]}" in
+        Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__*tasks__task_*) ;;
+        Read|Glob|Grep|LS|ToolSearch|AskUserQuestion) exit 0 ;;
+        *)
+            [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]] && exit 0
+            fp_dir=""; fp_sid=""
+            [[ $INPUT =~ \"scratchpad_dir\":\ ?\"([^\"]*)\" ]] && fp_dir=${BASH_REMATCH[1]}
+            [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && fp_sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
+            [ -f "${fp_dir:-${TMPDIR:-/tmp}/claude-hooks-${fp_sid:-default}}/triage-pending" ] || exit 0 ;;
+    esac
+fi
+
 command -v jq >/dev/null 2>&1 || exit 0
 
 # One jq call reads every field a branch below may need. @sh single-quotes
 # each value, so a crafted path or command cannot escape into this shell.
-eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "")"' 2>/dev/null)" || exit 0
+eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "") AID=\(.agent_id // "")"' 2>/dev/null)" || exit 0
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
@@ -238,8 +257,8 @@ pre_tasks() {
 pre_builtin_tasks() {
     _block "USE THE KODFLOW TASK TOOLS" \
         "$TOOL draws a second task list in the chat. Use the kodflow tasks MCP instead:" \
-        "task_create (subject: 40 characters at most), task_update (id, status), task_list." \
-        "They carry the same statuses: pending, in_progress, completed, deleted."
+        "task_create (subject: 40 characters at most), task_update (id, status), task_list," \
+        "task_epic / task_focus (one epic per subject). Statuses: pending, in_progress, waiting, completed, deleted."
 }
 
 # ============================================================================
@@ -359,11 +378,42 @@ post_failure() {
 }
 
 # ============================================================================
+# PreToolUse · triage gate
+# ============================================================================
+# The user wants every message filed in the task list BEFORE anything is done
+# about it. on-user.sh raises triage-pending on each prompt; the first call to
+# a task tool lowers it. Until then the main agent may only read and load
+# tools — enough to understand the request, not to act on it. Subagents are
+# not gated: they work for a task the main agent already filed.
+if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$STATE/triage-pending" ]; then
+    case "$TOOL" in
+        mcp__*tasks__task_*)
+            rm -f -- "$STATE/triage-pending" 2>/dev/null ;;
+        Read|Glob|Grep|LS|ToolSearch|AskUserQuestion)
+            ;;
+        *)
+            _block "TRIAGE FIRST — file this message in the task list" \
+                "Before acting, classify the user's message with the kodflow task tools:" \
+                "new work for an open epic → task_create(epic=id) · new subject → task_epic(title)" \
+                "context on the task in progress → task_update it · rework of a completed task → task_create \"Rework #N: …\"" \
+                "a question that needs no task → task_list (acknowledges the triage)." \
+                "Reading (Read, Grep, Glob) and ToolSearch stay allowed meanwhile." ;;
+    esac
+fi
+
+# Tools this script has nothing to do with leave at once, unlogged: the
+# matcher is wide only so the triage gate above sees every call.
+case "$EV/$TOOL" in
+    PreToolUse/Bash|PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit|PreToolUse/TaskCreate|PreToolUse/TodoWrite|PreToolUse/mcp__*tasks__task_*) ;;
+    PreToolUse/*) exit 0 ;;
+esac
+
+# ============================================================================
 # dispatch
 # ============================================================================
 case "$EV/$TOOL" in
     PreToolUse/Bash)                                        pre_bash ;;
-    PreToolUse/mcp__*tasks__task_create|PreToolUse/mcp__*tasks__task_update|PreToolUse/mcp__*tasks__task_list) pre_tasks ;;
+    PreToolUse/mcp__*tasks__task_create|PreToolUse/mcp__*tasks__task_update|PreToolUse/mcp__*tasks__task_list|PreToolUse/mcp__*tasks__task_epic|PreToolUse/mcp__*tasks__task_focus) pre_tasks ;;
     PreToolUse/TaskCreate|PreToolUse/TodoWrite)             pre_builtin_tasks ;;
     PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit)     pre_edit ;;
     PostToolUse/Write|PostToolUse/Edit|PostToolUse/MultiEdit|PostToolUse/NotebookEdit) post_edit ;;

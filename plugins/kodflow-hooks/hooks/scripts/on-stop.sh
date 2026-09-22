@@ -124,8 +124,11 @@ fi
 cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 open=""
 mcp_tasks=$cfg/kodflow/sessions/$SID/tasks.json
-[ -s "$mcp_tasks" ] && open=$(jq -r '.tasks[]? | select((.agent // "main") == "main")
-    | select(.status == "pending" or .status == "in_progress") | "\(.id)\t\(.status)\t\(.subject)\ttask_update"' \
+# Only the main agent's active epic (its tasks with no epic when none is
+# active): the other open epics are not this turn's subject. lib/epics.jq
+# reads v1 and v2 files alike and turns a malformed one into an empty list.
+mcp_epic='include "epics"; v2 | active_tasks("main")'
+[ -s "$mcp_tasks" ] && open=$(jq -r -L "$LIB" "$mcp_epic"' | select(.status == "pending" or .status == "in_progress") | "\(.id)\t\(.status)\t\(.subject)\ttask_update"' \
     "$mcp_tasks" 2>/dev/null)
 case "${CLAUDE_CODE_ENABLE_TODO_TOOLS:-}" in 0|false|no|off) ;; *)
     list=${CLAUDE_CODE_TASK_LIST_ID:-session-${SID:0:8}}
@@ -141,7 +144,22 @@ if [ -n "$open" ]; then
         printf '%s\n' "$sig" >> "$STATE/tasks-nudged"
         due=$(printf '%s\n' "$open" | awk -F'\t' '{printf "\n  - #%s %s (%s, via %s)", $1, $3, $2, $4}')
         ctx="${ctx:+$ctx
-}Tasks still open in your task list. Mark each one completed if its work is done, deleted if it no longer applies; leave it open only if it genuinely waits on the user, and say so:$due"
+}Tasks still open in your task list. Mark each one completed if its work is done, deleted if it no longer applies, waiting if it is blocked on the user:$due"
+    fi
+fi
+
+# The list must say what is true now. Tasks left to do with none in progress
+# and none waiting is a state that is always false: either one is under way,
+# or they wait on the user. Unlike the reminder above, this one is repeated
+# every turn until the list is corrected — it asks for one status change, not
+# for a decision the user owes — and the loop guard above still caps a turn.
+if [ -s "$mcp_tasks" ]; then
+    counts=$(jq -r -L "$LIB" 'include "epics"; v2 | [active_tasks("main") | .status] | "\(map(select(. == "pending")) | length) \(map(select(. == "in_progress")) | length) \(map(select(. == "waiting")) | length)"' \
+        "$mcp_tasks" 2>/dev/null)
+    read -r n_pending n_active n_waiting <<<"${counts:-0 0 0}"
+    if [ "${n_pending:-0}" -gt 0 ] && [ "${n_active:-0}" -eq 0 ] && [ "${n_waiting:-0}" -eq 0 ]; then
+        ctx="${ctx:+$ctx
+}Your task list shows $n_pending task(s) to do and none in progress or waiting, which cannot be true. Set the one you are working on to in_progress, or set the ones blocked on the user (a decision, an approval, an answer) to waiting."
     fi
 fi
 

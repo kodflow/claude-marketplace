@@ -40,10 +40,28 @@ _context() { jq -n -c --arg c "$1" --arg e "$EV" '{hookSpecificOutput:{hookEvent
 
 case "$EV" in
 SessionStart)
+    ctx=""
+    # A resumed, cleared or compacted session inherits a task list that no
+    # longer says what is true: nothing is in progress at startup, whatever
+    # the file claims. The list is shown and must be reconciled before any
+    # other action — the triage gate of on-tool.sh holds acting tools until a
+    # task tool is called.
+    tasks_file=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID/tasks.json
+    if [ -s "$tasks_file" ]; then
+        open=$(jq -r -L "$LIB" -f "$LIB/review.jq" "$tasks_file" 2>/dev/null)
+        if [ -n "$open" ]; then
+            mkdir -p "$STATE" 2>/dev/null && : > "$STATE/triage-pending" 2>/dev/null
+            ctx="## SESSION START — review the task list before anything else
+These tasks were left open by earlier work. Nothing is in progress right now: an in_progress status is a leftover of the previous run. With the kodflow task tools, reconcile each one with reality first — completed if its work is done (check before deciding), deleted if it no longer applies, waiting if it is blocked on the user, in_progress only for the one you resume now (task_focus its epic). Then tell the user what you resumed and what you changed.
+$open"
+        fi
+    fi
     if [ "$SOURCE" = compact ]; then
         # Compaction keeps the summary and drops the instructions. These are
         # the rules that were lost, in the order they are usually needed.
-        _context '## POST-COMPACTION — standing rules (kodflow-hooks)
+        ctx="${ctx:+$ctx
+
+}"'## POST-COMPACTION — standing rules (kodflow-hooks)
 1. MCP first: mcp__github__* / mcp__gitlab__* before gh or glab; mcp__context7__* for library docs.
 2. rtk rewrites Bash commands for compressed output. Byte-exact reads (cat, head, tail, sed, diff, patch, checksums) are never rewritten; prefix NO_RTK= to opt out of a line.
 3. Commits: conventional messages, no AI attribution, no .claude/ path in a message. Enforced by this plugin on PreToolUse and by the repo commit-msg hook.
@@ -57,11 +75,17 @@ Context was compacted: verify the task state before continuing.'
         # TRANSFORM: speak only when something is wrong. rtk present and
         # answering is the normal case and needs no words.
         if ! command -v rtk >/dev/null 2>&1; then
-            _context 'rtk is not on PATH: Bash output is not compressed this session. Install it (https://github.com/rtk-ai/rtk) or expect larger tool results.'
+            ctx="${ctx:+$ctx
+
+}rtk is not on PATH: Bash output is not compressed this session. Install it (https://github.com/rtk-ai/rtk) or expect larger tool results."
         elif ! rtk rewrite "ls" >/dev/null 2>&1; then
-            _context "rtk $(rtk --version 2>/dev/null | head -1) does not support 'rtk rewrite' (needs >= 0.23): Bash output is not compressed this session."
+            ctx="${ctx:+$ctx
+
+}rtk $(rtk --version 2>/dev/null | head -1) does not support 'rtk rewrite' (needs >= 0.23): Bash output is not compressed this session."
         fi
     fi
+    # One document per hook: every part above joins a single context.
+    [ -n "$ctx" ] && _context "$ctx"
     _log ;;
 
 SessionEnd)
