@@ -288,6 +288,16 @@ class TasksServer(unittest.TestCase):
         self.assertTrue(self.s.call("task_update", id="9", status="done", _session="s1").get("isError"))
         self.assertTrue(self.s.call("task_update", id="9", status="completed", _session="s1").get("isError"))
 
+    def test_a_missing_id_names_the_field(self):
+        """The wrong argument name must not read as an ownership problem."""
+        self.s.call("task_create", subject="Ship it", epic=0, _session="s1")
+        for args in ({"task_id": "1"}, {"id": ""}, {"id": "#"}, {}):
+            got = self.s.call("task_update", status="completed", _session="s1", **args)
+            text = got["content"][0]["text"]
+            self.assertTrue(got.get("isError"), text)
+            self.assertIn("needs the task id", text, "the error must name the missing field: %s" % text)
+            self.assertNotIn("in this agent's list", text, "must not blame ownership: %s" % text)
+
     def test_sessions_are_isolated(self):
         self.s.call("task_create", subject="In one", epic=0, _session="s1")
         self.s.call("task_create", subject="In two", epic=0, _session="s2")

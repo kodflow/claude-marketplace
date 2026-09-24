@@ -336,6 +336,53 @@ run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh
 [ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "tools this script ignores leave at once" || bad "fast exit" "rc=$RC out=$OUT"
 rm -f "$T/tmp/sp/triage-pending"
 
+echo "== UserPromptSubmit · turns the user did not type"
+# Claude Code fires UserPromptSubmit for a background task finishing, for a
+# message relayed from another agent and for a subagent's hand-back. The
+# prompts below are the shapes those payloads really carry.
+sys_turn() { run UserPromptSubmit "" "$(jq -n -c --arg p "$1" '{prompt:$p}')" on-user.sh; }
+MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"
+printf '%s' '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"api-gateway","touched":9}],
+  "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Fix daemon","status":"in_progress"}]}' > "$MS/tasks.json"
+i=0
+for P in '<task-notification>
+<task-id>a8b9904cf6289ba2a</task-id>
+<status>completed</status>
+<summary>Agent "Statusline stdin JSON fields" finished</summary>
+</task-notification>' \
+         '<agent-message from="ae81442cc2ac1525f">
+[Subagent hand-back] The text below is the final report of a subagent this session delegated to.
+Done, the PR is up.
+</agent-message>' \
+         '<teammate-message teammate_id="harness-papercuts" color="blue">
+{"type":"idle_notification","from":"harness-papercuts"}
+</teammate-message>' \
+         '[SYSTEM NOTIFICATION - NOT USER INPUT]
+This is an automated background-task event, NOT a message from the user.'; do
+    i=$((i + 1)); shape=${P%%$'\n'*}; shape=${shape:0:28}
+    rm -f "$T/tmp/sp/triage-pending"; printf '2' > "$T/tmp/sp/stop-count"
+    sys_turn "$P"; C=$(ctx_of)
+    [ ! -f "$T/tmp/sp/triage-pending" ] && ok "$shape raises no triage gate" || bad "system turn $i" "gate raised"
+    printf '%s' "$C" | grep -q TRIAGE && bad "system turn $i" "TRIAGE directive emitted: $C" || ok "$shape emits no TRIAGE directive"
+    printf '%s' "$C" | grep -qF 'Epics: active #1 api-gateway 0/1, in progress #1 Fix daemon' \
+        && ok "$shape still reports where things stand" || bad "system turn $i context" "$C"
+    [ "$(cat "$T/tmp/sp/stop-count" 2>/dev/null)" = 2 ] \
+        && ok "$shape leaves the stop-loop counter alone" || bad "system turn $i stop-count" "reset"
+done
+# Anchored at the start: a user writing about one of those markers is a user.
+rm -f "$T/tmp/sp/triage-pending"; printf '2' > "$T/tmp/sp/stop-count"
+sys_turn 'pourquoi <task-notification> lève la gate ?'
+[ -f "$T/tmp/sp/triage-pending" ] && ok "a user quoting a notification marker is still triaged" || bad "quoted marker" "no gate"
+ctx_of | grep -q TRIAGE && ok "the quoted marker still gets the directive" || bad "quoted marker" "no directive"
+[ ! -f "$T/tmp/sp/stop-count" ] && ok "a prompt the user typed resets the stop-loop counter" || bad "stop-count" "not reset"
+# A Stop-hook continuation quotes the user's own pending message inside the
+# brackets, so it carries user input nobody has triaged: it keeps the gate.
+rm -f "$T/tmp/sp/triage-pending"
+sys_turn 'Stop hook feedback:
+[la pastille orange est illisible sur haiku, propose deux palettes]: the user has not chosen yet.'
+[ -f "$T/tmp/sp/triage-pending" ] && ok "Stop hook feedback carries user text and is still triaged" || bad "stop feedback" "no gate"
+rm -rf "$T/home/.claude/kodflow" "$T/tmp/sp/triage-pending"
+
 echo "== SessionStart · review the task list left open"
 RS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$RS"; rm -f "$T/tmp/sp/triage-pending"
 printf '%s' '{"version":2,"epics":[{"id":1,"agent":"main","title":"SDK"}],"active":{"main":1},"tasks":[

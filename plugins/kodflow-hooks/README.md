@@ -42,7 +42,7 @@ fails by accident blocks every shell call of the session.
 | `SessionEnd` | `on-session.sh` | — | — | — | one log line with the session's event count (1.5 s budget) |
 | `PreCompact` | `on-session.sh` | — | — | — | log |
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
-| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists · the triage directive, always, with the epic mandatory on `task_create` · the delegation line (code in a repository: dispatch or message the epic's subagent) unless `KODFLOW_ROOT=off` | reset the Stop loop counter · log |
+| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists · the triage directive, always, with the epic mandatory on `task_create` · the delegation line (code in a repository: dispatch or message the epic's subagent) unless `KODFLOW_ROOT=off` · no triage directive on a turn the user did not type | raise the triage gate and reset the Stop loop counter, except on a turn the user did not type · log |
 | `Notification` | `on-user.sh` | — | — | bell (`terminalSequence`) on idle, permission and elicitation prompts | log |
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · log |
@@ -144,6 +144,18 @@ pill per open epic of the main agent.
   (`lib/review.jq`) and asks to reconcile them first — an `in_progress` left
   by the previous run is not work in progress — and raises the triage gate,
   so nothing is done before the list is true again.
+- **Turns the user did not type.** `UserPromptSubmit` also fires for a
+  background task finishing and for a message relayed from another agent (a
+  subagent's hand-back arrives inside that wrapper, never on its own). Their
+  `prompt` starts with `<task-notification>` or `<agent-message …>`;
+  `<teammate-message …>` and `[SYSTEM NOTIFICATION - NOT USER INPUT]` are
+  matched too, as shapes seen reaching a session but not yet in a hook
+  payload. Matched anchored, so quoting one is still a user message. Those
+  raise no gate, get no triage directive and leave the Stop loop counter
+  alone — a notification is not the user taking back control. The branch,
+  plan, goal and epic state are still injected: a finishing task is exactly
+  when where-things-stand is wanted. A `Stop hook feedback:` turn is *not*
+  in that list: it quotes the user's own pending message, so it keeps the gate.
 - **Triage gate.** Every user message raises `triage-pending`; until a task
   tool is called, `PreToolUse` refuses the main agent every tool but Read,
   Glob, Grep, LS, ToolSearch and AskUserQuestion — the message is filed in the

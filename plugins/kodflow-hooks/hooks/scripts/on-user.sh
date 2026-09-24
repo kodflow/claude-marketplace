@@ -35,12 +35,34 @@ _log() {
 
 case "$EV" in
 UserPromptSubmit)
-    # A new prompt means the user is back in control: the Stop hook's loop
-    # counter starts over.
-    rm -f -- "$STATE/stop-count" 2>/dev/null
-    # Every message is triaged into the task list before anything is done
-    # about it: on-tool.sh refuses acting tools until a task tool clears this.
-    mkdir -p "$STATE" 2>/dev/null && : > "$STATE/triage-pending" 2>/dev/null
+    # Claude Code fires this event for turns the user never typed: a background
+    # task finishing, a message relayed from another agent (a subagent's
+    # hand-back arrives inside that same wrapper). Those carry nothing to
+    # triage, so raising the gate on them only makes the next tool call fail
+    # with TRIAGE FIRST.
+    # The first two prefixes are the payload's .prompt verbatim, measured. The
+    # last two are shapes seen reaching a session but not yet in a hook payload,
+    # matched for one startswith each rather than left to surprise us.
+    # Anchored at the start, so a user who quotes one of them is still triaged.
+    # A "Stop hook feedback:" turn is deliberately absent: it quotes the user's
+    # own pending message, which has not been triaged yet.
+    # The prompt is tested inside jq and never enters the shell.
+    SYSTURN=$(printf '%s' "$INPUT" | jq -r '(.prompt // "")
+        | if   startswith("<task-notification>")
+            or startswith("<agent-message ")
+            or startswith("<teammate-message ")
+            or startswith("[SYSTEM NOTIFICATION - NOT USER INPUT]")
+          then "1" else "" end' 2>/dev/null)
+
+    if [ -z "$SYSTURN" ]; then
+        # A new prompt means the user is back in control: the Stop hook's loop
+        # counter starts over. A system turn is not the user back in control —
+        # resetting there would let a notification/feedback loop run forever.
+        rm -f -- "$STATE/stop-count" 2>/dev/null
+        # Every message is triaged into the task list before anything is done
+        # about it: on-tool.sh refuses acting tools until a task tool clears this.
+        mkdir -p "$STATE" 2>/dev/null && : > "$STATE/triage-pending" 2>/dev/null
+    fi
 
     # TRANSFORM: where we are. Branch, and the newest plan and goal so a
     # resumed or compacted session picks the task back up.
@@ -79,7 +101,9 @@ UserPromptSubmit)
     # progress does not become a new task and a new subject does not become
     # the tail of an unrelated epic. The tasks MCP ships in this plugin, so
     # the directive is always there. Kept short: it rides on every prompt.
-    ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools); task_create always names its epic (epic=id, 0 for none, no default):
+    # A system turn brought no message to sort: the state above is what it
+    # needs, the directive would only send it triaging a notification.
+    [ -z "$SYSTURN" ] && ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools); task_create always names its epic (epic=id, 0 for none, no default):
 - new work for an open epic: task_create(epic=id)
 - context on the in_progress task: apply it, no new task
 - change to a completed task: task_create \"Rework #N: ...\" in its epic
@@ -87,10 +111,8 @@ UserPromptSubmit)
 - question or discussion: no task"
     # Code in a repository is delegated to subagents (the PreToolUse gate of
     # on-tool.sh and the Stop rule enforce it); off with KODFLOW_ROOT=off.
-    [ "${KODFLOW_ROOT:-}" != off ] && ctx="$ctx
-Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it."
-    ctx="$ctx
-Keep statuses true: in_progress while worked on, waiting when blocked on the user, completed once verified."
+    [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it."
+    ctx="${ctx:+$ctx$NL}Keep statuses true: in_progress while worked on, waiting when blocked on the user, completed once verified."
     jq -n -c --arg c "$ctx" '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$c}}' 2>/dev/null
     _log ;;
 
