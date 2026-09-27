@@ -19,7 +19,7 @@ It prints `KEY=VALUE` lines. Read them; do not re-derive any of them by hand.
 | `CANDIDATE_<n>` | `path\|repos=<n>\|dirs=<n>` — one per probed code home, real path |
 | `EXCLUDED_<n>` | `path\|reason=macos-tcc` — a folder that exists but is never ranked |
 | `CANDIDATE_COUNT` | how many candidates existed |
-| `CODE_HOME` | the winning candidate, or `$HOME/Projects` when there is none |
+| `CODE_HOME` | the winning candidate, or `$HOME/Projects` when there is none; empty when that fallback itself resolves into a macOS TCC folder |
 | `CODE_HOME_EXISTS` | `0` when `CODE_HOME` is the fallback and still has to be created |
 | `PLATFORM` | `Linux` \| `Darwin` \| `MINGW64_NT-*` … |
 | `GH_PRESENT`, `GH_USER` | whether `gh` is installed and who it is authenticated as |
@@ -46,10 +46,12 @@ belongs. Two names for one directory — a symlink, or `~/projects` and
 `~/Projects` on a case-insensitive file system — are one candidate, printed with
 the spelling stored on disk.
 
-**macOS:** `~/Documents`, `~/Desktop` and `~/Downloads` are excluded outright,
-not merely ranked last. TCC protects them, and the kernel can refuse git, the
-shell and claude every read there; a code home that works until the day it
-locks the session out is worse than none. They appear as `EXCLUDED_<n>`.
+**macOS:** `~/Documents`, `~/Desktop` and `~/Downloads` — and anything that
+resolves inside them, such as a `~/Projects` symlinked to `~/Documents/Code` —
+are excluded outright, not merely ranked last. TCC protects them, and the kernel
+can refuse git, the shell and claude every read there; a code home that works
+until the day it locks the session out is worse than none. A probed candidate
+that lands there is reported as `EXCLUDED_<n>`.
 
 `$CLAUDE_CODE_HOME` overrides everything when it is set and exists — even a
 TCC folder, because it is the user's decision, not a guess.
@@ -82,7 +84,8 @@ project you are actually being asked about:
 ## When there is no candidate
 
 `CANDIDATE_COUNT=0` means no conventional code directory exists (`CODE_HOME`
-is then the `$HOME/Projects` fallback, with `CODE_HOME_EXISTS=0`). Ask once with
+is then the `$HOME/Projects` fallback, with `CODE_HOME_EXISTS=0`, or empty when
+`$HOME/Projects` points into a TCC folder — then do not offer it). Ask once with
 a multiple-choice question to the user where projects should live, offering `$HOME/Projects`
 (recommended, first) and `$HOME/src` — plus `$HOME/Documents` on Linux or
 Windows only, never on macOS — then `mkdir -p` the answer and use it as

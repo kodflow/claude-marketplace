@@ -121,7 +121,8 @@ bash "${CODEX_HOME:-$HOME/.codex}"/skills/project/scripts/locate-code-home.sh
 
 `CODE_HOME` is picked by evidence (the candidate holding the most git
 repositories, `<owner>/<repo>` included), not by hardcoding a folder; on macOS
-the TCC folders (`~/Documents`, `~/Desktop`, `~/Downloads`) are never picked.
+the TCC folders (`~/Documents`, `~/Desktop`, `~/Downloads`) are never guessed —
+only an explicit `CLAUDE_CODE_HOME` can select one.
 See `locate.md` before overriding it, and never invent a path the script did
 not print.
 
@@ -208,7 +209,7 @@ nothing to warm up.
 | Action | Status | Reason |
 |--------|--------|--------|
 | Hardcode a folder instead of reading `CODE_HOME` | **FORBIDDEN** | breaks on macOS/Windows and localized desktops |
-| Put code under `~/Documents`, `~/Desktop` or `~/Downloads` on macOS | **FORBIDDEN** | TCC can deny git and the shell every read there |
+| Put code under `~/Documents`, `~/Desktop` or `~/Downloads` on macOS unless `CLAUDE_CODE_HOME` says so | **FORBIDDEN** | TCC can deny git and the shell every read there |
 | `git init` inside an existing work tree | **FORBIDDEN** | creates a nested repository |
 | Overwrite a directory that already holds a different repo | **FORBIDDEN** | data loss; ask instead |
 | Create a public repository without being told to | **FORBIDDEN** | default is `--private` |

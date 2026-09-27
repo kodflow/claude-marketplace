@@ -39,9 +39,11 @@ locate() {
     mkdir -p "$bin"
     printf '#!/bin/sh\necho %s\n' "$platform" > "$bin/uname"
     printf '#!/bin/sh\nexit 1\n' > "$bin/gh"
-    chmod +x "$bin/uname" "$bin/gh"
+    # What xdg-user-dir prints when no Documents folder is configured: $HOME.
+    printf '#!/bin/sh\necho "$HOME"\n' > "$bin/xdg-user-dir"
+    chmod +x "$bin/uname" "$bin/gh" "$bin/xdg-user-dir"
     (cd "$home/.stub-bin" && env -u CLAUDE_CODE_HOME -u USERPROFILE -u OneDrive \
-        HOME="$home" XDG_CONFIG_HOME="$home/.config" PATH="$bin:$PATH" "$@" bash "$SRC")
+        HOME="$home" XDG_CONFIG_HOME="$home/.config" PATH="$bin:$PATH" "$@" "${TEST_BASH:-bash}" "$SRC")
 }
 
 key() { printf '%s\n' "$2" | sed -n "s/^$1=//p"; }
@@ -78,7 +80,7 @@ else
     echo "skip (b) case variant: $h is on a case-sensitive file system"
 fi
 
-# --- (c) no candidate at all: fall back to ~/Projects -----------------------
+# --- (c) no candidate at all ($HOME, which xdg-user-dir may print, is none): fall back to ~/Projects -----------------------
 for platform in Linux Darwin; do
     h="$(newhome)"
     out="$(locate "$h" "$platform")"
@@ -127,6 +129,40 @@ h="$(newhome)"
 repo "$h/Projects/one"; repo "$h/Documents/one"
 out="$(locate "$h" Linux)"
 check "(e) Linux: Projects wins a tie against Documents" "$h/Projects" "$(key CODE_HOME "$out")"
+
+# --- review cases ----------------------------------------------------------
+# A code root symlinked INTO a TCC folder is as locked as the folder itself.
+h="$(newhome)"
+repo "$h/Documents/Code/a/one"; ln -s "$h/Documents/Code" "$h/Projects"
+repo "$h/src/b/two"
+out="$(locate "$h" Darwin)"
+check "(e) Darwin: ~/Projects -> ~/Documents/Code is excluded" "$h/Documents/Code|reason=macos-tcc" "$(key EXCLUDED_1 "$out")"
+check "(e) Darwin: the next safe candidate wins instead" "$h/src" "$(key CODE_HOME "$out")"
+
+# With nothing safe left, the fallback must not hand back that same alias.
+h="$(newhome)"
+mkdir -p "$h/Documents"; ln -s "$h/Documents" "$h/Projects"
+out="$(locate "$h" Darwin)"
+check "(c) Darwin: a fallback resolving into TCC is withheld" "" "$(key CODE_HOME "$out")"
+check "(c) Darwin: and flagged as missing" "0" "$(key CODE_HOME_EXISTS "$out")"
+
+# Repositories rank first: a thousand plain folders never outweigh one repo.
+h="$(newhome)"
+repo "$h/Projects/a/one"
+mkdir -p "$h/src"; (cd "$h/src" && mkdir $(seq 1 1100))
+out="$(locate "$h" Linux)"
+check "ranking: one repository beats 1100 empty folders" "$h/Projects" "$(key CODE_HOME "$out")"
+
+# A relative override that looks like a cd option is still a path.
+h="$(newhome)"
+mkdir -p "$h/.stub-bin/-P"; repo "$h/Projects/a/one"
+out="$(locate "$h" Linux CLAUDE_CODE_HOME=-P)"
+check "(d) CLAUDE_CODE_HOME=-P is a directory, not an option" "$h/.stub-bin/-P" "$(key CODE_HOME "$out")"
+
+# CLAUDE_CODE_HOME=$HOME is honoured although $HOME is never guessed.
+h="$(newhome)"
+out="$(locate "$h" Linux CLAUDE_CODE_HOME="$h")"
+check "(d) CLAUDE_CODE_HOME=\$HOME is honoured" "$h" "$(key CODE_HOME "$out")"
 
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

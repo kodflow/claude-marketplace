@@ -66,36 +66,51 @@ done
 
 # Real path of a directory: symlinks resolved and, on a case-insensitive file
 # system, the spelling stored on disk (getcwd returns it, not the one typed).
-real() { (cd "$1" 2>/dev/null && pwd -P); }
+real() { (cd -- "$1" 2>/dev/null && pwd -P); }
 # Device and inode, so two names for one directory collapse even where getcwd
 # keeps the typed case.
 ident() { stat -c '%d:%i' "$1" 2>/dev/null || stat -f '%d:%i' "$1" 2>/dev/null; }
 
-# macOS TCC-protected folders, resolved so a case variant cannot slip through.
-tcc=""
+# macOS TCC-protected folders, as real paths: a candidate that resolves to one
+# of them or anywhere below it (a ~/Projects symlinked into ~/Documents) is out.
+tcc=()
 if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
   for d in Documents Desktop Downloads; do
-    [ -d "$HOME/$d" ] && tcc="$tcc:$(ident "$HOME/$d")"
+    t=$(real "$HOME/$d") && [ -n "$t" ] && tcc+=("$t")
   done
 fi
+protected() {
+  local t
+  for t in ${tcc[@]+"${tcc[@]}"}; do
+    case "$1/" in "$t"/*) return 0 ;; esac
+  done
+  return 1
+}
 
 # ------------------------------------------------------------------- rank them
-# Score = git repositories one level down (<c>/*/.git) plus two levels down
+# Rank = git repositories one level down (<c>/*/.git) plus two levels down
 # (<c>/*/*/.git). Ties break on immediate child count, then on the order above
 # (earliest candidate wins). No deeper walk: this must stay instant.
-best=""; best_score=-1; rank=0; excluded=0
+best=""; best_repos=-1; best_kids=-1; rank=0; excluded=0
 seen=""
-for c in "${candidates[@]}"; do
+override=""
+[ -n "${CLAUDE_CODE_HOME:-}" ] && override=$(real "$CLAUDE_CODE_HOME")
+# $HOME itself is never a code home: xdg-user-dir answers $HOME for a folder
+# the user disabled, and ranking it would crown the whole home directory.
+home_real=$(real "$HOME")
+for c in ${candidates[@]+"${candidates[@]}"}; do
   r=$(real "$c"); [ -n "$r" ] || continue
   id=$(ident "$r"); [ -n "$id" ] || id=$r
   case ":$seen:" in *":$id:"*) continue ;; esac
   seen="$seen:$id"
-  if [ "$r" != "$(real "${CLAUDE_CODE_HOME:-/nonexistent}")" ]; then
-    case "$tcc:" in *":$id:"*)
+  # The override is a decision: neither filter below second-guesses it.
+  if [ "$r" != "$override" ]; then
+    [ "$r" = "$home_real" ] && continue
+    if protected "$r"; then
       excluded=$((excluded + 1))
       emit "EXCLUDED_$excluded" "$r|reason=macos-tcc"
-      continue ;;
-    esac
+      continue
+    fi
   fi
   repos=0; kids=0
   for sub in "$r"/*/; do
@@ -109,15 +124,24 @@ for c in "${candidates[@]}"; do
   done
   rank=$((rank + 1))
   emit "CANDIDATE_$rank" "$r|repos=$repos|dirs=$kids"
-  score=$((repos * 1000 + kids))
-  if [ "$score" -gt "$best_score" ]; then best_score=$score; best="$r"; fi
+  if [ "$repos" -gt "$best_repos" ] ||
+     { [ "$repos" -eq "$best_repos" ] && [ "$kids" -gt "$best_kids" ]; }; then
+    best_repos=$repos; best_kids=$kids; best="$r"
+  fi
 done
 
 emit CANDIDATE_COUNT "$rank"
 # An explicit CLAUDE_CODE_HOME is a decision, not a candidate: it wins even
 # when another directory holds more repositories, and even on a TCC folder.
-if [ -n "${CLAUDE_CODE_HOME:-}" ] && [ -d "$CLAUDE_CODE_HOME" ]; then best=$(real "$CLAUDE_CODE_HOME"); fi
-emit CODE_HOME "${best:-$HOME/Projects}"
+if [ -n "$override" ]; then best=$override; fi
+# No candidate: propose ~/Projects, unless it resolves into a TCC folder, in
+# which case nothing safe is left to propose and CODE_HOME is empty.
+if [ -z "$best" ]; then
+  best="$HOME/Projects"
+  fb=$(real "$best")
+  if [ -n "$fb" ] && protected "$fb"; then best=""; fi
+fi
+emit CODE_HOME "$best"
 emit CODE_HOME_EXISTS "$([ -n "$best" ] && [ -d "$best" ] && echo 1 || echo 0)"
 
 # --------------------------------------------------------------- host identity

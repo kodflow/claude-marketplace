@@ -26,10 +26,11 @@ Find it on `PATH`; never assume a host-specific install location:
 command -v zig
 ```
 
-If `zig` is not found, say so in the result: review against the version the
-project pins (`minimum_zig_version` in `build.zig.zon`, a `.zig-version` or
-`.tool-versions`), mark every claim that depends on it as unverified, and point
-to <https://ziglang.org/download/> for the install. Do not go looking for stray
+If `zig` is not found, say so in the result and point to
+<https://ziglang.org/download/> for the install. Target an exact version only
+when the project pins one (`.zig-version`, `.tool-versions`);
+`minimum_zig_version` in `build.zig.zon` is a compatibility floor, not a pin.
+Either way, mark every version-specific claim as unverified. Do not go looking for stray
 binaries in the user's folders.
 
 If the installed version is not one you have concrete knowledge of, fetch its
