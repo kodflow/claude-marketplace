@@ -29,14 +29,14 @@ Find it on `PATH`; never assume a host-specific install location:
 command -v zig
 ```
 
-If `zig` is not found, report it as the first line of the result and give the
-install route from <https://ziglang.org/learn/getting-started/>: `brew install zig`
+If `zig` is not found, open the JSON `summary` with `zig not found on PATH` (the
+result stays valid JSON) and give the install route from <https://ziglang.org/learn/getting-started/>: `brew install zig`
 on macOS; on Linux the distribution's package manager, or a bundle from
 <https://ziglang.org/download/> extracted and added to `PATH`. Do not go looking
 for stray binaries in the user's folders. Without a toolchain, target an exact
 version only when the project pins one (`.zig-version`, `.tool-versions`) —
 `minimum_zig_version` in `build.zig.zon` is a compatibility floor, not a pin —
-and mark every version-specific claim as unverified.
+and list every version-specific claim under `unverified`.
 
 If the installed version is not one you have concrete knowledge of, fetch its
 release notes (`https://ziglang.org/download/<version>/release-notes.html`)
