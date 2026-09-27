@@ -70,7 +70,7 @@ Branch: $BRANCH · agent: ${AGENT:-unknown}
 2. rtk rewrites Bash for compressed output; byte-exact reads are never rewritten.
 3. Commits: conventional, no AI attribution, never on main, never --no-verify or --force.
 4. Return what you were asked for and say what you verified versus what you assumed.
-5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; never under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS) and deliver through a PR; the main thread reviews and merges." \
+5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; if that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS, use ~/Projects/.worktrees/<repo>-<epic-slug>) and deliver through a PR; the main thread reviews and merges." \
         '{hookSpecificOutput:{hookEventName:"SubagentStart",additionalContext:$c}}' 2>/dev/null
     _log ;;
 

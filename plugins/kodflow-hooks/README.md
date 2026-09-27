@@ -55,9 +55,10 @@ The user's rule: the main thread triages, manages epics and tasks,
 dispatches, reviews, merges after the user's OK, and informs. Code
 production in a git repository is delegated: every epic is carried by at
 least one subagent working in its own git worktree
-beside the repository (`<repo parent>/.worktrees/<repo>-<epic-slug>`; never
-under `~/Documents`, `~/Desktop` or `~/Downloads`, which macOS TCC protects)
-that delivers through a PR. The main thread keeps every other permission —
+beside the repository (`<repo parent>/.worktrees/<repo>-<epic-slug>`; when
+that parent is or sits under `~/Documents`, `~/Desktop` or `~/Downloads`, which
+macOS TCC protects, `~/Projects/.worktrees/<repo>-<epic-slug>` instead) that
+delivers through a PR. The main thread keeps every other permission —
 it is also the workstation's sysadmin (sudo, apt, systemctl, nmcli, installs,
 files outside repositories, configuration).
 
