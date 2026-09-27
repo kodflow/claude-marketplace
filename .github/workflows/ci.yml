@@ -111,6 +111,12 @@ jobs:
       - name: The flow inventory reads every shipped layout
         run: bash scripts/tests/test_flow_inventory.sh
 
+      # /project creates every new checkout under the CODE_HOME this prints.
+      # A wrong pick scatters code into a folder macOS may lock the shell out
+      # of, so the ranking is asserted against fake homes on both platforms.
+      - name: The code-home locator picks the right folder
+        run: bash scripts/tests/test_locate_code_home.sh
+
       # Pruning is invisible to the freshness check below: a generator that
       # stopped deleting produces no diff, it just leaves a dropped skill
       # installed for ever. So it is exercised against a seeded fixture.

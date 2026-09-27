@@ -6,10 +6,15 @@
 #   2. Where does this user keep their code?   -> CODE_HOME (+ ranked candidates)
 #
 # "Where the user keeps their code" is decided by EVIDENCE, not by convention:
-# the candidate holding the most immediate git repositories wins. A localized
-# Documents folder (Documents, Documentos, Dokumente, ...) is resolved through
-# xdg-user-dir so this works on a non-English desktop, and the Windows/macOS
-# layouts are probed too so the same skill behaves identically on all three.
+# the candidate holding the most git repositories wins, counted one and two
+# levels down so both <home>/<repo> and <home>/<owner>/<repo> are recognised. A
+# localized Documents folder (Documents, Documentos, Dokumente, ...) is resolved
+# through xdg-user-dir so this works on a non-English desktop, and the Windows
+# layouts are probed too so the same skill behaves identically everywhere.
+#
+# On macOS, ~/Documents, ~/Desktop and ~/Downloads are never candidates: TCC
+# protects them, and the kernel can deny git, the shell and claude any read
+# there. They are reported as EXCLUDED_<n>, not ranked.
 set -uo pipefail
 
 emit() { printf '%s=%s\n' "$1" "$2"; }
@@ -34,6 +39,9 @@ add() { [ -n "${1:-}" ] && [ -d "$1" ] && candidates+=("$1"); }
 # Explicit override always wins if it exists.
 add "${CLAUDE_CODE_HOME:-}"
 
+# The dedicated code root comes first so it wins every tie against Documents.
+add "$HOME/Projects"
+
 # Linux/BSD: honour the localized XDG name before guessing in English.
 if command -v xdg-user-dir >/dev/null 2>&1; then
   add "$(xdg-user-dir DOCUMENTS 2>/dev/null)"
@@ -41,7 +49,7 @@ fi
 [ -r "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" ] &&
   add "$(. "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" 2>/dev/null; eval echo "${XDG_DOCUMENTS_DIR:-}")"
 
-# macOS and English Linux.
+# English Linux (excluded below on macOS).
 add "$HOME/Documents"
 # Windows (Git Bash / MSYS / WSL interop): USERPROFILE, and OneDrive redirection.
 if [ -n "${USERPROFILE:-}" ]; then
@@ -52,36 +60,65 @@ fi
 [ -n "${OneDrive:-}" ] && add "$(printf '%s' "$OneDrive" | tr '\\' '/')/Documents"
 
 # Conventional developer roots, all platforms.
-for d in Projects projects Code code Developer dev src workspace repos git work; do
+for d in projects Code code Developer dev src workspace repos git work; do
   add "$HOME/$d"
 done
 
+# Real path of a directory: symlinks resolved and, on a case-insensitive file
+# system, the spelling stored on disk (getcwd returns it, not the one typed).
+real() { (cd "$1" 2>/dev/null && pwd -P); }
+# Device and inode, so two names for one directory collapse even where getcwd
+# keeps the typed case.
+ident() { stat -c '%d:%i' "$1" 2>/dev/null || stat -f '%d:%i' "$1" 2>/dev/null; }
+
+# macOS TCC-protected folders, resolved so a case variant cannot slip through.
+tcc=""
+if [ "$(uname -s 2>/dev/null)" = Darwin ]; then
+  for d in Documents Desktop Downloads; do
+    [ -d "$HOME/$d" ] && tcc="$tcc:$(ident "$HOME/$d")"
+  done
+fi
+
 # ------------------------------------------------------------------- rank them
-# Score = number of immediate children that are git repositories. Ties break on
-# total child count, then on the order above (earliest candidate wins).
-best=""; best_score=-1; rank=0
+# Score = git repositories one level down (<c>/*/.git) plus two levels down
+# (<c>/*/*/.git). Ties break on immediate child count, then on the order above
+# (earliest candidate wins). No deeper walk: this must stay instant.
+best=""; best_score=-1; rank=0; excluded=0
 seen=""
 for c in "${candidates[@]}"; do
-  case ":$seen:" in *":$c:"*) continue ;; esac
-  seen="$seen:$c"
+  r=$(real "$c"); [ -n "$r" ] || continue
+  id=$(ident "$r"); [ -n "$id" ] || id=$r
+  case ":$seen:" in *":$id:"*) continue ;; esac
+  seen="$seen:$id"
+  if [ "$r" != "$(real "${CLAUDE_CODE_HOME:-/nonexistent}")" ]; then
+    case "$tcc:" in *":$id:"*)
+      excluded=$((excluded + 1))
+      emit "EXCLUDED_$excluded" "$r|reason=macos-tcc"
+      continue ;;
+    esac
+  fi
   repos=0; kids=0
-  for sub in "$c"/*/; do
+  for sub in "$r"/*/; do
     [ -d "$sub" ] || continue
     kids=$((kids + 1))
-    [ -e "$sub/.git" ] && repos=$((repos + 1))
+    # A repository counts once; its own subdirectories are not an owner level.
+    if [ -e "$sub/.git" ]; then repos=$((repos + 1)); continue; fi
+    for sub2 in "$sub"*/; do
+      [ -e "$sub2/.git" ] && repos=$((repos + 1))
+    done
   done
   rank=$((rank + 1))
-  emit "CANDIDATE_$rank" "$c|repos=$repos|dirs=$kids"
+  emit "CANDIDATE_$rank" "$r|repos=$repos|dirs=$kids"
   score=$((repos * 1000 + kids))
-  if [ "$score" -gt "$best_score" ]; then best_score=$score; best="$c"; fi
+  if [ "$score" -gt "$best_score" ]; then best_score=$score; best="$r"; fi
 done
 
 emit CANDIDATE_COUNT "$rank"
 # An explicit CLAUDE_CODE_HOME is a decision, not a candidate: it wins even
-# when another directory holds more repositories.
-if [ -n "${CLAUDE_CODE_HOME:-}" ] && [ -d "$CLAUDE_CODE_HOME" ]; then best=$CLAUDE_CODE_HOME; fi
-emit CODE_HOME "${best:-$HOME/Documents}"
-emit CODE_HOME_EXISTS "$([ -d "${best:-}" ] && echo 1 || echo 0)"
+# when another directory holds more repositories, and even on a TCC folder.
+if [ -n "${CLAUDE_CODE_HOME:-}" ] && [ -d "$CLAUDE_CODE_HOME" ]; then best=$(real "$CLAUDE_CODE_HOME"); fi
+emit CODE_HOME "${best:-$HOME/Projects}"
+emit CODE_HOME_EXISTS "$([ -n "$best" ] && [ -d "$best" ] && echo 1 || echo 0)"
 
 # --------------------------------------------------------------- host identity
 emit PLATFORM "$(uname -s 2>/dev/null || echo unknown)"

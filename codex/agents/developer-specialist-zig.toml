@@ -20,12 +20,17 @@ nothing useful.
 zig version
 ```
 
-This host ships `~/Documents/zig-x86_64-linux-0.15.2/zig` and may not have `zig`
-on `PATH`. Find it before concluding the toolchain is absent:
+Find it on `PATH`; never assume a host-specific install location:
 
 ```bash
-command -v zig || ls -d ~/Documents/zig-*/zig 2>/dev/null
+command -v zig
 ```
+
+If `zig` is not found, say so in the result: review against the version the
+project pins (`minimum_zig_version` in `build.zig.zon`, a `.zig-version` or
+`.tool-versions`), mark every claim that depends on it as unverified, and point
+to <https://ziglang.org/download/> for the install. Do not go looking for stray
+binaries in the user's folders.
 
 If the installed version is not one you have concrete knowledge of, fetch its
 release notes (`https://ziglang.org/download/<version>/release-notes.html`)

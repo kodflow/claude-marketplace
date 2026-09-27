@@ -2,13 +2,13 @@
 name: project
 description: Open or create the workspace for a coding project, then turn the conversation
   into enforceable constraints. Detects whether the current directory is already a git work
-  tree; if not, finds where this user keeps their code (localized Documents, ~/Projects, %USERPROFILE%\Documents,
-  ...) and adopts, clones, or creates the GitHub repository. Every decision, preference and
-  idea exchanged afterwards is recorded as a numbered, verifiable constraint in the project's
-  CLAUDE.md so later sessions inherit them instead of re-deriving them. Use when at the very
-  start of work on a project — "let's work on X", "start a new project", "clone X and set
-  it up" — and again whenever a discussion settles a rule the project must follow from now
-  on.
+  tree; if not, finds where this user keeps their code (~/Projects, localized Documents off
+  macOS, %USERPROFILE%\Documents, ...) and adopts, clones, or creates the GitHub repository.
+  Every decision, preference and idea exchanged afterwards is recorded as a numbered, verifiable
+  constraint in the project's CLAUDE.md so later sessions inherit them instead of re-deriving
+  them. Use when at the very start of work on a project — "let's work on X", "start a new
+  project", "clone X and set it up" — and again whenever a discussion settles a rule the project
+  must follow from now on.
 metadata:
   short-description: Open or create the workspace for a coding project, then turn the conversation
     in
@@ -120,8 +120,10 @@ bash "${CODEX_HOME:-$HOME/.codex}"/skills/project/scripts/locate-code-home.sh
 - `IN_REPO=0` → the code home is `CODE_HOME`. Go to Phase 1.
 
 `CODE_HOME` is picked by evidence (the candidate holding the most git
-repositories), not by hardcoding `~/Documents`. See `locate.md` before
-overriding it, and never invent a path the script did not print.
+repositories, `<owner>/<repo>` included), not by hardcoding a folder; on macOS
+the TCC folders (`~/Documents`, `~/Desktop`, `~/Downloads`) are never picked.
+See `locate.md` before overriding it, and never invent a path the script did
+not print.
 
 **If `CANDIDATE_COUNT=0`** the user has no recognisable code directory: ask where
 projects should live, and create that directory.
@@ -205,7 +207,8 @@ nothing to warm up.
 
 | Action | Status | Reason |
 |--------|--------|--------|
-| Hardcode `~/Documents` instead of reading `CODE_HOME` | **FORBIDDEN** | breaks on macOS/Windows and localized desktops |
+| Hardcode a folder instead of reading `CODE_HOME` | **FORBIDDEN** | breaks on macOS/Windows and localized desktops |
+| Put code under `~/Documents`, `~/Desktop` or `~/Downloads` on macOS | **FORBIDDEN** | TCC can deny git and the shell every read there |
 | `git init` inside an existing work tree | **FORBIDDEN** | creates a nested repository |
 | Overwrite a directory that already holds a different repo | **FORBIDDEN** | data loss; ask instead |
 | Create a public repository without being told to | **FORBIDDEN** | default is `--private` |
