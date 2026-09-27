@@ -16,9 +16,11 @@ It prints `KEY=VALUE` lines. Read them; do not re-derive any of them by hand.
 | `REPO_BRANCH` | current branch, or `DETACHED` |
 | `REPO_DEFAULT_BRANCH` | branch `origin/HEAD` points at, empty when unset |
 | `REPO_DIRTY` | count of modified/untracked entries |
-| `CANDIDATE_<n>` | `path\|repos=<n>\|dirs=<n>` — one per probed code home |
+| `CANDIDATE_<n>` | `path\|repos=<n>\|dirs=<n>` — one per probed code home, real path |
+| `EXCLUDED_<n>` | `path\|reason=macos-tcc` — a folder that exists but is never ranked |
 | `CANDIDATE_COUNT` | how many candidates existed |
-| `CODE_HOME` | the winning candidate |
+| `CODE_HOME` | the winning candidate, or `$HOME/Projects` when there is none; empty when that fallback itself resolves into a macOS TCC folder |
+| `CODE_HOME_EXISTS` | `0` when `CODE_HOME` is the fallback and still has to be created |
 | `PLATFORM` | `Linux` \| `Darwin` \| `MINGW64_NT-*` … |
 | `GH_PRESENT`, `GH_USER` | whether `gh` is installed and who it is authenticated as |
 | `GIT_DEFAULT_BRANCH` | `init.defaultBranch`, empty when never configured |
@@ -29,18 +31,30 @@ It prints `KEY=VALUE` lines. Read them; do not re-derive any of them by hand.
 
 | Platform | Typical code home |
 |----------|-------------------|
-| Linux (English) | `~/Documents`, `~/Projects`, `~/src` |
-| Linux (localized) | `~/Documents`, `~/Documentos`, `~/Dokumente`, `~/文档` — resolved via `xdg-user-dir DOCUMENTS` |
-| macOS | `~/Documents`, `~/Developer` |
+| Linux (English) | `~/Projects`, `~/Documents`, `~/src` |
+| Linux (localized) | `~/Projects`, then `~/Documentos`, `~/Dokumente`, `~/文档` — resolved via `xdg-user-dir DOCUMENTS` |
+| macOS | `~/Projects`, `~/Developer` — **never** `~/Documents`, `~/Desktop`, `~/Downloads` |
 | Windows (Git Bash / MSYS) | `%USERPROFILE%\Documents`, `%USERPROFILE%\source\repos` |
 | Windows + OneDrive | `%OneDrive%\Documents` (Documents is redirected) |
 
-The script probes all of them, then **ranks by evidence**: the candidate with the
-most immediate subdirectories that are git repositories wins, ties broken on
-total subdirectory count, then on probe order. A directory that already holds
-this user's other projects is, by definition, where the next one belongs.
+The script probes all of them, then **ranks by evidence**: the candidate holding
+the most git repositories wins, counted one level down (`<home>/<repo>`) and two
+levels down (`<home>/<owner>/<repo>`); ties break on subdirectory count, then on
+probe order, and `~/Projects` is probed before `~/Documents`. A directory that
+already holds this user's other projects is, by definition, where the next one
+belongs. Two names for one directory — a symlink, or `~/projects` and
+`~/Projects` on a case-insensitive file system — are one candidate, printed with
+the spelling stored on disk.
 
-`$CLAUDE_CODE_HOME` overrides everything when it is set and exists.
+**macOS:** `~/Documents`, `~/Desktop` and `~/Downloads` — and anything that
+resolves inside them, such as a `~/Projects` symlinked to `~/Documents/Code` —
+are excluded outright, not merely ranked last. TCC protects them, and the kernel
+can refuse git, the shell and claude every read there; a code home that works
+until the day it locks the session out is worse than none. A probed candidate
+that lands there is reported as `EXCLUDED_<n>`.
+
+`$CLAUDE_CODE_HOME` overrides everything when it is set and exists — even a
+TCC folder, because it is the user's decision, not a guess.
 
 ## Decision table
 
@@ -69,9 +83,12 @@ project you are actually being asked about:
 
 ## When there is no candidate
 
-`CANDIDATE_COUNT=0` means no conventional code directory exists. Ask once with
-a multiple-choice question to the user where projects should live, offering `$HOME/Documents`,
-`$HOME/Projects` and `$HOME/src`, then `mkdir -p` the answer and use it as
+`CANDIDATE_COUNT=0` means no conventional code directory exists (`CODE_HOME`
+is then the `$HOME/Projects` fallback, with `CODE_HOME_EXISTS=0`, or empty when
+`$HOME/Projects` points into a TCC folder — then do not offer it). Ask once with
+a multiple-choice question to the user where projects should live, offering `$HOME/Projects`
+(recommended, first) and `$HOME/src` — plus `$HOME/Documents` on Linux or
+Windows only, never on macOS — then `mkdir -p` the answer and use it as
 `CODE_HOME`. Record the answer as a constraint so the next session does not ask
 again:
 
