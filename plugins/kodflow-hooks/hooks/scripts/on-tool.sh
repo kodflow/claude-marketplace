@@ -166,7 +166,7 @@ _root_deny() {
     _block "BLOCKED — code production in a repository is delegated" \
         "$1" \
         "Dispatch the epic's subagent (task_focus the epic first), or SendMessage it if it is running;" \
-        "it works in its own worktree (~/Documents/worktrees/<repo>-<epic-slug>) and delivers through a PR." \
+        "it works in its own worktree (<repo parent>/.worktrees/<repo>-<epic-slug>, never under ~/Documents, ~/Desktop or ~/Downloads) and delivers through a PR." \
         "A genuine exception: prefix the Bash line with ROOT_OK=1 (KODFLOW_ROOT=off turns the gate off)."
 }
 

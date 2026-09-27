@@ -55,10 +55,11 @@ The user's rule: the main thread triages, manages epics and tasks,
 dispatches, reviews, merges after the user's OK, and informs. Code
 production in a git repository is delegated: every epic is carried by at
 least one subagent working in its own git worktree
-(`~/Documents/worktrees/<repo>-<epic-slug>`) that delivers through a PR. The
-main thread keeps every other permission — it is also the workstation's
-sysadmin (sudo, apt, systemctl, nmcli, installs, files outside repositories,
-configuration).
+beside the repository (`<repo parent>/.worktrees/<repo>-<epic-slug>`; never
+under `~/Documents`, `~/Desktop` or `~/Downloads`, which macOS TCC protects)
+that delivers through a PR. The main thread keeps every other permission —
+it is also the workstation's sysadmin (sudo, apt, systemctl, nmcli, installs,
+files outside repositories, configuration).
 
 The gate is mechanical. A `PreToolUse` payload carries `agent_id` only when the
 call comes from inside a subagent (measured on 855 real events: every one
