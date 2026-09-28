@@ -279,6 +279,12 @@ def in_progress_cap(store, agent):
 
 def task_update(store, agent, args):
     task_id = str(args.get("id") or "").strip().lstrip("#")
+    # A caller that names the argument something else — task_id is the common
+    # slip — would otherwise look the empty id up and be told "no task # in
+    # this agent's list", which sends the reader hunting for an ownership
+    # problem instead of a missing argument.
+    if not task_id:
+        raise ValueError('task_update needs the task id: id="36"')
     status = args.get("status")
     subject = args.get("subject")
     if status is not None and status not in STATUSES:
