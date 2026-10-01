@@ -79,7 +79,6 @@ body. Resolving and dismissing have no MCP equivalent: use `gh api`.
 |-----|--------|------------------------------|-------|
 | CodeRabbit | `@coderabbitai review` (incremental) · `@coderabbitai full review` | `@coderabbitai resolve` | only after the fixes are pushed; it re-reviews every push anyway |
 | Qodo | `/review` · `/improve` | none — findings live in one comment that the next `/review` rewrites | P0/P1 are addressed, P2 may be answered in a reply to the summary comment |
-| Codacy | re-runs on push | resolves on push | a finding that stays is a real one or a rule to disable in `.codacy.yml` |
 
 Order matters: **fix → push → wait for the re-review → then resolve what is
 left**. Resolving before the re-review hides findings the bot will reopen.
