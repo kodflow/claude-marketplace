@@ -206,7 +206,7 @@ include the new ADR in the PR. Skip for routine changes.
 | 1.0 | Peek | Pin commit SHA, verify PR/MR exists |
 | 2.0 | Status Parsing | Job-level (not overall), MCP-ONLY |
 | 3.0 | CI Monitoring | Exponential backoff, 10min hard timeout |
-| 3.5 | Review Triage | CodeRabbit + Qodo + Codacy + Human — fixed or refuted *on the platform*, see `review-threads.md` |
+| 3.5 | Review Triage | CodeRabbit + Qodo + Human — fixed or refuted *on the platform*, see `review-threads.md` |
 | 4.0 | Error Log | Extract actionable info on failure |
 | 5.0 | Auto-fix Loop | 3 attempts max, error categories |
 | 5.5 | PR Regen | Body must describe the head: `<!-- describes: sha -->` differs → regenerate |
