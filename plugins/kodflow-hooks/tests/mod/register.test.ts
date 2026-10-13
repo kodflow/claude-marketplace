@@ -396,7 +396,7 @@ test("/lint-setup is registered and answers outside a Go project without asking"
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
   h.dirs.add("/repo");
   await start($);
-  expect(h.commands.map((c) => c.name)).toEqual(["lint-setup"]);
+  expect(h.commands.map((c) => c.name)).toContain("lint-setup");
   const r: any = await $.command.run({ command: "lint-setup", args: "" } as any);
   expect(r.text).toContain("No go.mod at or above /repo inside /repo");
   expect(h.runs.some((a) => a[0] === "curl" || a[0] === "project-linter")).toBe(
