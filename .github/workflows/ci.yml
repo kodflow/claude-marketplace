@@ -80,9 +80,12 @@ jobs:
           done
           echo "_shared mirrors in sync"
 
-      # The hooks block, rewrite and log on behalf of every consumer. Each of
-      # those behaviours is asserted against the JSON Claude Code actually sends.
-      - name: Hook scripts behave
+      # The hooks block and log on behalf of every consumer. Each of those
+      # behaviours is asserted against the JSON Claude Code actually sends,
+      # and the shell guards against the bash-guard corpus
+      # (plugins/kodflow-hooks/tests/fixtures/bash-guard.jsonl): rc and motif
+      # of every line, known gaps reported, not counted.
+      - name: Hook scripts behave, bash-guard corpus included
         run: bash scripts/tests/test_hooks.sh
 
       # A plugin that ships a suite gets it run. Discovered, not listed: a
@@ -130,3 +133,16 @@ jobs:
           python3 scripts/build-codex.py
           git diff --exit-code -- codex/ \
             || { echo "::error::codex/ is stale — run scripts/build-codex.py"; exit 1; }
+
+  # macOS runs hooks with /bin/bash 3.2: no associative arrays, no ;&, and
+  # global substitutions that are quadratic. The same suites, that shell.
+  hooks-bash32:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: bash-guard corpus and hook suite under /bin/bash 3.2
+        run: |
+          /bin/bash --version | head -1
+          HOOK_SHELL=/bin/bash /bin/bash scripts/tests/test_hooks.sh
+      - name: Delegation gate under /bin/bash 3.2
+        run: /bin/bash plugins/kodflow-hooks/tests/test_root_gate.sh

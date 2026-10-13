@@ -1,7 +1,7 @@
 # kodflow-hooks
 
-The lifecycle machinery the other kodflow plugins assume: shell-output
-compression that never rewrites a read whose bytes matter, a git guard, the
+The lifecycle machinery the other kodflow plugins assume: a git and forge
+guard that reads a Bash line as the shell would and never rewrites it, the
 delegation gate (code in a git repository is produced by subagents), session context, a
 formatter, a turn-end quality gate, and one structured log.
 
@@ -20,7 +20,7 @@ stage that has nothing more to do:
 |-------|---------|------|
 | **1 · gate** | the cheapest test that lets most calls leave at once | `0` |
 | **2 · block** | what must stop the call | `2`, reason on stderr |
-| **3 · transform** | rewrite the input, emitted as **one** JSON document | `0` |
+| **3 · transform** | what Claude reads (context, the task identity of a `task_*` call), emitted as **one** JSON document; a Bash command is never rewritten | `0` |
 | **4 · observe** | logging and advice, off the critical path | `0` |
 
 Every path that is not a deliberate block exits `0`. A `PreToolUse` hook that
@@ -30,15 +30,15 @@ fails by accident blocks every shell call of the session.
 
 | Event | Script | Gate | Block | Transform | Observe |
 |-------|--------|------|-------|-----------|---------|
-| `PreToolUse` · Bash | `on-tool.sh` | main thread and a repository-producing git/forge op on the line · no guarded git op on the line | the main thread producing into a repository (delegation gate) · `--no-verify`/`-n` · AI attribution or `.claude/` path in the message · credential shapes in the staged blobs · forced push inside a compound line | `--force` → `--force-with-lease` · `rtk rewrite` unless a segment must stay byte-exact | log |
+| `PreToolUse` · Bash | `on-tool.sh` | no `git`/`gh`/`glab`/`curl`/`wget`/`http` on the line once unquoted (and no `$'…'`) | read by the shell reader below: the main thread producing into a repository (delegation gate) · `--no-verify`, `-n` on a commit, `-c core.hooksPath` · AI attribution or workflow leak in a commit message, AI attribution in a PR/MR title or body · credential shapes in the staged blobs · a forced push (`--force`, `-f`, `+refspec`), with the command to run instead · from a subagent: any merge, any push to the default branch | none: the input is never rewritten | log; a main-thread merge is tagged `root_guard: merge` |
 | `PreToolUse` · task tools | `on-tool.sh` | — | built-in `TaskCreate`/`TodoWrite`: their chat panel duplicates the status line, the refusal points at the MCP | the MCP call (`task_create`/`update`/`list`/`epic`/`focus`) gets `_session` and `_agent` (the caller's `agent_id`, else `main`), overriding the model | log |
 | `PreToolUse` · Write/Edit | `on-tool.sh` | main thread writing inside a git work tree (memory and Claude configuration excepted) · no file path | the main thread producing into a repository (delegation gate) · protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
-| `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | subagent, or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) | — | log |
+| `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` | — | log; a main-thread merge is tagged `root_guard: merge` |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
 | `PostToolUse` · Task/Agent | `on-tool.sh` | — | — | — | log tagged `root_guard: dispatch` |
 | `PostToolUse` · other | `on-tool.sh` | — | — | — | log |
 | `PostToolUseFailure` | `on-tool.sh` | — | — | — | remediation hint · log (error redacted) |
-| `SessionStart` | `on-session.sh` | — | — | post-compaction rules on `compact` · a warning when rtk is absent | log |
+| `SessionStart` | `on-session.sh` | — | — | post-compaction rules on `compact` · a warning when rtk is absent · a warning to the user (`systemMessage`) and to Claude when `disableAllHooks` is set, when `CLAUDE_CODE_PLUGIN_DIRS` is set, or when an enabled plugin, a skills directory or a plugin dir outside the kodflow marketplace declares `modules` | log |
 | `SessionEnd` | `on-session.sh` | — | — | — | one log line with the session's event count (1.5 s budget) |
 | `PreCompact` | `on-session.sh` | — | — | — | log |
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
@@ -71,8 +71,37 @@ is refused exactly three things:
 | Tool | Refused | Still allowed |
 |------|---------|---------------|
 | `Write`/`Edit`/`MultiEdit`/`NotebookEdit` | a file inside a git work tree: its directory and parents are walked up looking for `.git` (a directory, or a worktree's gitdir file), no exec, after the path is normalised lexically | everything outside a repository; `<config>/projects/*/memory/*`, `<config>/settings.json`, `settings.local.json`, `<config>/CLAUDE.md` and `~/CLAUDE.md` even inside one |
-| `Bash` | `git commit`, `push`, `rebase`, `cherry-pick`, `merge`, `am`, `apply`, `revert`, `reset --hard`, `worktree add`; `gh pr create`, `glab mr create` — found anywhere on the line, past `cd … &&`, `git -C`/`-c`, `env`/`sudo`/`xargs` prefixes and `bash -c "…"`, the attribution guard's shape | everything else: no allow-list, no redirection rule, unknown commands pass; `gh pr merge` and `glab mr merge` pass |
+| `Bash` | `git commit`, `push`, `rebase`, `cherry-pick`, `merge`, `am`, `apply`, `revert`, `reset --hard`, `worktree add`; `gh pr create`, `glab mr create` — wherever the shell reader finds them (below) | everything else: no allow-list, no redirection rule, unknown commands pass; `gh pr merge` and `glab mr merge` pass (journaled as `root_guard: merge` until the mod that asks the user exists) |
 | forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | file, branch, push and pull-request writes, and any tool not classified | reads, merges, reviews, comments, issues (decided in the jq-free fast path) |
+
+## The shell reader
+
+A regex over the raw line cannot tell `git "commit"`, `\git commit` or
+`=git commit` from a commit, and it reads a heredoc that merely quotes a
+commit as one. `on-tool.sh` does the shell's first pass instead: it cuts the
+line into simple commands on `;` `&&` `||` `|` `&` and newlines, removes
+quotes and backslashes, decodes `$'…'`, joins `\`+newline, sets heredoc and
+here-string bodies aside as the command's stdin, walks past `VAR=value`,
+reserved words and wrappers (`env`, `command`, `exec`, `sudo`, `doas`,
+`nohup`, `nice`, `timeout`, `xargs`, `rtk`, `rtk proxy`…), and queues for
+another pass every text the shell would itself run: `$( )`, backticks,
+`<( )`, `bash -c`/`sh -c`/`zsh -c`, `eval`, `su -c`/`sg -c`, a heredoc or a
+here-string fed to a shell, and `echo …`/`cat <<EOF` piped into one. A
+heredoc fed to anything else is data: `cat > notes.md <<EOF` quoting a commit
+and a `.claude/` path passes.
+
+It never expands a variable or an alias. Those, and an interpreter other than
+a shell (`python -c "os.system(…)"`), `find -exec` and a git alias defined on
+the line, are the known gaps; each has a `known_gap` case in the corpus.
+
+Every refusal ends with a `[motif:<id>]` line (`root`, `no-verify`,
+`attribution`, `leak`, `secrets`, `force`, `merge`, `push-default`): tests
+compare it, never the wording. The corpus is
+`tests/fixtures/bash-guard.jsonl`, one case per line (`cmd` or `tool` and
+`input`, `rc`, `motif`, `agent`, `root`, `known_gap`), played by
+`scripts/tests/test_hooks.sh` (`HOOK_SHELL=/bin/bash` plays it under macOS's
+bash 3.2). Its attribution shapes are written with `\u` escapes so the file
+does not carry them in clear.
 
 The denial is short: it is code production in a repository, so dispatch the
 epic's subagent (focus the epic first, so the subagent is attributed to it)
@@ -194,7 +223,8 @@ output — and every string is clipped, then redacted (`token=`, `api_key=`,
 | worktree cleanup in `session-init.sh` | gone | it force-removed any worktree older than 24 h, including one with uncommitted work |
 | `task-created.sh` contract registry | gone | it needed a capability file nothing writes and a primitives library the plugin never shipped, so it never ran. Team tasks are logged, not adjudicated |
 | `feature-update.sh` | gone | `errexit` on a fail-open hook; its only output went to an async hook and arrived a turn late |
-| `rtk` rewrite with `permissionDecision: allow` | rewrite only | `allow` skips the permission prompt for every command rtk knows — most of them. The rewritten command now goes through the normal permission flow |
+| `rtk` rewrite with `permissionDecision: allow` | rewrite only, then gone | `allow` skipped the permission prompt for every command rtk knows. The rewrite itself went next (D3): a hook that changes the input is a second author of every command. rtk is now a prefix the caller chooses |
+| `--force` → `--force-with-lease` rewrite | refusal with the command to run | the rewrite was only correct when the whole line was the push; the refusal says what to run instead |
 | stderr "warnings" on exit 0 | `additionalContext` | stderr on exit 0 goes to the debug log; Claude never saw them |
 | `printf '\a'` | `terminalSequence` | hooks have no terminal; the bell never rang, and on `Stop` it corrupted the JSON that followed it |
 | per-event jsonl files, `checkpoint.json`, compaction snapshots | one log | no reader for any of them; compaction recovery is Claude Code's job |
@@ -216,8 +246,11 @@ Wall time per hook invocation on the same machine, 20 runs, realistic payloads
 | UserPromptSubmit | 26 ms | 20 ms |
 | Stop | 43 ms | 16 ms |
 
-The remaining cost of a Bash call is `rtk rewrite` itself (≈22 ms), which is
-the transform. Logging is a detached subshell and no longer on the path.
+The shell reader runs only when the unquoted line names a verb it knows; a
+2.5 kB heredoc commit message costs about 100 ms under bash 5 and bash 3.2
+alike. Global substitutions (`${x//…/}`) are quadratic in bash 3.2 and are
+kept off long strings. Logging is a detached subshell and no longer on the
+path; its lock is a `mkdir`, `flock` being absent on macOS.
 
 ## Project knobs
 
@@ -226,7 +259,6 @@ the transform. Logging is a detached subshell and no longer on the path.
 | `.claude/protected-paths` | one glob per line; replaces the default list (`node_modules/`, `.git/`, `vendor/`, `dist/`, `build/`, `.env*`, `*.lock`, lockfiles, `go.sum`) |
 | `KTN_LINTER_PORT` (default 7717) | where a project-linter server listens; nothing is called when the port is closed |
 | `KTN_PRE_PHASES`, `KTN_STOP_PHASES` | linter phases at edit time and at turn end |
-| `NO_RTK=` prefix on a command | that line is never rewritten |
 | `ROOT_OK=1` prefix on a command | that line is exempt from the delegation gate |
 | `KODFLOW_ROOT=off` | the delegation gate, its Stop rule and its prompt line are off for the session |
 
@@ -237,8 +269,9 @@ bash scripts/tests/test_hooks.sh
 bash plugins/kodflow-hooks/tests/run-tests.sh   # tasks MCP + delegation gate
 ```
 
-A hundred cases in a throwaway repository: every block, every rewrite, the
-fidelity guard, the tracker fed a file name that is also a shell command, the
+A hundred and forty cases in a throwaway repository, plus the bash-guard
+corpus (about two hundred lines, rc and motif compared): every block, the
+input never rewritten, the tracker fed a file name that is also a shell command, the
 redaction of every persisted string, the Stop reminder firing once, the task rules on the active epic only, the
 triage and epic state injected with each prompt, and every
 script fed garbage or nothing and exiting 0.
@@ -248,6 +281,6 @@ the guard they test. The delegation gate has its own suite,
 `tests/test_root_gate.sh` (run by `tests/run-tests.sh`): writes inside and
 outside a work tree (worktree gitdir files, relative and `..` paths), memory
 and configuration inside a repository, sysadmin commands allowed, every
-producing git/forge op refused including wrapped forms, merges allowed, the
+producing git/forge op refused including wrapped forms, merges allowed (journaled), the
 forge MCP tools, the escapes, the subagent never gated, the Stop rule with and
 without a subagent on the epic, and the log tags.
