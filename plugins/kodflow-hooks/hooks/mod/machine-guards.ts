@@ -69,6 +69,9 @@ export function notePrompt(origin: unknown, nowMs: number): void {
   if ((origin as { kind?: unknown } | undefined)?.kind === "composer") lastComposerMs = nowMs;
 }
 
+/** When the user last typed a prompt at the terminal, for any presence rule. */
+export const lastComposerAt = (): number | undefined => lastComposerMs;
+
 // A collision the user chose to go past: path -> the foreign edit's time.
 // A newer edit by the other session asks again.
 const acknowledged = new Map<string, number>();
