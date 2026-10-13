@@ -152,3 +152,51 @@ jobs:
           HOOK_SHELL=/bin/bash /bin/bash scripts/tests/test_hooks.sh
       - name: Delegation gate under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-hooks/tests/test_root_gate.sh
+
+  # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
+  # are checked by the engine itself, at the version the README names as
+  # tested. Bumped by hand: a new release can move the plugin API.
+  mod:
+    runs-on: ubuntu-latest
+    env:
+      CLAUDE_CODE_VERSION: 2.1.296
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '24' }
+
+      - name: Claude Code, pinned
+        run: |
+          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          claude --version
+
+      # --strict also fails on the missing "version" in plugin.json, which is
+      # deliberate: these plugins are versioned by commit (git-subdir), and a
+      # version field would stop `claude plugin update` from seeing new
+      # commits. Every other warning, and every error, fails the job.
+      - name: The engine reads the plugin as meant
+        run: |
+          set +e
+          claude plugin validate --strict --json plugins/kodflow-hooks > validate.json
+          set -e
+          cat validate.json
+          python3 - <<'PY'
+          import json, sys
+          r = json.load(open("validate.json"))
+          parts = [r["manifest"]] + r.get("contents", [])
+          errors = [e for p in parts for e in p.get("errors", [])]
+          warnings = [w for p in parts for w in p.get("warnings", []) if w.get("path") != "version"]
+          notes = " ".join(n for p in parts for n in p.get("notes", []))
+          bad = errors + warnings
+          for item in bad:
+              print("::error::%s" % item)
+          if "./mod/register.ts hooks:" not in notes:
+              print("::error::the hooks module was not read"); sys.exit(1)
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: The mod's tests, in the engine (claude plugin test)
+        run: claude plugin test plugins/kodflow-hooks
+
+      - name: The conformance corpus, a real disk, several processes (node)
+        run: node plugins/kodflow-hooks/tests/mod/run-node.ts
