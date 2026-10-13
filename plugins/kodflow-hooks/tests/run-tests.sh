@@ -6,3 +6,4 @@ set -e
 cd "$(dirname "$0")"
 python3 -m unittest -v test_tasks_mcp 2>&1
 bash test_root_gate.sh
+bash test_lock.sh
