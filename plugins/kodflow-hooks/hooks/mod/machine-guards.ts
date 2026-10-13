@@ -1,4 +1,4 @@
-// guards.ts — modwall, collision-guard and zsh-safe, over a port.
+// machine-guards.ts — modwall, collision-guard and zsh-safe, over a port.
 //
 // The engine follows `$` and `on` only inside register.ts, so register.ts
 // builds a GuardPort from `$` and hooks the events; what each hook does is
@@ -18,6 +18,7 @@ import {
   excluded,
   isLive,
   newest,
+  present,
   question,
   record,
   targetOf,
@@ -59,6 +60,14 @@ const judged: Decision[] = [];
 // Refusals made before the session bound (a toast then is dropped), shown
 // at session.start
 const unshown: string[] = [];
+
+// When the user last typed a prompt at the terminal (origin `composer`)
+let lastComposerMs: number | undefined;
+
+/** prompt.submit: remember a prompt the user typed, for the presence rule. */
+export function notePrompt(origin: unknown, nowMs: number): void {
+  if ((origin as { kind?: unknown } | undefined)?.kind === "composer") lastComposerMs = nowMs;
+}
 
 // A collision the user chose to go past: path -> the foreign edit's time.
 // A newer edit by the other session asks again.
@@ -173,8 +182,14 @@ export async function guardWrite<R>(
     (o) => newest(path, o, now),
     () => undefined,
   );
-  if (hit && hit.at > (acknowledged.get(path) ?? 0)) {
-    // No one to ask (-p), or the dialog dismissed: the edit goes on
+  if (hit && hit.at > (acknowledged.get(path) ?? 0) && !present(lastComposerMs, p.now())) {
+    // Nobody typed a prompt lately: asking would hold the edit until someone
+    // comes back. Journaled, and the edit goes on.
+    p.log(
+      `collision-guard: ${path} edited by session ${hit.session} at ${hit.at}; no prompt typed in 10 min, not asked, the edit goes on`,
+    );
+  } else if (hit && hit.at > (acknowledged.get(path) ?? 0)) {
+    // The dialog dismissed, or no one to ask after all: the edit goes on
     const chosen = await p
       .ask(question(path, hit, now), [CONTINUE, WORKTREE, CANCEL])
       .catch(() => undefined);

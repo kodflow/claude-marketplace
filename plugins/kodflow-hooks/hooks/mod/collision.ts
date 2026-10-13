@@ -17,6 +17,17 @@ const WRITERS: Record<string, string> = {
   NotebookEdit: "notebook_path",
 };
 
+/** How recent a prompt typed at the terminal must be for the user to be asked: 10 minutes. */
+export const PRESENCE_MS = 10 * 60 * 1000;
+
+/**
+ * Whether someone is at the terminal: a `composer` prompt (typed or queued
+ * at the prompt) within PRESENCE_MS. A night run, `-p` or a peer's message
+ * is no one to ask, and a question with no timeout would hold the edit.
+ */
+export const present = (lastComposerMs: number | undefined, nowMs: number): boolean =>
+  lastComposerMs !== undefined && nowMs - lastComposerMs < PRESENCE_MS;
+
 export const editsFile = (dir: string): string => `${dir}/edits.tsv`;
 
 /** Whether a call of this tool writes a file. */

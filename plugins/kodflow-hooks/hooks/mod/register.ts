@@ -41,10 +41,11 @@ import {
   admit,
   endGuards,
   guardWrite,
+  notePrompt,
   modsReport,
   startGuards,
   type GuardPort,
-} from "./guards.ts";
+} from "./machine-guards.ts";
 
 // Set once every tool registered; the beat is a promise that they did.
 let toolsReady = false;
@@ -147,7 +148,7 @@ async function serve(
   return answer;
 }
 
-// modwall, collision-guard and zsh-safe (guards.ts) reach `$` through this
+// modwall, collision-guard and zsh-safe (machine-guards.ts) reach `$` through this
 function guardPort($: any): GuardPort {
   return {
     off: () => off($),
@@ -194,6 +195,7 @@ export const register: Register = (on) => {
   }).catch(($, e, next) => next(e));
 
   on("prompt.submit", async ($, e, next) => {
+    notePrompt(e.origin, Date.now());
     if (!(await off($))) {
       await ensureTools($);
       await beat($);

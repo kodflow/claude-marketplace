@@ -1,4 +1,4 @@
-// guards.test.ts — modwall, collision-guard and zsh-safe, under `claude
+// machine-guards.test.ts — modwall, collision-guard and zsh-safe, under `claude
 // plugin test`: the wiring through register.ts with the host in memory, and
 // the pure decisions beside it.
 import { test, expect, mock } from "claude-code/testing";
@@ -10,6 +10,8 @@ import {
   report,
 } from "../../hooks/mod/modwall.ts";
 import {
+  PRESENCE_MS,
+  present,
   WINDOW_S,
   answer,
   excluded,
@@ -60,6 +62,7 @@ function host(on: any, env: Record<string, string>): Host {
     return { value: undefined };
   });
   on("session.id", async () => ({ value: SID }));
+  on("prompt.submit", async (_$: any, e: any) => ({ text: e.text }));
   on("session.cwd", async () => ({ value: "/repo" }));
   on("session.root", async () => ({ value: "/repo" }));
   on("session.start", async (_$: any, e: any) => ({ cwd: e.cwd ?? "/repo" }));
@@ -130,6 +133,10 @@ function otherSession(h: Host, path: string, ago: number, beatAgo = 1) {
   h.files.set(`${SESSIONS}/${OTHER}/mod-beat`, String(now() - beatAgo));
 }
 
+// The user typing at the terminal: the presence rule lets collision-guard ask
+const typed = ($: any) =>
+  $.prompt.submit({ text: "go on", origin: { kind: "composer" } } as any);
+
 const write = ($: any, file_path: string) =>
   $.tool.call({ tool: "Write", file_path, content: "x" } as any);
 
@@ -145,6 +152,7 @@ test("collision-guard: a write is noted in this session's edits.tsv, path and ti
 
 test("collision-guard: a recent edit by another live session asks; Cancel denies", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await typed($);
   otherSession(h, "/repo/src/a.ts", 120);
   h.answer = "Cancel";
   const r: any = await write($, "/repo/src/a.ts");
@@ -157,6 +165,7 @@ test("collision-guard: a recent edit by another live session asks; Cancel denies
 
 test("collision-guard: Move to a worktree denies with EnterWorktree", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await typed($);
   otherSession(h, "/repo/src/a.ts", 60);
   h.answer = "Move to a worktree";
   const r: any = await write($, "/repo/src/a.ts");
@@ -166,6 +175,7 @@ test("collision-guard: Move to a worktree denies with EnterWorktree", async ($, 
 
 test("collision-guard: Continue writes, and is not asked again for the same edit", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await typed($);
   otherSession(h, "/repo/src/b.ts", 60);
   h.answer = "Continue";
   await write($, "/repo/src/b.ts");
@@ -176,10 +186,29 @@ test("collision-guard: Continue writes, and is not asked again for the same edit
 
 test("collision-guard: no answer (dismissed, or -p) lets the write through", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await typed($);
   otherSession(h, "/repo/src/c.ts", 60);
   await write($, "/repo/src/c.ts");
   expect(h.asked.length).toBe(1);
   expect(h.writes).toBe(1);
+});
+
+test("collision-guard: no prompt typed at the terminal lately, nobody is asked and the edit goes on", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.answer = "Cancel";
+  otherSession(h, "/repo/src/d.ts", 60);
+  // A night run: no prompt at all
+  await write($, "/repo/src/d.ts");
+  // -p, the SDK, a peer's message: not someone at the terminal
+  await $.prompt.submit({ text: "from the sdk", origin: { kind: "sdk" } } as any);
+  await write($, "/repo/src/d.ts");
+  expect(h.asked).toEqual([]);
+  expect(h.writes).toBe(2);
+  // Once the user types, the next collision is asked
+  await typed($);
+  await write($, "/repo/src/d.ts");
+  expect(h.asked.length).toBe(1);
+  expect(h.writes).toBe(2);
 });
 
 test("collision-guard: an old edit, a stale beat or Claude's projects dir ask nothing", async ($, on) => {
@@ -329,6 +358,9 @@ test("collision: paths, the window, one line per path", () => {
     at: t,
   });
   expect(answer("Continue", "/b")).toEqual({ go: true });
+  expect(present(undefined, 1e12)).toBe(false);
+  expect(present(1e12 - PRESENCE_MS + 1, 1e12)).toBe(true);
+  expect(present(1e12 - PRESENCE_MS, 1e12)).toBe(false);
   expect(answer("something else", "/b")).toHaveProperty("deny");
 });
 
