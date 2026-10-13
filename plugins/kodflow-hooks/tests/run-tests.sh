@@ -14,3 +14,4 @@ else
 fi
 bash test_root_gate.sh
 bash test_lock.sh
+bash test_zsh_safe.sh

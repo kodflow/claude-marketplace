@@ -37,6 +37,15 @@ import {
   sessionDir,
   triageFile,
 } from "./paths.ts";
+import {
+  admit,
+  endGuards,
+  guardWrite,
+  notePrompt,
+  modsReport,
+  startGuards,
+  type GuardPort,
+} from "./machine-guards.ts";
 
 // Set once every tool registered; the beat is a promise that they did.
 let toolsReady = false;
@@ -139,9 +148,41 @@ async function serve(
   return answer;
 }
 
+// modwall, collision-guard and zsh-safe (machine-guards.ts) reach `$` through this
+function guardPort($: any): GuardPort {
+  return {
+    off: () => off($),
+    config: () => config($),
+    read: (path) =>
+      $.fs.read(path).then(
+        (t: string) => t,
+        () => undefined,
+      ),
+    write: (path, text) => $.fs.write(path, text),
+    list: (path) => $.fs.list(path),
+    session: () => $.session.id(),
+    cwd: () => $.session.cwd(),
+    ask: (question, options) =>
+      $.ui.ask(question, { options, header: "Collision" }),
+    storeGet: (key) => $.store.get(key),
+    storeSet: (key, value) => $.store.set(key, value),
+    log: (text) => $.ui.log(text, { to: "debug" }),
+    toast: (text) => $.ui.toast(text, { timeoutMs: 8000 }),
+    registerMods: (description) =>
+      $.command.register({ name: "kodflow-mods", description }),
+    zdotdir: () => $.env.get("ZDOTDIR"),
+    userZdotdir: () => $.env.get("KODFLOW_USER_ZDOTDIR"),
+    setZdotdir: (value) => $.env.set("ZDOTDIR", value),
+    setUserZdotdir: (value) => $.env.set("KODFLOW_USER_ZDOTDIR", value),
+    pluginRoot: $.plugin.root,
+    now: () => Date.now(),
+  };
+}
+
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
     if (!(await off($))) await ensureTools($);
+    await startGuards(guardPort($)).catch(() => undefined);
     return next(e);
   });
 
@@ -154,6 +195,7 @@ export const register: Register = (on) => {
   }).catch(($, e, next) => next(e));
 
   on("prompt.submit", async ($, e, next) => {
+    notePrompt(e.origin, Date.now());
     if (!(await off($))) {
       await ensureTools($);
       await beat($);
@@ -180,4 +222,24 @@ export const register: Register = (on) => {
     const text = attributionText(e.kind);
     return text === undefined || (await off($)) ? next(e) : { text };
   });
+
+  // modwall: refuses a user-tier module from outside the kodflow marketplace
+  on("plugin.register", async ($, e, next) => {
+    const refused = await admit(guardPort($), e);
+    return refused ?? next(e);
+  }).catch(($, e, next) => next(e));
+
+  on("command.run", { command: "kodflow-mods" }, async ($) => ({
+    text: await modsReport(guardPort($)),
+  }));
+
+  on("session.end", async ($, e, next) => {
+    await endGuards(guardPort($)).catch(() => undefined);
+    return next(e);
+  });
+
+  // collision-guard: a file another live session wrote in the last 30 min
+  on("tool.call", { tool: ["Edit", "Write", "MultiEdit", "NotebookEdit"] }, async ($, e, next) =>
+    guardWrite(guardPort($), e as any, () => next(e)),
+  ).catch(($, e, next) => next(e));
 };
