@@ -589,12 +589,19 @@ lrun() { local ev=$1 tool=$2 frag=$3 script=$4
     OUT=$(jq -n -c --arg ev "$ev" --arg tool "$tool" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" --argjson frag "$frag" \
         '{session_id:"sess-1",hook_event_name:$ev,tool_name:$tool,cwd:$cwd,scratchpad_dir:$sp,tool_use_id:"t1"} + $frag' \
         | PATH="$FB:$PATH" KTN_LINTER_PORT=$LP bash "$S/$script" 2>/dev/null); RC=$?; }
+# A triage gate left raised by an earlier case would refuse the edit first
+rm -f "$T/home/.claude/kodflow/sessions/sess-1/triage-pending"
+# on-tool.sh skips files under /tmp, where mktemp puts $T on Linux: the
+# pre-edit cases get a project of their own inside the checkout.
+PP=$(mktemp -d "$ROOT/.kf-gomod.XXXXXX")
+mkdir -p "$PP/projects/app/cmd/x" "$PP/tools"; printf 'module app\n' > "$PP/projects/app/go.mod"
+: > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PreToolUse Edit "$(jq -n -c --arg f "$PP/tools/gen.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
+[ ! -s "$LL" ] && [ "$RC" -eq 0 ] && ok "pre-edit: a .go file outside any module probes nothing" || bad "pre-edit outside" "rc=$RC log=$(cat "$LL")"
+: > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PreToolUse Edit "$(jq -n -c --arg f "$PP/projects/app/cmd/x/main.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
+grep -q "^curl .*:$LP/hooks/pre-tool-use" "$LL" && [ "$RC" -eq 0 ] && ok "pre-edit: a file of a module below the root reaches the daemon" || bad "pre-edit module" "rc=$RC log=$(cat "$LL")"
+rm -rf "$PP"
 GM=$T/repo/projects/app; mkdir -p "$GM/cmd/x" "$T/repo/tools"
 printf 'module app\n' > "$GM/go.mod"; printf 'package main\n' > "$GM/cmd/x/main.go"; printf 'x\n' > "$T/repo/tools/gen.go"
-: > "$LL"; lrun PreToolUse Edit "$(jq -n -c --arg f "$T/repo/tools/gen.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
-[ ! -s "$LL" ] && [ "$RC" -eq 0 ] && ok "pre-edit: a .go file outside any module probes nothing" || bad "pre-edit outside" "$(cat "$LL")"
-: > "$LL"; lrun PreToolUse Edit "$(jq -n -c --arg f "$GM/cmd/x/main.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
-grep -q "^curl .*:$LP/hooks/pre-tool-use" "$LL" && ok "pre-edit: a file of a module below the root reaches the daemon" || bad "pre-edit module" "$(cat "$LL")"
 rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/claudemd-nudged"
 printf '%s\n' "$T/repo/tools/gen.go" "$T/repo/a.txt" > "$T/tmp/sp/edited"
 : > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
