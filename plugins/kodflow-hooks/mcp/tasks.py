@@ -255,16 +255,25 @@ def task_create(store, agent, args):
 STALE_AGENT = 12 * 3600  # a subagent with no stop for this long was lost with its session
 
 
-def running_subagents(store):
-    """Count the subagents of the session still running (agents.json, hooks)."""
+def load_agents(store):
+    """The session's subagents as recorded by the hooks: {agent_id: entry}."""
     try:
         with open(os.path.join(store.dir, "agents.json"), encoding="utf-8") as fh:
             agents = json.load(fh).get("agents") or {}
     except (OSError, ValueError, AttributeError):
-        return 0
-    cutoff = time.time() - STALE_AGENT
-    return sum(1 for a in agents.values()
-               if isinstance(a, dict) and a.get("stopped") is None and (a.get("started") or 0) >= cutoff)
+        return {}
+    return {str(k): v for k, v in agents.items() if isinstance(v, dict)} if isinstance(agents, dict) else {}
+
+
+def alive(entry, now=None):
+    """Running: no stop recorded, and started within STALE_AGENT."""
+    cutoff = (now or time.time()) - STALE_AGENT
+    return entry.get("stopped") is None and (entry.get("started") or 0) >= cutoff
+
+
+def running_subagents(store):
+    """Count the subagents of the session still running (agents.json, hooks)."""
+    return sum(1 for a in load_agents(store).values() if alive(a))
 
 
 def in_progress_cap(store, agent):
@@ -275,6 +284,70 @@ def in_progress_cap(store, agent):
     while that subagent works, and only then.
     """
     return 1 + running_subagents(store) if agent == MAIN else 1
+
+
+def matches(agent_id, entry, worker):
+    """A worker is named by its agent id (the agents.json key) or its type."""
+    return worker in (agent_id, str(entry.get("type") or ""))
+
+
+def worker_alive(agents, task):
+    """Whether the worker linked to a task is still running.
+
+    The recorded id first; failing that, any running agent of the same name,
+    in case the agent came back under another id.
+    """
+    entry = agents.get(task.get("worker_id") or "")
+    if entry is not None and alive(entry):
+        return True
+    name = task.get("worker") or ""
+    return bool(name) and any(alive(e) and matches(k, e, name) for k, e in agents.items())
+
+
+def since(started):
+    minutes = max(0, int(time.time() - (started or 0)) // 60)
+    return "%dh%02d" % divmod(minutes, 60) if minutes >= 60 else "%d min" % minutes
+
+
+def workers_report(store, data, agent):
+    """Who is counted: the running workers, and who holds each task in progress."""
+    agents = load_agents(store)
+    live = sorted(((k, e) for k, e in agents.items() if alive(e)), key=lambda kv: kv[1].get("started") or 0)
+    lines = ["Running subagents: " + (", ".join("%s (id %s, for %s)" % (e.get("type") or "?", k, since(e.get("started")))
+                                             for k, e in live) or "none")]
+    held = [t for t in data["tasks"] if t.get("agent", MAIN) == agent and t.get("status") == "in_progress"]
+    for t in held:
+        if t.get("worker"):
+            state = "running" if worker_alive(agents, t) else "STOPPED"
+            lines.append("#%s %s: worker %s (%s)" % (t["id"], t["subject"], t["worker"], state))
+        else:
+            lines.append("#%s %s: no worker linked" % (t["id"], t["subject"]))
+    return "\n".join(lines)
+
+
+def claim_worker(store, data, agent, task_id, worker):
+    """Resolve the worker a task is handed to; refuse a stopped or busy one."""
+    agents = load_agents(store)
+    named = [(k, e) for k, e in agents.items() if matches(k, e, worker)]
+    running = [(k, e) for k, e in named if alive(e)]
+    unblock = ("Name a running subagent (its type or id, listed above) with worker=, or start one for this task "
+               "first; a task nobody runs stays pending.")
+    if not running:
+        why = "is stopped" if named else "is not a subagent of this session"
+        raise ValueError("cannot start #%s on worker %s: it %s.\n%s\n%s"
+                         % (task_id, worker, why, workers_report(store, data, agent), unblock))
+    holding = {}
+    for t in data["tasks"]:
+        if t.get("agent", MAIN) == agent and t.get("status") == "in_progress" and t["id"] != task_id \
+                and t.get("worker_id"):
+            holding[t["worker_id"]] = t
+    free = [(k, e) for k, e in running if k not in holding]
+    if not free:
+        t = holding[running[0][0]]
+        raise ValueError("cannot start #%s on worker %s: it already holds #%s %s. One task per worker: set #%s to "
+                         "completed, pending or waiting first, or hand this one to another subagent.\n%s"
+                         % (task_id, worker, t["id"], t["subject"], t["id"], workers_report(store, data, agent)))
+    return free[0][0]
 
 
 def task_update(store, agent, args):
@@ -291,6 +364,9 @@ def task_update(store, agent, args):
         raise ValueError("status must be one of %s" % ", ".join(STATUSES))
     if subject is not None:
         subject = check_subject(subject)
+    # worker only means something on a start; with any other status it is
+    # ignored, and leaving in_progress drops the link anyway
+    worker = str(args.get("worker") or "").strip() if status == "in_progress" else ""
 
     def change(data):
         for idx, task in enumerate(data["tasks"]):
@@ -301,18 +377,30 @@ def task_update(store, agent, args):
                     return "Task #%s deleted" % task_id
                 # One task in progress per worker: an amber cell on the status
                 # line must mean someone is on it right now
-                if status == "in_progress" and task.get("status") != "in_progress":
+                starting = status == "in_progress" and task.get("status") != "in_progress"
+                if worker:
+                    # A named worker is checked for itself: running, and on
+                    # no other task. The headcount below cannot tell a task
+                    # held by a live subagent from one left by a dead one.
+                    task["worker_id"] = claim_worker(store, data, agent, task_id, worker)
+                    task["worker"] = worker
+                elif starting:
                     busy = [t for t in data["tasks"] if t.get("agent", MAIN) == agent
                             and t.get("status") == "in_progress" and t["id"] != task_id]
                     cap = in_progress_cap(store, agent)
                     if len(busy) >= cap:
                         workers = "you" if cap == 1 else "you and %d running subagent(s)" % (cap - 1)
                         raise ValueError(
-                            "cannot start #%s: %d task(s) already in progress (%s) for %d worker(s), %s. "
-                            "One task per worker: complete it, or set the one nobody is on to pending or "
-                            "waiting; to run this one in parallel, start a subagent for it first, then mark "
-                            "it in_progress." % (task_id, len(busy), ", ".join("#%s %s" % (t["id"], t["subject"])
-                                                                              for t in busy), cap, workers))
+                            "cannot start #%s: %d task(s) already in progress (%s) for %d worker(s), %s.\n%s\n"
+                            "One task per worker: complete a task nobody is on, or set it to pending or waiting; "
+                            "to hand this one to a running subagent, pass worker=<its type or id> with "
+                            "status=in_progress (refused if that subagent is stopped or already holds a task)."
+                            % (task_id, len(busy), ", ".join("#%s %s" % (t["id"], t["subject"]) for t in busy),
+                               cap, workers, workers_report(store, data, agent)))
+                if status and status != "in_progress":
+                    # The link lasts as long as the task is in progress
+                    task.pop("worker", None)
+                    task.pop("worker_id", None)
                 if status:
                     task["status"] = status
                 if subject:
@@ -320,7 +408,8 @@ def task_update(store, agent, args):
                 if args.get("description") is not None:
                     task["description"] = args["description"]
                 task["updated"] = int(time.time())
-                return "Task #%s updated: %s (%s)" % (task_id, task["subject"], task["status"])
+                held = " on worker %s" % task["worker"] if task.get("worker") else ""
+                return "Task #%s updated: %s (%s%s)" % (task_id, task["subject"], task["status"], held)
         raise ValueError("no task #%s in this agent's list" % task_id)
 
     return store.mutate(change)
@@ -440,12 +529,18 @@ TOOLS = [
             "either one is under way, or they wait on the user and say so. One task in_progress per worker: you "
             "may have one, plus one per running subagent (each subagent works on exactly one task); switching "
             "to another task means setting the current one back to pending first, and a task handed to a "
-            "subagent goes in_progress once that subagent has started. Extra in_progress calls are refused."),
+            "subagent goes in_progress once that subagent has started, with worker=<its type or id> so the task is "
+            "tied to it. With worker, the start is refused if that subagent is stopped or already holds another "
+            "task; without it, a start beyond the worker count is refused. The link is dropped when the task "
+            "leaves in_progress. A refusal lists the running subagents and who holds each task in progress."),
         "inputSchema": {"type": "object", "properties": dict({
             "id": {"type": "string", "description": "Task id, as returned by task_create."},
             "status": {"type": "string", "enum": list(STATUSES)},
             "subject": {"type": "string", "maxLength": MAX_SUBJECT},
             "description": {"type": "string"},
+            "worker": {"type": "string",
+                       "description": "With status=in_progress: the running subagent that takes the task, by "
+                                      "type (its name) or agent id. Optional."},
         }, **HIDDEN), "required": ["id"]},
     },
     {

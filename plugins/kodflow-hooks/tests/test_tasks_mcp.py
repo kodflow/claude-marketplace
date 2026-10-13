@@ -270,6 +270,98 @@ class TasksServer(unittest.TestCase):
         self.s.call("task_update", id="1", status="in_progress", _session="s1", _agent="a1")
         self.assertTrue(self.s.call("task_update", id="2", status="in_progress", _session="s1", _agent="a1").get("isError"))
 
+    def roster(self, session, entries):
+        """Write agents.json: {id: (type, alive)}; a dead one has a stop time."""
+        d = os.path.join(self.tmp.name, "kodflow", "sessions", session)
+        os.makedirs(d, exist_ok=True)
+        now = int(__import__("time").time())
+        with open(os.path.join(d, "agents.json"), "w", encoding="utf-8") as fh:
+            json.dump({"agents": {k: {"type": t, "started": now - 600, "stopped": None if up else now}
+                                  for k, (t, up) in entries.items()}}, fh)
+
+    def test_worker_running_takes_the_task(self):
+        """The 13/10 incident: stale in-progress tasks must not block a live worker."""
+        self.roster("s1", {"r1": ("review-pr3", False), "r2": ("forgejo-cluster", False),
+                           "c2": ("sdk-consensus2", True)})
+        for subject in ("Review PR 3", "Forgejo cluster", "Consensus"):
+            self.s.call("task_create", subject=subject, epic=0, _session="s1")
+        self.s.call("task_update", id="1", status="in_progress", _session="s1")
+        self.s.call("task_update", id="2", status="in_progress", _session="s1")
+        refused = self.s.call("task_update", id="3", status="in_progress", _session="s1")
+        self.assertTrue(refused.get("isError"), "without worker the headcount still applies")
+        out = self.s.call("task_update", id="3", status="in_progress", worker="sdk-consensus2", _session="s1")
+        self.assertFalse(out.get("isError"), out)
+        self.assertIn("on worker sdk-consensus2", self.text(out))
+        task = self.state()["tasks"][2]
+        self.assertEqual((task["status"], task["worker"], task["worker_id"]), ("in_progress", "sdk-consensus2", "c2"))
+
+    def test_worker_by_agent_id(self):
+        self.roster("s1", {"c2": ("sdk-consensus2", True)})
+        self.s.call("task_create", subject="Consensus", epic=0, _session="s1")
+        out = self.s.call("task_update", id="1", status="in_progress", worker="c2", _session="s1")
+        self.assertFalse(out.get("isError"), out)
+        self.assertEqual(self.state()["tasks"][0]["worker_id"], "c2")
+
+    def test_worker_stopped_or_unknown_is_refused(self):
+        self.roster("s1", {"r1": ("review-pr3", False), "c2": ("sdk-consensus2", True)})
+        self.s.call("task_create", subject="Review", epic=0, _session="s1")
+        stopped = self.s.call("task_update", id="1", status="in_progress", worker="review-pr3", _session="s1")
+        self.assertTrue(stopped.get("isError"))
+        text = self.text(stopped)
+        self.assertIn("review-pr3: it is stopped", text)
+        self.assertIn("Running subagents: sdk-consensus2 (id c2, for 10 min)", text)
+        self.assertIn("worker=", text, "the refusal says how to unblock")
+        unknown = self.s.call("task_update", id="1", status="in_progress", worker="ghost", _session="s1")
+        self.assertTrue(unknown.get("isError"))
+        self.assertIn("ghost: it is not a subagent of this session", self.text(unknown))
+        self.assertEqual(self.state()["tasks"][0]["status"], "pending", "a refused start changes nothing")
+        self.assertNotIn("worker", self.state()["tasks"][0])
+
+    def test_worker_already_busy_is_refused(self):
+        self.roster("s1", {"c2": ("sdk-consensus2", True)})
+        for subject in ("First", "Second"):
+            self.s.call("task_create", subject=subject, epic=0, _session="s1")
+        self.s.call("task_update", id="1", status="in_progress", worker="sdk-consensus2", _session="s1")
+        busy = self.s.call("task_update", id="2", status="in_progress", worker="c2", _session="s1")
+        self.assertTrue(busy.get("isError"))
+        self.assertIn("it already holds #1 First", self.text(busy))
+        self.assertIn("#1 First: worker sdk-consensus2 (running)", self.text(busy))
+        again = self.s.call("task_update", id="1", status="in_progress", worker="sdk-consensus2", _session="s1")
+        self.assertFalse(again.get("isError"), "re-asserting its own task is not a second one")
+
+    def test_refusal_lists_workers_and_holders(self):
+        self.roster("s1", {"r1": ("review-pr3", False), "c2": ("sdk-consensus2", True)})
+        for subject in ("Mine", "Delegated", "Third"):
+            self.s.call("task_create", subject=subject, epic=0, _session="s1")
+        self.s.call("task_update", id="1", status="in_progress", _session="s1")
+        self.s.call("task_update", id="2", status="in_progress", _session="s1")
+        refused = self.s.call("task_update", id="3", status="in_progress", _session="s1")
+        self.assertTrue(refused.get("isError"))
+        text = self.text(refused)
+        self.assertIn("for 2 worker(s), you and 1 running subagent(s)", text)
+        self.assertIn("Running subagents: sdk-consensus2 (id c2", text)
+        self.assertNotIn("review-pr3", text, "a stopped subagent is not listed as running")
+        self.assertIn("#1 Mine: no worker linked", text)
+        self.assertIn("#2 Delegated: no worker linked", text)
+        self.assertIn("pass worker=<its type or id> with status=in_progress", text)
+
+    def test_worker_link_is_dropped_when_leaving_in_progress(self):
+        self.roster("s1", {"c2": ("sdk-consensus2", True)})
+        self.s.call("task_create", subject="Work", epic=0, _session="s1")
+        self.s.call("task_update", id="1", status="in_progress", worker="sdk-consensus2", _session="s1")
+        self.s.call("task_update", id="1", status="waiting", _session="s1")
+        self.assertNotIn("worker", self.state()["tasks"][0])
+        self.assertNotIn("worker_id", self.state()["tasks"][0])
+        self.s.call("task_update", id="1", status="in_progress", worker="sdk-consensus2", _session="s1")
+        out = self.s.call("task_update", id="1", status="completed", worker="sdk-consensus2", _session="s1")
+        self.assertFalse(out.get("isError"), "worker is ignored outside a start")
+        self.assertNotIn("worker", self.state()["tasks"][0])
+
+    def test_schema_offers_worker(self):
+        tools = {t["name"]: t for t in self.s.request("tools/list")["result"]["tools"]}
+        self.assertIn("worker", tools["task_update"]["inputSchema"]["properties"])
+        self.assertIn("worker=", tools["task_update"]["description"])
+
     def test_long_subject_is_refused(self):
         out = self.s.call("task_create", subject="x" * 41, epic=0, _session="s1")
         self.assertTrue(out.get("isError"))

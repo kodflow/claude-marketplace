@@ -165,19 +165,44 @@ if [ -s "$mcp_tasks" ]; then
     # One task in progress per worker, across every epic: the main agent is
     # one worker, each running subagent another. More amber cells than
     # workers means some task is shown as moving while nobody is on it —
-    # typically a subagent finished and its task was never closed.
-    busy=$(jq -r '[.tasks[]? | select((.agent // "main") == "main" and .status == "in_progress") | "#\(.id) \(.subject)"] | "\(length)\t\(join(", "))"' \
-        "$mcp_tasks" 2>/dev/null)
-    n_busy=${busy%%$'\t'*}; busy_list=${busy#*$'\t'}
+    # typically a subagent finished and its task was never closed. A task
+    # tied to a subagent (task_update worker=) is judged on that subagent
+    # alone: running, it holds its task and its slot; stopped, the task is
+    # reported below by name. The headcount covers the tasks tied to nobody.
     agents_file=${mcp_tasks%/*}/agents.json
-    running=0
-    [ -s "$agents_file" ] && running=$(jq -r --argjson cut "$(( $(date +%s) - 43200 ))" \
-        '[.agents // {} | .[] | select(type == "object" and .stopped == null and (.started // 0) >= $cut)] | length' \
-        "$agents_file" 2>/dev/null)
-    workers=$(( 1 + ${running:-0} ))
-    if [ "${n_busy:-0}" -gt "$workers" ] 2>/dev/null; then
+    agents='{}'
+    [ -s "$agents_file" ] && agents=$(jq -c '.agents // {} | if type == "object" then . else {} end' "$agents_file" 2>/dev/null)
+    [[ $agents == \{* ]] || agents='{}'
+    # First line: counts and the untied list, fields split by \x1f (a tab
+    # would collapse an empty field); every following line: one orphaned task.
+    held=$(jq -r --argjson ag "$agents" --argjson cut "$(( $(date +%s) - 43200 ))" '
+        def alive: type == "object" and .stopped == null and (.started // 0) >= $cut;
+        def runs($t): ($ag[$t.worker_id // ""] | alive)
+            or (($t.worker // "") as $w | $w != "" and any($ag | to_entries[]; (.value | alive) and (.key == $w or .value.type == $w)));
+        [.tasks[]? | objects | select((.agent // "main") == "main" and .status == "in_progress")] as $ip
+        | ([$ag[] | select(alive)] | length) as $running
+        | [$ip[] | select((.worker // "") != "" and runs(.))] as $live
+        | [$ip[] | select((.worker // "") == "")] as $free
+        | ([$free | length, 1 + $running - ($live | length), $running] | map(tostring)
+           + [$free | map("#\(.id) \(.subject)") | join(", ")] | join("\u001f")),
+          ($ip[] | select((.worker // "") != "" and (runs(.) | not)) | "  - #\(.id) \(.subject): worker \(.worker) is stopped")' \
+        "$mcp_tasks" 2>/dev/null)
+    IFS=$'\x1f' read -r n_busy workers running busy_list <<<"$(printf '%s\n' "$held" | head -n 1)"
+    dead=$(printf '%s\n' "$held" | tail -n +2)
+    if [ "${n_busy:-0}" -gt "${workers:-1}" ] 2>/dev/null; then
         ctx="${ctx:+$ctx
-}$n_busy tasks are in progress for $workers worker(s) (you and ${running:-0} running subagent(s)): $busy_list. One task per worker: set every task nobody is working on right now to completed, pending or waiting."
+}$n_busy tasks are in progress for $workers worker(s) (you and ${running:-0} running subagent(s), less those holding a task by worker=): $busy_list. One task per worker: set every task nobody is working on right now to completed, pending or waiting, or tie each to its running subagent with task_update(status=in_progress, worker=<type or id>)."
+    fi
+    # Once per set of orphaned tasks, like the open-tasks reminder: the task
+    # may genuinely wait for that subagent to be resumed.
+    if [ -n "$dead" ]; then
+        sig=$(printf '%s' "$dead" | cksum | cut -d' ' -f1)
+        if ! grep -qxF "$sig" "$STATE/workers-nudged" 2>/dev/null; then
+            printf '%s\n' "$sig" >> "$STATE/workers-nudged"
+            ctx="${ctx:+$ctx
+}These tasks are in progress on a subagent that has stopped, so nobody is on them. Set each to completed if its work is done, pending or waiting otherwise, or resume its subagent:
+$dead"
+        fi
     fi
 
     # The main thread delegates; it does not do the epic itself. Every epic under way is
@@ -192,8 +217,15 @@ if [ -s "$mcp_tasks" ]; then
             '[.agents // {} | .[] | select(type == "object" and .stopped == null and (.started // 0) >= $cut) | (.epic // 0)] | unique' \
             "$agents_file" 2>/dev/null)
         [[ $covered == \[*\] ]] || covered="[]"
-        producing=$(jq -r --argjson cov "$covered" '.tasks[]? | objects
+        # A task tied to a running subagent (task_update worker=) is covered
+        # by it whatever epic that subagent was attributed to.
+        producing=$(jq -r --argjson cov "$covered" --argjson ag "$agents" --argjson cut "$(( $(date +%s) - 43200 ))" '
+            def alive: type == "object" and .stopped == null and (.started // 0) >= $cut;
+            def runs($t): ($ag[$t.worker_id // ""] | alive)
+                or (($t.worker // "") as $w | $w != "" and any($ag | to_entries[]; (.value | alive) and (.key == $w or .value.type == $w)));
+            .tasks[]? | objects
             | select((.agent // "main") == "main" and .status == "in_progress")
+            | select(runs(.) | not)
             | (.epic // 0) as $e | select(any($cov[]; . == $e) | not)
             | "  - #\(.id) \(.subject): " + (if $e == 0 then "dispatch a subagent in a worktree for it" else "dispatch a subagent in a worktree for epic #\($e)" end)
               + ", or set #\(.id) back to pending/waiting"' "$mcp_tasks" 2>/dev/null)
