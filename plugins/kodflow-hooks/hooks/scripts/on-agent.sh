@@ -37,18 +37,22 @@ _log() {
 # updates an agent already recorded, so they leave no phantom entry.
 # The running subagents of the session, for the status line and the task
 # view: <config>/kodflow/sessions/<session>/agents.json, next to the task list
-# the tasks MCP keeps. Start and stop can race, so every write holds the lock.
+# the tasks MCP keeps. Start and stop can race, so every write holds the lock:
+# lib/lock.sh (mkdir), since flock(1) does not exist on macOS. The tasks MCP
+# only reads agents.json, which is replaced whole, so it needs no lock here.
 _agents() {   # $1 = start|stop
     [ -n "$AID" ] || return 0
     local dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
     (
         mkdir -p "$dir" 2>/dev/null || exit 0
-        exec 9>>"$dir/.lock"; flock -w 2 9 2>/dev/null
+        # A lock not obtained in 2 s is written through anyway: a lost start
+        # or stop would miscount the workers for the rest of the session.
+        . "$LIB/lock.sh" 2>/dev/null && kf_lock "$dir/.agents.lock.d" 2
         local f=$dir/agents.json cur='{"agents":{}}' epic=0
         [ -s "$f" ] && cur=$(cat "$f" 2>/dev/null)
         # The epic the main agent is on when the subagent starts: the status
-        # line counts the subagent on that epic's pill. Same lock as the
-        # tasks MCP, so the read is consistent; anything unreadable is 0.
+        # line counts the subagent on that epic's pill. The tasks MCP replaces
+        # tasks.json whole, so the read is consistent; anything unreadable is 0.
         if [ "$1" = start ] && [ -s "$dir/tasks.json" ]; then
             epic=$(jq -L "$LIB" 'include "epics"; v2 | active("main")' "$dir/tasks.json" 2>/dev/null)
             [[ $epic =~ ^[0-9]+$ ]] || epic=0
