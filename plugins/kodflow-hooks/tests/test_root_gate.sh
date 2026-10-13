@@ -195,6 +195,11 @@ printf '{"agents":{"a1":{"type":"general-purpose","started":%s,"stopped":%s,"epi
 stop; producing && ok "a stopped subagent does not cover it" || bad "stop: stopped" "$OUT"
 printf '{"agents":{"a1":{"type":"general-purpose","started":%s,"stopped":null,"epic":3}}}' "$(( $(date +%s) - 50000 ))" > "$MS/agents.json"
 stop; producing && ok "a subagent started over 12 h ago does not cover it" || bad "stop: stale" "$OUT"
+printf '{"agents":{"a1":{"type":"forgejo-cluster","started":%s,"stopped":null,"epic":4}}}' "$(date +%s)" > "$MS/agents.json"
+jq '.tasks[0] += {worker:"forgejo-cluster",worker_id:"a1"}' "$MS/tasks.json" > "$MS/t" && mv "$MS/t" "$MS/tasks.json"
+stop; producing && bad "stop: tied" "$OUT" || ok "a task tied to its running subagent (worker=) is covered, whatever its epic"
+printf '{"agents":{"a1":{"type":"forgejo-cluster","started":%s,"stopped":%s,"epic":4}}}' "$(date +%s)" "$(date +%s)" > "$MS/agents.json"
+stop; producing && ok "a task tied to a stopped subagent is flagged" || bad "stop: tied stopped" "$OUT"
 rm -f "$MS/agents.json"
 stop KODFLOW_ROOT=off; producing && bad "stop: off" "$OUT" || ok "KODFLOW_ROOT=off skips the rule"
 printf '%s' '{"version":2,"active":{"main":3},"epics":[{"id":3,"agent":"main","title":"Rules"}],"tasks":[
