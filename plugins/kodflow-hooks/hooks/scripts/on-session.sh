@@ -40,6 +40,29 @@ _log() {
 }
 _context() { jq -n -c --arg c "$1" --arg e "$EV" '{hookSpecificOutput:{hookEventName:$e,additionalContext:$c}}' 2>/dev/null; }
 
+_sha256() { { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi; } 2>/dev/null | cut -d' ' -f1; }
+
+# $1 config dir → one warning line per guard script that differs from the
+# fingerprint shipped with this copy, and one when this copy's fingerprints
+# differ from the marketplace's (an update pending, or a modified install).
+_fingerprints() {
+    local hd=${BASH_SOURCE[0]%/*}/.. fp h p got pub
+    fp=$hd/fingerprints.sha256
+    if [ ! -f "$fp" ]; then
+        printf '\n%s' "- hooks/fingerprints.sha256 is missing from the installed kodflow-hooks: the guards cannot be checked."
+        return 0
+    fi
+    while read -r h p; do
+        [ -n "$p" ] || continue
+        got=$(_sha256 "$hd/$p")
+        [ "$got" = "$h" ] || printf '\n%s' "- $p differs from its published fingerprint (expected ${h:0:12}, found ${got:-missing}): the installed guard was modified."
+    done < "$fp"
+    pub=$1/plugins/marketplaces/kodflow/plugins/kodflow-hooks/hooks/fingerprints.sha256
+    [ -f "$pub" ] && ! cmp -s "$pub" "$fp" \
+        && printf '\n%s' "- the installed kodflow-hooks guards differ from the marketplace copy: run claude plugin update kodflow-hooks@kodflow, or find out what changed."
+    return 0
+}
+
 # $1 config dir, $2 roots (one per line), $3 enabled plugins (name@mkt per
 # line) → every hooks.json declaring modules outside the kodflow marketplace.
 _foreign_modules() {
@@ -120,6 +143,12 @@ Context was compacted: verify the task state before continuing.'
     [ -n "${CLAUDE_CODE_PLUGIN_DIRS:-}" ] && roots="$roots"$'\n'"$(printf '%s' "$CLAUDE_CODE_PLUGIN_DIRS" | tr ':,' '\n\n')"
     mods=$(_foreign_modules "$cfg" "$roots" "$enabled")
     [ -n "$mods" ] && warn="$warn"$'\n'"- modules declared outside kodflow (TypeScript run by the CLI):"$'\n'"$(printf '%s\n' "$mods" | sed 's/^/  /')"
+
+    # D8 · self-defence by fingerprint. Nothing is blocked; an edited guard
+    # is said out loud. The reference is fingerprints.sha256, generated and
+    # checked by CI (scripts/hooks-fingerprints.sh) and shipped with the
+    # plugin; the marketplace clone holds the published one.
+    warn="$warn$(_fingerprints "$cfg")"
 
     # One document per hook: every part above joins a single context.
     if [ -n "$warn" ]; then

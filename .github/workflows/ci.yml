@@ -88,6 +88,12 @@ jobs:
       - name: Hook scripts behave, bash-guard corpus included
         run: bash scripts/tests/test_hooks.sh
 
+      # on-session.sh warns when an installed guard differs from the
+      # fingerprint shipped with it. The file is generated; a change to a
+      # guard that did not regenerate it would make every session warn.
+      - name: Guard fingerprints match the scripts
+        run: bash scripts/hooks-fingerprints.sh --check
+
       # A plugin that ships a suite gets it run. Discovered, not listed: a
       # hand-kept list is how kodflow-shell's 31 assertions sat in the tree
       # for a day without anything running them.

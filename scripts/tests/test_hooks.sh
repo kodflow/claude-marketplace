@@ -459,6 +459,30 @@ run SessionStart "" '{"source":"startup"}' on-session.sh
 printf '%s' "$OUT" | jq -e '.systemMessage | test("other/modder") | not' >/dev/null 2>&1 \
     && ok "a plugin that is not enabled is not reported" || bad "enabled filter" "$OUT"
 rm -rf "$CLAUDE_CONFIG_DIR/plugins" "$CLAUDE_CONFIG_DIR/skills" "$CLAUDE_CONFIG_DIR/settings.json"
+
+echo "== SessionStart · guards checked against their fingerprints (D8)"
+# A copy of the plugin's hooks stands for the installed one.
+CP=$T/installed/hooks; mkdir -p "$T/installed"; cp -R "$ROOT/plugins/kodflow-hooks/hooks" "$CP"
+start_copy() { OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"SessionStart",source:"startup",cwd:$cwd,scratchpad_dir:$sp}' \
+    | bash "$CP/scripts/on-session.sh" 2>/dev/null); }
+start_copy
+{ [ -z "$OUT" ] || printf '%s' "$OUT" | jq -e '.systemMessage // "" | test("fingerprint") | not' >/dev/null 2>&1; } \
+    && ok "an untouched copy matches its fingerprints" || bad "fingerprint clean" "$OUT"
+printf '\n# edited\n' >> "$CP/scripts/on-tool.sh"; start_copy
+printf '%s' "$OUT" | jq -e '(.systemMessage | test("scripts/on-tool.sh differs from its published fingerprint")) and (.hookSpecificOutput.additionalContext | test("on-tool.sh differs"))' >/dev/null 2>&1 \
+    && ok "an edited on-tool.sh raises a visible warning" || bad "fingerprint edited" "$OUT"
+cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/on-tool.sh" "$CP/scripts/on-tool.sh"
+MK=$CLAUDE_CONFIG_DIR/plugins/marketplaces/kodflow/plugins/kodflow-hooks/hooks; mkdir -p "$MK"
+cp "$CP/fingerprints.sha256" "$MK/"; start_copy
+{ [ -z "$OUT" ] || printf '%s' "$OUT" | jq -e '.systemMessage // "" | test("marketplace") | not' >/dev/null 2>&1; } \
+    && ok "the same fingerprints as the marketplace: silent" || bad "marketplace same" "$OUT"
+printf '0000  scripts/on-tool.sh\n' > "$MK/fingerprints.sha256"; start_copy
+printf '%s' "$OUT" | jq -e '.systemMessage | test("differ from the marketplace copy")' >/dev/null 2>&1 \
+    && ok "fingerprints that differ from the marketplace are reported" || bad "marketplace differs" "$OUT"
+rm -f "$CP/fingerprints.sha256"; start_copy
+printf '%s' "$OUT" | jq -e '.systemMessage | test("fingerprints.sha256 is missing")' >/dev/null 2>&1 \
+    && ok "a missing fingerprint file is reported" || bad "fingerprint missing" "$OUT"
+rm -rf "$CLAUDE_CONFIG_DIR/plugins" "$T/installed"
 run SubagentStart "" '{"agent_type":"Explore"}' on-agent.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("Subagent context")' >/dev/null 2>&1 && ok "subagent rules injected" || bad "subagent context" "$OUT"
 run SubagentStop "" '{"agent_type":"Explore","stop_hook_active":true}' on-agent.sh
