@@ -8,7 +8,7 @@
 #
 #   1. GATE       the cheapest test that lets most calls leave at once
 #   2. BLOCK      what must stop the call: exit 2 with the reason on stderr
-#   3. TRANSFORM  rewrite the input, emitted as ONE JSON document
+#   3. TRANSFORM  what Claude reads (context, a reformatted file), as ONE JSON document
 #   4. OBSERVE    logging and advice, off the critical path
 #
 # Every path that is not a deliberate block exits 0. A PreToolUse hook that
@@ -64,15 +64,26 @@ if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_
         Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__*tasks__task_*) ;;
         Read|Glob|Grep|LS|ToolSearch|AskUserQuestion) exit 0 ;;
         *)
-            [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]] && exit 0
-            fp_gate=0
-            if [ "${KODFLOW_ROOT:-}" != off ] && ! [[ $INPUT =~ \"permission_mode\":\ ?\"plan\" ]] && ! _forge_ok "$fp_tool"; then
-                fp_gate=1
-            fi
-            fp_dir=""; fp_sid=""
-            [[ $INPUT =~ \"scratchpad_dir\":\ ?\"([^\"]*)\" ]] && fp_dir=${BASH_REMATCH[1]}
-            [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && fp_sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
-            [ $fp_gate -eq 1 ] || [ -f "${fp_dir:-${TMPDIR:-/tmp}/claude-hooks-${fp_sid:-default}}/triage-pending" ] || exit 0 ;;
+            # A forge tool that carries a message, a title, a body, a branch or
+            # a merge goes on to the full path for every caller, subagents
+            # included: attribution, merges and default-branch writes are
+            # checked there.
+            fp_full=0
+            case "$fp_tool" in mcp__github__*|mcp__gitlab__*|mcp__GitKraken__*)
+                fp_re='"(message|commit_message|commit_title|squash_commit_message|merge_commit_message|title|body|description|merge_when_pipeline_succeeds|auto_merge|branch)":'
+                if [[ $INPUT =~ $fp_re ]]; then fp_full=1; else case "$fp_tool" in *merge_pull_request|*merge_merge_request) fp_full=1 ;; esac; fi ;;
+            esac
+            if [ $fp_full = 0 ]; then
+                [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]] && exit 0
+                fp_gate=0
+                if [ "${KODFLOW_ROOT:-}" != off ] && ! [[ $INPUT =~ \"permission_mode\":\ ?\"plan\" ]] && ! _forge_ok "$fp_tool"; then
+                    fp_gate=1
+                fi
+                fp_dir=""; fp_sid=""
+                [[ $INPUT =~ \"scratchpad_dir\":\ ?\"([^\"]*)\" ]] && fp_dir=${BASH_REMATCH[1]}
+                [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && fp_sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
+                [ $fp_gate -eq 1 ] || [ -f "${fp_dir:-${TMPDIR:-/tmp}/claude-hooks-${fp_sid:-default}}/triage-pending" ] || exit 0
+            fi ;;
     esac
 fi
 
@@ -115,8 +126,11 @@ _log() {
     local dir=$PROJECT_DIR/.claude/logs/$BRANCH_SAFE
     (
         mkdir -p "$dir" 2>/dev/null || exit 0
-        exec 9>>"$dir/.lock"; flock -w 2 9 2>/dev/null
+        # mkdir is the lock: flock is absent on macOS. A stale lock costs half
+        # a second, then the line is written anyway.
+        local n=0; until mkdir "$dir/.lock.d" 2>/dev/null; do n=$((n+1)); [ $n -ge 10 ] && break; sleep 0.05; done
         printf '%s' "$INPUT" | KODFLOW_ROOT_GUARD=${ROOT_GUARD:-} jq -c --arg b "$BRANCH" -f "$LIB/event.jq" >> "$dir/session.jsonl" 2>/dev/null
+        [ $n -lt 10 ] && rmdir "$dir/.lock.d" 2>/dev/null
     ) >/dev/null 2>&1 </dev/null &
 }
 
@@ -127,28 +141,564 @@ _block() {   # $1 = title, rest = lines. Stderr on exit 2 is what Claude reads.
     exit 2
 }
 
-# Split a command line on ; && || | & and newline. Text inside quotes is split
-# too; that only ever makes the guards more conservative.
-_split() {
-    local s=$1 l
-    s=${s//&&/$'\n'}; s=${s//||/$'\n'}; s=${s//;/$'\n'}; s=${s//|/$'\n'}; s=${s//&/$'\n'}
-    SEGS=()
-    while IFS= read -r l; do l=${l#"${l%%[![:space:]]*}"}; [ -n "$l" ] && SEGS+=("$l"); done <<<"$s"
+# ============================================================================
+# Shell reader · what a Bash line will actually run
+# ============================================================================
+# A regex over the raw line cannot tell `git "commit"`, `\git commit` or
+# `=git commit` from a commit, and it reads a heredoc that merely quotes a
+# commit as one. This reader does the shell's own first pass: it cuts the
+# line into simple commands, removes quotes and backslashes, joins
+# `\`+newline, sets heredoc bodies aside as data, and queues for another pass
+# every text the shell would itself run — $( ), backticks, <( ), bash -c,
+# sh -c, eval, su/sg -c, and a body or a pipe fed to a shell. It never expands
+# a variable or an alias: `c=git; $c commit` stays unread (known gap).
+#
+# Per command k: P_W[k] its words, US-separated; P_IN[k] what it reads on
+# stdin (heredoc, here-string); P_RD[k] its redirection targets; P_PIPE[k]=1
+# when a pipe feeds it. Bash 3.2: no associative arrays, no ;& in case.
+US=$'\037'
+
+_p_queue() { [ ${#PQ[@]} -lt 64 ] && [ "$2" -le 6 ] && { PQ+=("$1"); PQD+=("$2"); }; return 0; }
+
+# $1 text, $2 index just past "(" → PCAP the content, PJ the index past ")".
+_p_paren() {
+    local LC_ALL=C
+    local t=$1 k=$2 m=${#1} dep=1 ch r
+    while [ $k -lt $m ]; do
+        r=${t:k:256}; r=${r%%[\\\'\"\(\)]*}
+        [ -n "$r" ] && { k=$((k+${#r})); continue; }
+        ch=${t:k:1}
+        case "$ch" in
+            \\) k=$((k+2)); continue ;;
+            \') r=${t:k+1}; r=${r%%\'*}; k=$((k+${#r}+2)); continue ;;
+            \") k=$((k+1))
+                while [ $k -lt $m ]; do
+                    ch=${t:k:1}
+                    case "$ch" in \\) k=$((k+2)); continue ;; \") break ;; esac
+                    k=$((k+1))
+                done ;;
+            \() dep=$((dep+1)) ;;
+            \)) dep=$((dep-1)); [ $dep -eq 0 ] && break ;;
+        esac
+        k=$((k+1))
+    done
+    PCAP=${t:$2:k-$2}; PJ=$((k+1))
 }
 
-# The executable name of a segment, past VAR=value prefixes and wrappers.
-_seg_name() {
-    local seg=$1 w next
-    while :; do
-        w=${seg%%[[:space:]]*}
-        case "$w" in
-            [A-Za-z_]*=*|env|command|builtin|nohup|time|exec|sudo|sg)
-                next=${seg#*[[:space:]]}; [ "$next" = "$seg" ] && break
-                seg=${next#"${next%%[![:space:]]*}"} ;;
+# $1 source text, $2 its depth. Appends commands to P_*; queues nested text.
+_p_scan() {
+    local LC_ALL=C
+    local s=$1 d=$2 n=${#1} i=0 c r w="" wa=0 rn=0 cw="" cr="" pipe=0 q idx strip dl body line
+    local -a hq=()
+    _pw() {   # end of a word: an argument, a redirection target, or stdin data
+        if [ $wa = 1 ]; then
+            case $rn in
+                1) cr=$cr$w$US ;;
+                2) P_IN[P_N]=${P_IN[P_N]:-}$w$'\n' ;;
+                *) cw=$cw$w$US ;;
+            esac
+            rn=0
+        fi
+        w=""; wa=0
+    }
+    _pc() {   # end of a command; $1=1 when the next one reads a pipe
+        _pw
+        if [ -n "$cw$cr" ] || [ -n "${P_IN[P_N]:-}" ]; then
+            P_W[P_N]=$cw; P_RD[P_N]=$cr; P_PIPE[P_N]=$pipe; P_IN[P_N]=${P_IN[P_N]:-}
+            P_N=$((P_N+1))
+        fi
+        cw=""; cr=""; pipe=${1:-0}
+    }
+    _pdollar() {   # at $( : arithmetic is text, a substitution is queued
+        if [ "${s:i+2:1}" = '(' ]; then
+            _p_paren "$s" $((i+2)); w=$w'$('$PCAP')'
+        else
+            _p_paren "$s" $((i+2)); _p_queue "$PCAP" $((d+1)); w=$w'$('$PCAP')'
+        fi
+        wa=1; i=$PJ
+    }
+    _ptick() {   # at a backtick: the text up to the next one is queued
+        local k=$((i+1)) ch
+        while [ $k -lt $n ]; do
+            ch=${s:k:1}
+            case "$ch" in \\) k=$((k+2)); continue ;; \`) break ;; esac
+            k=$((k+1))
+        done
+        _p_queue "${s:i+1:k-i-1}" $((d+1)); w=$w${s:i:k-i+1}; wa=1; i=$((k+1))
+    }
+    while [ $i -lt $n ]; do
+        r=${s:i:256}; r=${r%%[!A-Za-z0-9_./:@%+,=-]*}
+        if [ -n "$r" ]; then w=$w$r; wa=1; i=$((i+${#r})); continue; fi
+        c=${s:i:1}
+        case "$c" in
+            ' '|$'\t') _pw ;;
+            $'\n')
+                _pc
+                if [ ${#hq[@]} -gt 0 ]; then   # the bodies follow, in order
+                    i=$((i+1))
+                    for q in "${hq[@]}"; do
+                        idx=${q%%"$US"*}; q=${q#*"$US"}; strip=${q%%"$US"*}; dl=${q#*"$US"}; body=""
+                        while [ $i -lt $n ]; do
+                            line=${s:i}; line=${line%%$'\n'*}; i=$((i+${#line}+1))
+                            if [ "$strip" = 1 ]; then while [ "${line:0:1}" = $'\t' ]; do line=${line:1}; done; fi
+                            [ "$line" = "$dl" ] && break
+                            body=$body$line$'\n'
+                        done
+                        P_IN[idx]=${P_IN[idx]:-}$body
+                    done
+                    hq=(); continue
+                fi ;;
+            ';'|'('|')') _pc ;;
+            '&')
+                if [ "${s:i+1:1}" = '>' ]; then   # &> and &>> redirect, they do not separate
+                    _pw; i=$((i+2)); [ "${s:i:1}" = '>' ] && i=$((i+1)); rn=1; continue
+                fi
+                [ "${s:i+1:1}" = '&' ] && i=$((i+1)); _pc ;;
+            '|')
+                case "${s:i+1:1}" in '|') i=$((i+1)); _pc ;; '&') i=$((i+1)); _pc 1 ;; *) _pc 1 ;; esac ;;
+            '<'|'>')
+                # an all-digit word right before is a file descriptor
+                if [ $wa = 1 ]; then case "$w" in *[!0-9]*) _pw ;; *) w=""; wa=0 ;; esac; fi
+                if [ "$c" = '<' ] && [ "${s:i+1:2}" = '<<' ]; then
+                    i=$((i+3)); rn=2; continue   # here-string: the next word is stdin
+                elif [ "$c" = '<' ] && [ "${s:i+1:1}" = '<' ]; then
+                    i=$((i+2)); strip=0; [ "${s:i:1}" = - ] && { strip=1; i=$((i+1)); }
+                    while [ "${s:i:1}" = ' ' ] || [ "${s:i:1}" = $'\t' ]; do i=$((i+1)); done
+                    dl=""
+                    while [ $i -lt $n ]; do
+                        c=${s:i:1}
+                        case "$c" in
+                            ' '|$'\t'|$'\n'|';'|'&'|'|'|'<'|'>'|'('|')') break ;;
+                            \'|\") r=${s:i+1}; r=${r%%"$c"*}; dl=$dl$r; i=$((i+${#r}+2)); continue ;;
+                            \\) dl=$dl${s:i+1:1}; i=$((i+2)); continue ;;
+                        esac
+                        dl=$dl$c; i=$((i+1))
+                    done
+                    hq+=("$P_N$US$strip$US$dl"); continue
+                elif [ "${s:i+1:1}" = '(' ]; then   # <( ) and >( ) run their text
+                    _p_paren "$s" $((i+2)); _p_queue "$PCAP" $((d+1)); i=$PJ; continue
+                fi
+                i=$((i+1))
+                case "${s:i:1}" in
+                    '>'|'|') i=$((i+1)) ;;
+                    '&') i=$((i+1)); while [[ ${s:i:1} == [0-9-] ]]; do i=$((i+1)); done; continue ;;
+                esac
+                [ "$c" = '<' ] && [ "${s:i:1}" = '>' ] && i=$((i+1))
+                rn=1; continue ;;
+            '#')
+                if [ $wa = 0 ]; then r=${s:i}; r=${r%%$'\n'*}; i=$((i+${#r})); continue; fi
+                w=$w$c ;;
+            \\)
+                [ "${s:i+1:1}" = $'\n' ] && { i=$((i+2)); continue; }
+                w=$w${s:i+1:1}; wa=1; i=$((i+2)); continue ;;
+            \')
+                r=${s:i+1}; r=${r%%\'*}; w=$w$r; wa=1; i=$((i+${#r}+2)); continue ;;
+            \")
+                i=$((i+1)); wa=1
+                while [ $i -lt $n ]; do
+                    r=${s:i:256}; r=${r%%[\"\\\$\`]*}
+                    [ -n "$r" ] && { w=$w$r; i=$((i+${#r})); continue; }
+                    c=${s:i:1}
+                    case "$c" in
+                        \") break ;;
+                        \\) case "${s:i+1:1}" in
+                                $'\n') i=$((i+2)); continue ;;
+                                \"|\\|\$|\`) w=$w${s:i+1:1}; i=$((i+2)); continue ;;
+                            esac ;;
+                        \$) [ "${s:i+1:1}" = '(' ] && { _pdollar; continue; } ;;
+                        \`) _ptick; continue ;;
+                    esac
+                    w=$w$c; i=$((i+1))
+                done ;;
+            \$)
+                case "${s:i+1:1}" in
+                    '(') _pdollar; continue ;;
+                    \')   # $'…': the escapes are decoded, \x67it is git
+                        i=$((i+2)); r=""
+                        while [ $i -lt $n ]; do
+                            c=${s:i:1}
+                            case "$c" in \') break ;; \\) r=$r${s:i:2}; i=$((i+2)); continue ;; esac
+                            r=$r$c; i=$((i+1))
+                        done
+                        printf -v r '%b' "$r" 2>/dev/null; w=$w$r; wa=1 ;;
+                    *) w=$w$c; wa=1 ;;
+                esac ;;
+            \`) _ptick; continue ;;
+            *) w=$w$c; wa=1 ;;
+        esac
+        i=$((i+1))
+    done
+    _pc
+}
+
+_p_words() { W=(); local r=$1; while [ -n "$r" ]; do W+=("${r%%"$US"*}"); r=${r#*"$US"}; done; }
+
+# $1 command index → A (argv from the executable on) and NAME (its basename).
+# Reserved words, VAR=value prefixes and wrappers are walked past; `=git`
+# (zsh) and `\git` (already unquoted) name git.
+_p_argv() {
+    _p_words "${P_W[$1]}"
+    local x=0 nw=${#W[@]} t name
+    while [ $x -lt $nw ]; do
+        t=${W[x]}
+        case "$t" in
+            '!'|'{'|'}'|if|then|else|elif|do|while|until) x=$((x+1)); continue ;;
+            [A-Za-z_]*=*) [[ ${t%%=*} == *[!A-Za-z0-9_]* ]] || { x=$((x+1)); continue; } ;;
+        esac
+        name=${t#=}; name=${name##*/}
+        case "$name" in
+            env)
+                x=$((x+1))
+                while [ $x -lt $nw ]; do
+                    case "${W[x]}" in -u|-C|-S|--unset|--chdir) x=$((x+2)) ;; -*|[A-Za-z_]*=*) x=$((x+1)) ;; *) break ;; esac
+                done ;;
+            command|builtin|nohup|chronic|exec|time|caffeinate)
+                x=$((x+1))
+                while [ $x -lt $nw ]; do
+                    case "$name/${W[x]}" in
+                        command/-v|command/-V) NAME=lookup; A=(); return ;;
+                        exec/-a) x=$((x+2)) ;;
+                        */-*) x=$((x+1)) ;;
+                        *) break ;;
+                    esac
+                done ;;
+            nice|timeout|ionice|stdbuf|doas|sudo|xargs)
+                x=$((x+1))
+                while [ $x -lt $nw ]; do
+                    case "$name/${W[x]}" in
+                        */--) x=$((x+1)); break ;;
+                        sudo/-[ugChpUrtDR]|doas/-[uC]|nice/-n|xargs/-[InPLsdEa]|timeout/-[sk]|ionice/-[cnp]) x=$((x+2)) ;;
+                        */-*) x=$((x+1)) ;;
+                        *) break ;;
+                    esac
+                done
+                [ "$name" = timeout ] && x=$((x+1)) ;;
+            rtk) x=$((x+1)); [ "${W[x]:-}" = proxy ] && x=$((x+1)) ;;
             *) break ;;
         esac
     done
-    w=${seg%%[[:space:]]*}; printf '%s' "${w##*/}"
+    A=("${W[@]:x}"); NAME=${A[0]:-}; NAME=${NAME#=}; NAME=${NAME##*/}
+}
+
+# $1 command index: queue what it hands to a shell.
+_p_expand() {
+    _p_argv "$1"
+    local y=1 na=${#A[@]} prev
+    case "$NAME" in
+        bash|sh|zsh|dash|ksh|ash|mksh)
+            while [ $y -lt $na ]; do
+                case "${A[y]}" in
+                    -o|+o) y=$((y+2)); continue ;;
+                    --*) ;;
+                    -*c*) _p_queue "${A[y+1]:-}" $((PDEPTH+1)); return ;;
+                    -*|+*) ;;
+                    *) return ;;   # a script file: not ours to read
+                esac
+                y=$((y+1))
+            done
+            # no -c and no file: the shell runs its stdin
+            [ -n "${P_IN[$1]:-}" ] && _p_queue "${P_IN[$1]}" $((PDEPTH+1))
+            if [ "${P_PIPE[$1]:-0}" = 1 ] && [ "$1" -gt 0 ]; then
+                prev=$(( $1 - 1 ))
+                [ -n "${P_IN[prev]:-}" ] && _p_queue "${P_IN[prev]}" $((PDEPTH+1))
+                _p_argv $prev
+                case "$NAME" in echo|printf) _p_queue "${A[*]:1}" $((PDEPTH+1)) ;; esac
+            fi ;;
+        eval) [ $na -gt 1 ] && _p_queue "${A[*]:1}" $((PDEPTH+1)) ;;
+        su|sg)
+            while [ $y -lt $na ]; do
+                [ "${A[y]}" = -c ] && { _p_queue "${A[y+1]:-}" $((PDEPTH+1)); return; }
+                y=$((y+1))
+            done ;;
+    esac
+}
+
+# $1 the command line → every simple command it runs, nested ones included.
+_p_parse() {
+    P_W=(); P_IN=(); P_RD=(); P_PIPE=(); P_N=0; PQ=("$1"); PQD=(0)
+    local qi=0 k
+    while [ $qi -lt ${#PQ[@]} ]; do
+        k=$P_N; PDEPTH=${PQD[qi]}
+        _p_scan "${PQ[qi]}" "$PDEPTH"
+        while [ $k -lt $P_N ]; do _p_expand $k; k=$((k+1)); done
+        qi=$((qi+1))
+    done
+}
+
+# $1 a file argument, $2 the command index. `-` is the command's stdin; a
+# file not on disk yet may be written earlier on the same line by a heredoc
+# (`cat > m.txt <<EOF … ; git commit -F m.txt`).
+_p_file() {
+    local f=$1 k
+    if [ "$f" = - ]; then
+        printf '%s' "${P_IN[$2]:-}"
+        if [ "${P_PIPE[$2]:-0}" = 1 ] && [ "$2" -gt 0 ]; then
+            k=$(( $2 - 1 )); printf '%s' "${P_IN[k]:-}"; _p_argv $k
+            case "$NAME" in echo|printf) printf '%s\n' "${A[*]:1}" ;; esac
+        fi
+        return 0
+    fi
+    [ -n "$f" ] || return 0
+    if [ -r "$f" ] && [ -f "$f" ]; then head -c 200000 -- "$f" 2>/dev/null; return 0; fi
+    k=0
+    while [ $k -lt $P_N ]; do
+        case "$US${P_RD[k]:-}" in *"$US$f$US"*)
+            printf '%s' "${P_IN[k]:-}"; _p_argv $k
+            case "$NAME" in echo|printf) printf '%s\n' "${A[*]:1}" ;; esac ;;
+        esac
+        k=$((k+1))
+    done
+}
+
+# ============================================================================
+# Guards · decided on what the line runs
+# ============================================================================
+# §5 of the user's rules. A commit message is held to every pattern; a pull
+# request title or body to the attribution ones only (a PR may name a .claude/
+# path it changes). Issues, comments and reviews are not checked.
+ATTR_PATTERNS=("co-authored-by:.*(claude|anthropic|openai|gpt|copilot|gemini|llm|ai)"
+    "generated[[:space:]]+(by|with)[[:space:]]+(claude|ai|gpt|anthropic|copilot)"
+    "ai[-.]assisted" "🤖" "claude[-[:space:]]code")
+LEAK_PATTERNS=("\\.claude/" "^[[:space:]]*plan:" "(see|ref|tracked-in)[[:space:]]+\\.claude" "\\bplan[[:space:]]+\\.claude")
+
+# $1 kind (commit|pr), $2 text → F_ATTR "<motif> <pattern>" on the first hit.
+_scan() {
+    [ -n "$F_ATTR" ] && return 0
+    local p hay
+    hay=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+    case "$hay" in *[![:space:]]*) ;; *) return 0 ;; esac
+    for p in "${ATTR_PATTERNS[@]}"; do
+        printf '%s' "$hay" | grep -qiE "$p" && { F_ATTR="attribution $p"; F_ATTR_KIND=$1; return 0; }
+    done
+    [ "$1" = commit ] || return 0
+    for p in "${LEAK_PATTERNS[@]}"; do
+        printf '%s' "$hay" | grep -qiE "$p" && { F_ATTR="leak $p"; F_ATTR_KIND=$1; return 0; }
+    done
+}
+
+_is_noverify() { case "$1" in --no-veri|--no-verif|--no-verify) return 0 ;; esac; return 1; }
+
+# The default branch names for a repository directory.
+_defaults() {
+    local h
+    DEFAULTS=" main master "
+    h=$(git -C "$1" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null) && DEFAULTS="$DEFAULTS${h#origin/} "
+}
+
+# $1 command index, A/NAME set. git: its globals, then the subcommand.
+_guard_git() {
+    local y=1 na=${#A[@]} gdir=$GDIR v lc sub msg="" farg="" hay
+    while [ $y -lt $na ]; do
+        v=${A[y]}
+        case "$v" in
+            -C) gdir=${A[y+1]:-}; y=$((y+2)); continue ;;
+            -c|--config-env)
+                lc=$(printf '%s' "${A[y+1]:-}" | tr '[:upper:]' '[:lower:]')
+                case "$lc" in core.hookspath=*) F_HOOKS=1 ;; esac
+                y=$((y+2)); continue ;;
+            --config-env=*) lc=$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]'); case "$lc" in *=core.hookspath=*) F_HOOKS=1 ;; esac ;;
+            --git-dir|--work-tree|--namespace|--super-prefix) y=$((y+2)); continue ;;
+            -*) ;;
+            *) break ;;
+        esac
+        y=$((y+1))
+    done
+    case "$gdir" in /*) ;; "") gdir=$PROJECT_DIR ;; *) gdir=$PROJECT_DIR/$gdir ;; esac
+    sub=${A[y]:-}; y=$((y+1))
+    case "$sub" in
+        commit|push|rebase|cherry-pick|merge|am|apply|revert)
+            F_ROOT="git $sub from the main thread produces into a repository." ;;
+        worktree) [ "${A[y]:-}" = add ] && F_ROOT="git worktree from the main thread produces into a repository." ;;
+        reset) case " ${A[*]:y} " in *" --hard "*) F_ROOT="git reset from the main thread produces into a repository." ;; esac ;;
+    esac
+    case "$sub" in
+        commit|push|merge|am|rebase|cherry-pick|revert|pull) [ "$F_HOOKS" = 1 ] && F_NV="git -c core.hooksPath on git $sub" ;;
+    esac
+    case "$sub" in
+        commit)
+            F_COMMIT=1
+            while [ $y -lt $na ]; do
+                v=${A[y]}
+                case "$v" in
+                    --) break ;;
+                    -m|--message|--trailer) msg=$msg$'\n'${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --message=*|--trailer=*) msg=$msg$'\n'${v#*=} ;;
+                    -F|--file) farg=${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --file=*) farg=${v#*=} ;;
+                    -C|-c|-t|--reuse-message|--reedit-message|--author|--date|--cleanup|--template|--fixup|--squash|--pathspec-from-file) y=$((y+2)); continue ;;
+                    --amend) F_AMEND=1 ;;
+                    --*) _is_noverify "$v" && F_NV="--no-verify on git commit" ;;
+                    -*)   # a short cluster: n is --no-verify, m F C c t take the rest or the next word
+                        local cl=${v#-} ch rest
+                        while [ -n "$cl" ]; do
+                            ch=${cl:0:1}; rest=${cl:1}
+                            case "$ch" in
+                                n) F_NV="-n (--no-verify) on git commit" ;;
+                                u|S) break ;;   # -uno, -S<key>: an attached optional argument
+                                m|F|C|c|t)
+                                    if [ -z "$rest" ]; then rest=${A[y+1]:-}; y=$((y+1)); fi
+                                    case "$ch" in m) msg=$msg$'\n'$rest ;; F) farg=$rest ;; esac
+                                    break ;;
+                            esac
+                            cl=$rest
+                        done ;;
+                esac
+                y=$((y+1))
+            done
+            hay=$msg
+            [ -n "$farg" ] && hay=$hay$'\n'$(_p_file "$farg" "$1")
+            [ "${F_AMEND:-0}" = 1 ] && [ -z "$msg$farg" ] && hay=$hay$'\n'$(git -C "$gdir" log -1 --pretty=%B 2>/dev/null)
+            _scan commit "$hay" ;;
+        merge)
+            while [ $y -lt $na ]; do
+                v=${A[y]}
+                case "$v" in
+                    -m) _scan commit "${A[y+1]:-}"; y=$((y+2)); continue ;;
+                    -F|--file) _scan commit "$(_p_file "${A[y+1]:-}" "$1")"; y=$((y+2)); continue ;;
+                    --*) _is_noverify "$v" && F_NV="--no-verify on git merge" ;;
+                esac
+                y=$((y+1))
+            done ;;
+        rebase|cherry-pick)
+            for v in "${A[@]:y}"; do _is_noverify "$v" && F_NV="--no-verify on git $sub"; done
+            _scan commit "$(git -C "$gdir" log -5 --pretty=%B 2>/dev/null)" ;;
+        am|revert|pull)
+            for v in "${A[@]:y}"; do _is_noverify "$v" && F_NV="--no-verify on git $sub"; done ;;
+        push) _guard_push "$1" ;;
+    esac
+}
+
+# git push: --no-verify, a forced push, and (subagent) the default branch.
+_guard_push() {
+    local v pos=0 refs="" force=0 all=0 r dst cur
+    while [ $y -lt $na ]; do
+        v=${A[y]}
+        case "$v" in
+            --force-with-lease*|--force-if-includes|--no-force-*) ;;
+            --force) force=1 ;;
+            --mirror|--all|--branches) all=1 ;;
+            --repo|--receive-pack|--exec|--push-option|-o) y=$((y+1)) ;;
+            --*) _is_noverify "$v" && F_NV="--no-verify on git push" ;;
+            -*) case "$v" in *f*) force=1 ;; esac ;;
+            *) pos=$((pos+1)); [ $pos -ge 2 ] && refs="$refs$v$US"
+               case "$v" in +*) [ $pos -ge 2 ] && force=1 ;; esac ;;
+        esac
+        y=$((y+1))
+    done
+    [ $force = 1 ] && F_FORCE=1
+    [ -n "$AID" ] || return 0
+    _defaults "$gdir"
+    if [ $all = 1 ]; then F_DEFPUSH="git push --all/--mirror includes the default branch"; return 0; fi
+    if [ -z "$refs" ]; then
+        cur=$(git -C "$gdir" symbolic-ref --short HEAD 2>/dev/null)
+        case "$DEFAULTS" in *" $cur "*) [ -n "$cur" ] && F_DEFPUSH="git push from $cur, the default branch" ;; esac
+        return 0
+    fi
+    while [ -n "$refs" ]; do
+        r=${refs%%"$US"*}; refs=${refs#*"$US"}; r=${r#+}
+        dst=${r#*:}
+        if [ "$dst" = HEAD ] || [ "$r" = HEAD ]; then dst=$(git -C "$gdir" symbolic-ref --short HEAD 2>/dev/null); fi
+        dst=${dst#refs/heads/}
+        case "$DEFAULTS" in *" $dst "*) [ -n "$dst" ] && F_DEFPUSH="git push to $dst, the default branch" ;; esac
+    done
+}
+
+_merge_re='(^|/)pulls/[^/[:space:]]+/merge/?$|merge_requests/[^/[:space:]]+/merge/?$'
+_merge_words='mergePullRequest|enablePullRequestAutoMerge|merge_when_pipeline_succeeds'
+
+# gh: pr create/edit text, pr merge, and the REST/GraphQL equivalents.
+_guard_gh() {
+    local y=1 na=${#A[@]} sub act v f hay="" ep=""
+    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo|--hostname) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
+    sub=${A[y]:-}; act=${A[y+1]:-}
+    case "$sub/$act" in
+        pr/create|pr/edit)
+            [ "$act" = create ] && F_ROOT="gh pr create from the main thread: opening the PR is the subagent's delivery."
+            y=$((y+2))
+            while [ $y -lt $na ]; do
+                v=${A[y]}
+                case "$v" in
+                    -t|--title|-b|--body) hay=$hay$'\n'${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --title=*|--body=*) hay=$hay$'\n'${v#*=} ;;
+                    -F|--body-file) hay=$hay$'\n'$(_p_file "${A[y+1]:-}" "$1"); y=$((y+2)); continue ;;
+                    --body-file=*) hay=$hay$'\n'$(_p_file "${v#*=}" "$1") ;;
+                    -R|--repo|-B|--base|-H|--head|-a|--assignee|-l|--label|-m|--milestone|-p|--project|-r|--reviewer|-T|--template|--add-*|--remove-*) y=$((y+2)); continue ;;
+                esac
+                y=$((y+1))
+            done
+            _scan pr "$hay" ;;
+        pr/merge) F_MERGE="gh pr merge" ;;
+        api/*)
+            y=$((y+1))
+            while [ $y -lt $na ]; do
+                v=${A[y]}
+                case "$v" in
+                    -f|--raw-field|-F|--field)
+                        f=${A[y+1]:-}
+                        case "$f" in *=@*) hay=$hay$'\n'$(_p_file "${f#*=@}" "$1") ;; *) hay=$hay$'\n'${f#*=} ;; esac
+                        y=$((y+2)); continue ;;
+                    --input) hay=$hay$'\n'$(_p_file "${A[y+1]:-}" "$1"); y=$((y+2)); continue ;;
+                    -X|--method|-H|--header|-q|--jq|-t|--template|-p|--preview|--hostname|--cache) y=$((y+2)); continue ;;
+                    -*) ;;
+                    *) [ -z "$ep" ] && ep=$v ;;
+                esac
+                y=$((y+1))
+            done
+            if [[ $ep =~ $_merge_re ]]; then F_MERGE="gh api $ep"
+            elif [ "$ep" = graphql ]; then
+                [[ $hay =~ $_merge_words ]] && F_MERGE="gh api graphql ${BASH_REMATCH[0]}"
+                [[ $hay =~ (create|update)PullRequest ]] && _scan pr "$hay"
+            elif [[ $ep =~ (^|/)pulls(/[^/]+)?/?$ ]]; then _scan pr "$hay"
+            fi ;;
+    esac
+}
+
+# glab: mr create/update text, mr merge, and the API.
+_guard_glab() {
+    local y=1 na=${#A[@]} sub act v hay=""
+    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
+    sub=${A[y]:-}; act=${A[y+1]:-}
+    [[ ${A[*]} =~ $_merge_words ]] && F_MERGE="glab ${BASH_REMATCH[0]}"
+    case "$sub/$act" in
+        mr/create|mr/update)
+            [ "$act" = create ] && F_ROOT="glab mr create from the main thread: opening the PR is the subagent's delivery."
+            y=$((y+2))
+            while [ $y -lt $na ]; do
+                v=${A[y]}
+                case "$v" in
+                    -t|--title|-d|--description) hay=$hay$'\n'${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --title=*|--description=*) hay=$hay$'\n'${v#*=} ;;
+                esac
+                y=$((y+1))
+            done
+            _scan pr "$hay" ;;
+        mr/merge) F_MERGE="glab mr merge" ;;
+        api/*)
+            y=$((y+1))
+            while [ $y -lt $na ]; do
+                case "${A[y]}" in
+                    -X|--method|-H|--header|-f|--raw-field|-F|--field|--hostname|--input) y=$((y+2)); continue ;;
+                    -*) ;;
+                    *) [[ ${A[y]} =~ $_merge_re ]] && F_MERGE="glab api ${A[y]}"; break ;;
+                esac
+                y=$((y+1))
+            done ;;
+    esac
+}
+
+# curl and friends: only a merge, by its endpoint or its GraphQL mutation.
+_guard_http() {
+    local v
+    for v in "${A[@]:1}"; do
+        if [[ $v =~ $_merge_re ]] || [[ $v =~ $_merge_words ]]; then F_MERGE="$NAME ${BASH_REMATCH[0]}"; return 0; fi
+        [[ $v =~ /pulls/[^/[:space:]]+/merge([/?[:space:]]|$) ]] && { F_MERGE="$NAME …/merge"; return 0; }
+    done
+}
+
+_motif_block() {   # $1 motif, $2 title, rest = lines. The motif line is what tests compare.
+    local m=$1; shift
+    local t=$1; shift
+    _block "$t" "$@" "[motif:$m]"
 }
 
 # ============================================================================
@@ -167,26 +717,8 @@ _root_deny() {
         "$1" \
         "Dispatch the epic's subagent (task_focus the epic first), or SendMessage it if it is running;" \
         "it works in its own worktree (<repo parent>/.worktrees/<repo>-<epic-slug>, or ~/Projects/.worktrees/<repo>-<epic-slug> when that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads) and delivers through a PR." \
-        "A genuine exception: prefix the Bash line with ROOT_OK=1 (KODFLOW_ROOT=off turns the gate off)."
-}
-
-# GATE · Bash. Only the operations that produce into a repository, found
-# anywhere on the line with the attribution guard's shape: past a separator,
-# a quote (bash -c "…"), VAR= and wrapper prefixes, and git's -C/-c/long
-# globals. Everything else — sudo, installs, redirections, unknown
-# commands — is the main thread's own business.
-_root_gate_bash() {
-    [ "$ROOT_MAIN" = 1 ] || return 0
-    [[ $CMD =~ ^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*ROOT_OK=1([[:space:]]|$) ]] && return 0
-    local pre re_git re_forge
-    pre="(^|[;&|(\"'\`/]|[[:space:]])(([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*|env|command|exec|sudo|nohup|time|xargs|eval)[[:space:]]+)*"
-    re_git="${pre}git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+(commit|push|rebase|cherry-pick|merge|am|apply|revert|worktree[[:space:]]+add|reset[^;&|]*[[:space:]]--hard)([[:space:]]|$)"
-    re_forge="${pre}(gh|glab)([[:space:]]+(-R|--repo)[[:space:]]+[^[:space:]]+)*[[:space:]]+(pr|mr)[[:space:]]+create([[:space:]]|$)"
-    if [[ $1 =~ $re_git ]]; then
-        _root_deny "git ${BASH_REMATCH[6]%%[[:space:]]*} from the main thread produces into a repository."
-    elif [[ $1 =~ $re_forge ]]; then
-        _root_deny "${BASH_REMATCH[4]} ${BASH_REMATCH[7]} create from the main thread: opening the PR is the subagent's delivery."
-    fi
+        "A genuine exception: prefix the Bash line with ROOT_OK=1 (KODFLOW_ROOT=off turns the gate off)." \
+        "[motif:root]"
 }
 
 # GATE · Write/Edit. Refused only inside a git work tree: the file's
@@ -224,134 +756,98 @@ _root_gate_edit() {
 # ============================================================================
 # PreToolUse · Bash
 # ============================================================================
+# The input is never rewritten (D3): a forced push is refused with the
+# command to run instead, and rtk is the caller's choice, not this hook's.
 pre_bash() {
     [ -n "$CMD" ] || exit 0
-    local norm=$CMD
-    case "$norm" in "rtk proxy "*) norm=${norm#rtk proxy } ;; "rtk "*) norm=${norm#rtk } ;; esac
-    _root_gate_bash "$norm"
+    F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
+    GDIR=""
 
-    # --- GATE: which guarded git operations appear, anywhere on the line ---
-    # Anchoring on `^git` let `cd x && git commit`, `env git push`, `git -C dir
-    # commit` and `bash -c "git commit"` through untouched. The match runs on
-    # the whole line: a wrapper, a separator, a quote or a path may precede it.
-    local re rest OPS=""
-    re="(^|[;&|(\"'\`/]|[[:space:]])(([A-Za-z_][A-Za-z_0-9]*=[^[:space:]]*|env|command|exec|sudo|nohup|time|xargs|eval)[[:space:]]+)*git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+(commit|push|rebase|cherry-pick)([[:space:]]|$)"
-    rest=$norm
-    while [[ $rest =~ $re ]]; do
-        OPS="$OPS ${BASH_REMATCH[6]}"
-        rest=${rest#*"${BASH_REMATCH[0]}"}
+    # GATE: no verb this hook knows, even once unquoted, leaves at once. A
+    # $'…' string may spell one in escapes, so it is always read. tr, not
+    # ${CMD//…/}: a global substitution is quadratic in bash 3.2 (1.5 s on a
+    # 2.5 kB commit message).
+    local t=$CMD
+    case "$t" in *[\"\'\\]*) t=$(printf '%s' "$CMD" | tr -d "\"'\\\\") ;; esac
+    case "$t" in *git*|*gh*|*glab*|*curl*|*wget*|*http*) ;; *) case "$CMD" in *"\$'"*) ;; *) _log; exit 0 ;; esac ;; esac
+
+    _p_parse "$CMD"
+    local k=0
+    while [ $k -lt $P_N ]; do
+        _p_argv $k; F_HOOKS=0
+        case "$NAME" in
+            git) _guard_git $k ;;
+            gh) _guard_gh $k ;;
+            glab) _guard_glab $k ;;
+            curl|wget|http|https|xh) _guard_http ;;
+            cd) GDIR=${A[1]:-} ;;
+        esac
+        k=$((k+1))
     done
-    _split "$norm"
 
-    if [ -n "$OPS" ]; then
-        # --- BLOCK 1: --no-verify, and -n on a commit segment ---------------
-        # --no-verify skips the repo's own commit-msg hook, the second layer of
-        # the attribution guard. `-n` is git commit's alias for it, also inside
-        # a cluster (-anm). Quoted strings are removed first so a message that
-        # says "-n" is not read as a flag. The -n test is per segment: sed -n
-        # elsewhere on the line is not a commit flag.
-        local seg flags
-        flags=$(printf '%s' "$norm" | sed -E "s/\"[^\"]*\"//g; s/'[^']*'//g")
-        [[ $flags =~ --no-verify ]] && _block "COMMAND BLOCKED — --no-verify is forbidden" \
-            "Local git hooks are the second layer of the attribution and secret guards." \
-            "If a hook is wrong, fix the hook; do not skip it."
-        for seg in "${SEGS[@]}"; do
-            [[ $seg =~ git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+|[[:space:]]+--[^[:space:]]+)*[[:space:]]+commit([[:space:]]|$) ]] || continue
-            flags=$(printf '%s' "$seg" | sed -E "s/\"[^\"]*\"//g; s/'[^']*'//g")
-            [[ $flags =~ (^|[[:space:]])-[a-zA-Z]*n[a-zA-Z]*([[:space:]]|$) ]] && _block \
-                "COMMAND BLOCKED — -n (--no-verify) is forbidden on git commit" \
-                "Local git hooks are the second layer of the attribution and secret guards."
-        done
-
-        # --- BLOCK 2: AI attribution and workflow leaks in the message -------
-        # Scan the raw line rather than extract -m values: every -m, --message
-        # and heredoc body is a substring of it. Augment with what lives
-        # outside the line: -F file content, HEAD for --amend, recent commits
-        # for rebase/cherry-pick. Tokens that exist on disk are dropped first so
-        # a pathspec under .claude/ is not mistaken for a leaked reference.
-        local hay tok farg
-        case " $OPS " in *" commit "*|*" rebase "*|*" cherry-pick "*)
-            hay=$CMD
-            set -f; for tok in $CMD; do [ -e "$tok" ] && hay=${hay//"$tok"/}; done; set +f
-            farg=""
-            if   [[ $norm =~ -F[[:space:]]+\"([^\"]+)\" ]]; then farg=${BASH_REMATCH[1]}
-            elif [[ $norm =~ -F[[:space:]]+\'([^\']+)\' ]]; then farg=${BASH_REMATCH[1]}
-            elif [[ $norm =~ -F[[:space:]]+([^[:space:]]+) ]]; then farg=${BASH_REMATCH[1]}; fi
-            [ -n "$farg" ] && [ "$farg" != "-" ] && [ -r "$farg" ] && hay="$hay"$'\n'"$(cat -- "$farg" 2>/dev/null)"
-            [[ $norm =~ --amend ]] && [[ ! $norm =~ -m[[:space:]]|--message ]] && hay="$hay"$'\n'"$(git -C "$PROJECT_DIR" log -1 --pretty=%B 2>/dev/null)"
-            case " $OPS " in *" rebase "*|*" cherry-pick "*) hay="$hay"$'\n'"$(git -C "$PROJECT_DIR" log -5 --pretty=%B 2>/dev/null)" ;; esac
-            hay=$(printf '%s' "$hay" | tr '[:upper:]' '[:lower:]')
-            local p
-            for p in "co-authored-by:.*(claude|anthropic|openai|gpt|copilot|gemini|llm|ai)" \
-                     "generated[[:space:]]+(by|with)[[:space:]]+(claude|ai|gpt|anthropic|copilot)" \
-                     "ai[-.]assisted" "🤖" "claude[-[:space:]]code" \
-                     "\\.claude/" "^[[:space:]]*plan:" "(see|ref|tracked-in)[[:space:]]+\\.claude" "\\bplan[[:space:]]+\\.claude"; do
-                printf '%s' "$hay" | grep -qiE "$p" && _block "COMMIT BLOCKED — AI reference detected" \
-                    "Forbidden pattern: $p" \
-                    "Remove AI attribution (co-authored-by, generated by, 🤖) and workflow leaks (.claude/ paths, Plan: footers)." \
-                    "The repo's commit-msg hook blocks the same thing on the git side."
-            done ;;
-        esac
-
-        # --- BLOCK 3: secrets in the staged blobs (commit only) --------------
-        # Reads the index, not the working tree. Hook and test sources are
-        # skipped: they carry detection patterns that match themselves. The
-        # alternation is assembled so this file does not itself read as a
-        # credential to a line scanner.
-        case " $OPS " in *" commit "*)
-            local f content kw tok oth pat hits=""
-            kw="pass""word|api[_-]?key|secret""_key"
-            tok="gh""p_[a-zA-Z0-9]{36}|gh""o_[a-zA-Z0-9]{36}|github""_pat_[a-zA-Z0-9_]+"
-            oth="aws[_-]?access[_-]?key|BEGIN RSA PRIV""ATE KEY|BEGIN OPENSSH PRIV""ATE KEY|sk""-[a-zA-Z0-9]{48}|AK""IA[0-9A-Z]{16}"
-            pat="(${kw})"'\s*=\s*["\047][^"\047]+'"|${tok}|${oth}"
-            while IFS= read -r -d '' f; do
-                case "$f" in */hooks/scripts/*|*/.claude/scripts/*|*/.claude/agents/*|*/.githooks/*|*/tests/*|*/fixtures/*|*.bats|*.tpl) continue ;; esac
-                content=$(git -C "$PROJECT_DIR" show ":$f" 2>/dev/null) || continue
-                printf '%s' "$content" | grep -qI . || continue      # binary
-                printf '%s' "$content" | grep -iEq "$pat" && hits="$hits"$'\n'"  - $f"
-            done < <(git -C "$PROJECT_DIR" diff --cached --name-only -z 2>/dev/null)
-            [ -n "$hits" ] && _block "COMMIT BLOCKED — secrets detected in staged files" "Remove them before committing:$hits" ;;
-        esac
+    # --- BLOCK 0: the delegation gate (main thread only) ---------------------
+    if [ -n "$F_ROOT" ] && [ "$ROOT_MAIN" = 1 ] \
+        && ! [[ $CMD =~ ^([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*ROOT_OK=1([[:space:]]|$) ]]; then
+        _root_deny "$F_ROOT"
     fi
 
-    # --- TRANSFORM 1: --force → --force-with-lease on a push -----------------
-    # Token-wise: --force-if-includes is left alone. A forced push inside a
-    # compound line is refused rather than rewritten: the rewrite is only
-    # correct when the whole line is the push.
-    local new=$CMD
-    if [[ " $OPS " == *" push "* ]] && [[ $norm =~ (^|[[:space:]])(--force|-f)([[:space:]]|$) ]] && [[ $norm != *--force-with-lease* ]]; then
-        [ ${#SEGS[@]} -gt 1 ] && _block "COMMAND BLOCKED — forced push inside a compound command" \
-            "Run the push on its own line, as git push --force-with-lease."
-        new=$(printf '%s' "$CMD" | sed -E 's/(^|[[:space:]])(--force|-f)([[:space:]]|$)/\1--force-with-lease\3/g')
+    # --- BLOCK 1: --no-verify, -n on a commit, core.hooksPath ---------------
+    # They skip the repo's own commit-msg hook, the second layer of the
+    # attribution guard.
+    [ -n "$F_NV" ] && _motif_block no-verify "COMMAND BLOCKED — skipping git hooks is forbidden ($F_NV)" \
+        "Local git hooks are the second layer of the attribution and secret guards." \
+        "If a hook is wrong, fix the hook; do not skip it."
+
+    # --- BLOCK 2: AI attribution and workflow leaks -------------------------
+    if [ -n "$F_ATTR" ]; then
+        local motif=${F_ATTR%% *}
+        _motif_block "$motif" "$( [ "$F_ATTR_KIND" = pr ] && echo "PULL REQUEST" || echo "COMMIT" ) BLOCKED — AI reference detected" \
+            "Forbidden pattern: ${F_ATTR#* }" \
+            "Remove AI attribution (co-authored-by, generated by, 🤖) and, in a commit, workflow leaks (.claude/ paths, Plan: footers)." \
+            "The repo's commit-msg hook and the post-commit gate block the same thing."
     fi
 
-    # --- TRANSFORM 2: rtk rewrite, unless a segment must stay byte-exact ------
-    # rtk's read path strips comments, so a rewritten cat hands the agent a
-    # file it cannot safely edit from. Any segment whose exact bytes matter
-    # protects the whole line. NO_RTK= is the explicit opt-out.
-    case "$new" in NO_RTK=*) ;; *)
-        if command -v rtk >/dev/null 2>&1; then
-            local protected=0 seg name
-            for seg in "${SEGS[@]}"; do
-                name=$(_seg_name "$seg")
-                case "$name" in
-                    cat|head|tail|sed|awk|diff|patch|sha256sum|sha1sum|md5sum|base64|xxd|od|strings|cmp) protected=1 ;;
-                    find) case " $seg " in *" -not "*|*" -exec "*|*" -execdir "*|*" -o "*|*" -delete "*|*" -prune "*|*" -printf "*|*" -print0 "*) protected=1 ;; esac ;;
-                esac
-                [ $protected -eq 1 ] && break
-            done
-            if [ $protected -eq 0 ]; then
-                local r; r=$(rtk rewrite "$new" 2>/dev/null) && [ -n "$r" ] && new=$r
-            fi
-        fi ;;
-    esac
+    # --- BLOCK 3: secrets in the staged blobs (commit only) -----------------
+    # Reads the index, not the working tree. Hook and test sources are
+    # skipped: they carry detection patterns that match themselves. The
+    # alternation is assembled so this file does not itself read as a
+    # credential to a line scanner.
+    if [ "$F_COMMIT" = 1 ]; then
+        local f content kw tok oth pat hits=""
+        kw="pass""word|api[_-]?key|secret""_key"
+        tok="gh""p_[a-zA-Z0-9]{36}|gh""o_[a-zA-Z0-9]{36}|github""_pat_[a-zA-Z0-9_]+"
+        oth="aws[_-]?access[_-]?key|BEGIN RSA PRIV""ATE KEY|BEGIN OPENSSH PRIV""ATE KEY|sk""-[a-zA-Z0-9]{48}|AK""IA[0-9A-Z]{16}"
+        pat="(${kw})"'\s*=\s*["\047][^"\047]+'"|${tok}|${oth}"
+        while IFS= read -r -d '' f; do
+            case "$f" in */hooks/scripts/*|*/.claude/scripts/*|*/.claude/agents/*|*/.githooks/*|*/tests/*|*/fixtures/*|*.bats|*.tpl) continue ;; esac
+            content=$(git -C "$PROJECT_DIR" show ":$f" 2>/dev/null) || continue
+            printf '%s' "$content" | grep -qI . || continue      # binary
+            printf '%s' "$content" | grep -iEq "$pat" && hits="$hits"$'\n'"  - $f"
+        done < <(git -C "$PROJECT_DIR" diff --cached --name-only -z 2>/dev/null)
+        [ -n "$hits" ] && _motif_block secrets "COMMIT BLOCKED — secrets detected in staged files" "Remove them before committing:$hits"
+    fi
 
-    # ONE document. updatedInput without permissionDecision: the rewritten
-    # command goes through the normal permission flow. "allow" here would
-    # auto-approve every command rtk knows how to rewrite — most of them.
-    if [ "$new" != "$CMD" ]; then
-        printf '%s' "$INPUT" | jq -c --arg cmd "$new" \
-            '{hookSpecificOutput:{hookEventName:"PreToolUse",updatedInput:(.tool_input|.command=$cmd)}}' 2>/dev/null
+    # --- BLOCK 4: a forced push is refused, with the command to run ---------
+    if [ "$F_FORCE" = 1 ]; then
+        local fixed
+        fixed=$(printf '%s' "$CMD" | sed -E 's/(^|[[:space:]])(--force|-f)([[:space:]]|$)/\1--force-with-lease\3/g; s/([[:space:]])\+([^[:space:]]+)/\1\2/g')
+        [[ $fixed == *--force-with-lease* ]] || fixed="$fixed --force-with-lease"
+        _motif_block force "COMMAND BLOCKED — forced push" \
+            "--force, -f and a +refspec overwrite the remote without checking what is there." \
+            "Run instead: $fixed"
+    fi
+
+    # --- BLOCK 5: a subagent never merges nor pushes to the default branch --
+    if [ -n "$AID" ]; then
+        [ -n "$F_MERGE" ] && _motif_block merge "COMMAND BLOCKED — a subagent does not merge ($F_MERGE)" \
+            "Merging is the main thread's decision, after the user's explicit OK." \
+            "Report the PR and its CI state; stop there."
+        [ -n "$F_DEFPUSH" ] && _motif_block push-default "COMMAND BLOCKED — a subagent does not push to the default branch ($F_DEFPUSH)" \
+            "Push your feature branch and open a PR."
+    elif [ -n "$F_MERGE" ]; then
+        # The main thread's merge is journaled only until the mod that asks
+        # the user (L5) exists.
+        ROOT_GUARD=merge
     fi
     _log
     exit 0
@@ -479,6 +975,43 @@ post_edit() {
 }
 
 # ============================================================================
+# PreToolUse · forge MCP tools
+# ============================================================================
+# The same rules as the shell, by field name: a commit message (message,
+# commit_message, commit_title, squash_commit_message, merge_commit_message)
+# meets every §5 pattern; the title, body or description of a pull or merge
+# request meets the attribution ones; issues, comments and reviews are not
+# read. A subagent does not merge and does not write to main or master.
+pre_forge() {
+    [ "$ROOT_MAIN" = 1 ] && ! _forge_ok "$TOOL" && _root_deny \
+        "$TOOL writes into a repository (files, branches, pull requests); reads, reviews, comments, issues and merges stay allowed."
+    local FC="" FP="" FM=0 FB=""
+    eval "$(printf '%s' "$INPUT" | jq -r '.tool_name as $t | .tool_input as $i
+        | def s($k): ($i[$k] // empty | strings);
+          (($t | test("pull_request|merge_request")) and ($t | test("review|comment|note|discussion|thread|reply") | not)) as $pr
+        | @sh "FC=\([s("message"), s("commit_message"), s("commit_title"), s("squash_commit_message"), s("merge_commit_message")] | join("\n")) FP=\(if $pr then [s("title"), s("body"), s("description")] | join("\n") else "" end) FM=\(if ($t | test("merge_pull_request$|merge_merge_request$")) or ($i.merge_when_pipeline_succeeds == true) or ($i.auto_merge == true) then 1 else 0 end) FB=\(($i.branch // "") | tostring)"' 2>/dev/null)" || { _log; exit 0; }
+    F_ATTR=""; F_ATTR_KIND=""
+    _scan commit "$FC"; _scan pr "$FP"
+    [ -n "$F_ATTR" ] && _motif_block "${F_ATTR%% *}" "$TOOL BLOCKED — AI reference detected" \
+        "Forbidden pattern: ${F_ATTR#* }" \
+        "Remove AI attribution (co-authored-by, generated by, 🤖) and, in a commit message, workflow leaks (.claude/ paths, Plan: footers)."
+    if [ -n "$AID" ]; then
+        [ "$FM" = 1 ] && _motif_block merge "$TOOL BLOCKED — a subagent does not merge" \
+            "Merging is the main thread's decision, after the user's explicit OK." "Report the PR and its CI state; stop there."
+        case "$FB" in main|master|refs/heads/main|refs/heads/master)
+            case "$TOOL" in *push_files|*create_or_update_file|*delete_file|*git_push|*git_commit)
+                _motif_block push-default "$TOOL BLOCKED — a subagent does not write to the default branch ($FB)" \
+                    "Write to your feature branch and open a PR." ;;
+            esac ;;
+        esac
+    elif [ "$FM" = 1 ]; then
+        ROOT_GUARD=merge
+    fi
+    _log
+    exit 0
+}
+
+# ============================================================================
 # PostToolUseFailure · any tool
 # ============================================================================
 post_failure() {
@@ -528,9 +1061,7 @@ fi
 case "$EV/$TOOL" in
     PreToolUse/Bash|PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit|PreToolUse/TaskCreate|PreToolUse/TodoWrite|PreToolUse/mcp__*tasks__task_*) ;;
     PreToolUse/mcp__github__*|PreToolUse/mcp__gitlab__*|PreToolUse/mcp__GitKraken__*)
-        [ "$ROOT_MAIN" = 1 ] && ! _forge_ok "$TOOL" && _root_deny \
-            "$TOOL writes into a repository (files, branches, pull requests); reads, reviews, comments, issues and merges stay allowed."
-        exit 0 ;;
+        pre_forge ;;
     PreToolUse/*) exit 0 ;;
 esac
 
