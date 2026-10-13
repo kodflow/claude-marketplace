@@ -1,5 +1,5 @@
 {
-  "description": "One script per event, each a fixed sequence: gate, block, transform, observe. Hooks on the same event run in parallel, so the order lives inside the script, not in this file. Every path that is not a deliberate block exits 0. The function hooks in mod/ serve the task tools and the attribution text (Claude Code 2.1.293 or later); the hard guards stay in the scripts.",
+  "description": "One script per event, each a fixed sequence: gate, block, transform, observe. Hooks on the same event run in parallel, so the order lives inside the script, not in this file. Every path that is not a deliberate block exits 0. The function hooks in mod/ serve the task tools and the attribution text, agree a merge with the user, double the Bash guards in refusal only, compress Bash output and mask secrets in tool results (Claude Code 2.1.293 or later); the hard guards stay in the scripts.",
   "modules": ["./mod/register.ts"],
   "hooks": {
     "SessionStart": [

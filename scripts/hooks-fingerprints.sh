@@ -13,7 +13,7 @@ set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 H=$ROOT/plugins/kodflow-hooks/hooks
 OUT=$H/fingerprints.sha256
-FILES="scripts/on-tool.sh"
+FILES="scripts/on-tool.sh ../merge-exemptions.txt"
 
 sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
 

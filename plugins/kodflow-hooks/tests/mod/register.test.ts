@@ -16,6 +16,10 @@ type Host = {
   commands: any[];
   agents: { id: string; type: string; name?: string; status: string }[];
   failMv?: boolean;
+  /** What `gh …` answers, when a test sets it. */
+  gh?: (argv: string[]) => { exitCode: number; stdout: string; stderr?: string };
+  /** The engine version $.session.version() reports. */
+  version: string;
 };
 
 // A file system and the five commands the mod runs, enough to hold it to
@@ -28,6 +32,7 @@ function host(on: any, env: Record<string, string>): Host {
     registered: [],
     commands: [],
     agents: [],
+    version: "2.1.296",
   };
   const parent = (p: string) => p.slice(0, p.lastIndexOf("/")) || "/";
   const mkdirs = (p: string) => {
@@ -38,6 +43,10 @@ function host(on: any, env: Record<string, string>): Host {
   on("session.start", async (_$: any, e: any) => ({ cwd: e.cwd ?? "/repo" }));
   on("prompt.submit", async (_$: any, e: any) => ({ text: e.text }));
   on("session.root", async () => ({ value: "/repo" }));
+  on("session.cwd", async () => ({ value: "/repo" }));
+  on("session.version", async () => ({
+    value: { version: h.version, base: h.version },
+  }));
   on("tool.register", async (_$: any, e: any) => {
     h.registered.push(e);
     return { value: { tool: T(e.name) } };
@@ -107,6 +116,21 @@ function host(on: any, env: Record<string, string>): Host {
       }
       case "bash":
         return done(0);
+      case "gh": {
+        if (!h.gh) return done(127);
+        const r = h.gh(argv);
+        return {
+          value: {
+            exitCode: r.exitCode,
+            stdout: r.stdout,
+            stderr: r.stderr ?? "",
+            isStdoutTruncated: false,
+            isStderrTruncated: false,
+          },
+        };
+      }
+      case "git":
+        return done(1);
     }
     return done(127);
   });
@@ -402,4 +426,184 @@ test("/lint-setup is registered and answers outside a Go project without asking"
   expect(h.runs.some((a) => a[0] === "curl" || a[0] === "project-linter")).toBe(
     false,
   );
+});
+
+// ---------------------------------------------------------------------------
+// The Bash pipeline and the veil, wired (pipeline.test.ts holds the logic)
+// ---------------------------------------------------------------------------
+
+const HEAD = "0123456789abcdef0123456789abcdef01234567";
+const STATUS =
+  'On branch feat/x\nChanges not staged for commit:\n  (use "git add <file>..." to update what will be committed)\n\tmodified:   a.txt\n\nno changes added to commit (use "git add" and/or "git commit -a")\n';
+const out = (stdout: string) => ({
+  result: {
+    stdout,
+    stderr: "",
+    interrupted: false,
+    isImage: false,
+    noOutputExpected: false,
+  },
+});
+const ghView = (head = HEAD) => () => ({
+  exitCode: 0,
+  stdout: JSON.stringify({
+    headRefOid: head,
+    state: "OPEN",
+    statusCheckRollup: [
+      { __typename: "CheckRun", name: "ci", status: "COMPLETED", conclusion: "SUCCESS" },
+    ],
+  }),
+});
+
+test("Bash: what comes back is the filtered output, every other key kept", async ($, on) => {
+  host(on, { CLAUDE_CONFIG_DIR: CFG });
+  on("tool.call", { tool: "Bash" }, async () => out(STATUS) as any);
+  await start($);
+  const r: any = await $.tool.call({ tool: "Bash", command: "git status" } as any);
+  expect(r.result.stdout).not.toContain("(use ");
+  expect(r.result.stdout).toContain("modified:   a.txt");
+  expect(Object.keys(r.result).sort()).toEqual(
+    ["interrupted", "isImage", "noOutputExpected", "stderr", "stdout"],
+  );
+  const raw: any = await $.tool.call({ tool: "Bash", command: "cat status.txt" } as any);
+  expect(raw.result.stdout).toBe(STATUS);
+});
+
+test("Bash: an engine version CI has not validated gets the output whole", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.version = "2.1.297";
+  on("tool.call", { tool: "Bash" }, async () => out(STATUS) as any);
+  await start($);
+  const r: any = await $.tool.call({ tool: "Bash", command: "git status" } as any);
+  expect(r.result.stdout).toBe(STATUS);
+});
+
+test("veil: a credential in any tool's result is masked before the model reads it", async ($, on) => {
+  host(on, { CLAUDE_CONFIG_DIR: CFG, GITHUB_TOKEN: "env-" + "value-0123456789" });
+  const gh = "gh" + "p_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8";
+  on("tool.call", { tool: "Bash" }, async () => out(`token ${gh}\nenv-value-0123456789\n`) as any);
+  on("tool.call", { tool: "mcp__srv__read" }, async () => ({ result: `x ${gh}` }) as any);
+  await start($);
+  const r: any = await $.tool.call({ tool: "Bash", command: "printenv" } as any);
+  expect(r.result.stdout).not.toContain(gh);
+  expect(r.result.stdout).not.toContain("env-value-0123456789");
+  expect(r.result.stdout).toContain("[masked:");
+  const m: any = await $.tool.call({ tool: "mcp__srv__read" } as any);
+  expect(JSON.stringify(m)).not.toContain(gh);
+});
+
+test("guards: the mod refuses what the shell refuses, with its motif", async ($, on) => {
+  host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  let reached = 0;
+  on("tool.call", { tool: "Bash" }, async () => (reached++, out("")) as any);
+  await start($);
+  const r: any = await $.tool.call({
+    tool: "Bash",
+    command: "git commit -n -m x",
+  } as any);
+  expect(refusal(r)).toContain("[motif:no-verify]");
+  expect(reached).toBe(0);
+});
+
+test("merge: unpinned, refused with the exact command; a subagent, refused outright", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.gh = ghView();
+  let reached = 0;
+  on("tool.call", { tool: "Bash" }, async () => (reached++, out("")) as any);
+  on("tool.call", { tool: "mcp__github__merge_pull_request" }, async () => (reached++, { result: "merged" }) as any);
+  await start($);
+  const r: any = await $.tool.call({ tool: "Bash", command: "gh pr merge 12 -R o/r --squash" } as any);
+  expect(refusal(r)).toContain(`gh pr merge 12 -R o/r --squash --match-head-commit ${HEAD}`);
+  const sub: any = await $.tool.call({
+    tool: "Bash",
+    command: `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
+    agentId: "a1",
+  } as any);
+  expect(refusal(sub)).toContain("a subagent does not merge");
+  const mcp: any = await $.tool.call({
+    tool: "mcp__github__merge_pull_request",
+    owner: "o",
+    repo: "r",
+    pullNumber: 12,
+  } as any);
+  expect(refusal(mcp)).toContain(`"sha": "${HEAD}"`);
+  expect(reached).toBe(0);
+});
+
+test("merge: a forge that fails refuses (a failure never lets a merge through)", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.gh = () => ({ exitCode: 1, stdout: "", stderr: "HTTP 502" });
+  on("tool.call", { tool: "Bash" }, async () => out("") as any);
+  await start($);
+  const r: any = await $.tool.call({
+    tool: "Bash",
+    command: `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
+  } as any);
+  expect(refusal(r)).toContain("HTTP 502");
+});
+
+test("merge: pinned, CI green, nobody at the prompt: waiting for the user", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.gh = ghView();
+  on("tool.call", { tool: "Bash" }, async () => out("") as any);
+  await start($);
+  const r: any = await $.tool.call({
+    tool: "Bash",
+    command: `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
+  } as any);
+  expect(refusal(r)).toContain("waiting for the user's OK");
+  expect([...h.files.keys()].some((k) => k.includes("/merge-ok/"))).toBe(false);
+});
+
+test("merge: the user typed, CI green, pinned: asked, yes writes the token and the call goes on", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.gh = ghView();
+  const asked: any[] = [];
+  let reached = 0;
+  on("tool.call", { tool: "AskUserQuestion" }, async (_$: any, e: any) => {
+    asked.push(e);
+    const q = e.questions?.[0]?.question ?? "";
+    return { result: { questions: e.questions, answers: { [q]: "Merge" } } } as any;
+  });
+  on("tool.call", { tool: "Bash" }, async () => (reached++, out("merged")) as any);
+  await start($);
+  await $.prompt
+    .submit({ text: "merge it", origin: { kind: "composer" } } as any)
+    .catch(() => undefined);
+  const r: any = await $.tool.call({
+    tool: "Bash",
+    tool_use_id: "toolu_m1",
+    command: `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
+  } as any);
+  expect(asked.length).toBe(1);
+  expect(JSON.stringify(asked[0])).toContain("o/r#12");
+  expect(refusal(r)).toBeUndefined();
+  expect(reached).toBe(1);
+  expect(h.files.get(`${DIR}/merge-ok/toolu_m1`)?.split("\n")[0]).toBe(HEAD);
+});
+
+test("blast radius: asked while the user is there, passes when nobody is (fail open)", async ($, on) => {
+  host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  let answer = "Do not run it";
+  let asked = 0;
+  let reached = 0;
+  on("tool.call", { tool: "AskUserQuestion" }, async (_$: any, e: any) => {
+    asked++;
+    const q = e.questions?.[0]?.question ?? "";
+    return { result: { questions: e.questions, answers: { [q]: answer } } } as any;
+  });
+  on("tool.call", { tool: "Bash" }, async () => (reached++, out("")) as any);
+  await start($);
+  // Nobody typed yet: the call goes on, unasked
+  await $.tool.call({ tool: "Bash", command: "rm -rf build" } as any);
+  expect([asked, reached]).toEqual([0, 1]);
+  await $.prompt
+    .submit({ text: "clean up", origin: { kind: "composer" } } as any)
+    .catch(() => undefined);
+  const no: any = await $.tool.call({ tool: "Bash", command: "rm -rf build" } as any);
+  expect(refusal(no)).toContain("[motif:blast]");
+  expect([asked, reached]).toEqual([1, 1]);
+  answer = "Run it";
+  await $.tool.call({ tool: "Bash", command: "rm -rf build" } as any);
+  expect([asked, reached]).toEqual([2, 2]);
 });

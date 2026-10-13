@@ -149,11 +149,11 @@
 {"family": "merge", "cmd": "gh pr checks 12 --watch", "rc": 0, "agent": true}
 {"family": "merge", "cmd": "git merge-base a b", "rc": 0, "agent": true}
 {"family": "merge", "cmd": "gh pr list --state merged", "rc": 0, "agent": true}
-{"family": "merge", "cmd": "gh pr merge 12 --squash", "rc": 0}
+{"family": "merge", "cmd": "gh pr merge 12 --squash", "rc": 2, "motif": "merge"}
 {"family": "merge", "tool": "mcp__github__merge_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3}, "rc": 2, "motif": "merge", "agent": true}
 {"family": "merge", "tool": "mcp__gitlab__merge_merge_request", "input": {"project_id": "1", "merge_request_iid": "4"}, "rc": 2, "motif": "merge", "agent": true}
 {"family": "merge", "tool": "mcp__gitlab__update_merge_request", "input": {"project_id": "1", "merge_request_iid": "4", "merge_when_pipeline_succeeds": true}, "rc": 2, "motif": "merge", "agent": true}
-{"family": "merge", "tool": "mcp__github__merge_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3}, "rc": 0}
+{"family": "merge", "tool": "mcp__github__merge_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3}, "rc": 2, "motif": "merge"}
 {"family": "push-default", "cmd": "git push origin main", "rc": 2, "motif": "push-default", "agent": true}
 {"family": "push-default", "cmd": "git push origin HEAD:main", "rc": 2, "motif": "push-default", "agent": true}
 {"family": "push-default", "cmd": "git push origin feat:refs/heads/main", "rc": 2, "motif": "push-default", "agent": true}
@@ -201,7 +201,7 @@
 {"family": "root", "cmd": "echo \"git push\"", "rc": 0, "root": true}
 {"family": "root", "cmd": "cat > n.md <<'EOF'\ngit push\nEOF", "rc": 0, "root": true}
 {"family": "root", "cmd": "ROOT_OK=1 git push", "rc": 0, "root": true}
-{"family": "root", "cmd": "gh pr merge 3 --squash", "rc": 0, "root": true}
+{"family": "root", "cmd": "gh pr merge 3 --squash", "rc": 2, "motif": "merge", "root": true}
 {"family": "root", "cmd": "git worktree list", "rc": 0, "root": true}
 {"family": "mod-write", "tool": "Write", "input": {"file_path": "/x/.claude/skills/s/hooks/hooks.json", "content": "{}"}, "rc": 2, "motif": "mod-write"}
 {"family": "mod-write", "tool": "Write", "input": {"file_path": "/x/.claude/skills/s/.claude-plugin/plugin.json", "content": "{}"}, "rc": 2, "motif": "mod-write"}
@@ -238,3 +238,10 @@
 {"family": "gap", "cmd": "git -c alias.ci=commit ci --no-verify -m x", "rc": 2, "motif": "no-verify", "known_gap": "a git alias defined on the line is not resolved"}
 {"family": "gap", "cmd": "$(printf git) commit --no-verify -m x", "rc": 2, "motif": "no-verify", "known_gap": "a command name produced by a substitution is not known"}
 {"family": "gap", "cmd": "find . -maxdepth 0 -exec git commit --no-verify -m x \\;", "rc": 2, "motif": "no-verify", "known_gap": "find -exec is not read as a command"}
+{"family": "merge", "cmd": "gh pr merge 12 -R o/r --match-head-commit 0123456789abcdef0123456789abcdef01234567", "rc": 2, "motif": "merge"}
+{"family": "merge", "cmd": "GH_REPO=o/r gh pr merge 12 --squash", "rc": 2, "motif": "merge"}
+{"family": "merge", "cmd": "glab mr merge 4 -R g/p", "rc": 2, "motif": "merge"}
+{"family": "merge", "cmd": "gh api -X PUT repos/o/r/pulls/12/merge -f sha=0123456789abcdef0123456789abcdef01234567", "rc": 2, "motif": "merge"}
+{"family": "merge", "tool": "mcp__gitlab__merge_merge_request", "input": {"project_id": "1", "merge_request_iid": "4"}, "rc": 2, "motif": "merge"}
+{"family": "merge", "cmd": "gh pr merge-base 3", "rc": 0}
+{"family": "merge", "cmd": "git merge --ff-only origin/feat", "rc": 0}
