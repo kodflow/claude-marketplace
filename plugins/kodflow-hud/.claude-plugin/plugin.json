@@ -1,0 +1,31 @@
+{
+  "name": "kodflow-hud",
+  "description": "Optional heads-up display beside the status line, as a mod (function hooks, Claude Code 2.1.293 or later): a Tasks pane with the open epics of kodflow-hooks' task list, the worker on each task and how it stands, the time since it last moved, a silent flag and the tasks waiting on the person; an Agents pane with the folder each agent works in and the files it last read, wrote or committed; toasts for a task done, blocked or gone silent. It reads and observes only: no tool, no refusal, nothing added to what the model reads.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "silentMinutes": {
+      "type": "number",
+      "title": "Silent after (minutes)",
+      "description": "A task in progress with no activity from its worker for this long is flagged silent and toasted once.",
+      "default": 10
+    },
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open the panes at start",
+      "description": "Open the Tasks and Agents panes when a session starts. The engine seats an unasked pane only from 144 columns; /hud opens them at any width.",
+      "default": true
+    },
+    "ci": {
+      "type": "boolean",
+      "title": "CI of cited pull requests",
+      "description": "Every 5 minutes at most, ask gh pr checks about the GitHub pull request URLs that an open task cites, and show the result beside the task.",
+      "default": true
+    }
+  }
+}
