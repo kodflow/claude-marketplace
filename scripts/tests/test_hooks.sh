@@ -116,7 +116,11 @@ cp "$S/../patterns/patterns.txt" "$T/np/hooks/patterns/"
 { printf '# @scope: commit,mr\n'; cat "$S/../patterns/patterns-strict.txt"; } > "$T/np/hooks/patterns/patterns-strict.txt"
 E=$(np_cmd 'gh pr create --title x --body plain'); RC=$?
 [ "$RC" -eq 2 ] && printf '%s' "$E" | grep -q 'hooks/patterns unreadable' && ok "an unknown scope: a pull request is refused" || bad "unknown scope" "rc=$RC $E"
+{ cat "$S/../patterns/patterns.txt"; printf 'unclosed[bracket\n'; } > "$T/np/hooks/patterns/patterns.txt"
 cp "$S/../patterns/patterns-strict.txt" "$T/np/hooks/patterns/"
+E=$(np_cmd 'git commit -m "feat: plain"'); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$E" | grep -q 'hooks/patterns unreadable' && ok "a pattern grep cannot compile: a commit is refused" || bad "invalid pattern" "rc=$RC $E"
+cp "$S/../patterns/patterns.txt" "$T/np/hooks/patterns/"
 E=$(np_cmd 'git commit -m "feat: plain"'); RC=$?
 [ "$RC" -eq 0 ] && ok "both files back: a plain commit passes" || bad "patterns restored" "rc=$RC $E"
 

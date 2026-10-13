@@ -512,19 +512,26 @@ _load_patterns() {
 # $1 kind (commit|pr), $2 text → F_ATTR "<motif> <pattern>" on the first hit.
 _scan() {
     [ -n "$F_ATTR" ] && return 0
-    local p hay
+    local p hay r bad="(hooks/patterns unreadable or malformed: nothing to check $1 text against)"
     hay=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
     case "$hay" in *[![:space:]]*) ;; *) return 0 ;; esac
     _load_patterns
     if [ ${#ATTR_PATTERNS[@]} -eq 0 ] || [ ${#COMMIT_PATTERNS[@]} -eq 0 ]; then
-        F_ATTR="attribution (hooks/patterns unreadable or malformed: nothing to check $1 text against)"; F_ATTR_KIND=$1; return 0
+        F_ATTR="attribution $bad"; F_ATTR_KIND=$1; return 0
     fi
+    # grep exits 2 on a pattern it cannot compile: refused, never a non-match
     for p in "${ATTR_PATTERNS[@]}"; do
-        printf '%s' "$hay" | grep -qiE -- "$p" && { F_ATTR="attribution $p"; F_ATTR_KIND=$1; return 0; }
+        printf '%s' "$hay" | grep -qiE -- "$p" 2>/dev/null; r=$?
+        [ $r -eq 1 ] && continue
+        [ $r -eq 0 ] && F_ATTR="attribution $p" || F_ATTR="attribution $bad"
+        F_ATTR_KIND=$1; return 0
     done
     [ "$1" = commit ] || return 0
     for p in "${COMMIT_PATTERNS[@]}"; do
-        printf '%s' "$hay" | grep -qiE -- "${p#*|}" && { F_ATTR="${p%%|*} ${p#*|}"; F_ATTR_KIND=$1; return 0; }
+        printf '%s' "$hay" | grep -qiE -- "${p#*|}" 2>/dev/null; r=$?
+        [ $r -eq 1 ] && continue
+        [ $r -eq 0 ] && F_ATTR="${p%%|*} ${p#*|}" || F_ATTR="attribution $bad"
+        F_ATTR_KIND=$1; return 0
     done
 }
 
