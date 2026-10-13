@@ -15,7 +15,9 @@ blank the attribution text; they need **Claude Code 2.1.293 or later**.
 
 `hooks/mod/register.ts` is wiring only, one `on(...)` per event; the logic
 sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
-`paths.ts`), which never touch `$`.
+`paths.ts`, and for the three guards below `guards.ts` over a port, with
+`modwall.ts`, `collision.ts`, `zsh.ts`), which never touch `$`: the engine
+follows `$` and `on` only inside register.ts.
 
 | Event | What the mod does |
 |-------|-------------------|
@@ -23,9 +25,21 @@ sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
 | `classic.SessionStart`, `prompt.submit`, every `tool.call` | writes the beat, `<config>/kodflow/sessions/<session>/mod-beat` (time in seconds), before the shell hook of the same event runs, once the tools are registered |
 | `tool.call` on a task tool | answers it (below); a refusal is `{ deny }` with the text the model reads, an internal failure a text error, never a crash |
 | `attribution.text` | `""` for `commit` and `pr`; `exemption` and `remedy` untouched |
+| `plugin.register` | **modwall**: refuses every user-tier hooks module whose provenance is not `*@kodflow` (the list is in `modwall.ts`, nothing the model writes widens it); built-in and managed tiers are not judged. Each decision goes to `$.store` (`modwall`, last 100) and the debug log; a refusal is toasted once the session binds |
+| `command.run` · `/kodflow-mods` | the modules judged at this load, and the refusals on record |
+| `session.start` | **zsh-safe**: `ZDOTDIR` → `hooks/zsh`, the user's own in `KODFLOW_USER_ZDOTDIR` (`""` when unset); `hooks/zsh/.zshenv` gives ZDOTDIR back, sources the user's `.zshenv`, then `setopt nonomatch noequals`: `echo *.none` prints `*.none` instead of failing |
+| `tool.call` on `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | **collision-guard**: when another session of this machine, beating within 30 min, wrote the same file within 30 min (its `edits.tsv`), asks Continue / Move to a worktree (the model is told to call `EnterWorktree`) / Cancel; once written, notes `<seconds>\t<path>` in `<config>/kodflow/sessions/<session>/edits.tsv` (no prompt, no content); `<config>/projects` is never checked |
+| `session.end` | empties this session's `edits.tsv` |
 
 Every hook fails open. `KODFLOW_MOD=off` (environment or the `env` block of
 the settings) makes the module pass-through: no tool, no beat, no marker.
+A modwall judge that throws lets the module load; with no one to answer
+(`-p`) or the dialog dismissed, collision-guard lets the edit through.
+
+modwall judges only the modules that register after kodflow-hooks: one
+loaded before it (load order is the engine's) is admitted by core alone, and
+`/kodflow-mods` says so. `on-session.sh` stays the net: it warns about any
+plugin outside the kodflow marketplace that declares `modules`.
 
 The shell reads the beat (`lib/beat.sh`): younger than 5 s, the task tools
 answer; older, the mod was loaded and is gone; absent, it never loaded.
