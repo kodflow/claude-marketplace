@@ -1,4 +1,5 @@
-// Recorded from mcp/tasks.py by gen_conformance.py: do not edit by hand.
+// Recorded from mcp/tasks.py by gen_conformance.py: do not edit by hand. Both were
+// removed once the port matched; the commit that added this file holds them.
 // Each step: the call, the state of tasks.json before, the answer, the state after.
 // The TypeScript port is held to it by conformance.ts.
 export const T0 = 1791900000;

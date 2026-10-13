@@ -54,14 +54,31 @@ UserPromptSubmit)
             or startswith("[SYSTEM NOTIFICATION - NOT USER INPUT]")
           then "1" else "" end' 2>/dev/null)
 
+    # The task tools are the mod's (hooks/mod/register.ts): everything below
+    # that sends the model to them waits for its beat, written just before
+    # this hook ran. A stale beat is a mod that was unloaded; no beat at all,
+    # a Claude Code without mods or KODFLOW_MOD=off.
+    SDIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
+    BEAT=2; . "$LIB/beat.sh" 2>/dev/null && { kf_beat "$SDIR"; BEAT=$?; }
+    msg=""
+    case "$BEAT" in
+        1) msg=$KF_BEAT_LOST; rm -f -- "$SDIR/triage-pending" 2>/dev/null ;;
+        2) if [ "${KODFLOW_MOD:-}" != off ] && [ ! -f "$STATE/mod-absent-said" ]; then
+               msg="kodflow-hooks: the task tools did not load. They are a mod and need Claude Code 2.1.293 or later (or run /reload-plugins); tasks are not tracked this session."
+               mkdir -p "$STATE" 2>/dev/null && : > "$STATE/mod-absent-said" 2>/dev/null
+           fi ;;
+    esac
+
     if [ -z "$SYSTURN" ]; then
         # A new prompt means the user is back in control: the Stop hook's loop
         # counter starts over. A system turn is not the user back in control —
         # resetting there would let a notification/feedback loop run forever.
         rm -f -- "$STATE/stop-count" 2>/dev/null
         # Every message is triaged into the task list before anything is done
-        # about it: on-tool.sh refuses acting tools until a task tool clears this.
-        mkdir -p "$STATE" 2>/dev/null && : > "$STATE/triage-pending" 2>/dev/null
+        # about it: on-tool.sh refuses acting tools until a task tool clears
+        # this. Only while the task tools answer: a gate nothing can lift
+        # would stop the session.
+        [ "$BEAT" = 0 ] && mkdir -p "$SDIR" 2>/dev/null && : > "$SDIR/triage-pending" 2>/dev/null
     fi
 
     # TRANSFORM: where we are. Branch, and the newest plan and goal so a
@@ -78,10 +95,10 @@ UserPromptSubmit)
         [ -n "$newest" ] && ctx="${ctx:+$ctx$NL}Latest goal: .claude/goals/${newest##*/}"
     fi
 
-    # The main agent's epics as the tasks MCP left them, so the triage below
+    # The main agent's epics as the task tools left them, so the triage below
     # has the ids at hand. Any read error leaves the line out.
-    tasks=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID/tasks.json
-    if [ -s "$tasks" ]; then
+    tasks=$SDIR/tasks.json
+    if [ "$BEAT" = 0 ] && [ -s "$tasks" ]; then
         state=$(jq -r -L "$LIB" 'include "epics"; v2 | active("main") as $a
             | [epic_rows("main")] as $rows
             | ($rows | map(select(.id == $a)) | .[0]) as $act
@@ -99,11 +116,11 @@ UserPromptSubmit)
 
     # Every message is sorted before any work, so a remark about the task in
     # progress does not become a new task and a new subject does not become
-    # the tail of an unrelated epic. The tasks MCP ships in this plugin, so
-    # the directive is always there. Kept short: it rides on every prompt.
+    # the tail of an unrelated epic. Given whenever the task tools answer.
+    # Kept short: it rides on every prompt.
     # A system turn brought no message to sort: the state above is what it
     # needs, the directive would only send it triaging a notification.
-    [ -z "$SYSTURN" ] && ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools); task_create always names its epic (epic=id, 0 for none, no default):
+    [ -z "$SYSTURN" ] && [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools); task_create always names its epic (epic=id, 0 for none, no default):
 - new work for an open epic: task_create(epic=id)
 - context on the in_progress task: apply it, no new task
 - change to a completed task: task_create \"Rework #N: ...\" in its epic
@@ -112,8 +129,9 @@ UserPromptSubmit)
     # Code in a repository is delegated to subagents (the PreToolUse gate of
     # on-tool.sh and the Stop rule enforce it); off with KODFLOW_ROOT=off.
     [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it."
-    ctx="${ctx:+$ctx$NL}Keep statuses true: in_progress while worked on, waiting when blocked on the user, completed once verified."
-    jq -n -c --arg c "$ctx" '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$c}}' 2>/dev/null
+    [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}Keep statuses true: in_progress while worked on, waiting when blocked on the user, completed once verified."
+    jq -n -c --arg c "$ctx" --arg m "$msg" '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$c}}
+        + (if $m == "" then {} else {systemMessage:$m} end)' 2>/dev/null
     _log ;;
 
 Notification)

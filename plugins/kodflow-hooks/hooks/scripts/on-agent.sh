@@ -37,8 +37,8 @@ _log() {
 # updates an agent already recorded, so they leave no phantom entry.
 # The running subagents of the session, for the status line and the task
 # view: <config>/kodflow/sessions/<session>/agents.json, next to the task list
-# the tasks MCP keeps. Start and stop can race, so every write holds the lock:
-# lib/lock.sh (mkdir), since flock(1) does not exist on macOS. The tasks MCP
+# the task tools (the mod) keep. Start and stop can race, so every write holds the lock:
+# lib/lock.sh (mkdir), since flock(1) does not exist on macOS. The task tools
 # only reads agents.json, which is replaced whole, so it needs no lock here.
 _agents() {   # $1 = start|stop
     [ -n "$AID" ] || return 0
@@ -51,7 +51,7 @@ _agents() {   # $1 = start|stop
         local f=$dir/agents.json cur='{"agents":{}}' epic=0
         [ -s "$f" ] && cur=$(cat "$f" 2>/dev/null)
         # The epic the main agent is on when the subagent starts: the status
-        # line counts the subagent on that epic's pill. The tasks MCP replaces
+        # line counts the subagent on that epic's pill. The task tools replace
         # tasks.json whole, so the read is consistent; anything unreadable is 0.
         if [ "$1" = start ] && [ -s "$dir/tasks.json" ]; then
             epic=$(jq -L "$LIB" 'include "epics"; v2 | active("main")' "$dir/tasks.json" 2>/dev/null)

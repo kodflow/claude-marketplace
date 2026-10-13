@@ -3,7 +3,43 @@
 The lifecycle machinery the other kodflow plugins assume: a git and forge
 guard that reads a Bash line as the shell would and never rewrites it, the
 delegation gate (code in a git repository is produced by subagents), session context, a
-formatter, a turn-end quality gate, and one structured log.
+formatter, a turn-end quality gate, one structured log, and the session task
+list.
+
+Two halves. The shell scripts (`hooks/scripts/`) hold every hard guard and run
+on any Claude Code. The function hooks (`hooks/mod/`, a mod: TypeScript the
+engine loads from `hooks/hooks.json` → `modules`) serve the task tools and
+blank the attribution text; they need **Claude Code 2.1.293 or later**.
+
+## The mod and what is lost without it
+
+`hooks/mod/register.ts` is wiring only, one `on(...)` per event; the logic
+sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
+`paths.ts`), which never touch `$`.
+
+| Event | What the mod does |
+|-------|-------------------|
+| `session.start` | registers `task_create`, `task_update`, `task_epic`, `task_focus`, `task_list` (`isDeferred: false`), listed as `mcp__kodflow-hooks__task_*` |
+| `classic.SessionStart`, `prompt.submit`, every `tool.call` | writes the beat, `<config>/kodflow/sessions/<session>/mod-beat` (time in seconds), before the shell hook of the same event runs, once the tools are registered |
+| `tool.call` on a task tool | answers it (below); a refusal is `{ deny }` with the text the model reads, an internal failure a text error, never a crash |
+| `attribution.text` | `""` for `commit` and `pr`; `exemption` and `remedy` untouched |
+
+Every hook fails open. `KODFLOW_MOD=off` (environment or the `env` block of
+the settings) makes the module pass-through: no tool, no beat, no marker.
+
+The shell reads the beat (`lib/beat.sh`): younger than 5 s, the task tools
+answer; older, the mod was loaded and is gone; absent, it never loaded.
+
+| Without the mod (Claude Code < 2.1.293, `KODFLOW_MOD=off`, a failed reload) | |
+|---|---|
+| task tools | absent: tasks are not tracked, the status line shows no epic |
+| triage gate, triage directive, epic state in the prompt, session-start review | off: nothing could lift a gate the tools cannot answer |
+| built-in `TaskCreate`/`TodoWrite` | allowed again: they are the only list left |
+| attribution text | Claude Code's own (the shell guard still refuses AI attribution in a commit) |
+| what the user is told | once per session that the task tools did not load (not with `KODFLOW_MOD=off`); after an unload, `/reload-plugins` |
+
+Every hard guard (git, delegation, protected paths, secrets) is shell and
+does not depend on the mod.
 
 ## One script per event
 
@@ -31,18 +67,18 @@ fails by accident blocks every shell call of the session.
 | Event | Script | Gate | Block | Transform | Observe |
 |-------|--------|------|-------|-----------|---------|
 | `PreToolUse` · Bash | `on-tool.sh` | no `git`/`gh`/`glab`/`curl`/`wget`/`http` on the line once unquoted (and no `$'…'`) | read by the shell reader below: the main thread producing into a repository (delegation gate) · `--no-verify`, `-n` on a commit, `-c core.hooksPath` · AI attribution or workflow leak in a commit message, AI attribution in a PR/MR title or body · credential shapes in the staged blobs · a forced push (`--force`, `-f`, `+refspec`), with the command to run instead · from a subagent: any merge, any push to the default branch | none: the input is never rewritten | log; a main-thread merge is tagged `root_guard: merge` |
-| `PreToolUse` · task tools | `on-tool.sh` | — | built-in `TaskCreate`/`TodoWrite`: their chat panel duplicates the status line, the refusal points at the MCP | the MCP call (`task_create`/`update`/`list`/`epic`/`focus`) gets `_session` and `_agent` (the caller's `agent_id`, else `main`), overriding the model | log |
+| `PreToolUse` · task tools | `on-tool.sh` | the mod's task tools never reach it (a call a function hook answers fires no `PreToolUse`); the old MCP names are logged and passed | built-in `TaskCreate`/`TodoWrite` while the mod beats: their chat panel duplicates the status line, the refusal points at the kodflow task tools | — | log |
 | `PreToolUse` · Write/Edit | `on-tool.sh` | main thread writing inside a git work tree (memory and Claude configuration excepted) · no file path | the main thread producing into a repository (delegation gate) · protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
 | `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` | — | log; a main-thread merge is tagged `root_guard: merge` |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
 | `PostToolUse` · Task/Agent | `on-tool.sh` | — | — | — | log tagged `root_guard: dispatch` |
 | `PostToolUse` · other | `on-tool.sh` | — | — | — | log |
 | `PostToolUseFailure` | `on-tool.sh` | — | — | — | remediation hint · log (error redacted) |
-| `SessionStart` | `on-session.sh` | — | — | post-compaction rules on `compact` · a warning when rtk is absent · a warning to the user (`systemMessage`) and to Claude when `disableAllHooks` is set, when `CLAUDE_CODE_PLUGIN_DIRS` is set, or when an enabled plugin, a skills directory or a plugin dir outside the kodflow marketplace declares `modules` · the same warning when an installed guard (`on-tool.sh`) differs from `hooks/fingerprints.sha256`, when that file is missing, or when it differs from the marketplace clone's (D8: nothing is blocked; the file is generated by `scripts/hooks-fingerprints.sh` and checked by CI) | log |
+| `SessionStart` | `on-session.sh` | — | — | the open tasks to reconcile, while the mod beats · post-compaction rules on `compact` · a warning when rtk is absent · a warning to the user (`systemMessage`) and to Claude when `disableAllHooks` is set, when `CLAUDE_CODE_PLUGIN_DIRS` is set, or when an enabled plugin, a skills directory or a plugin dir outside the kodflow marketplace declares `modules` · the same warning when an installed guard (`on-tool.sh`) differs from `hooks/fingerprints.sha256`, when that file is missing, or when it differs from the marketplace clone's (D8: nothing is blocked; the file is generated by `scripts/hooks-fingerprints.sh` and checked by CI) | log |
 | `SessionEnd` | `on-session.sh` | — | — | — | one log line with the session's event count (1.5 s budget) |
 | `PreCompact` | `on-session.sh` | — | — | — | log |
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
-| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists · the triage directive, always, with the epic mandatory on `task_create` · the delegation line (code in a repository: dispatch or message the epic's subagent) unless `KODFLOW_ROOT=off` · no triage directive on a turn the user did not type | raise the triage gate and reset the Stop loop counter, except on a turn the user did not type · log |
+| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · while the mod beats: the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists, and the triage directive with the epic mandatory on `task_create` · the delegation line (code in a repository: dispatch or message the epic's subagent) unless `KODFLOW_ROOT=off` · no triage directive on a turn the user did not type · a `systemMessage` when the mod is gone | raise the triage gate (mod beating) and reset the Stop loop counter, except on a turn the user did not type · log |
 | `Notification` | `on-user.sh` | — | — | bell (`terminalSequence`) on idle, permission and elicitation prompts | log |
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · log |
@@ -148,19 +184,32 @@ grep -c '"root_guard":"deny"' "$L"; grep -c '"root_guard":"dispatch"' "$L"
 `lib/epics.jq` is the hooks' read side of `tasks.json` (v1 or v2, malformed
 read as empty), shared by `on-user.sh`, `on-agent.sh` and `on-stop.sh`.
 
-## The task list (MCP)
+## The task list (mod)
 
-`mcp/tasks.py`, declared in `.mcp.json`: a standard-library Python MCP server
-(`task_create`, `task_update`, `task_epic`, `task_focus`, `task_list`) that
-keeps the session task list in `<config>/kodflow/sessions/<session>/tasks.json`,
-`<config>` being `CLAUDE_CONFIG_DIR` or `~/.claude`. It replaces the built-in
-task tools, whose panel in the chat duplicates the status line. The file
-format (version 2) is a contract shared with the status line, which draws one
-pill per open epic of the main agent.
+Five tools the mod registers and answers itself (`hooks/mod/tasks.ts`):
+`task_create`, `task_update`, `task_epic`, `task_focus`, `task_list`, named
+`mcp__kodflow-hooks__task_*`. They keep the session task list in
+`<config>/kodflow/sessions/<session>/tasks.json`, `<config>` being
+`CLAUDE_CONFIG_DIR` or `~/.claude` (always an absolute path). They replace the
+built-in task tools, whose panel in the chat duplicates the status line. The
+file format (version 2) is a contract shared with the status line, which draws
+one pill per open epic of the main agent. They were an MCP server in Python
+(`mcp/tasks.py`, gone): the port gives the same answers and leaves the same
+files, proven by a corpus recorded from it (Tests, below).
 
-- **One list per agent.** An MCP server cannot tell who calls it; `on-tool.sh`
-  writes `_session` and `_agent` into every call. The status line and the Stop
-  rules read the main agent's entries only.
+- **One list per agent.** The mod reads the caller from the call itself
+  (`agentId`, absent on the main loop, kept path-safe) and the session from
+  `$.session.id()` on every call, so a `/clear` or a `/resume` lands in the
+  right file. The status line and the Stop rules read the main agent's
+  entries only.
+- **Writes.** The file is read fresh on every call and replaced whole: a
+  temporary file in the session directory, then `mv` (exit code checked), so
+  a reader never sees half a list. Calls are queued one at a time inside the
+  process (the main loop and every subagent share one copy of the mod), and a
+  `mkdir` lock (`.lock.d`, the protocol of `lib/lock.sh`: stale after 10 s,
+  broken by a rename, written through after 2 s) keeps two processes apart.
+  `task_list` writes nothing. Timestamps are in seconds, lengths in code
+  points. Each call is logged through `on-mod.sh` and `lib/event.jq`.
 - **Statuses:** `pending`, `in_progress`, `waiting` (blocked on the user: a
   decision, an approval, an answer), `completed`, `deleted`. The list must say
   what is true now; the Stop hook flags an active epic with tasks to do and
@@ -186,20 +235,22 @@ pill per open epic of the main agent.
   task), a change to a completed task (`Rework #N: …` in its epic), a new
   subject (`task_epic`), or plain discussion (nothing).
 - **One task in progress per worker.** The main agent may have one task
-  `in_progress` plus one per running subagent (`agents.json`); a subagent
-  has one. `task_update` refuses an extra start, and the Stop hook flags more
+  `in_progress` plus one per subagent that is `running`, `waiting` or `idle`
+  in `$.agent.list()` (`agents.json` when the list cannot be read); a
+  subagent has one. `task_update` refuses an extra start, and the Stop hook flags more
   tasks in progress than workers, across every epic, on every turn.
 - **A task tied to its worker.** `task_update(status=in_progress,
-  worker=<type or agent id>)` hands a task to a subagent as `agents.json`
-  records it (the key, or its `type`, which is the agent's name). The start
-  is refused if that subagent is stopped (or started over 12 h ago), unknown,
-  or already holds another task in progress; otherwise it is accepted
+  worker=<type, name or agent id>)` hands a task to a subagent as
+  `$.agent.list()` names it (its id, its `SendMessage` name or its type). The
+  start is refused if that subagent is stopped, unknown, or already holds
+  another task in progress; otherwise it is accepted
   whatever the headcount, so tasks left `in_progress` by finished subagents
   no longer block a live one. `worker` and `worker_id` are stored on the task
   and dropped when it leaves `in_progress`; without `worker`, the headcount
   above applies as before. Every refusal lists the running subagents (type,
   id, for how long) and, for each task in progress, its worker and whether it
-  runs, or "no worker linked", then says how to unblock. At Stop, a task
+  runs, or "no worker linked", then says how to unblock (how long each has
+  run comes from `agents.json`, when `on-agent.sh` recorded it). At Stop, a task
   whose worker has stopped is named once per set of such tasks; the
   headcount rule counts only untied tasks, against the main thread plus the
   running subagents that hold no tied task; and a task tied to a running
@@ -208,7 +259,7 @@ pill per open epic of the main agent.
   `SessionStart` lists the main agent's open tasks of every epic
   (`lib/review.jq`) and asks to reconcile them first — an `in_progress` left
   by the previous run is not work in progress — and raises the triage gate,
-  so nothing is done before the list is true again.
+  so nothing is done before the list is true again. Only while the mod beats.
 - **Turns the user did not type.** `UserPromptSubmit` also fires for a
   background task finishing and for a message relayed from another agent (a
   subagent's hand-back arrives inside that wrapper, never on its own). Their
@@ -221,10 +272,14 @@ pill per open epic of the main agent.
   plan, goal and epic state are still injected: a finishing task is exactly
   when where-things-stand is wanted. A `Stop hook feedback:` turn is *not*
   in that list: it quotes the user's own pending message, so it keeps the gate.
-- **Triage gate.** Every user message raises `triage-pending`; until a task
-  tool is called, `PreToolUse` refuses the main agent every tool but Read,
-  Glob, Grep, LS, ToolSearch and AskUserQuestion — the message is filed in the
-  task list before anything is done about it. Subagents are not gated. The
+- **Triage gate.** Every user message raises
+  `<config>/kodflow/sessions/<session>/triage-pending`, while the mod beats;
+  until the main agent calls a task tool (the mod removes the flag; a
+  subagent's call does not), `PreToolUse` refuses the main agent every tool
+  but Read, Glob, Grep, LS, ToolSearch and AskUserQuestion — the message is
+  filed in the task list before anything is done about it. Subagents are not
+  gated. A stale beat lifts the gate (nothing could lower it any more) and
+  says `/reload-plugins`. The
   `PreToolUse` matcher is the catch-all for this; tools the script does not
   handle are decided without jq (~6 ms per call, measured, the delegation gate
   included).
@@ -239,10 +294,9 @@ pill per open epic of the main agent.
   does not exist on macOS, where the former `flock -w 2` serialised nothing
   and concurrent starts lost entries. A lock older than 10 s is broken by an
   atomic rename; one not obtained in 2 s is written through, never blocking.
-- Without the hook, the session is found through the parent Claude Code
-  process (`<config>/sessions/<pid>.json`) and every call belongs to `main`.
 
-`tests/run-tests.sh` drives the server over stdio, then runs `test_root_gate.sh` and `test_lock.sh`.
+`tests/run-tests.sh` runs the mod's node suite (when node can run TypeScript),
+then `test_root_gate.sh` and `test_lock.sh`.
 
 ## What the log is
 
@@ -299,13 +353,30 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KTN_PRE_PHASES`, `KTN_STOP_PHASES` | linter phases at edit time and at turn end |
 | `ROOT_OK=1` prefix on a command | that line is exempt from the delegation gate |
 | `KODFLOW_ROOT=off` | the delegation gate, its Stop rule and its prompt line are off for the session |
+| `KODFLOW_MOD=off` | the mod hooks nothing: no task tools, no beat, attribution left to Claude Code |
 
 ## Tests
 
 ```
 bash scripts/tests/test_hooks.sh
-bash plugins/kodflow-hooks/tests/run-tests.sh   # tasks MCP + delegation gate
+bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate
+claude plugin validate --json plugins/kodflow-hooks
+claude plugin test plugins/kodflow-hooks         # tests/mod/*.test.ts, in the engine
+node plugins/kodflow-hooks/tests/mod/run-node.ts # corpus, real disk, several processes
 ```
+
+The mod is held three ways. `tests/mod/conformance.corpus.ts` was recorded
+from `mcp/tasks.py` before it was removed (38 scenarios, 184 calls: the 26
+tests of its suite, the worker cases, the order of validation, code points,
+`task_list` writing nothing, the agent id made path-safe, a worker judged by its id alone): each step keeps the
+file before, the call, the answer and the file after, and the port must match
+every one (`conformance.ts`, run by `claude plugin test` and by node).
+`tests/mod/register.test.ts` runs the wiring in the engine's own test kit,
+with the host in memory: registration, the temporary file and `mv` under the
+lock, refusals as `{ deny }`, the cap read from `$.agent.list()`, the beat
+written before the call goes on, `KODFLOW_MOD=off`, the attribution text.
+`run-node.ts` runs the store on a real disk, a stale lock, and six processes
+writing one `tasks.json` at once (every task kept, ids unique).
 
 A hundred and forty cases in a throwaway repository, plus the bash-guard
 corpus (about two hundred lines, rc and motif compared): every block, the

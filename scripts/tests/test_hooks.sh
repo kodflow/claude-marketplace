@@ -289,26 +289,35 @@ printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("2 task
     && ok "a tied task takes its worker's slot: two untied tasks for the main thread are flagged" || bad "untied cap" "$OUT"
 rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/workers-nudged"
 
-echo "== PreToolUse · task tools"
-run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_create '{"tool_input":{"subject":"x","_agent":"forged"}}' on-tool.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .subject == "x" and ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \
-    && ok "main agent call: session and agent written in, forged value overridden" || bad "task injection" "$OUT"
-run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_update '{"tool_input":{"id":"1"},"agent_id":"a1b2"}' on-tool.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput._agent == "a1b2"' >/dev/null 2>&1 \
-    && ok "subagent call is attributed to its agent_id" || bad "subagent attribution" "$OUT"
-run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_epic '{"tool_input":{"title":"SDK"}}' on-tool.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \
-    && ok "task_epic gets the session and agent too" || bad "epic injection" "$OUT"
-run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_focus '{"tool_input":{"epic":"2"},"agent_id":"a9"}' on-tool.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .epic == "2" and ._session == "sess-1" and ._agent == "a9"' >/dev/null 2>&1 \
-    && ok "task_focus gets the session and agent too" || bad "focus injection" "$OUT"
+echo "== PreToolUse · task tools (served by the mod, never by this script)"
+SD=$T/home/.claude/kodflow/sessions/sess-1
+beat()  { mkdir -p "$SD"; date +%s > "$SD/mod-beat"; }            # the mod is loaded
+stale() { mkdir -p "$SD"; echo $(( $(date +%s) - 60 )) > "$SD/mod-beat"; }   # it was, and is gone
+nobeat() { rm -f "$SD/mod-beat"; }                                    # it never loaded
+for name in mcp__plugin_kodflow-hooks_tasks__task_create mcp__kodflow-hooks__task_create; do
+    run PreToolUse "$name" '{"tool_input":{"subject":"x","_agent":"forged"}}' on-tool.sh
+    [ "$RC" -eq 0 ] && ! printf '%s' "$OUT" | grep -q updatedInput \
+        && ok "${name%%__task*}: no input rewrite, the mod tells callers apart itself" || bad "task call $name" "rc=$RC $OUT"
+done
 jq -e '.hooks.PreToolUse | length == 1 and .[0].matcher == ""' "$ROOT/plugins/kodflow-hooks/hooks/hooks.json" >/dev/null 2>&1 \
-    && ok "the PreToolUse matcher sees every tool (triage gate, task tools included)" || bad "matcher" "PreToolUse matcher is not the catch-all"
+    && ok "the PreToolUse matcher sees every tool (triage gate)" || bad "matcher" "PreToolUse matcher is not the catch-all"
+jq -e '.modules == ["./mod/register.ts"]' "$ROOT/plugins/kodflow-hooks/hooks/hooks.json" >/dev/null 2>&1 \
+    && ok "hooks.json loads the mod" || bad "modules" "no ./mod/register.ts"
+[ ! -e "$ROOT/plugins/kodflow-hooks/.mcp.json" ] && [ ! -e "$ROOT/plugins/kodflow-hooks/mcp/tasks.py" ] \
+    && ok "the tasks MCP is gone (.mcp.json, mcp/tasks.py)" || bad "tasks MCP" "still shipped"
+beat
 run PreToolUse TaskCreate '{"tool_input":{"subject":"x","description":"y"}}' on-tool.sh
-expect_rc "built-in TaskCreate refused" 2
-printf '%s' "$ERR" | grep -q 'task_create' && ok "the refusal points at the MCP tools" || bad "refusal text" "$ERR"
+expect_rc "built-in TaskCreate refused while the mod beats" 2
+printf '%s' "$ERR" | grep -q 'task_create' && ok "the refusal points at the kodflow task tools" || bad "refusal text" "$ERR"
 run PreToolUse TodoWrite '{"tool_input":{"todos":[]}}' on-tool.sh
-expect_rc "built-in TodoWrite refused" 2
+expect_rc "built-in TodoWrite refused while the mod beats" 2
+stale
+run PreToolUse TaskCreate '{"tool_input":{"subject":"x","description":"y"}}' on-tool.sh
+expect_rc "built-in TaskCreate allowed once the mod is gone" 0
+nobeat
+run PreToolUse TodoWrite '{"tool_input":{"todos":[]}}' on-tool.sh
+expect_rc "built-in TodoWrite allowed without the mod" 0
+rm -rf "$T/home/.claude/kodflow"
 
 echo "== SubagentStart / SubagentStop · running agents registry"
 AG=$T/home/.claude/kodflow/sessions/sess-1/agents.json
@@ -335,14 +344,16 @@ rm -rf "$T/home/.claude/kodflow"
 
 echo "== UserPromptSubmit · triage and epic state"
 ctx_of() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+sys_of() { printf '%s' "$OUT" | jq -r '.systemMessage // empty' 2>/dev/null; }
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -q 'TRIAGE this message' && ok "the triage directive is injected with no tasks.json" || bad "triage" "$OUT"
 printf '%s' "$C" | grep -q 'Epics:' && bad "no state without tasks.json" "$C" || ok "no epic state without tasks.json"
 printf '%s' "$C" | grep -q 'task_create always names its epic' && printf '%s' "$C" | grep -q '0 for none, no default' \
     && ok "the directive says the epic is mandatory, 0 for none" || bad "epic mandatory" "$C"
 [ "${#C}" -lt 900 ] && ok "the injected context stays under 900 characters (${#C})" || bad "context size" "${#C}"
-MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"
+[ -z "$(sys_of)" ] && ok "a beating mod: no system message" || bad "beat message" "$OUT"
+MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"; beat
 printf '%s' '{"version":2,"active":{"main":2},
   "epics":[{"id":1,"agent":"main","title":"api-gateway","touched":5},{"id":2,"agent":"main","title":"SDK status-line","touched":9},
            {"id":3,"agent":"main","title":"Finished","touched":9},{"id":7,"agent":"a1","title":"Sub epic","touched":9}],
@@ -365,30 +376,57 @@ printf '{"tasks":[' > "$MS/tasks.json"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] && ctx_of | grep -q TRIAGE && ! ctx_of | grep -q 'Epics:' \
     && ok "a malformed tasks.json: one document, triage kept, state left out" || bad "user malformed" "rc=$RC $OUT"
-rm -rf "$T/home/.claude/kodflow"
+printf '%s' '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"E"}],"tasks":[]}' > "$MS/tasks.json"
+stale; rm -f "$MS/triage-pending"; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+C=$(ctx_of)
+! printf '%s' "$C" | grep -q 'TRIAGE\|Epics:\|Keep statuses' && [ ! -f "$MS/triage-pending" ] \
+    && ok "mod gone: no gate, no directive, no task state" || bad "stale prompt" "$OUT"
+sys_of | grep -q '/reload-plugins' && ok "mod gone: the user is told to /reload-plugins" || bad "stale message" "$OUT"
+printf '%s' "$C" | grep -q 'feat/test' && ok "mod gone: the rest of the context stays" || bad "stale context" "$C"
+nobeat; rm -f "$T/tmp/sp/mod-absent-said"; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+! ctx_of | grep -q 'TRIAGE' && [ ! -f "$MS/triage-pending" ] && sys_of | grep -q '2.1.293' \
+    && ok "no mod at all: no gate, no directive, the version is named" || bad "absent prompt" "$OUT"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+[ -z "$(sys_of)" ] && ok "no mod at all: said once per session" || bad "absent twice" "$OUT"
+rm -f "$T/tmp/sp/mod-absent-said"
+OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"hi"}' \
+    | KODFLOW_MOD=off bash "$S/on-user.sh" 2>/dev/null)
+[ -z "$(sys_of)" ] && [ ! -f "$T/tmp/sp/mod-absent-said" ] && ok "KODFLOW_MOD=off: nothing said, no marker" || bad "mod off" "$OUT"
+rm -rf "$T/home/.claude/kodflow" "$T/tmp/sp/mod-absent-said"
 
 echo "== Triage gate · file the message before acting"
-rm -f "$T/tmp/sp/triage-pending"
+TP=$SD/triage-pending
+beat; rm -f "$TP"
 run UserPromptSubmit "" '{"prompt":"fais un truc"}' on-user.sh
-[ -f "$T/tmp/sp/triage-pending" ] && ok "a new prompt raises the triage flag" || bad "triage flag" "absent"
-bash_cmd 'ls';                                                        expect_rc "acting before triage is refused" 2
+[ -f "$TP" ] && ok "a new prompt raises the triage flag in the session's state" || bad "triage flag" "absent"
+beat; bash_cmd 'ls';                                                  expect_rc "acting before triage is refused" 2
 printf '%s' "$ERR" | grep -q 'TRIAGE FIRST' && ok "the refusal says to triage first" || bad "triage message" "$ERR"
 run PreToolUse Read '{"tool_input":{"file_path":"/etc/hostname"}}' on-tool.sh; expect_rc "reading stays allowed" 0
 run PreToolUse ToolSearch '{"tool_input":{"query":"x"}}' on-tool.sh;        expect_rc "loading tools stays allowed" 0
 run PreToolUse Bash '{"tool_input":{"command":"ls"},"agent_id":"a1"}' on-tool.sh; expect_rc "a subagent is not gated" 0
-run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_list '{"tool_input":{}}' on-tool.sh
-[ ! -f "$T/tmp/sp/triage-pending" ] && ok "a task tool call lowers the flag" || bad "flag lowered" "still there"
+beat; run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh;   expect_rc "a tool this script ignores is gated too" 2
+# The mod lowers the flag on the main loop's task call, which never reaches
+# this script; here it is lowered by hand, as the mod's rm -f does
+rm -f "$TP"
 bash_cmd 'ls';                                                        expect_rc "acting after triage is allowed" 0
 run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh
 [ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "tools this script ignores leave at once" || bad "fast exit" "rc=$RC out=$OUT"
-rm -f "$T/tmp/sp/triage-pending"
+# The mod unloaded mid-session: nothing can lower the flag any more
+: > "$TP"; stale
+run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh
+[ "$RC" -eq 0 ] && [ ! -f "$TP" ] && printf '%s' "$OUT" | jq -e '.systemMessage | test("/reload-plugins")' >/dev/null 2>&1 \
+    && ok "a stale beat lifts the gate and says /reload-plugins" || bad "stale gate" "rc=$RC out=$OUT"
+: > "$TP"; stale; bash_cmd 'git commit --no-verify -m "feat: x"'
+expect_rc "a stale beat lifts the gate, the git guard still runs" 2
+[ ! -f "$TP" ] && ok "the gate was lifted on the way" || bad "stale gate bash" "flag still there"
+rm -rf "$T/home/.claude/kodflow"
 
 echo "== UserPromptSubmit · turns the user did not type"
 # Claude Code fires UserPromptSubmit for a background task finishing, for a
 # message relayed from another agent and for a subagent's hand-back. The
 # prompts below are the shapes those payloads really carry.
 sys_turn() { run UserPromptSubmit "" "$(jq -n -c --arg p "$1" '{prompt:$p}')" on-user.sh; }
-MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"
+MS=$SD; mkdir -p "$MS"
 printf '%s' '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"api-gateway","touched":9}],
   "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Fix daemon","status":"in_progress"}]}' > "$MS/tasks.json"
 i=0
@@ -407,9 +445,9 @@ Done, the PR is up.
          '[SYSTEM NOTIFICATION - NOT USER INPUT]
 This is an automated background-task event, NOT a message from the user.'; do
     i=$((i + 1)); shape=${P%%$'\n'*}; shape=${shape:0:28}
-    rm -f "$T/tmp/sp/triage-pending"; printf '2' > "$T/tmp/sp/stop-count"
-    sys_turn "$P"; C=$(ctx_of)
-    [ ! -f "$T/tmp/sp/triage-pending" ] && ok "$shape raises no triage gate" || bad "system turn $i" "gate raised"
+    rm -f "$TP"; printf '2' > "$T/tmp/sp/stop-count"
+    beat; sys_turn "$P"; C=$(ctx_of)
+    [ ! -f "$TP" ] && ok "$shape raises no triage gate" || bad "system turn $i" "gate raised"
     printf '%s' "$C" | grep -q TRIAGE && bad "system turn $i" "TRIAGE directive emitted: $C" || ok "$shape emits no TRIAGE directive"
     printf '%s' "$C" | grep -qF 'Epics: active #1 api-gateway 0/1, in progress #1 Fix daemon' \
         && ok "$shape still reports where things stand" || bad "system turn $i context" "$C"
@@ -417,21 +455,21 @@ This is an automated background-task event, NOT a message from the user.'; do
         && ok "$shape leaves the stop-loop counter alone" || bad "system turn $i stop-count" "reset"
 done
 # Anchored at the start: a user writing about one of those markers is a user.
-rm -f "$T/tmp/sp/triage-pending"; printf '2' > "$T/tmp/sp/stop-count"
-sys_turn 'pourquoi <task-notification> lève la gate ?'
-[ -f "$T/tmp/sp/triage-pending" ] && ok "a user quoting a notification marker is still triaged" || bad "quoted marker" "no gate"
+rm -f "$TP"; printf '2' > "$T/tmp/sp/stop-count"
+beat; sys_turn 'pourquoi <task-notification> lève la gate ?'
+[ -f "$TP" ] && ok "a user quoting a notification marker is still triaged" || bad "quoted marker" "no gate"
 ctx_of | grep -q TRIAGE && ok "the quoted marker still gets the directive" || bad "quoted marker" "no directive"
 [ ! -f "$T/tmp/sp/stop-count" ] && ok "a prompt the user typed resets the stop-loop counter" || bad "stop-count" "not reset"
 # A Stop-hook continuation quotes the user's own pending message inside the
 # brackets, so it carries user input nobody has triaged: it keeps the gate.
-rm -f "$T/tmp/sp/triage-pending"
+rm -f "$TP"; beat
 sys_turn 'Stop hook feedback:
 [la pastille orange est illisible sur haiku, propose deux palettes]: the user has not chosen yet.'
-[ -f "$T/tmp/sp/triage-pending" ] && ok "Stop hook feedback carries user text and is still triaged" || bad "stop feedback" "no gate"
-rm -rf "$T/home/.claude/kodflow" "$T/tmp/sp/triage-pending"
+[ -f "$TP" ] && ok "Stop hook feedback carries user text and is still triaged" || bad "stop feedback" "no gate"
+rm -rf "$T/home/.claude/kodflow"
 
 echo "== SessionStart · review the task list left open"
-RS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$RS"; rm -f "$T/tmp/sp/triage-pending"
+RS=$SD; mkdir -p "$RS"; rm -f "$TP"; beat
 printf '%s' '{"version":2,"epics":[{"id":1,"agent":"main","title":"SDK"}],"active":{"main":1},"tasks":[
   {"id":"1","agent":"main","epic":1,"subject":"Stale work","status":"in_progress"},
   {"id":"2","agent":"main","epic":1,"subject":"Done work","status":"completed"},
@@ -440,17 +478,20 @@ printf '%s' '{"version":2,"epics":[{"id":1,"agent":"main","title":"SDK"}],"activ
 run SessionStart "" '{"source":"resume"}' on-session.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("SESSION START") and test("#1 \\[in_progress\\] Stale work") and test("#3 \\[pending\\] Loose") and (test("Done work") | not) and (test("Sub") | not)' >/dev/null 2>&1 \
     && ok "resume lists the main agent's open tasks, finished and subagent ones left out" || bad "session review" "$OUT"
-[ -f "$T/tmp/sp/triage-pending" ] && ok "resume holds acting tools until the list is reviewed" || bad "review gate" "flag absent"
-rm -f "$T/tmp/sp/triage-pending"
-run SessionStart "" '{"source":"compact"}' on-session.sh
+[ -f "$TP" ] && ok "resume holds acting tools until the list is reviewed" || bad "review gate" "flag absent"
+rm -f "$TP"
+beat; run SessionStart "" '{"source":"compact"}' on-session.sh
 [ "$(printf '%s\n' "$OUT" | grep -c '^{')" -eq 1 ] && printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("SESSION START") and test("POST-COMPACTION")' >/dev/null 2>&1 \
     && ok "compact: review and standing rules in one document" || bad "compact review" "$OUT"
 printf '%s' '{"version":2,"epics":[],"active":{},"tasks":[{"id":"1","agent":"main","epic":0,"subject":"x","status":"completed"}]}' > "$RS/tasks.json"
-rm -f "$T/tmp/sp/triage-pending"; run SessionStart "" '{"source":"resume"}' on-session.sh
-[ ! -f "$T/tmp/sp/triage-pending" ] && ! printf '%s' "$OUT" | grep -q 'SESSION START' && ok "nothing open: no review, no gate" || bad "empty review" "$OUT"
+rm -f "$TP"; beat; run SessionStart "" '{"source":"resume"}' on-session.sh
+[ ! -f "$TP" ] && ! printf '%s' "$OUT" | grep -q 'SESSION START' && ok "nothing open: no review, no gate" || bad "empty review" "$OUT"
 printf '%s' '{"tasks":' > "$RS/tasks.json"
 run SessionStart "" '{"source":"resume"}' on-session.sh; expect_rc "a malformed task file fails open" 0
-rm -rf "$RS" "$T/tmp/sp/triage-pending"
+printf '%s' '{"version":2,"epics":[],"active":{},"tasks":[{"id":"1","agent":"main","epic":0,"subject":"Open","status":"pending"}]}' > "$RS/tasks.json"
+nobeat; run SessionStart "" '{"source":"resume"}' on-session.sh
+[ ! -f "$TP" ] && ! printf '%s' "$OUT" | grep -q 'SESSION START' && ok "no mod: no review sent to tools that do not exist, no gate" || bad "review without mod" "$OUT"
+rm -rf "$RS"
 
 echo "== UserPromptSubmit / SessionStart / agents"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
