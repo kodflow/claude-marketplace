@@ -3,7 +3,7 @@
 #
 # Each case feeds a hook the JSON Claude Code would send and asserts on the
 # exit code and stdout. Runs in a throwaway git repository; needs bash, jq,
-# git. rtk is optional: the rewrite assertions adapt to its absence.
+# git.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 S=$ROOT/plugins/kodflow-hooks/hooks/scripts
@@ -33,8 +33,6 @@ run() {
 }
 bash_cmd() { run PreToolUse Bash "$(jq -n -c --arg c "$1" '{tool_input:{command:$c}}')" on-tool.sh; }
 expect_rc() { [ "$RC" -eq "$2" ] && ok "$1" || bad "$1" "rc=$RC out=$OUT err=${ERR:0:160}"; }
-# rtk, when present, prefixes git commands: compare past that prefix.
-updated() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.updatedInput.command // empty' 2>/dev/null | sed 's/^rtk //'; }
 
 echo "== PreToolUse Bash · git guard"
 AI="Co-Authored""-By: Cla""ude <x@y>"       # assembled: this file must not carry the shape itself
@@ -60,28 +58,49 @@ mkdir -p "$T/repo/x/hooks/scripts"; printf 'aws_key = "%s%s"\n' "AK""IA" "ABCDEF
 git -C "$T/repo" add x; bash_cmd 'git commit -m "feat: hook"';        expect_rc "hook sources are exempt from the secret scan" 0
 git -C "$T/repo" rm -rq --cached x; rm -rf "$T/repo/x"
 
-echo "== PreToolUse Bash · force push"
-bash_cmd 'git push --force origin main'
-[ "$(updated)" = 'git push --force-with-lease origin main' ] && ok "--force rewritten to --force-with-lease" || bad "--force rewrite" "$OUT"
-bash_cmd 'git push -f origin main'
-[ "$(updated)" = 'git push --force-with-lease origin main' ] && ok "-f rewritten" || bad "-f rewrite" "$OUT"
-bash_cmd 'git push --force-if-includes origin main'
-[ -z "$(updated)" ] || [ "$(updated)" = "$(updated | sed 's/--force-with-lease//')" ] && ok "--force-if-includes left alone" || bad "--force-if-includes" "$OUT"
-bash_cmd 'git status && git push --force origin main';                 expect_rc "forced push in a compound line refused" 2
-bash_cmd 'git push --force-with-lease origin main'
-[ -z "$(updated)" ] || [[ "$(updated)" == *--force-with-lease* ]] && ok "--force-with-lease untouched" || bad "with-lease" "$OUT"
+echo "== PreToolUse Bash · the input is never rewritten"
+bash_cmd 'git push --force origin feat'
+[ "$RC" -eq 2 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q 'Run instead: git push --force-with-lease origin feat' \
+    && ok "--force refused with the command to run" || bad "--force refusal" "rc=$RC out=$OUT err=$ERR"
+bash_cmd 'git push -f origin feat'
+printf '%s' "$ERR" | grep -q 'git push --force-with-lease origin feat' && ok "-f refused with the command to run" || bad "-f refusal" "$ERR"
+for c in 'ls -la /tmp' 'git status' 'cat a.txt' 'git push --force-with-lease origin feat'; do
+    bash_cmd "$c"; [ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "no updatedInput: $c" || bad "no rewrite: $c" "rc=$RC out=$OUT"
+done
 
-echo "== PreToolUse Bash · rtk"
-if command -v rtk >/dev/null 2>&1; then
-    bash_cmd 'ls -la /tmp'
-    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput.command | startswith("rtk ")' >/dev/null 2>&1 && ok "ls rewritten through rtk" || bad "rtk rewrite" "$OUT"
-    printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision' >/dev/null 2>&1 && bad "no permission decision on a rewrite" "$OUT" || ok "rewrite carries no permissionDecision (normal permission flow applies)"
-    bash_cmd 'echo ok; cat a.txt && true';  [ -z "$(updated)" ] && ok "cat after ; and before && protects the line" || bad "fidelity guard" "$OUT"
-    bash_cmd 'OUT=x head -40 a.txt';        [ -z "$(updated)" ] && ok "VAR= prefix does not hide head" || bad "fidelity guard VAR=" "$OUT"
-    bash_cmd 'NO_RTK= ls -la';              [ -z "$(updated)" ] && ok "NO_RTK= opts out" || bad "NO_RTK" "$OUT"
-else
-    echo "  skip rtk not installed"
-fi
+echo "== PreToolUse Bash · bash-guard corpus"
+# tests/fixtures/bash-guard.jsonl: one case per line. rc and the [motif:x]
+# line of the refusal are compared, never the wording. A known_gap case is
+# played and reported, not counted.
+# HOOK_SHELL=/bin/bash plays it under macOS's bash 3.2.
+CORPUS=$ROOT/plugins/kodflow-hooks/tests/fixtures/bash-guard.jsonl
+HOOK_SHELL=${HOOK_SHELL:-bash}
+c_pass=0; c_fail=0; c_gap=0; c_n=0
+while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    c_n=$((c_n+1))
+    # one jq per case: the payload and the expectations, shell-quoted
+    eval "$(printf '%s' "$row" | jq -r --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '
+        ({session_id:"sess-corpus",hook_event_name:"PreToolUse",tool_name:(.tool // "Bash"),cwd:$cwd,scratchpad_dir:$sp,tool_use_id:"tc",
+          tool_input:(if .tool then .input else {command:.cmd} end)}
+         + (if .agent then {agent_id:"agt_corpus",agent_type:"general-purpose"} else {} end)) as $p
+        | @sh "json=\($p | tojson) exp_rc=\(.rc) exp_m=\(.motif // "") gap=\(.known_gap // "") root=\(.root // false) label=\((.tool // .cmd) | gsub("\n"; "⏎") | .[0:90])"')"
+    if [ "$root" = true ]; then
+        ERR=$(printf '%s' "$json" | env -u KODFLOW_ROOT "$HOOK_SHELL" "$S/on-tool.sh" 2>&1 >/dev/null); RC=$?
+    else
+        ERR=$(printf '%s' "$json" | "$HOOK_SHELL" "$S/on-tool.sh" 2>&1 >/dev/null); RC=$?
+    fi
+    got_m=$(printf '%s' "$ERR" | sed -n 's/^ *\[motif:\(.*\)\]$/\1/p' | head -1)
+    if [ "$RC" -eq "$exp_rc" ] && { [ "$exp_rc" -eq 0 ] || [ -z "$exp_m" ] || [ "$got_m" = "$exp_m" ]; }; then
+        if [ -n "$gap" ]; then c_gap=$((c_gap+1)); printf '  gap  (now holds) %s\n' "$label"; else c_pass=$((c_pass+1)); fi
+    elif [ -n "$gap" ]; then
+        c_gap=$((c_gap+1)); printf '  gap  %s — %s\n' "$label" "$gap"
+    else
+        c_fail=$((c_fail+1)); bad "corpus: $label" "want rc=$exp_rc motif=$exp_m, got rc=$RC motif=$got_m"
+    fi
+done < "$CORPUS"
+echo "  corpus bash-guard: $c_n cases, $c_pass passed, $c_fail failed, $c_gap known gaps"
+[ "$c_fail" -eq 0 ] && [ "$c_n" -gt 0 ] && ok "bash-guard corpus" || bad "bash-guard corpus" "$c_fail case(s) failed"
 
 echo "== PreToolUse Edit · protected paths"
 edit() { run PreToolUse Edit "$(jq -n -c --arg f "$1" '{tool_input:{file_path:$f,old_string:"a",new_string:"b"}}')" on-tool.sh; }
@@ -438,8 +457,60 @@ run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("feat/test")' >/dev/null 2>&1 && ok "branch injected with the prompt" || bad "prompt context" "$OUT"
 run SessionStart "" '{"source":"compact"}' on-session.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("POST-COMPACTION")' >/dev/null 2>&1 && ok "post-compaction rules injected" || bad "compact context" "$OUT"
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("refused: use --force-with-lease") and (test("rtk rewrites") | not)' >/dev/null 2>&1 \
+    && ok "post-compaction text: forced push refused, no rtk rewrite claimed" || bad "compact text" "$OUT"
 run SessionStart "" '{"source":"startup"}' on-session.sh
 expect_rc "startup exits 0" 0
+printf '%s' "$OUT" | jq -e '.systemMessage' >/dev/null 2>&1 && bad "no warning on a clean setup" "$OUT" || ok "a clean setup raises no guard warning"
+
+echo "== SessionStart · what can switch the guards off"
+mkdir -p "$CLAUDE_CONFIG_DIR"
+printf '{"disableAllHooks":true}' > "$CLAUDE_CONFIG_DIR/settings.local.json"
+run SessionStart "" '{"source":"startup"}' on-session.sh
+printf '%s' "$OUT" | jq -e '(.systemMessage | test("disableAllHooks")) and (.hookSpecificOutput.additionalContext | test("disableAllHooks"))' >/dev/null 2>&1 \
+    && ok "disableAllHooks is reported to the user and to Claude" || bad "disableAllHooks" "$OUT"
+rm -f "$CLAUDE_CONFIG_DIR/settings.local.json"
+OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"SessionStart",source:"startup",cwd:$cwd,scratchpad_dir:$sp}' \
+    | CLAUDE_CODE_PLUGIN_DIRS=$T/pdirs bash "$S/on-session.sh" 2>/dev/null)
+printf '%s' "$OUT" | jq -e '.systemMessage | test("CLAUDE_CODE_PLUGIN_DIRS")' >/dev/null 2>&1 && ok "CLAUDE_CODE_PLUGIN_DIRS is reported" || bad "plugin dirs" "$OUT"
+PC=$CLAUDE_CONFIG_DIR/plugins/cache
+mkdir -p "$PC/other/modder/1.0/hooks" "$PC/kodflow/kodflow-hooks/9/hooks" "$PC/other/quiet/1.0/hooks" "$CLAUDE_CONFIG_DIR/skills/s/hooks"
+printf '{"modules":["./mod/register.ts"]}' > "$PC/other/modder/1.0/hooks/hooks.json"
+printf '{"modules":["./mod/register.ts"]}' > "$PC/kodflow/kodflow-hooks/9/hooks/hooks.json"
+printf '{"hooks":{}}' > "$PC/other/quiet/1.0/hooks/hooks.json"
+printf '{"modules":["./x.ts"]}' > "$CLAUDE_CONFIG_DIR/skills/s/hooks/hooks.json"
+run SessionStart "" '{"source":"startup"}' on-session.sh
+printf '%s' "$OUT" | jq -e '.systemMessage | test("other/modder") and test("skills/s/hooks") and (test("cache/kodflow") | not) and (test("quiet") | not)' >/dev/null 2>&1 \
+    && ok "modules outside kodflow are reported, kodflow's and plain hooks are not" || bad "foreign modules" "$OUT"
+printf '{"enabledPlugins":{"quiet@other":true}}' > "$CLAUDE_CONFIG_DIR/settings.json"
+run SessionStart "" '{"source":"startup"}' on-session.sh
+printf '%s' "$OUT" | jq -e '.systemMessage | test("other/modder") | not' >/dev/null 2>&1 \
+    && ok "a plugin that is not enabled is not reported" || bad "enabled filter" "$OUT"
+rm -rf "$CLAUDE_CONFIG_DIR/plugins" "$CLAUDE_CONFIG_DIR/skills" "$CLAUDE_CONFIG_DIR/settings.json"
+
+echo "== SessionStart · guards checked against their fingerprints (D8)"
+# A copy of the plugin's hooks stands for the installed one.
+CP=$T/installed/hooks; mkdir -p "$T/installed"; cp -R "$ROOT/plugins/kodflow-hooks/hooks" "$CP"
+start_copy() { OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"SessionStart",source:"startup",cwd:$cwd,scratchpad_dir:$sp}' \
+    | bash "$CP/scripts/on-session.sh" 2>/dev/null); }
+start_copy
+{ [ -z "$OUT" ] || printf '%s' "$OUT" | jq -e '.systemMessage // "" | test("fingerprint") | not' >/dev/null 2>&1; } \
+    && ok "an untouched copy matches its fingerprints" || bad "fingerprint clean" "$OUT"
+printf '\n# edited\n' >> "$CP/scripts/on-tool.sh"; start_copy
+printf '%s' "$OUT" | jq -e '(.systemMessage | test("scripts/on-tool.sh differs from its published fingerprint")) and (.hookSpecificOutput.additionalContext | test("on-tool.sh differs"))' >/dev/null 2>&1 \
+    && ok "an edited on-tool.sh raises a visible warning" || bad "fingerprint edited" "$OUT"
+cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/on-tool.sh" "$CP/scripts/on-tool.sh"
+MK=$CLAUDE_CONFIG_DIR/plugins/marketplaces/kodflow/plugins/kodflow-hooks/hooks; mkdir -p "$MK"
+cp "$CP/fingerprints.sha256" "$MK/"; start_copy
+{ [ -z "$OUT" ] || printf '%s' "$OUT" | jq -e '.systemMessage // "" | test("marketplace") | not' >/dev/null 2>&1; } \
+    && ok "the same fingerprints as the marketplace: silent" || bad "marketplace same" "$OUT"
+printf '0000  scripts/on-tool.sh\n' > "$MK/fingerprints.sha256"; start_copy
+printf '%s' "$OUT" | jq -e '.systemMessage | test("differ from the marketplace copy")' >/dev/null 2>&1 \
+    && ok "fingerprints that differ from the marketplace are reported" || bad "marketplace differs" "$OUT"
+rm -f "$CP/fingerprints.sha256"; start_copy
+printf '%s' "$OUT" | jq -e '.systemMessage | test("fingerprints.sha256 is missing")' >/dev/null 2>&1 \
+    && ok "a missing fingerprint file is reported" || bad "fingerprint missing" "$OUT"
+rm -rf "$CLAUDE_CONFIG_DIR/plugins" "$T/installed"
 run SubagentStart "" '{"agent_type":"Explore"}' on-agent.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("Subagent context")' >/dev/null 2>&1 && ok "subagent rules injected" || bad "subagent context" "$OUT"
 run SubagentStop "" '{"agent_type":"Explore","stop_hook_active":true}' on-agent.sh

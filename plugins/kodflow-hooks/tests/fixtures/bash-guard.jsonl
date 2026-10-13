@@ -1,0 +1,240 @@
+{"family": "verb", "cmd": "git \"commit\" --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git 'commit' --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "g\"i\"t commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "\\git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "=git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "/usr/bin/git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "$'git' commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "$'\\x67it' commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "command git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "env git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "env -i PATH=/usr/bin git commit -n -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "exec git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "echo a | xargs git commit --no-verify -m", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "sudo -u root git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "nohup git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "timeout 30 git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "GIT_TRACE=1 git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git -c user.name=x commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git --no-pager commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git -C /tmp commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "rtk git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "rtk proxy git commit -n -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git commit --no-veri -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git -c core.hooksPath=/dev/null commit -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git -c CORE.HOOKSPATH=/dev/null push origin feat", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git push --no-verify origin feat", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git commit -anm \"feat: x\"", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git commit -an -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git commit -nm x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "if true; then git commit --no-verify -m x; fi", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "{ git commit --no-verify -m x; }", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "(git commit --no-verify -m x)", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git status && git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git status; git commit -n -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "true || git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git commit --no-verify -m x &", "rc": 2, "motif": "no-verify"}
+{"family": "verb", "cmd": "git commit --no-verify -m x 2>&1 | tee log", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "bash -c \"git commit --no-verify -m x\"", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "sh -c 'git commit -n -m x'", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "bash -lc \"git commit --no-verify -m x\"", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "zsh -c \"git commit -an -m x\"", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "eval \"git commit --no-verify -m x\"", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "eval git commit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "bash -c \"bash -c 'git commit --no-verify -m x'\"", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "echo $(git commit --no-verify -m x)", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "echo `git commit --no-verify -m x`", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "cat <(git commit --no-verify -m x)", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "echo \"$(git commit --no-verify -m x)\"", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "sg staff -c \"git commit -n -m x\"", "rc": 2, "motif": "no-verify"}
+{"family": "nested", "cmd": "su root -c \"git commit --no-verify -m x\"", "rc": 2, "motif": "no-verify"}
+{"family": "heredoc-shell", "cmd": "bash <<'EOF'\ngit commit --no-verify -m x\nEOF", "rc": 2, "motif": "no-verify"}
+{"family": "heredoc-shell", "cmd": "sh <<EOF\ngit commit -n -m x\nEOF", "rc": 2, "motif": "no-verify"}
+{"family": "heredoc-shell", "cmd": "cat <<'EOF' | bash\ngit commit --no-verify -m x\nEOF", "rc": 2, "motif": "no-verify"}
+{"family": "heredoc-shell", "cmd": "echo \"git commit --no-verify -m x\" | sh", "rc": 2, "motif": "no-verify"}
+{"family": "heredoc-shell", "cmd": "bash <<< \"git commit --no-verify -m x\"", "rc": 2, "motif": "no-verify"}
+{"family": "heredoc-shell", "cmd": "bash <<-EOF\n\tgit commit -n -m x\n\tEOF", "rc": 2, "motif": "no-verify"}
+{"family": "continuation", "cmd": "git commit -m x \\\n  -n", "rc": 2, "motif": "no-verify"}
+{"family": "continuation", "cmd": "git commit \\\n  --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "continuation", "cmd": "git \\\ncommit --no-verify -m x", "rc": 2, "motif": "no-verify"}
+{"family": "negative", "cmd": "git log --grep=--no-verify", "rc": 0}
+{"family": "negative", "cmd": "git log -n 3", "rc": 0}
+{"family": "negative", "cmd": "echo -n hi", "rc": 0}
+{"family": "negative", "cmd": "sed -n 1p a.txt", "rc": 0}
+{"family": "negative", "cmd": "git commit -m \"docs: explain the -n flag\"", "rc": 0}
+{"family": "negative", "cmd": "git commit -m \"docs: --no-verify is forbidden\"", "rc": 0}
+{"family": "negative", "cmd": "git commit -m 'fix: -n'", "rc": 0}
+{"family": "negative", "cmd": "git commit -mn", "rc": 0}
+{"family": "negative", "cmd": "echo \"git commit --no-verify\"", "rc": 0}
+{"family": "negative", "cmd": "grep -rn \"git commit --no-verify\" .", "rc": 0}
+{"family": "negative", "cmd": "git commit -m \"feat: x\" && sed -n 1p a.txt", "rc": 0}
+{"family": "negative", "cmd": "cat > notes.md <<'EOF'\nRun git commit --no-verify -m \"see .claude/plans/x.md\"\nEOF", "rc": 0}
+{"family": "negative", "cmd": "cat <<'EOF' > notes.md\ngit commit -m \"Plan: .claude/plans/x.md\"\ngit push --force origin main\nEOF", "rc": 0}
+{"family": "negative", "cmd": "python3 - <<'EOF'\nprint('git commit --no-verify')\nEOF", "rc": 0}
+{"family": "negative", "cmd": "git commit -m \"$(cat <<'EOF'\nfeat: x\n\nThe body names the --no-verify policy.\nEOF\n)\"", "rc": 0}
+{"family": "negative", "cmd": "git -C /tmp log -n 3", "rc": 0}
+{"family": "negative", "cmd": "npm test -- -n 3", "rc": 0}
+{"family": "negative", "cmd": "ls -la", "rc": 0}
+{"family": "negative", "cmd": "git status && echo done", "rc": 0}
+{"family": "negative", "cmd": "printf '%s\\n' \"git push --force\"", "rc": 0}
+{"family": "negative", "cmd": "git push --force-with-lease origin feat", "rc": 0}
+{"family": "negative", "cmd": "git push --force-if-includes --force-with-lease origin feat", "rc": 0}
+{"family": "negative", "cmd": "git push -u origin feat", "rc": 0}
+{"family": "negative", "cmd": "git push -n origin feat", "rc": 0}
+{"family": "negative", "cmd": "echo \"a && git commit -n\" > f.txt", "rc": 0}
+{"family": "negative", "cmd": "# git commit --no-verify", "rc": 0}
+{"family": "negative", "cmd": "git commit -m \"feat: x\" # --no-verify", "rc": 0}
+{"family": "negative", "cmd": "git commit -uno -m x", "rc": 0}
+{"family": "negative", "cmd": "git commit -Sn0key -m x", "rc": 0}
+{"family": "negative", "cmd": "git push -o ci.skip origin feat", "rc": 0}
+{"family": "negative", "cmd": "git commit -F- -m x </dev/null", "rc": 0}
+{"family": "attribution-commit", "cmd": "git commit -m \"feat: x\" -m \"C\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-commit", "cmd": "git commit -m \"feat: see .claude/plans/x.md\"", "rc": 2, "motif": "leak"}
+{"family": "attribution-commit", "cmd": "git commit -m \"$(cat <<'EOF'\nfeat: x\n\nG\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\nEOF\n)\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-commit", "cmd": "git commit -F - <<'EOF'\nfeat: x\n\n\ud83e\udd16 robot\nEOF", "rc": 2, "motif": "attribution"}
+{"family": "attribution-commit", "cmd": "cat > corpus-msg.txt <<'EOF'\nfeat: x\n\nPlan: corpus\nEOF\ngit commit -F corpus-msg.txt", "rc": 2, "motif": "leak"}
+{"family": "attribution-commit", "cmd": "git \"commit\" -m \"fix: a\u0069-a\u0073si\u0073te\u0064\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-commit", "cmd": "bash -c 'git commit -m \"feat: x c\u006cau\u0064e \u0063od\u0065\"'", "rc": 2, "motif": "attribution"}
+{"family": "attribution-commit", "cmd": "git merge -m \"Merge: G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\" feat", "rc": 2, "motif": "attribution"}
+{"family": "attribution-commit", "cmd": "git commit -m \"feat: x\" -m \"Plan: .claude/plans/a.md\"", "rc": 2, "motif": "leak"}
+{"family": "attribution-commit", "cmd": "git commit --message=\"feat: G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-commit", "cmd": "git commit -m \"feat: x\" -- .claude/settings.json", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh pr create --title \"feat: x\" --body \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh pr create -t \"feat: x\" -b \"\ud83e\udd16 robot\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh pr create --title \"feat: x\" --body \"touches .claude/plans/x.md\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh pr create --title x --body-file - <<'EOF'\nG\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\nEOF", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh pr edit 3 --body \"C\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh -R o/r pr create --title \"x\" --body \"a\u0069-a\u0073si\u0073te\u0064 change\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh api repos/o/r/pulls -f title=x -f body=\"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh api -X PATCH repos/o/r/pulls/3 -f body=\"c\u006cau\u0064e \u0063od\u0065\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh api -X PATCH repos/o/r/pulls/3 -f body=\"C\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh pr create --title \"feat(hooks): guards for Claude Code\" --body \"Hooks every Claude Code session loads.\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh pr create --title x --body \"Plan: ship the hooks\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh pr create --title x --body \"C\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh pr create --title x --body \"co-authored-by: someone <noreply@anthropic.com>\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "glab mr create -t x -d \"edits .claude/settings.json for Claude Code\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh api repos/o/r/issues/3/comments -f body=\"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh issue create --title x --body \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh pr comment 3 --body \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "glab mr create -t x -d \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh api graphql -f query='mutation { createPullRequest(input:{title:\"x\", body:\"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"}) { clientMutationId } }'", "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__github__create_pull_request", "input": {"owner": "o", "repo": "r", "title": "x", "body": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e", "head": "f", "base": "main"}, "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__github__create_pull_request", "input": {"owner": "o", "repo": "r", "title": "x", "body": "edits .claude/plans/x.md", "head": "f", "base": "main"}, "rc": 0}
+{"family": "mcp", "tool": "mcp__github__update_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3, "title": "feat: c\u006cau\u0064e \u0063od\u0065"}, "rc": 0}
+{"family": "mcp", "tool": "mcp__github__update_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3, "body": "x\n\nC\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>"}, "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__github__create_pull_request", "input": {"owner": "o", "repo": "r", "title": "x", "body": "Generated with [Claude Code](https://example.invalid)", "head": "f", "base": "main"}, "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__gitlab__create_merge_request", "input": {"project_id": "1", "title": "x", "description": "Claude Code plugin, see .claude/plans"}, "rc": 0}
+{"family": "mcp", "tool": "mcp__github__push_files", "input": {"owner": "o", "repo": "r", "branch": "f", "message": "feat: see .claude/plans/x.md", "files": []}, "rc": 2, "motif": "leak", "agent": true}
+{"family": "mcp", "tool": "mcp__github__create_or_update_file", "input": {"owner": "o", "repo": "r", "branch": "f", "path": "a", "content": "x", "message": "feat: x\n\nC\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>"}, "rc": 2, "motif": "attribution", "agent": true}
+{"family": "mcp", "tool": "mcp__github__merge_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3, "commit_message": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e"}, "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__gitlab__create_merge_request", "input": {"project_id": "1", "title": "x", "description": "\ud83e\udd16"}, "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__GitKraken__git_commit", "input": {"directory": ".", "message": "fix: x, see .claude/x"}, "rc": 2, "motif": "leak", "agent": true}
+{"family": "mcp", "tool": "mcp__github__issue_write", "input": {"method": "create", "owner": "o", "repo": "r", "title": "x", "body": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e"}, "rc": 0}
+{"family": "mcp", "tool": "mcp__github__add_issue_comment", "input": {"owner": "o", "repo": "r", "issue_number": 3, "body": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e"}, "rc": 0}
+{"family": "mcp", "tool": "mcp__github__pull_request_review_write", "input": {"method": "create", "owner": "o", "repo": "r", "pullNumber": 3, "body": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e"}, "rc": 0}
+{"family": "mcp", "tool": "mcp__gitlab__create_issue", "input": {"project_id": "1", "title": "x", "description": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e"}, "rc": 0}
+{"family": "mcp", "tool": "mcp__github__get_file_contents", "input": {"owner": "o", "repo": "r", "path": "a"}, "rc": 0}
+{"family": "merge", "cmd": "gh pr merge 12 --squash", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "gh pr merge 12 --auto --squash", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "gh api -X PUT repos/o/r/pulls/12/merge", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input:{pullRequestId:\"x\"}) { clientMutationId } }'", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "gh api graphql -f query='mutation { mergePullRequest(input:{pullRequestId:\"x\"}) { clientMutationId } }'", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "glab mr merge 4", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "glab api -X PUT projects/1/merge_requests/4/merge", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "glab api -X PUT projects/1/merge_requests/4 -f merge_when_pipeline_succeeds=true", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "curl -X PUT -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/o/r/pulls/12/merge", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "bash -c \"gh pr merge 12\"", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "cd sub && gh pr merge 12 --rebase", "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "cmd": "gh pr view 12", "rc": 0, "agent": true}
+{"family": "merge", "cmd": "gh pr checks 12 --watch", "rc": 0, "agent": true}
+{"family": "merge", "cmd": "git merge-base a b", "rc": 0, "agent": true}
+{"family": "merge", "cmd": "gh pr list --state merged", "rc": 0, "agent": true}
+{"family": "merge", "cmd": "gh pr merge 12 --squash", "rc": 0}
+{"family": "merge", "tool": "mcp__github__merge_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3}, "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "tool": "mcp__gitlab__merge_merge_request", "input": {"project_id": "1", "merge_request_iid": "4"}, "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "tool": "mcp__gitlab__update_merge_request", "input": {"project_id": "1", "merge_request_iid": "4", "merge_when_pipeline_succeeds": true}, "rc": 2, "motif": "merge", "agent": true}
+{"family": "merge", "tool": "mcp__github__merge_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3}, "rc": 0}
+{"family": "push-default", "cmd": "git push origin main", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "git push origin HEAD:main", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "git push origin feat:refs/heads/main", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "git push origin :main", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "git push --delete origin master", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "git push --all origin", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "git push --mirror", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "git -C . push origin master", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "bash -c \"git push origin main\"", "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "cmd": "git push origin feat/x", "rc": 0, "agent": true}
+{"family": "push-default", "cmd": "git push -u origin HEAD", "rc": 0, "agent": true}
+{"family": "push-default", "cmd": "git push", "rc": 0, "agent": true}
+{"family": "push-default", "cmd": "git push origin feat/main-fix", "rc": 0, "agent": true}
+{"family": "push-default", "cmd": "git push origin main", "rc": 0}
+{"family": "push-default", "tool": "mcp__github__push_files", "input": {"owner": "o", "repo": "r", "branch": "main", "message": "feat: x", "files": []}, "rc": 2, "motif": "push-default", "agent": true}
+{"family": "push-default", "tool": "mcp__github__push_files", "input": {"owner": "o", "repo": "r", "branch": "feat/x", "message": "feat: x", "files": []}, "rc": 0, "agent": true}
+{"family": "force", "cmd": "git push --force origin feat", "rc": 2, "motif": "force"}
+{"family": "force", "cmd": "git push -f origin feat", "rc": 2, "motif": "force"}
+{"family": "force", "cmd": "git push -fu origin feat", "rc": 2, "motif": "force"}
+{"family": "force", "cmd": "git push origin +feat", "rc": 2, "motif": "force"}
+{"family": "force", "cmd": "git status && git push --force origin feat", "rc": 2, "motif": "force"}
+{"family": "force", "cmd": "bash -c \"git push --force origin feat\"", "rc": 2, "motif": "force"}
+{"family": "root", "cmd": "git commit -m 'feat: x'", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git push origin main", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git rebase main", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git cherry-pick abc", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git merge main", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git am < p.patch", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git apply p.diff", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git revert HEAD", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git reset --hard origin/main", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git reset -q --hard", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git worktree add ../w -b x", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "gh pr create --fill", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "gh -R o/r pr create -t x", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "glab mr create", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git \"push\" origin x", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "\\git push", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "=git push", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "bash -c \"git push\"", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "eval git push", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "ls | xargs git apply", "rc": 2, "motif": "root", "root": true}
+{"family": "root", "cmd": "git status", "rc": 0, "root": true}
+{"family": "root", "cmd": "gh pr view 3", "rc": 0, "root": true}
+{"family": "root", "cmd": "echo \"git push\"", "rc": 0, "root": true}
+{"family": "root", "cmd": "cat > n.md <<'EOF'\ngit push\nEOF", "rc": 0, "root": true}
+{"family": "root", "cmd": "ROOT_OK=1 git push", "rc": 0, "root": true}
+{"family": "root", "cmd": "gh pr merge 3 --squash", "rc": 0, "root": true}
+{"family": "root", "cmd": "git worktree list", "rc": 0, "root": true}
+{"family": "mod-write", "tool": "Write", "input": {"file_path": "/x/.claude/skills/s/hooks/hooks.json", "content": "{}"}, "rc": 2, "motif": "mod-write"}
+{"family": "mod-write", "tool": "Write", "input": {"file_path": "/x/.claude/skills/s/.claude-plugin/plugin.json", "content": "{}"}, "rc": 2, "motif": "mod-write"}
+{"family": "mod-write", "tool": "Edit", "input": {"file_path": "/x/.claude/skills/s/hooks/hooks.json", "old_string": "a", "new_string": "b"}, "rc": 2, "motif": "mod-write", "agent": true}
+{"family": "mod-write", "tool": "Write", "input": {"file_path": ".claude/skills/s/hooks/hooks.json", "content": "{}"}, "rc": 2, "motif": "mod-write"}
+{"family": "mod-write", "tool": "Write", "input": {"file_path": "/x/.claude/skills/s/SKILL.md", "content": "x"}, "rc": 0}
+{"family": "mod-write", "tool": "Write", "input": {"file_path": "/x/plugins/p/hooks/hooks.json", "content": "{}"}, "rc": 0}
+{"family": "mod-write", "cmd": "echo '{}' > ~/.claude/skills/s/hooks/hooks.json", "rc": 2, "motif": "mod-write"}
+{"family": "mod-write", "cmd": "cat > .claude/skills/s/.claude-plugin/plugin.json <<'EOF'\n{}\nEOF", "rc": 2, "motif": "mod-write"}
+{"family": "mod-write", "cmd": "printf x >> /x/.claude/skills/s/hooks/hooks.json", "rc": 2, "motif": "mod-write"}
+{"family": "mod-write", "cmd": "bash -c 'echo {} > /x/.claude/skills/s/hooks/hooks.json'", "rc": 2, "motif": "mod-write"}
+{"family": "mod-write", "cmd": "echo '{}' > /x/.claude/skills/s/hooks/hooks.json", "rc": 2, "motif": "mod-write", "agent": true}
+{"family": "mod-write", "cmd": "echo x > /x/.claude/skills/s/notes.md", "rc": 0}
+{"family": "mod-write", "cmd": "cat /x/.claude/skills/s/hooks/hooks.json", "rc": 0}
+{"family": "mod-write", "cmd": "ls ~/.claude/skills", "rc": 0}
+{"family": "plugin-source", "cmd": "claude plugin install evil@other", "rc": 2, "motif": "plugin-source"}
+{"family": "plugin-source", "cmd": "claude plugin install evil", "rc": 2, "motif": "plugin-source"}
+{"family": "plugin-source", "cmd": "claude plugin i x@y", "rc": 2, "motif": "plugin-source"}
+{"family": "plugin-source", "cmd": "claude plugin install --scope project x@y", "rc": 2, "motif": "plugin-source"}
+{"family": "plugin-source", "cmd": "claude plugin marketplace add someone/market", "rc": 2, "motif": "plugin-source"}
+{"family": "plugin-source", "cmd": "bash -c \"claude plugin install x@y\"", "rc": 2, "motif": "plugin-source"}
+{"family": "plugin-source", "cmd": "claude plugin install kodflow-hooks@kodflow", "rc": 0}
+{"family": "plugin-source", "cmd": "claude plugin marketplace add kodflow/claude-marketplace", "rc": 0}
+{"family": "plugin-source", "cmd": "claude plugin update kodflow-hooks@kodflow", "rc": 0}
+{"family": "plugin-source", "cmd": "claude plugin marketplace update kodflow", "rc": 0}
+{"family": "plugin-source", "cmd": "claude --version", "rc": 0}
+{"family": "gap", "cmd": "cp h.json ~/.claude/skills/s/hooks/hooks.json", "rc": 2, "motif": "mod-write", "known_gap": "only a shell redirection into a skills directory is read; cp, tee, sed -i and git clone are not"}
+{"family": "gap", "cmd": "tee ~/.claude/skills/s/hooks/hooks.json < h.json", "rc": 2, "motif": "mod-write", "known_gap": "only a shell redirection into a skills directory is read; cp, tee, sed -i and git clone are not"}
+{"family": "gap", "cmd": "sed -i s/a/b/ ~/.claude/skills/s/hooks/hooks.json", "rc": 2, "motif": "mod-write", "known_gap": "only a shell redirection into a skills directory is read; cp, tee, sed -i and git clone are not"}
+{"family": "gap", "cmd": "git clone https://example.invalid/x.git ~/.claude/skills/x", "rc": 2, "motif": "mod-write", "known_gap": "only a shell redirection into a skills directory is read; cp, tee, sed -i and git clone are not"}
+{"family": "gap", "cmd": "c=git; $c commit --no-verify -m x", "rc": 2, "motif": "no-verify", "known_gap": "variable expansion: the reader never expands a variable"}
+{"family": "gap", "cmd": "alias g=git; g commit --no-verify -m x", "rc": 2, "motif": "no-verify", "known_gap": "aliases are not resolved"}
+{"family": "gap", "cmd": "python3 -c \"import os; os.system('git commit --no-verify -m x')\"", "rc": 2, "motif": "no-verify", "known_gap": "an interpreter other than a shell is not read"}
+{"family": "gap", "cmd": "git -c alias.ci=commit ci --no-verify -m x", "rc": 2, "motif": "no-verify", "known_gap": "a git alias defined on the line is not resolved"}
+{"family": "gap", "cmd": "$(printf git) commit --no-verify -m x", "rc": 2, "motif": "no-verify", "known_gap": "a command name produced by a substitution is not known"}
+{"family": "gap", "cmd": "find . -maxdepth 0 -exec git commit --no-verify -m x \\;", "rc": 2, "motif": "no-verify", "known_gap": "find -exec is not read as a command"}

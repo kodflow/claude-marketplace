@@ -26,8 +26,9 @@ bad() { fail=$((fail+1)); printf '  FAIL %s\n       %s\n' "$1" "$2"; }
 
 # payload TOOL INPUT-fragment [EXTRA-fragment] → the JSON the harness sends
 payload() {
+    local extra=${3:-}; [ -n "$extra" ] || extra='{}'   # bash 3.2 misreads ${3:-{\}}
     jq -n -c --arg tool "$1" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" \
-        --argjson ti "$2" --argjson extra "${3:-{\}}" \
+        --argjson ti "$2" --argjson extra "$extra" \
         '{session_id:"sess-root",hook_event_name:"PreToolUse",tool_name:$tool,cwd:$cwd,scratchpad_dir:$sp,tool_use_id:"t1",tool_input:$ti} + $extra'
 }
 # run JSON [ENV-assignment...] → sets RC, ERR
@@ -173,6 +174,11 @@ sleep 0.6
     && ok "each denial is one tagged line in the log" || bad "deny count" "$(cat "$L" 2>/dev/null)"
 [ "$(grep -c '"root_guard":"dispatch"' "$L" 2>/dev/null)" = 1 ] \
     && ok "each dispatch is one tagged line in the log" || bad "dispatch count" "$(tail -1 "$L" 2>/dev/null)"
+run "$(cmd 'gh pr merge 12 --squash')"
+run "$(payload mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":12}')"
+sleep 0.6
+[ "$(grep -c '"root_guard":"merge"' "$L" 2>/dev/null)" = 2 ] \
+    && ok "a main-thread merge (shell or MCP) is journaled, not refused, until the mod asks the user" || bad "merge journal" "$(tail -2 "$L" 2>/dev/null)"
 
 echo "== Stop · an epic in progress needs a subagent"
 MS=$CFG/kodflow/sessions/sess-root; mkdir -p "$MS"
