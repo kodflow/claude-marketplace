@@ -1,0 +1,11 @@
+# merge-exemptions.txt — repositories whose merges from the main thread need
+# no agreement from the kodflow mod (green CI, pinned head, the user's yes).
+#
+# One repository per line, owner/repo as the forge spells it (case does not
+# matter); `#` starts a comment. Changed by pull request only: the file is
+# fingerprinted (hooks/fingerprints.sha256) and a modified copy is reported
+# at session start. Each merge it lets through is journaled
+# (root_guard "merge-exempt" in .claude/logs/<branch>/session.jsonl).
+#
+# kodflow/claude-marketplace is never exempt, whatever this file says: it
+# ships the guards themselves.

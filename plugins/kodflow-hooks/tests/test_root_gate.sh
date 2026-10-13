@@ -94,11 +94,25 @@ for c in 'sg ai -c "sudo apt update && sudo apt upgrade -y"' 'sudo systemctl res
     run "$(cmd "$c")"; expect_rc "allowed: $c" 0
 done
 
-echo "== merging is allowed, after the user's OK"
-run "$(cmd 'gh pr merge 12 --squash --delete-branch')";          expect_rc "gh pr merge allowed" 0
-run "$(cmd 'glab mr merge 4')";                                  expect_rc "glab mr merge allowed" 0
-run "$(payload mcp__github__merge_pull_request '{}')";            expect_rc "GitHub MCP merge allowed" 0
-run "$(payload mcp__gitlab__merge_merge_request '{}')";           expect_rc "GitLab MCP merge allowed" 0
+echo "== merging needs the user's OK, which the mod's token carries"
+# The mod writes sessions/<sid>/merge-ok/<tool_use_id> after the user's yes,
+# the head SHA first; the call must carry that SHA.
+SHA=0123456789abcdef0123456789abcdef01234567
+TOK=$T/home/.claude/kodflow/sessions/sess-root/merge-ok
+token() { mkdir -p "$TOK"; printf '%s\ngithub:o/r#12\n0\n' "${1:-$SHA}" > "$TOK/t1"; }
+run "$(cmd 'gh pr merge 12 --squash --delete-branch')";          expect_rc "gh pr merge without a token denied" 2
+run "$(cmd 'glab mr merge 4')";                                  expect_rc "glab mr merge without a token denied" 2
+run "$(payload mcp__github__merge_pull_request '{}')";            expect_rc "GitHub MCP merge without a token denied" 2
+run "$(payload mcp__gitlab__merge_merge_request '{}')";           expect_rc "GitLab MCP merge without a token denied" 2
+token; run "$(cmd "gh pr merge 12 -R o/r --squash --match-head-commit $SHA")"; expect_rc "gh pr merge with its token allowed" 0
+[ ! -e "$TOK/t1" ] && ok "the token is spent" || bad "token spent" "$(ls "$TOK")"
+run "$(cmd "gh pr merge 12 -R o/r --match-head-commit $SHA")";   expect_rc "a spent token does not merge twice" 2
+token; run "$(cmd 'gh pr merge 12 -R o/r --squash')";            expect_rc "a token whose SHA the call does not carry denied" 2
+MJ=$(jq -n -c --arg s "$SHA" '{owner:"o",repo:"r",pullNumber:12,sha:$s}')
+token; run "$(payload mcp__github__merge_pull_request "$MJ")"
+expect_rc "GitHub MCP merge with its token allowed" 0
+token 'not-a-sha'; run "$(cmd "gh pr merge 12 -R o/r --match-head-commit $SHA")"; expect_rc "a malformed token denied" 2
+rm -rf "$TOK"
 
 echo "== Bash: the git and forge operations that produce into a repository are refused"
 G=git
@@ -176,9 +190,12 @@ sleep 0.6
     && ok "each dispatch is one tagged line in the log" || bad "dispatch count" "$(tail -1 "$L" 2>/dev/null)"
 run "$(cmd 'gh pr merge 12 --squash')"
 run "$(payload mcp__github__merge_pull_request '{"owner":"o","repo":"r","pullNumber":12}')"
+token; run "$(cmd "gh pr merge 12 -R o/r --match-head-commit $SHA")"
 sleep 0.6
 [ "$(grep -c '"root_guard":"merge"' "$L" 2>/dev/null)" = 2 ] \
-    && ok "a main-thread merge (shell or MCP) is journaled, not refused, until the mod asks the user" || bad "merge journal" "$(tail -2 "$L" 2>/dev/null)"
+    && ok "a main-thread merge refused (shell or MCP) is one tagged line" || bad "merge journal" "$(tail -3 "$L" 2>/dev/null)"
+[ "$(grep -c '"root_guard":"merge-ok"' "$L" 2>/dev/null)" = 1 ] \
+    && ok "an agreed merge is journaled as such" || bad "merge-ok journal" "$(tail -1 "$L" 2>/dev/null)"
 
 echo "== Stop · an epic in progress needs a subagent"
 MS=$CFG/kodflow/sessions/sess-root; mkdir -p "$MS"
