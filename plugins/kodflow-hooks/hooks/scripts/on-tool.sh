@@ -453,21 +453,61 @@ _p_file() {
 # ============================================================================
 # Guards · decided on what the line runs
 # ============================================================================
-# §5 of the user's rules, with the scopes of kodflow/post-commit's
-# patterns.txt (`# @scope: commit,pr` and `# @scope: commit`). A commit
-# message meets both lists. A pull or merge request title or body meets the
-# ATTRIBUTION list only: it may well be about the tooling, so naming Claude
-# Code or a .claude/ path there is ordinary prose. Issues, comments and
-# reviews are not checked. Until patterns.txt is read at a pinned ref (L0.7),
-# the commit,pr list below copies its attribution patterns.
-ATTR_PATTERNS=("^[[:space:]]*(co-authored-by|assisted-by|generated-by|authored-by|committed-by|reviewed-by|signed-off-by)[[:space:]]*:.*(claude|anthropic|openai|chatgpt|gpt-[0-9]|copilot|gemini|codeium|cursor|devin|aider|llm|[^a-z]ai[^a-z])"
-    "noreply@anthropic\\.com" "copilot@users\\.noreply\\.github\\.com"
-    "generated[[:space:]]+(by|with|using)[[:space:]]+\\[?(claude|ai|gpt|chatgpt|anthropic|copilot|gemini|cursor|devin|aider|an?[[:space:]]+llm)"
-    "🤖" "\\bai[-[:space:]]?(assisted|generated|authored|written)\\b"
-    "\\b(written|authored|generated)[[:space:]]+by[[:space:]]+an?[[:space:]]+(ai|llm|language[[:space:]]model)\\b")
-# commit only, "<motif>|<pattern>": the rest of §5.
-COMMIT_PATTERNS=("leak|^[[:space:]]*plan:" "attribution|claude[-[:space:]]code" "leak|\\.claude/"
-    "leak|(see|ref|tracked-in)[[:space:]]+\\.claude" "leak|\\bplan[[:space:]]+\\.claude")
+# §5 of the user's rules, read from kodflow/post-commit's patterns.txt and
+# patterns-strict.txt, vendored at a pinned commit in ../patterns (SOURCE
+# names it; scripts/sync-post-commit-patterns.sh moves it, CI checks the copy).
+# A commit message meets every pattern, strict included. A pull or merge
+# request title or body meets the `# @scope: commit,pr` ones only: it may
+# well be about the tooling, so naming Claude Code or a .claude/ path there is
+# ordinary prose. Issues, comments and reviews are not checked.
+#
+# Each pattern carries a motif: `attribution` for the commit,pr scope and the
+# vendor keywords, `leak` for a commit-only pattern naming a workflow artefact
+# (a .claude path, the Plan: footer). Leaks are tried before the keywords, so
+# `\bclaude\b` does not report `.claude/plans/x.md` as an attribution.
+PATTERNS_DIR=${BASH_SOURCE[0]%/*}/../patterns
+ATTR_PATTERNS=(); COMMIT_PATTERNS=(); PATTERNS_LOADED=""
+
+# Once per call, builtins only: patterns.sh's format (one ERE a line, `#` and
+# blank lines skipped, `# @scope: <list>` for what follows, `commit` before
+# the first) without its bash-4 reader. Any defect empties both lists, which
+# _scan refuses rather than report a clean text.
+_load_patterns() {
+    [ -n "$PATTERNS_LOADED" ] && return 0
+    PATTERNS_LOADED=1
+    local f line rest cur s leak="" kw=""
+    for f in "$PATTERNS_DIR/patterns.txt" "$PATTERNS_DIR/patterns-strict.txt"; do
+        [ -r "$f" ] || { ATTR_PATTERNS=(); COMMIT_PATTERNS=(); return 0; }
+        cur=commit
+        while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in
+                '#'*)
+                    rest=${line#\#}; rest=${rest#"${rest%%[![:space:]]*}"}
+                    case "$rest" in '@scope:'*) ;; *) continue ;; esac
+                    cur=${rest#@scope:}; cur=${cur//[[:space:]]/}
+                    case "$cur" in ''|,*|*,|*,,*) ATTR_PATTERNS=(); COMMIT_PATTERNS=(); return 0 ;; esac
+                    s=,$cur,
+                    while [ -n "${s#,}" ]; do
+                        s=${s#,}
+                        case "${s%%,*}" in commit|pr) ;; *) ATTR_PATTERNS=(); COMMIT_PATTERNS=(); return 0 ;; esac
+                        s=,${s#*,}
+                    done
+                    continue ;;
+                '') continue ;;
+            esac
+            case ",$cur," in
+                *,pr,*) ATTR_PATTERNS+=("$line") ;;
+                *,commit,*)
+                    case "$line" in
+                        *'\.claude'*|*'plan:'*) leak=$leak$'\n'$line ;;
+                        *) kw=$kw$'\n'$line ;;
+                    esac ;;
+            esac
+        done < "$f"
+    done
+    while IFS= read -r line; do [ -n "$line" ] && COMMIT_PATTERNS+=("leak|$line"); done <<< "$leak"
+    while IFS= read -r line; do [ -n "$line" ] && COMMIT_PATTERNS+=("attribution|$line"); done <<< "$kw"
+}
 
 # $1 kind (commit|pr), $2 text → F_ATTR "<motif> <pattern>" on the first hit.
 _scan() {
@@ -475,12 +515,16 @@ _scan() {
     local p hay
     hay=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
     case "$hay" in *[![:space:]]*) ;; *) return 0 ;; esac
+    _load_patterns
+    if [ ${#ATTR_PATTERNS[@]} -eq 0 ] || [ ${#COMMIT_PATTERNS[@]} -eq 0 ]; then
+        F_ATTR="attribution (hooks/patterns unreadable or malformed: nothing to check $1 text against)"; F_ATTR_KIND=$1; return 0
+    fi
     for p in "${ATTR_PATTERNS[@]}"; do
-        printf '%s' "$hay" | grep -qiE "$p" && { F_ATTR="attribution $p"; F_ATTR_KIND=$1; return 0; }
+        printf '%s' "$hay" | grep -qiE -- "$p" && { F_ATTR="attribution $p"; F_ATTR_KIND=$1; return 0; }
     done
     [ "$1" = commit ] || return 0
     for p in "${COMMIT_PATTERNS[@]}"; do
-        printf '%s' "$hay" | grep -qiE "${p#*|}" && { F_ATTR="${p%%|*} ${p#*|}"; F_ATTR_KIND=$1; return 0; }
+        printf '%s' "$hay" | grep -qiE -- "${p#*|}" && { F_ATTR="${p%%|*} ${p#*|}"; F_ATTR_KIND=$1; return 0; }
     done
 }
 

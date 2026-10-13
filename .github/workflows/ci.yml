@@ -94,6 +94,13 @@ jobs:
       - name: Guard fingerprints match the scripts
         run: bash scripts/hooks-fingerprints.sh --check
 
+      # hooks/patterns is kodflow/post-commit's patterns.txt and
+      # patterns-strict.txt at the commit hooks/patterns/SOURCE pins. The
+      # plugin reads only that copy, so a hand edit or a half-done sync would
+      # ship rules the gate does not hold. Network here, never at run time.
+      - name: Vendored patterns match kodflow/post-commit at the pinned commit
+        run: bash scripts/sync-post-commit-patterns.sh --check
+
       # A plugin that ships a suite gets it run. Discovered, not listed: a
       # hand-kept list is how kodflow-shell's 31 assertions sat in the tree
       # for a day without anything running them.

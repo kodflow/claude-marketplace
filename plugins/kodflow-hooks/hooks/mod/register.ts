@@ -60,6 +60,7 @@ import {
 } from "./machine-guards.ts";
 import { parse } from "./shell.ts";
 import { inspect, refusalText, verdict, type GuardCtx } from "./guards.ts";
+import { loadRules, type Rules } from "./patterns.ts";
 import {
   classifyBash,
   classifyMcp,
@@ -86,6 +87,8 @@ const present = () => {
 // Read once a session: the engine's version, the credential variables' values.
 let validated: Promise<boolean> | undefined;
 let secrets: Promise<string[]> | undefined;
+// The vendored §5 rules; a failed read stays undefined and is tried again.
+let rules: Rules | undefined;
 
 const off = async ($: any): Promise<boolean> =>
   isOff(await $.env.get("KODFLOW_MOD"));
@@ -357,7 +360,11 @@ async function origin($: any): Promise<string | undefined> {
   return url.exitCode === 0 ? url.stdout.trim() : undefined;
 }
 
-async function guardCtx($: any, e: any): Promise<GuardCtx> {
+async function guardCtx(
+  $: any,
+  e: any,
+  patterns: () => Promise<Rules | undefined>,
+): Promise<GuardCtx> {
   const dir = await projectDir($);
   const cfg = await config($);
   const agentId = e.agentId || undefined;
@@ -386,6 +393,7 @@ async function guardCtx($: any, e: any): Promise<GuardCtx> {
       const sha = token?.split("\n")[0] ?? "";
       return /^[0-9a-f]{40}$/.test(sha) && String(e.command).includes(sha);
     },
+    patterns,
   };
 }
 
@@ -495,7 +503,11 @@ export const register: Register = (on) => {
         return g && "deny" in g ? g : undefined;
       },
       guards: async () => {
-        const ctx = await guardCtx($, e);
+        rules ??= await loadRules(
+          (path) => $.fs.read(path),
+          `${$.plugin.root}/hooks/patterns`,
+        );
+        const ctx = await guardCtx($, e, async () => rules);
         const found = await inspect(line, ctx);
         const refusal = found && (await verdict(line, found, ctx));
         return refusal ? { deny: refusalText(refusal) } : undefined;

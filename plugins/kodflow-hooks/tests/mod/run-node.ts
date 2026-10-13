@@ -28,6 +28,7 @@ import { lock, mutate, type Port } from "../../hooks/mod/store.ts";
 import { plan } from "../../hooks/mod/tasks.ts";
 import { goModuleOf } from "../../hooks/mod/lint.ts";
 import { replay } from "./corpus.ts";
+import { loadRules } from "../../hooks/mod/patterns.ts";
 import { invariants } from "./invariants.ts";
 
 const run = promisify(execFile);
@@ -223,6 +224,12 @@ try {
     join(dirname(HERE), "..", "fixtures", "bash-guard.jsonl"),
     "utf8",
   );
+  // The files the plugin ships, read as register.ts reads them
+  const rules = await loadRules(
+    async (p) => readFileSync(p, "utf8"),
+    join(dirname(HERE), "..", "..", "hooks", "patterns"),
+  );
+  check(rules !== undefined, "hooks/patterns read and parsed", "");
   const r = await replay(corpus, {
     projectDir: repo,
     home: join(lab, "home"),
@@ -242,6 +249,7 @@ try {
       }
     },
     mergeAllowed: async () => false,
+    patterns: async () => rules,
   });
   for (const g of r.gaps) console.log(`  gap  ${g}`);
   check(

@@ -66,7 +66,10 @@ function host(on: any, env: Record<string, string>): Host {
     return { value: undefined };
   });
   on("fs.read", async (_$: any, e: any) => {
-    const text = h.files.get(e.path);
+    // A key "*/a/b" stands for a file under the plugin root, wherever it is
+    const text =
+      h.files.get(e.path) ??
+      [...h.files].find(([k]) => k.startsWith("*/") && e.path.endsWith(k.slice(1)))?.[1];
     if (text === undefined) return { deny: "ENOENT" };
     return { value: text };
   });
@@ -503,6 +506,50 @@ test("guards: the mod refuses what the shell refuses, with its motif", async ($,
   } as any);
   expect(refusal(r)).toContain("[motif:no-verify]");
   expect(reached).toBe(0);
+});
+
+// The vendored rules' shape (hooks/patterns), in miniature: a plugin test
+// reads no file. The real files are replayed by tests/mod/run-node.ts.
+const PATTERNS =
+  "# @scope: commit,pr\nnoreply@anthropic\\.com\n# @scope: commit\n^[[:space:]]*plan:[[:space:]]\n";
+const STRICT = "# @scope: commit\n\\bclaude\\b\n\\.claude/\n";
+
+test("attribution: without hooks/patterns, a commit message is refused, never read as clean", async ($, on) => {
+  host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  let reached = 0;
+  on("tool.call", { tool: "Bash" }, async () => (reached++, out("")) as any);
+  await start($);
+  const r: any = await $.tool.call({
+    tool: "Bash",
+    command: 'git commit -m "feat: plain"',
+  } as any);
+  expect(refusal(r)).toContain("hooks/patterns unreadable");
+  expect(reached).toBe(0);
+});
+
+test("attribution: hooks/patterns read, scoped for commit and pr, leaks before keywords", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  h.files.set("*/hooks/patterns/patterns.txt", PATTERNS);
+  h.files.set("*/hooks/patterns/patterns-strict.txt", STRICT);
+  let reached = 0;
+  on("tool.call", { tool: "Bash" }, async () => (reached++, out("")) as any);
+  await start($);
+  const call = (command: string) =>
+    $.tool.call({ tool: "Bash", command } as any) as any;
+  expect(refusal(await call('git commit -m "feat: x" -m "Plan: y"'))).toContain(
+    "[motif:leak]",
+  );
+  expect(refusal(await call('git commit -m "fix: see .claude/x"'))).toContain(
+    "[motif:leak]",
+  );
+  expect(refusal(await call('git commit -m "fix: claude"'))).toContain(
+    "[motif:attribution]",
+  );
+  await call('git commit -m "feat: plain"');
+  await call(
+    'gh pr create --title x --body "Plan: y, for claude, in .claude/x"',
+  );
+  expect(reached).toBe(2);
 });
 
 test("merge: unpinned, refused with the exact command; a subagent, refused outright", async ($, on) => {

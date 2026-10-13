@@ -99,6 +99,8 @@
 {"family": "attribution-commit", "cmd": "git commit -m \"feat: x\" -m \"Plan: .claude/plans/a.md\"", "rc": 2, "motif": "leak"}
 {"family": "attribution-commit", "cmd": "git commit --message=\"feat: G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 2, "motif": "attribution"}
 {"family": "attribution-commit", "cmd": "git commit -m \"feat: x\" -- .claude/settings.json", "rc": 0}
+{"family": "attribution-commit", "cmd": "git commit -m \"fix: claude session handling\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-commit", "cmd": "git commit -m \"chore: bump the anthropic sdk\"", "rc": 2, "motif": "attribution"}
 {"family": "attribution-pr", "cmd": "gh pr create --title \"feat: x\" --body \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 2, "motif": "attribution"}
 {"family": "attribution-pr", "cmd": "gh pr create -t \"feat: x\" -b \"\ud83e\udd16 robot\"", "rc": 2, "motif": "attribution"}
 {"family": "attribution-pr", "cmd": "gh pr create --title \"feat: x\" --body \"touches .claude/plans/x.md\"", "rc": 0}
@@ -118,6 +120,7 @@
 {"family": "attribution-pr", "cmd": "gh pr comment 3 --body \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 0}
 {"family": "attribution-pr", "cmd": "glab mr create -t x -d \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 2, "motif": "attribution"}
 {"family": "attribution-pr", "cmd": "gh api graphql -f query='mutation { createPullRequest(input:{title:\"x\", body:\"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"}) { clientMutationId } }'", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh pr create --title x --body \"bump the anthropic sdk for claude\"", "rc": 0}
 {"family": "mcp", "tool": "mcp__github__create_pull_request", "input": {"owner": "o", "repo": "r", "title": "x", "body": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e", "head": "f", "base": "main"}, "rc": 2, "motif": "attribution"}
 {"family": "mcp", "tool": "mcp__github__create_pull_request", "input": {"owner": "o", "repo": "r", "title": "x", "body": "edits .claude/plans/x.md", "head": "f", "base": "main"}, "rc": 0}
 {"family": "mcp", "tool": "mcp__github__update_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3, "title": "feat: c\u006cau\u0064e \u0063od\u0065"}, "rc": 0}
