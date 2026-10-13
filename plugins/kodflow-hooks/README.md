@@ -94,6 +94,15 @@ It never expands a variable or an alias. Those, and an interpreter other than
 a shell (`python -c "os.system(…)"`), `find -exec` and a git alias defined on
 the line, are the known gaps; each has a `known_gap` case in the corpus.
 
+The attribution guard follows the scopes of kodflow/post-commit's
+`patterns.txt`. A commit message meets every §5 pattern. A pull or merge
+request title or body meets the attribution patterns only (AI trailers such
+as Co-Authored-By, AI noreply addresses, "Generated with/by", the robot
+emoji, "AI-assisted"): a PR may well be about the tooling, so naming Claude
+Code or a `.claude/` path, or a `Plan:` line, passes there. The lists are
+copied into `on-tool.sh` until `patterns.txt` is read at a pinned ref
+(L0.7, a known gap).
+
 Plugin machinery stays in marketplaces (L0.6). For every caller, Edit and
 Write, and a shell redirection, are refused when they write a
 `.claude-plugin/` or a `hooks/hooks.json` under a skills directory

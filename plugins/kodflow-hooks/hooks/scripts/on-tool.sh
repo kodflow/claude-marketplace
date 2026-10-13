@@ -453,13 +453,21 @@ _p_file() {
 # ============================================================================
 # Guards · decided on what the line runs
 # ============================================================================
-# §5 of the user's rules. A commit message is held to every pattern; a pull
-# request title or body to the attribution ones only (a PR may name a .claude/
-# path it changes). Issues, comments and reviews are not checked.
-ATTR_PATTERNS=("co-authored-by:.*(claude|anthropic|openai|gpt|copilot|gemini|llm|ai)"
-    "generated[[:space:]]+(by|with)[[:space:]]+(claude|ai|gpt|anthropic|copilot)"
-    "ai[-.]assisted" "🤖" "claude[-[:space:]]code")
-LEAK_PATTERNS=("\\.claude/" "^[[:space:]]*plan:" "(see|ref|tracked-in)[[:space:]]+\\.claude" "\\bplan[[:space:]]+\\.claude")
+# §5 of the user's rules, with the scopes of kodflow/post-commit's
+# patterns.txt (`# @scope: commit,pr` and `# @scope: commit`). A commit
+# message meets both lists. A pull or merge request title or body meets the
+# ATTRIBUTION list only: it may well be about the tooling, so naming Claude
+# Code or a .claude/ path there is ordinary prose. Issues, comments and
+# reviews are not checked. Until patterns.txt is read at a pinned ref (L0.7),
+# the commit,pr list below copies its attribution patterns.
+ATTR_PATTERNS=("^[[:space:]]*(co-authored-by|assisted-by|generated-by|authored-by|committed-by|reviewed-by|signed-off-by)[[:space:]]*:.*(claude|anthropic|openai|chatgpt|gpt-[0-9]|copilot|gemini|codeium|cursor|devin|aider|llm|[^a-z]ai[^a-z])"
+    "noreply@anthropic\\.com" "copilot@users\\.noreply\\.github\\.com"
+    "generated[[:space:]]+(by|with|using)[[:space:]]+\\[?(claude|ai|gpt|chatgpt|anthropic|copilot|gemini|cursor|devin|aider|an?[[:space:]]+llm)"
+    "🤖" "\\bai[-[:space:]]?(assisted|generated|authored|written)\\b"
+    "\\b(written|authored|generated)[[:space:]]+by[[:space:]]+an?[[:space:]]+(ai|llm|language[[:space:]]model)\\b")
+# commit only, "<motif>|<pattern>": the rest of §5.
+COMMIT_PATTERNS=("leak|^[[:space:]]*plan:" "attribution|claude[-[:space:]]code" "leak|\\.claude/"
+    "leak|(see|ref|tracked-in)[[:space:]]+\\.claude" "leak|\\bplan[[:space:]]+\\.claude")
 
 # $1 kind (commit|pr), $2 text → F_ATTR "<motif> <pattern>" on the first hit.
 _scan() {
@@ -471,8 +479,8 @@ _scan() {
         printf '%s' "$hay" | grep -qiE "$p" && { F_ATTR="attribution $p"; F_ATTR_KIND=$1; return 0; }
     done
     [ "$1" = commit ] || return 0
-    for p in "${LEAK_PATTERNS[@]}"; do
-        printf '%s' "$hay" | grep -qiE "$p" && { F_ATTR="leak $p"; F_ATTR_KIND=$1; return 0; }
+    for p in "${COMMIT_PATTERNS[@]}"; do
+        printf '%s' "$hay" | grep -qiE "${p#*|}" && { F_ATTR="${p%%|*} ${p#*|}"; F_ATTR_KIND=$1; return 0; }
     done
 }
 

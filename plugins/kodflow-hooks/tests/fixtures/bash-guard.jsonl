@@ -106,7 +106,13 @@
 {"family": "attribution-pr", "cmd": "gh pr edit 3 --body \"C\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>\"", "rc": 2, "motif": "attribution"}
 {"family": "attribution-pr", "cmd": "gh -R o/r pr create --title \"x\" --body \"a\u0069-a\u0073si\u0073te\u0064 change\"", "rc": 2, "motif": "attribution"}
 {"family": "attribution-pr", "cmd": "gh api repos/o/r/pulls -f title=x -f body=\"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 2, "motif": "attribution"}
-{"family": "attribution-pr", "cmd": "gh api -X PATCH repos/o/r/pulls/3 -f body=\"c\u006cau\u0064e \u0063od\u0065\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh api -X PATCH repos/o/r/pulls/3 -f body=\"c\u006cau\u0064e \u0063od\u0065\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh api -X PATCH repos/o/r/pulls/3 -f body=\"C\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh pr create --title \"feat(hooks): guards for Claude Code\" --body \"Hooks every Claude Code session loads.\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh pr create --title x --body \"Plan: ship the hooks\"", "rc": 0}
+{"family": "attribution-pr", "cmd": "gh pr create --title x --body \"C\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "gh pr create --title x --body \"co-authored-by: someone <noreply@anthropic.com>\"", "rc": 2, "motif": "attribution"}
+{"family": "attribution-pr", "cmd": "glab mr create -t x -d \"edits .claude/settings.json for Claude Code\"", "rc": 0}
 {"family": "attribution-pr", "cmd": "gh api repos/o/r/issues/3/comments -f body=\"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 0}
 {"family": "attribution-pr", "cmd": "gh issue create --title x --body \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 0}
 {"family": "attribution-pr", "cmd": "gh pr comment 3 --body \"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"", "rc": 0}
@@ -114,7 +120,10 @@
 {"family": "attribution-pr", "cmd": "gh api graphql -f query='mutation { createPullRequest(input:{title:\"x\", body:\"G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e\"}) { clientMutationId } }'", "rc": 2, "motif": "attribution"}
 {"family": "mcp", "tool": "mcp__github__create_pull_request", "input": {"owner": "o", "repo": "r", "title": "x", "body": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e", "head": "f", "base": "main"}, "rc": 2, "motif": "attribution"}
 {"family": "mcp", "tool": "mcp__github__create_pull_request", "input": {"owner": "o", "repo": "r", "title": "x", "body": "edits .claude/plans/x.md", "head": "f", "base": "main"}, "rc": 0}
-{"family": "mcp", "tool": "mcp__github__update_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3, "title": "feat: c\u006cau\u0064e \u0063od\u0065"}, "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__github__update_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3, "title": "feat: c\u006cau\u0064e \u0063od\u0065"}, "rc": 0}
+{"family": "mcp", "tool": "mcp__github__update_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3, "body": "x\n\nC\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>"}, "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__github__create_pull_request", "input": {"owner": "o", "repo": "r", "title": "x", "body": "Generated with [Claude Code](https://example.invalid)", "head": "f", "base": "main"}, "rc": 2, "motif": "attribution"}
+{"family": "mcp", "tool": "mcp__gitlab__create_merge_request", "input": {"project_id": "1", "title": "x", "description": "Claude Code plugin, see .claude/plans"}, "rc": 0}
 {"family": "mcp", "tool": "mcp__github__push_files", "input": {"owner": "o", "repo": "r", "branch": "f", "message": "feat: see .claude/plans/x.md", "files": []}, "rc": 2, "motif": "leak", "agent": true}
 {"family": "mcp", "tool": "mcp__github__create_or_update_file", "input": {"owner": "o", "repo": "r", "branch": "f", "path": "a", "content": "x", "message": "feat: x\n\nC\u006f-A\u0075th\u006fre\u0064-B\u0079: \u0043la\u0075de\u0020<x\u0040y>"}, "rc": 2, "motif": "attribution", "agent": true}
 {"family": "mcp", "tool": "mcp__github__merge_pull_request", "input": {"owner": "o", "repo": "r", "pullNumber": 3, "commit_message": "G\u0065ne\u0072at\u0065d \u0077it\u0068 C\u006cau\u0064e"}, "rc": 2, "motif": "attribution"}
