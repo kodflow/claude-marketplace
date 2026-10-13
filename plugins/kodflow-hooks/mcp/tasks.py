@@ -294,14 +294,11 @@ def matches(agent_id, entry, worker):
 def worker_alive(agents, task):
     """Whether the worker linked to a task is still running.
 
-    The recorded id first; failing that, any running agent of the same name,
-    in case the agent came back under another id.
+    By its recorded id alone: an agent resumed by SendMessage fires
+    SubagentStart again under the same agent_id (measured on 2.1.296).
     """
     entry = agents.get(task.get("worker_id") or "")
-    if entry is not None and alive(entry):
-        return True
-    name = task.get("worker") or ""
-    return bool(name) and any(alive(e) and matches(k, e, name) for k, e in agents.items())
+    return entry is not None and alive(entry)
 
 
 def since(started):

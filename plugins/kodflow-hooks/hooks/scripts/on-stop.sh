@@ -177,8 +177,7 @@ if [ -s "$mcp_tasks" ]; then
     # would collapse an empty field); every following line: one orphaned task.
     held=$(jq -r --argjson ag "$agents" --argjson cut "$(( $(date +%s) - 43200 ))" '
         def alive: type == "object" and .stopped == null and (.started // 0) >= $cut;
-        def runs($t): ($ag[$t.worker_id // ""] | alive)
-            or (($t.worker // "") as $w | $w != "" and any($ag | to_entries[]; (.value | alive) and (.key == $w or .value.type == $w)));
+        def runs($t): $ag[$t.worker_id // ""] | alive;
         [.tasks[]? | objects | select((.agent // "main") == "main" and .status == "in_progress")] as $ip
         | ([$ag[] | select(alive)] | length) as $running
         | [$ip[] | select((.worker // "") != "" and runs(.))] as $live
@@ -221,8 +220,7 @@ $dead"
         # by it whatever epic that subagent was attributed to.
         producing=$(jq -r --argjson cov "$covered" --argjson ag "$agents" --argjson cut "$(( $(date +%s) - 43200 ))" '
             def alive: type == "object" and .stopped == null and (.started // 0) >= $cut;
-            def runs($t): ($ag[$t.worker_id // ""] | alive)
-                or (($t.worker // "") as $w | $w != "" and any($ag | to_entries[]; (.value | alive) and (.key == $w or .value.type == $w)));
+            def runs($t): $ag[$t.worker_id // ""] | alive;
             .tasks[]? | objects
             | select((.agent // "main") == "main" and .status == "in_progress")
             | select(runs(.) | not)
