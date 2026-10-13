@@ -58,6 +58,41 @@ mkdir -p "$T/repo/x/hooks/scripts"; printf 'aws_key = "%s%s"\n' "AK""IA" "ABCDEF
 git -C "$T/repo" add x; bash_cmd 'git commit -m "feat: hook"';        expect_rc "hook sources are exempt from the secret scan" 0
 git -C "$T/repo" rm -rq --cached x; rm -rf "$T/repo/x"
 
+echo "== PreToolUse · mcp.json is never committed (the index)"
+# The corpus plays a fixed repository; what these read is the index. -f: a
+# global excludes file may ignore mcp.json.
+mj_motif() { printf '%s' "$ERR" | grep -q '\[motif:mcp-json\]'; }
+expect_mj() { [ "$RC" -eq 2 ] && mj_motif && ok "$1" || bad "$1" "rc=$RC err=${ERR:0:200}"; }
+forge() { run PreToolUse "$1" "$(jq -n -c --argjson i "$2" '{agent_id:"agt_mj",tool_input:$i}')" on-tool.sh; }
+mkdir -p "$T/repo/sub"; printf '{}\n' > "$T/repo/.mcp.json"; git -C "$T/repo" add -f .mcp.json
+bash_cmd 'git commit -m "feat: servers"';                              expect_mj "commit with a staged .mcp.json blocked"
+bash_cmd "git -C $T/repo commit -m \"feat: servers\"";                expect_mj "git -C dir commit reads that index"
+forge mcp__GitKraken__git_commit '{"directory":".","message":"feat: x"}'; expect_mj "GitKraken git_commit with a staged .mcp.json blocked"
+git -C "$T/repo" commit -qm "chore: tracked for the test"
+git -C "$T/repo" rm -q --cached .mcp.json
+bash_cmd 'git commit -m "chore: drop .mcp.json"';                      expect_rc "commit of the deletion allowed" 0
+git -C "$T/repo" commit -qm "chore: drop .mcp.json"
+printf '{}\n' > "$T/repo/sub/MCP.json"; git -C "$T/repo" add -f sub/MCP.json; git -C "$T/repo" commit -qm "chore: tracked"
+printf '{"a":1}\n' > "$T/repo/sub/MCP.json"
+bash_cmd 'git commit -am "feat: x"';                                   expect_mj "commit -am with a modified tracked mcp.json blocked"
+bash_cmd 'git commit --all -m "feat: x"';                              expect_mj "commit --all with a modified tracked mcp.json blocked"
+bash_cmd 'git commit -m "feat: x"';                                    expect_rc "plain commit leaves the working tree alone" 0
+git -C "$T/repo" checkout -q sub/MCP.json
+git -C "$T/repo" mv sub/MCP.json sub/servers.json
+bash_cmd 'git commit -m "chore: rename"';                              expect_rc "a rename away from mcp.json allowed" 0
+git -C "$T/repo" commit -qm "chore: rename"; git -C "$T/repo" mv sub/servers.json sub/mcp.json
+bash_cmd 'git commit -m "chore: rename"';                              expect_mj "a rename onto mcp.json blocked"
+git -C "$T/repo" mv sub/mcp.json sub/servers.json
+printf '{}\n' > "$T/repo/mymcp.json"; git -C "$T/repo" add mymcp.json
+bash_cmd 'git commit -m "feat: x"';                                    expect_rc "mymcp.json staged allowed" 0
+git -C "$T/repo" rm -q --cached mymcp.json; rm -f "$T/repo/mymcp.json"
+git -C "$T/repo" rm -q --cached sub/servers.json; rm -rf "$T/repo/sub"
+git -C "$T/repo" config core.excludesFile /dev/null
+forge mcp__GitKraken__git_add '{"directory":"."}';                     expect_mj "GitKraken git_add of every file with an untracked .mcp.json blocked"
+rm -f "$T/repo/.mcp.json"
+forge mcp__GitKraken__git_add '{"directory":"."}';                     expect_rc "GitKraken git_add of every file without one allowed" 0
+git -C "$T/repo" config --unset core.excludesFile
+
 echo "== PreToolUse Bash · the input is never rewritten"
 bash_cmd 'git push --force origin feat'
 [ "$RC" -eq 2 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q 'Run instead: git push --force-with-lease origin feat' \

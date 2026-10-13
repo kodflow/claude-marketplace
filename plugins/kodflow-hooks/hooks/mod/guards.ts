@@ -6,7 +6,8 @@
 // bash-guard corpus decides both the same way (tests/mod/guards.corpus.ts).
 //
 // Not doubled: the staged-secret scan (BLOCK 3), which reads the index blob
-// by blob and stays the shell's alone.
+// by blob and stays the shell's alone. The mcp.json refusal of the same block
+// is doubled: it reads the index once, by name and status only.
 import { argvOf, fileText, parse, type Parsed } from "./shell.ts";
 import { scan, type Hit, type Kind, type Rules } from "./patterns.ts";
 
@@ -40,6 +41,8 @@ export type Findings = {
   defaultPush?: string;
   modWrite?: string;
   plugin?: string;
+  /** An mcp.json added or committed, and how. */
+  mcpJson?: string;
 };
 
 export type Refusal = { motif: string; title: string; lines: string[] };
@@ -51,6 +54,40 @@ export const MERGE_RE =
   /(^|\/)pulls\/[^/\s]+\/merge\/?$|merge_requests\/[^/\s]+\/merge\/?$/;
 export const MERGE_WORDS =
   /mergePullRequest|enablePullRequestAutoMerge|merge_when_pipeline_succeeds/;
+
+/** mcp.json or .mcp.json, any case, at any path: it may carry tokens. */
+export const isMcpJson = (path: string) => /(^|\/)\.?mcp\.json$/i.test(path);
+
+/**
+ * `git diff --name-status -z` → the paths it adds or changes; a deletion is
+ * left out, and a rename or a copy gives its new path.
+ */
+export function changedPaths(out: string): string[] {
+  const w = out.split("\0");
+  const paths: string[] = [];
+  for (let i = 0; i + 1 < w.length; ) {
+    const st = w[i]!;
+    if (!st) break;
+    const two = st[0] === "R" || st[0] === "C";
+    const path = w[i + (two ? 2 : 1)] ?? "";
+    if (st[0] !== "D") paths.push(path);
+    i += two ? 3 : 2;
+  }
+  return paths;
+}
+
+/** The refusal of an mcp.json added or committed (BLOCK 3 of on-tool.sh). */
+export function mcpJsonRefusal(what: string): Refusal {
+  return {
+    motif: "mcp-json",
+    title: `BLOCKED — an mcp.json file is never committed (${what})`,
+    lines: [
+      "mcp.json and .mcp.json may carry tokens: neither is added nor committed, at any path.",
+      "Deleting one stays allowed: git rm --cached <path>, then commit the deletion.",
+      "A plugin declares its MCP servers in plugin.json (mcpServers), not in a .mcp.json.",
+    ],
+  };
+}
 
 /** A path a skills directory must never receive (plugin machinery). */
 export function modPath(
@@ -76,6 +113,10 @@ type State = {
   gdir: string;
   hooks: boolean;
   amend: boolean;
+  /** git commit -a: the tracked changes are staged first. */
+  all: boolean;
+  /** The repository the commit runs in. */
+  cgdir: string;
   scan: (kind: Kind, text: string) => Hit | undefined;
 };
 
@@ -225,14 +266,30 @@ async function guardGit(
   )
     st.f.noVerify = `git -c core.hooksPath on git ${sub}`;
 
-  if (sub === "commit") {
+  if (sub === "add" || sub === "stage") {
+    // Every word but an option's names a pathspec, -f or not
+    while (y < A.length) {
+      const v = A[y]!;
+      if (v === "--pathspec-from-file" || v === "--chmod") {
+        y += 2;
+        continue;
+      }
+      if (!v.startsWith("-") && isMcpJson(v)) st.f.mcpJson = `git ${sub} ${v}`;
+      y++;
+    }
+  } else if (sub === "commit") {
     st.f.commit = true;
+    st.cgdir = gdir;
     let msg = "";
     let farg = "";
     let given = false;
     while (y < A.length) {
       const v = A[y]!;
-      if (v === "--") break;
+      if (v === "--") {
+        for (const w of A.slice(y + 1))
+          if (isMcpJson(w)) st.f.mcpJson = `git commit ${w}`;
+        break;
+      }
       if (v === "-m" || v === "--message" || v === "--trailer") {
         msg += `\n${A[y + 1] ?? ""}`;
         given = true;
@@ -266,6 +323,7 @@ async function guardGit(
         y += 2;
         continue;
       } else if (v === "--amend") st.amend = true;
+      else if (v === "--all") st.all = true;
       else if (v.startsWith("--")) {
         if (isNoVerify(v)) st.f.noVerify = "--no-verify on git commit";
       } else if (v.startsWith("-")) {
@@ -274,6 +332,7 @@ async function guardGit(
           const ch = cl[0]!;
           let r = cl.slice(1);
           if (ch === "n") st.f.noVerify = "-n (--no-verify) on git commit";
+          else if (ch === "a") st.all = true;
           else if (ch === "u" || ch === "S") break;
           else if ("mFCct".includes(ch)) {
             if (!r) {
@@ -288,7 +347,7 @@ async function guardGit(
           }
           cl = r;
         }
-      }
+      } else if (isMcpJson(v)) st.f.mcpJson = `git commit ${v}`; // a pathspec
       y++;
     }
     let hay = msg;
@@ -569,6 +628,8 @@ export async function inspect(
     gdir: "",
     hooks: false,
     amend: false,
+    all: false,
+    cgdir: "",
     scan: (kind, text) => scan(kind, text, rules),
   };
   for (let k = 0; k < p.commands.length; k++) {
@@ -585,7 +646,65 @@ export async function inspect(
       guardHttp(st, name, A);
     else if (name === "cd") st.gdir = A[1] ?? "";
   }
+  if (st.f.commit && !st.f.mcpJson) {
+    const dir = st.cgdir || ctx.projectDir;
+    const staged = changedPaths(
+      (await ctx.git(dir, ["diff", "--cached", "--name-status", "-z"])) ?? "",
+    ).find(isMcpJson);
+    if (staged) st.f.mcpJson = `${staged} is staged`;
+    else if (st.all) {
+      const changed = changedPaths(
+        (await ctx.git(dir, ["diff", "--name-status", "-z"])) ?? "",
+      ).find(isMcpJson);
+      if (changed)
+        st.f.mcpJson = `${changed} is modified and git commit -a stages it`;
+    }
+  }
   return st.f;
+}
+
+/**
+ * A forge tool that writes an mcp.json: a path it names (a deletion is
+ * allowed), else, for a GitKraken add or commit naming no file, what the
+ * repository would take in. pre_forge of on-tool.sh, doubled.
+ */
+export async function forgeMcpJson(
+  tool: string,
+  input: Record<string, any>,
+  ctx: Pick<GuardCtx, "projectDir" | "git">,
+): Promise<Refusal | undefined> {
+  if (!/^mcp__(github|gitlab|GitKraken)__/.test(tool)) return undefined;
+  const paths: unknown[] = [];
+  if (!/delete_file$/.test(tool)) paths.push(input.path, input.file_path);
+  for (const f of Array.isArray(input.files) ? input.files : [])
+    paths.push(typeof f === "string" ? f : (f?.path ?? f?.file_path));
+  for (const a of Array.isArray(input.actions) ? input.actions : [])
+    if (a?.action !== "delete") paths.push(a?.file_path);
+  const named = paths.find((p) => typeof p === "string" && isMcpJson(p));
+  if (named) return mcpJsonRefusal(`${tool}: ${named}`);
+  const gk = /GitKraken__git_(add|commit)$/.test(tool);
+  if (!gk || (Array.isArray(input.files) && input.files.length)) return undefined;
+  let dir = typeof input.directory === "string" ? input.directory : ".";
+  if (!dir.startsWith("/")) dir = `${ctx.projectDir}/${dir}`;
+  if (tool.endsWith("git_add")) {
+    // "XY path", the old path after a rename; Y is the working tree
+    const w = (
+      (await ctx.git(dir, ["status", "--porcelain", "-z", "--untracked-files=all"])) ?? ""
+    ).split("\0");
+    for (let i = 0; i < w.length; i++) {
+      const e = w[i]!;
+      if (e.length < 4) continue;
+      if (e[0] === "R" || e[0] === "C") i++;
+      if (e[1] === " " || e[1] === "D") continue;
+      if (isMcpJson(e.slice(3)))
+        return mcpJsonRefusal(`${tool}: ${e.slice(3)}, added with every file`);
+    }
+    return undefined;
+  }
+  const staged = changedPaths(
+    (await ctx.git(dir, ["diff", "--cached", "--name-status", "-z"])) ?? "",
+  ).find(isMcpJson);
+  return staged ? mcpJsonRefusal(`${tool}: ${staged} is staged`) : undefined;
 }
 
 const ROOT_OK =
@@ -635,6 +754,7 @@ export async function verdict(
         "Remove AI attribution (co-authored-by, generated by, the robot emoji) and, in a commit, workflow leaks (.claude/ paths, Plan: footers).",
       ],
     };
+  if (f.mcpJson) return mcpJsonRefusal(f.mcpJson);
   if (f.modWrite)
     return {
       motif: "mod-write",

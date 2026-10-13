@@ -59,7 +59,13 @@ import {
   type GuardPort,
 } from "./machine-guards.ts";
 import { parse } from "./shell.ts";
-import { inspect, refusalText, verdict, type GuardCtx } from "./guards.ts";
+import {
+  forgeMcpJson,
+  inspect,
+  refusalText,
+  verdict,
+  type GuardCtx,
+} from "./guards.ts";
 import { loadRules, type Rules } from "./patterns.ts";
 import {
   classifyBash,
@@ -458,6 +464,23 @@ export const register: Register = (on) => {
     // Before next: the shell's PreToolUse runs inside it and reads the beat
     await beat($).catch(() => undefined);
     if (tool) return serve($, tool, e);
+    // A forge tool writing an mcp.json: refused for every caller, as the
+    // shell does; doubled, so a failure lets the call on to the shell
+    if (/^mcp__(github|gitlab|GitKraken)__/.test(e.tool)) {
+      try {
+        const mj = await forgeMcpJson(
+          e.tool,
+          argsOf(e as any) ?? {},
+          await guardCtx($, e, async () => rules),
+        );
+        if (mj) {
+          journal($, e, "mcp-json", "deny");
+          return { deny: refusalText(mj) };
+        }
+      } catch (err) {
+        journal($, e, "mcp-json", "error", err);
+      }
+    }
     // A forge merge tool: the same gate as a Bash merge, a failure refuses
     const merge = classifyMcp(e.tool, argsOf(e as any));
     if (merge.kind === "merge") {
