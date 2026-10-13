@@ -1,4 +1,5 @@
-// conformance.ts — replays the corpus recorded from tasks.py on the port.
+// conformance.ts — replays the corpus recorded from tasks.py on the port,
+// then the user's tasks (conformance.human.corpus.ts), added after it.
 //
 // Pure: run by tasks.test.ts under `claude plugin test` and by run-node.ts
 // under plain node, so the parity holds wherever either is available.
@@ -14,6 +15,7 @@ import {
 } from "../../hooks/mod/tasks.ts";
 import { safe } from "../../hooks/mod/paths.ts";
 import { CORPUS, TOOLS as RECORDED } from "./conformance.corpus.ts";
+import { HUMAN_CORPUS } from "./conformance.human.corpus.ts";
 
 type Answer = { error: boolean; text: string };
 
@@ -72,9 +74,10 @@ export function call(
 export function conformance(): { calls: number; failures: string[] } {
   const failures: string[] = [];
   let calls = 0;
-  if (!equal(PORTED, RECORDED))
+  // The tools tasks.py had come first and are its own, word for word
+  if (!equal(PORTED.slice(0, RECORDED.length), RECORDED))
     failures.push("tools: names, descriptions or schemas differ from tasks.py");
-  for (const scenario of CORPUS as any[]) {
+  for (const scenario of [...CORPUS, ...HUMAN_CORPUS] as any[]) {
     const files = new Map<string, string | undefined>();
     let workers: Worker[] = [];
     scenario.steps.forEach((step: any, i: number) => {

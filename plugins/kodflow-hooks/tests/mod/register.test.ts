@@ -13,6 +13,7 @@ type Host = {
   dirs: Set<string>;
   runs: string[][];
   registered: any[];
+  commands: any[];
   agents: { id: string; type: string; name?: string; status: string }[];
   failMv?: boolean;
 };
@@ -25,6 +26,7 @@ function host(on: any, env: Record<string, string>): Host {
     dirs: new Set(["/", CFG]),
     runs: [],
     registered: [],
+    commands: [],
     agents: [],
   };
   const parent = (p: string) => p.slice(0, p.lastIndexOf("/")) || "/";
@@ -41,6 +43,13 @@ function host(on: any, env: Record<string, string>): Host {
     return { value: { tool: T(e.name) } };
   });
   on("agent.list", async () => ({ value: h.agents }));
+  on("command.register", async (_$: any, e: any) => {
+    h.commands.push(e);
+    return { value: { command: e.name } };
+  });
+  on("fs.exists", async (_$: any, e: any) => ({
+    value: h.dirs.has(e.path) || h.files.has(e.path),
+  }));
   on("clock.sleep", async () => ({ value: undefined }));
   on("fs.write", async (_$: any, e: any) => {
     mkdirs(parent(e.path));
@@ -111,7 +120,7 @@ const start = async ($: any) => {
   await $.session.start({ source: "startup", cwd: "/repo" });
 };
 
-test("the five task tools are registered, in the prompt from the start", async ($, on) => {
+test("the six task tools are registered, in the prompt from the start", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
   await start($);
   expect(h.registered.map((t) => t.name)).toEqual([
@@ -120,6 +129,7 @@ test("the five task tools are registered, in the prompt from the start", async (
     "task_epic",
     "task_focus",
     "task_list",
+    "task_assign_human",
   ]);
   expect(h.registered.every((t) => t.isDeferred === false)).toBe(true);
 });
@@ -319,4 +329,77 @@ test("a failure inside a task tool answers as text, never as a crash", async ($,
   } as any);
   expect(refusal(r)).toBeDefined();
   expect(refusal(r)).toContain("kodflow task tools failed");
+});
+
+test("a task for the user: filed waiting, closed by task_update, main agent only", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await start($);
+  await $.tool.call({ tool: T("task_epic"), title: "NAS" } as any);
+  const r: any = await $.tool.call({
+    tool: T("task_assign_human"),
+    subject: "Give the go",
+    epic: 1,
+  } as any);
+  expect(r.result).toContain("Task #1 assigned to the user, waiting: Give the go");
+  const task = JSON.parse(h.files.get(`${DIR}/tasks.json`)!).tasks[0];
+  expect(task).toEqual(
+    expect.objectContaining({ status: "waiting", assignee: "human", epic: 1 }),
+  );
+  const sub: any = await $.tool.call({
+    tool: T("task_assign_human"),
+    subject: "Touch ID",
+    epic: 1,
+    agentId: "a1",
+  } as any);
+  expect(refusal(sub)).toContain("task_assign_human is the main agent's");
+  const done: any = await $.tool.call({
+    tool: T("task_update"),
+    id: "1",
+    status: "completed",
+  } as any);
+  expect(done.result).toBe("Task #1 updated: Give the go (completed)");
+});
+
+test("after a compaction the user's open tasks come back as context, and only then", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  on("classic.SessionStart", async () => ({ additionalContext: ["shell"] }));
+  await start($);
+  await $.tool.call({ tool: T("task_epic"), title: "NAS" } as any);
+  await $.tool.call({
+    tool: T("task_assign_human"),
+    subject: "Give the go",
+    epic: 1,
+    description: "Reply go.",
+  } as any);
+  const compact: any = await $.classic.SessionStart({
+    source: "compact",
+    session_id: SID,
+  } as any);
+  expect(compact.additionalContext[0]).toBe("shell");
+  expect(compact.additionalContext[1]).toContain(
+    "  - #1 Give the go (epic #1 NAS): Reply go.",
+  );
+  const resumed: any = await $.classic.SessionStart({
+    source: "resume",
+    session_id: SID,
+  } as any);
+  expect(resumed.additionalContext).toEqual(["shell"]);
+  h.files.delete(`${DIR}/tasks.json`);
+  const none: any = await $.classic.SessionStart({
+    source: "compact",
+    session_id: SID,
+  } as any);
+  expect(none.additionalContext).toEqual(["shell"]);
+});
+
+test("/lint-setup is registered and answers outside a Go project without asking", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.dirs.add("/repo");
+  await start($);
+  expect(h.commands.map((c) => c.name)).toContain("lint-setup");
+  const r: any = await $.command.run({ command: "lint-setup", args: "" } as any);
+  expect(r.text).toContain("No go.mod at or above /repo inside /repo");
+  expect(h.runs.some((a) => a[0] === "curl" || a[0] === "project-linter")).toBe(
+    false,
+  );
 });

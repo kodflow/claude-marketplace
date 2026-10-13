@@ -212,6 +212,9 @@ stale && ok "flagged again on the next turn until corrected" || bad "stale list 
 printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Wait","status":"waiting"},{"id":"2","agent":"main","subject":"Next","status":"pending"}]}' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 stale && bad "waiting accepted" "$OUT" || ok "a task waiting on the user makes the list truthful"
+printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Go","status":"waiting","assignee":"human"},{"id":"2","agent":"main","subject":"Next","status":"pending"}]}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+stale && bad "human waiting accepted" "$OUT" || ok "a task assigned to the user (assignee human) is read as any waiting task"
 printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Doing","status":"in_progress"},{"id":"2","agent":"main","subject":"Next","status":"pending"},{"id":"3","agent":"a1","subject":"Sub","status":"pending"}]}' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 stale && bad "in progress accepted" "$OUT" || ok "a task in progress makes the list truthful"
@@ -372,6 +375,14 @@ printf '%s' "$C" | grep -q 'TRIAGE' && ok "triage still injected alongside the s
 printf '%s' '{"version":1,"epics":{"main":{"id":1,"title":"Legacy"}},"tasks":[{"id":"1","agent":"main","epic":1,"subject":"T","status":"pending"}]}' > "$MS/tasks.json"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 ctx_of | grep -qF 'Epics: active #1 Legacy 0/1' && ok "a v1 tasks.json is read as v2" || bad "v1 state" "$OUT"
+printf '%s' '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"NAS","touched":1}],
+  "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Check backups","status":"in_progress"},
+           {"id":"2","agent":"main","epic":1,"subject":"Give the go","status":"waiting","assignee":"human"},
+           {"id":"3","agent":"main","epic":1,"subject":"Touch ID","status":"completed","assignee":"human"}]}' > "$MS/tasks.json"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+C=$(ctx_of)
+printf '%s' "$C" | grep -qF 'Epics: active #1 NAS 1/3, in progress #1 Check backups · waiting on the user: #2 Give the go (task_update completed once answered)' \
+    && ok "the user's open tasks ride the epic state, answered ones do not" || bad "human state" "$C"
 printf '{"tasks":[' > "$MS/tasks.json"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] && ctx_of | grep -q TRIAGE && ! ctx_of | grep -q 'Epics:' \
@@ -561,6 +572,49 @@ run Notification "" '{"notification_type":"permission_prompt","message":"x"}' on
 printf '%s' "$OUT" | jq -e '.terminalSequence' >/dev/null 2>&1 && ok "permission prompt rings the bell" || bad "notification bell" "$OUT"
 run Notification "" '{"notification_type":"auth_success","message":"x"}' on-user.sh
 [ -z "$OUT" ] && ok "other notifications stay silent" || bad "notification silent" "$OUT"
+
+echo "== project-linter · Go projects only (the nearest go.mod, never above the root)"
+# A fake project-linter and curl record what reaches them; a listener makes
+# the port probe succeed, so only the go.mod rule decides.
+FB=$T/fakebin; mkdir -p "$FB"; LL=$T/linter.log; : > "$LL"
+printf '#!/bin/sh\necho "project-linter $(pwd) $*" >> "%s"\necho "lint report"\n' "$LL" > "$FB/project-linter"
+printf '#!/bin/sh\necho "curl $*" >> "%s"\necho "{}"\n' "$LL" > "$FB/curl"
+chmod +x "$FB/project-linter" "$FB/curl"
+LP=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])' 2>/dev/null)
+python3 -c 'import socket,sys,time
+s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1", int(sys.argv[1]))); s.listen(64); time.sleep(60)' "$LP" &
+LPID=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do (exec 3<>"/dev/tcp/127.0.0.1/$LP") 2>/dev/null && break; sleep 0.2; done
+lrun() { local ev=$1 tool=$2 frag=$3 script=$4
+    OUT=$(jq -n -c --arg ev "$ev" --arg tool "$tool" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" --argjson frag "$frag" \
+        '{session_id:"sess-1",hook_event_name:$ev,tool_name:$tool,cwd:$cwd,scratchpad_dir:$sp,tool_use_id:"t1"} + $frag' \
+        | PATH="$FB:$PATH" KTN_LINTER_PORT=$LP bash "$S/$script" 2>/dev/null); RC=$?; }
+# A triage gate left raised by an earlier case would refuse the edit first
+rm -f "$T/home/.claude/kodflow/sessions/sess-1/triage-pending"
+# on-tool.sh skips files under /tmp, where mktemp puts $T on Linux: the
+# pre-edit cases get a project of their own inside the checkout.
+PP=$(mktemp -d "$ROOT/.kf-gomod.XXXXXX")
+mkdir -p "$PP/projects/app/cmd/x" "$PP/tools"; printf 'module app\n' > "$PP/projects/app/go.mod"
+: > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PreToolUse Edit "$(jq -n -c --arg f "$PP/tools/gen.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
+[ ! -s "$LL" ] && [ "$RC" -eq 0 ] && ok "pre-edit: a .go file outside any module probes nothing" || bad "pre-edit outside" "rc=$RC log=$(cat "$LL")"
+: > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PreToolUse Edit "$(jq -n -c --arg f "$PP/projects/app/cmd/x/main.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
+grep -q "^curl .*:$LP/hooks/pre-tool-use" "$LL" && [ "$RC" -eq 0 ] && ok "pre-edit: a file of a module below the root reaches the daemon" || bad "pre-edit module" "rc=$RC log=$(cat "$LL")"
+rm -rf "$PP"
+GM=$T/repo/projects/app; mkdir -p "$GM/cmd/x" "$T/repo/tools"
+printf 'module app\n' > "$GM/go.mod"; printf 'package main\n' > "$GM/cmd/x/main.go"; printf 'x\n' > "$T/repo/tools/gen.go"
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/claudemd-nudged"
+printf '%s\n' "$T/repo/tools/gen.go" "$T/repo/a.txt" > "$T/tmp/sp/edited"
+: > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
+[ ! -s "$LL" ] && ok "stop: edits outside any Go project reach neither the daemon nor the CLI" || bad "stop outside" "$(cat "$LL")"
+rm -f "$T/tmp/sp/stop-count"
+printf '%s\n' "$T/repo/tools/gen.go" "$GM/cmd/x/main.go" "$GM/go.mod" > "$T/tmp/sp/edited"
+: > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
+grep -q "^curl .*:$LP/hooks/stop" "$LL" && ok "stop: an edit in a module reaches the daemon" || bad "stop daemon" "$(cat "$LL")"
+grep -qx "project-linter $GM lint ./cmd/x" "$LL" && ok "stop: project-linter runs from the module, on its own package paths" || bad "stop cli" "$(cat "$LL")"
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("project-linter \\(session scope, projects/app\\):\nlint report")' >/dev/null 2>&1 \
+    && ok "stop: the report names its module" || bad "stop report" "$OUT"
+kill "$LPID" 2>/dev/null; wait "$LPID" 2>/dev/null
+rm -rf "$GM" "$T/repo/projects" "$T/repo/tools" "$FB"; : > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/claudemd-nudged"
 
 echo "== malformed input never blocks"
 for s in on-tool.sh on-session.sh on-user.sh on-agent.sh on-stop.sh; do

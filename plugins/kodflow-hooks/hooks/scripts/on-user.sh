@@ -96,7 +96,9 @@ UserPromptSubmit)
     fi
 
     # The main agent's epics as the task tools left them, so the triage below
-    # has the ids at hand. Any read error leaves the line out.
+    # has the ids at hand, and the tasks waiting on the user
+    # (task_assign_human), so an answer they give is matched to its task.
+    # Any read error leaves the line out.
     tasks=$SDIR/tasks.json
     if [ "$BEAT" = 0 ] && [ -s "$tasks" ]; then
         state=$(jq -r -L "$LIB" 'include "epics"; v2 | active("main") as $a
@@ -104,12 +106,14 @@ UserPromptSubmit)
             | ($rows | map(select(.id == $a)) | .[0]) as $act
             | ($rows | map(select(.id != $a and .done < .total)) | sort_by(-.touched) | .[:5]) as $others
             | ([.tasks[] | select((.agent // "main") == "main" and (.epic // 0) == 0 and .status != "completed")] | length) as $loose
-            | if $act == null and ($others | length) == 0 and $loose == 0 then empty else
+            | [.tasks[] | select((.agent // "main") == "main" and .assignee == "human" and .status != "completed")] as $human
+            | if $act == null and ($others | length) == 0 and $loose == 0 and ($human | length) == 0 then empty else
                 [ (if $act then "active #\($act.id) \($act.title) \($act.done)/\($act.total)"
                       + (if $act.current then ", in progress #\($act.current.id) \($act.current.subject)" else "" end)
                    else "none active" end),
                   (if ($others | length) > 0 then "other open: " + ($others | map("#\(.id) \(.title) \(.done)/\(.total)") | join("; ")) else empty end),
-                  (if $loose > 0 then "no epic: \($loose) open task(s)" else empty end)
+                  (if $loose > 0 then "no epic: \($loose) open task(s)" else empty end),
+                  (if ($human | length) > 0 then "waiting on the user: " + ($human | map("#\(.id) \(.subject)") | join("; ")) + " (task_update completed once answered)" else empty end)
                 ] | "Epics: " + join(" · ") end' "$tasks" 2>/dev/null)
         [ -n "$state" ] && ctx="${ctx:+$ctx$NL}$state"
     fi

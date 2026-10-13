@@ -1,12 +1,14 @@
 // run-node.ts — what `claude plugin test` cannot reach: a real file system,
 // real `mkdir`/`mv`, and several processes writing one tasks.json at once.
 //
-//   node run-node.ts            the conformance corpus, then the store on disk
+//   node run-node.ts            the conformance corpus, the store on disk,
+//                               then the Go-project rule on disk
 //   node run-node.ts --worker DIR N   (internal) N task_create in DIR
 //
 // Node 22.18 or later runs the TypeScript as it is (type stripping).
 import { execFile } from "node:child_process";
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -23,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { conformance } from "./conformance.ts";
 import { lock, mutate, type Port } from "../../hooks/mod/store.ts";
 import { plan } from "../../hooks/mod/tasks.ts";
+import { goModuleOf } from "../../hooks/mod/lint.ts";
 
 const run = promisify(execFile);
 const HERE = fileURLToPath(import.meta.url);
@@ -88,7 +91,7 @@ const check = (ok: boolean, what: string, detail = "") => {
   }
 };
 
-console.log("== conformance corpus (recorded from tasks.py)");
+console.log("== conformance corpus (recorded from tasks.py, then the user's tasks)");
 const c = conformance();
 check(
   c.failures.length === 0,
@@ -178,6 +181,30 @@ try {
   );
 } finally {
   rmSync(root, { recursive: true, force: true });
+}
+
+console.log("== the Go-project rule, on the fixtures lib/gomod.sh is held to");
+const fx = JSON.parse(
+  readFileSync(join(dirname(HERE), "..", "fixtures", "gomod.json"), "utf8"),
+);
+const tree = mkdtempSync(join(tmpdir(), "kf-gomod-"));
+try {
+  for (const f of fx.tree as string[]) {
+    mkdirSync(dirname(join(tree, f)), { recursive: true });
+    writeFileSync(join(tree, f), "");
+  }
+  for (const c of fx.cases as any[]) {
+    const got = await goModuleOf(
+      join(tree, c.file),
+      join(tree, c.root),
+      async (p) => existsSync(p),
+      c.dir === true,
+    );
+    const rel = got === undefined ? null : got.slice(tree.length + 1);
+    check(rel === c.module, c.name, `want ${c.module}, got ${rel}`);
+  }
+} finally {
+  rmSync(tree, { recursive: true, force: true });
 }
 
 console.log(failed ? `${failed} failure(s)` : "all passed");
