@@ -695,6 +695,42 @@ _guard_http() {
     done
 }
 
+# L0.6 · a skills directory never receives plugin machinery. A hooks.json or
+# a .claude-plugin/ there would load code (hooks, modules) beside these
+# guards without going through a marketplace. $1 a path → 0 when refused.
+_mod_path() {
+    local f=$1 cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+    case "$f" in "~/"*) f=$HOME/${f#"~/"} ;; esac
+    f=/${f#/}
+    case "$f" in */.claude/skills/*|"${cfg%/}"/skills/*) ;; *) return 1 ;; esac
+    case "$f" in */.claude-plugin/*|*/.claude-plugin|*/hooks/hooks.json) return 0 ;; esac
+    return 1
+}
+
+# claude plugin install|i and claude plugin marketplace add: only from the
+# kodflow marketplace. A plugin named without @marketplace is refused, its
+# source cannot be told.
+_guard_claude() {
+    local y na=${#A[@]} v spec=""
+    case "${A[1]:-}" in plugin|plugins) ;; *) return 0 ;; esac
+    case "${A[2]:-}" in
+        install|i) y=3 ;;
+        marketplace) [ "${A[3]:-}" = add ] || return 0; y=4 ;;
+        *) return 0 ;;
+    esac
+    while [ $y -lt $na ]; do
+        v=${A[y]}
+        case "$v" in -s|--scope) y=$((y+2)); continue ;; -*) ;; *) spec=$v; break ;; esac
+        y=$((y+1))
+    done
+    [ -n "$spec" ] || return 0
+    case "${A[2]}/$spec" in
+        install/*@kodflow|i/*@kodflow) ;;
+        marketplace/*kodflow/claude-marketplace|marketplace/*kodflow/claude-marketplace.git|marketplace/*kodflow/claude-marketplace/) ;;
+        *) F_PLUG="claude plugin ${A[2]}${A[3]:+ ${A[3]}} $spec" ;;
+    esac
+}
+
 _motif_block() {   # $1 motif, $2 title, rest = lines. The motif line is what tests compare.
     local m=$1; shift
     local t=$1; shift
@@ -761,7 +797,7 @@ _root_gate_edit() {
 pre_bash() {
     [ -n "$CMD" ] || exit 0
     F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
-    GDIR=""
+    F_MODW=""; F_PLUG=""; GDIR=""
 
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
     # $'…' string may spell one in escapes, so it is always read. tr, not
@@ -769,13 +805,19 @@ pre_bash() {
     # 2.5 kB commit message).
     local t=$CMD
     case "$t" in *[\"\'\\]*) t=$(printf '%s' "$CMD" | tr -d "\"'\\\\") ;; esac
-    case "$t" in *git*|*gh*|*glab*|*curl*|*wget*|*http*) ;; *) case "$CMD" in *"\$'"*) ;; *) _log; exit 0 ;; esac ;; esac
+    case "$t" in *git*|*gh*|*glab*|*curl*|*wget*|*http*|*skills*|*claude*) ;; *) case "$CMD" in *"\$'"*) ;; *) _log; exit 0 ;; esac ;; esac
 
     _p_parse "$CMD"
-    local k=0
+    local k=0 rd r
     while [ $k -lt $P_N ]; do
+        rd=${P_RD[k]:-}
+        while [ -n "$rd" ]; do
+            r=${rd%%"$US"*}; rd=${rd#*"$US"}
+            _mod_path "$r" && F_MODW=$r
+        done
         _p_argv $k; F_HOOKS=0
         case "$NAME" in
+            claude) _guard_claude ;;
             git) _guard_git $k ;;
             gh) _guard_gh $k ;;
             glab) _guard_glab $k ;;
@@ -826,6 +868,16 @@ pre_bash() {
         done < <(git -C "$PROJECT_DIR" diff --cached --name-only -z 2>/dev/null)
         [ -n "$hits" ] && _motif_block secrets "COMMIT BLOCKED — secrets detected in staged files" "Remove them before committing:$hits"
     fi
+
+    # --- BLOCK 3b: plugin machinery under skills, plugins from elsewhere ----
+    # cp, tee, sed -i and git clone into a skills directory are not read
+    # (known gaps in the corpus): only a shell redirection is.
+    [ -n "$F_MODW" ] && _motif_block mod-write "COMMAND BLOCKED — plugin machinery written under a skills directory ($F_MODW)" \
+        "A hooks.json or .claude-plugin/ there loads code beside these guards without a marketplace." \
+        "Ship it as a plugin of the kodflow marketplace instead."
+    [ -n "$F_PLUG" ] && _motif_block plugin-source "COMMAND BLOCKED — plugin from outside the kodflow marketplace ($F_PLUG)" \
+        "Only kodflow plugins (name@kodflow) and the kodflow/claude-marketplace marketplace are installed here." \
+        "Ask the user to install it themselves if it is wanted."
 
     # --- BLOCK 4: a forced push is refused, with the command to run ---------
     if [ "$F_FORCE" = 1 ]; then
@@ -882,6 +934,9 @@ pre_builtin_tasks() {
 # ============================================================================
 pre_edit() {
     _root_gate_edit
+    _mod_path "${FILE:-$NB}" && _motif_block mod-write "EDIT BLOCKED — plugin machinery under a skills directory" \
+        "${FILE:-$NB}: a hooks.json or .claude-plugin/ there loads code beside these guards without a marketplace." \
+        "Ship it as a plugin of the kodflow marketplace instead."
     [ -n "$FILE" ] || exit 0
 
     # --- BLOCK: protected paths ----------------------------------------------
