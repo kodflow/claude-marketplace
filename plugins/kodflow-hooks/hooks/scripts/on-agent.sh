@@ -37,18 +37,22 @@ _log() {
 # updates an agent already recorded, so they leave no phantom entry.
 # The running subagents of the session, for the status line and the task
 # view: <config>/kodflow/sessions/<session>/agents.json, next to the task list
-# the tasks MCP keeps. Start and stop can race, so every write holds the lock.
+# the tasks MCP keeps. Start and stop can race, so every write holds the lock:
+# lib/lock.sh (mkdir), since flock(1) does not exist on macOS. The tasks MCP
+# only reads agents.json, which is replaced whole, so it needs no lock here.
 _agents() {   # $1 = start|stop
     [ -n "$AID" ] || return 0
     local dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
     (
         mkdir -p "$dir" 2>/dev/null || exit 0
-        exec 9>>"$dir/.lock"; flock -w 2 9 2>/dev/null
+        # A lock not obtained in 2 s is written through anyway: a lost start
+        # or stop would miscount the workers for the rest of the session.
+        . "$LIB/lock.sh" 2>/dev/null && kf_lock "$dir/.agents.lock.d" 2
         local f=$dir/agents.json cur='{"agents":{}}' epic=0
         [ -s "$f" ] && cur=$(cat "$f" 2>/dev/null)
         # The epic the main agent is on when the subagent starts: the status
-        # line counts the subagent on that epic's pill. Same lock as the
-        # tasks MCP, so the read is consistent; anything unreadable is 0.
+        # line counts the subagent on that epic's pill. The tasks MCP replaces
+        # tasks.json whole, so the read is consistent; anything unreadable is 0.
         if [ "$1" = start ] && [ -s "$dir/tasks.json" ]; then
             epic=$(jq -L "$LIB" 'include "epics"; v2 | active("main")' "$dir/tasks.json" 2>/dev/null)
             [[ $epic =~ ^[0-9]+$ ]] || epic=0
@@ -67,7 +71,7 @@ SubagentStart)
     jq -n -c --arg c "## Subagent context (kodflow-hooks)
 Branch: $BRANCH · agent: ${AGENT:-unknown}
 1. MCP first: mcp__github__* / mcp__gitlab__* before gh or glab; mcp__context7__* for library docs.
-2. rtk rewrites Bash for compressed output; byte-exact reads are never rewritten.
+2. rtk is not applied automatically: prefix rtk yourself for verbose read-only commands; byte-exact reads stay raw.
 3. Commits: conventional, no AI attribution, never on main, never --no-verify or --force.
 4. Return what you were asked for and say what you verified versus what you assumed.
 5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; if that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS, use ~/Projects/.worktrees/<repo>-<epic-slug>) and deliver through a PR; the main thread reviews and merges." \

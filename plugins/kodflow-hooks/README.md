@@ -47,7 +47,7 @@ fails by accident blocks every shell call of the session.
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · a main-agent task `in_progress` on an epic no running subagent is attributed to (the main thread producing), every turn, unless `KODFLOW_ROOT=off` | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · more untied tasks `in_progress` than free workers, every turn · a task `in_progress` whose `worker` has stopped, once per set · a main-agent task `in_progress` on an epic no running subagent is attributed to and not tied to a running `worker` (the main thread producing), every turn, unless `KODFLOW_ROOT=off` | bell · log |
 
 ## Main thread = reviewer, code is delegated
 
@@ -189,6 +189,21 @@ pill per open epic of the main agent.
   `in_progress` plus one per running subagent (`agents.json`); a subagent
   has one. `task_update` refuses an extra start, and the Stop hook flags more
   tasks in progress than workers, across every epic, on every turn.
+- **A task tied to its worker.** `task_update(status=in_progress,
+  worker=<type or agent id>)` hands a task to a subagent as `agents.json`
+  records it (the key, or its `type`, which is the agent's name). The start
+  is refused if that subagent is stopped (or started over 12 h ago), unknown,
+  or already holds another task in progress; otherwise it is accepted
+  whatever the headcount, so tasks left `in_progress` by finished subagents
+  no longer block a live one. `worker` and `worker_id` are stored on the task
+  and dropped when it leaves `in_progress`; without `worker`, the headcount
+  above applies as before. Every refusal lists the running subagents (type,
+  id, for how long) and, for each task in progress, its worker and whether it
+  runs, or "no worker linked", then says how to unblock. At Stop, a task
+  whose worker has stopped is named once per set of such tasks; the
+  headcount rule counts only untied tasks, against the main thread plus the
+  running subagents that hold no tied task; and a task tied to a running
+  subagent never trips the delegation rule.
 - **Session start review.** On `startup`, `resume`, `clear` and `compact`,
   `SessionStart` lists the main agent's open tasks of every epic
   (`lib/review.jq`) and asks to reconcile them first — an `in_progress` left
@@ -220,10 +235,14 @@ pill per open epic of the main agent.
 - **Running subagents** are recorded next to it, in `agents.json`, by the
   `SubagentStart`/`SubagentStop` hooks, each with the main agent's active epic
   at its start (`0` when none), so the status line counts it on that pill.
+  Writes hold `lib/lock.sh`, a `mkdir` lock (`.agents.lock.d`): `flock(1)`
+  does not exist on macOS, where the former `flock -w 2` serialised nothing
+  and concurrent starts lost entries. A lock older than 10 s is broken by an
+  atomic rename; one not obtained in 2 s is written through, never blocking.
 - Without the hook, the session is found through the parent Claude Code
   process (`<config>/sessions/<pid>.json`) and every call belongs to `main`.
 
-`tests/run-tests.sh` drives the server over stdio.
+`tests/run-tests.sh` drives the server over stdio, then runs `test_root_gate.sh` and `test_lock.sh`.
 
 ## What the log is
 

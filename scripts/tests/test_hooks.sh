@@ -261,6 +261,34 @@ rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.s
 printf '%s' "$OUT" | grep -q 'tasks are in progress for' && bad "cap with subagent" "$OUT" || ok "a running subagent covers the second task"
 rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
 
+echo "== Stop · a task tied to a stopped worker"
+mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/workers-nudged"
+NOW=$(date +%s)
+printf '{"agents":{"r1":{"type":"review-pr3","started":%s,"stopped":%s},"c2":{"type":"sdk-consensus2","started":%s,"stopped":null}}}' \
+    "$((NOW - 600))" "$NOW" "$((NOW - 600))" > "$MS/agents.json"
+printf '%s' '{"version":2,"epics":[],"active":{},"tasks":[
+  {"id":"36","agent":"main","epic":0,"subject":"Review PR 3","status":"in_progress","worker":"review-pr3","worker_id":"r1"},
+  {"id":"42","agent":"main","epic":0,"subject":"Consensus","status":"in_progress","worker":"sdk-consensus2","worker_id":"c2"},
+  {"id":"43","agent":"main","epic":0,"subject":"Mine","status":"in_progress"}]}' > "$MS/tasks.json"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+CTX=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null)
+printf '%s' "$CTX" | grep -q '#36 Review PR 3: worker review-pr3 is stopped' \
+    && ok "a task whose worker stopped is named with its worker" || bad "dead worker" "$OUT"
+printf '%s' "$CTX" | grep -q '#42 Consensus: worker' && bad "live worker flagged" "$CTX" || ok "a task tied to a running worker is not flagged"
+printf '%s' "$CTX" | grep -q 'tasks are in progress for' && bad "cap with tied tasks" "$CTX" \
+    || ok "a tied task holds its worker's slot: one untied task for the main thread passes the headcount"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | grep -q 'worker review-pr3 is stopped' && bad "dead worker repeated" "$OUT" \
+    || ok "the stopped-worker reminder is given once per set"
+printf '%s' '{"version":2,"epics":[],"active":{},"tasks":[
+  {"id":"42","agent":"main","epic":0,"subject":"Consensus","status":"in_progress","worker":"sdk-consensus2","worker_id":"c2"},
+  {"id":"43","agent":"main","epic":0,"subject":"Mine","status":"in_progress"},
+  {"id":"44","agent":"main","epic":0,"subject":"Other","status":"in_progress"}]}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("2 tasks are in progress for 1 worker[^\\n]*: #43 Mine, #44 Other\\. ")' >/dev/null 2>&1 \
+    && ok "a tied task takes its worker's slot: two untied tasks for the main thread are flagged" || bad "untied cap" "$OUT"
+rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/workers-nudged"
+
 echo "== PreToolUse · task tools"
 run PreToolUse mcp__plugin_kodflow-hooks_tasks__task_create '{"tool_input":{"subject":"x","_agent":"forged"}}' on-tool.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.updatedInput | .subject == "x" and ._session == "sess-1" and ._agent == "main"' >/dev/null 2>&1 \
