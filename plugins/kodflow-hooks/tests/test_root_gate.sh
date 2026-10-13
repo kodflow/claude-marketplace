@@ -216,7 +216,8 @@ stop; [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] && ! producin
     && ok "malformed files: one document, no flag" || bad "stop: malformed" "$OUT"
 
 echo "== UserPromptSubmit · the directive says code is delegated"
-user() { OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-root",hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"hi"}' \
+# The task directive and state ride only while the mod beats (lib/beat.sh)
+user() { mkdir -p "$MS"; date +%s > "$MS/mod-beat"; OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-root",hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"hi"}' \
     | env "$@" bash "$S/on-user.sh" 2>/dev/null); C=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null); }
 printf '%s' '{"version":2,"active":{"main":2},
   "epics":[{"id":1,"agent":"main","title":"api-gateway","touched":5},{"id":2,"agent":"main","title":"SDK status-line","touched":9}],

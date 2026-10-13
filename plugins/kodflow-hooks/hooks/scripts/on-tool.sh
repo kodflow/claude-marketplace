@@ -61,7 +61,7 @@ _forge_ok() {
 if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_name\":\ ?\"([^\"]+)\" ]]; then
     fp_tool=${BASH_REMATCH[1]}
     case "$fp_tool" in
-        Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__*tasks__task_*) ;;
+        Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__*tasks__task_*|mcp__kodflow-hooks__task_*) ;;
         Read|Glob|Grep|LS|ToolSearch|AskUserQuestion) exit 0 ;;
         *)
             # A forge tool that carries a message, a title, a body, a branch or
@@ -79,10 +79,9 @@ if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_
                 if [ "${KODFLOW_ROOT:-}" != off ] && ! [[ $INPUT =~ \"permission_mode\":\ ?\"plan\" ]] && ! _forge_ok "$fp_tool"; then
                     fp_gate=1
                 fi
-                fp_dir=""; fp_sid=""
-                [[ $INPUT =~ \"scratchpad_dir\":\ ?\"([^\"]*)\" ]] && fp_dir=${BASH_REMATCH[1]}
+                fp_sid=""
                 [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && fp_sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
-                [ $fp_gate -eq 1 ] || [ -f "${fp_dir:-${TMPDIR:-/tmp}/claude-hooks-${fp_sid:-default}}/triage-pending" ] || exit 0
+                [ $fp_gate -eq 1 ] || [ -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/${fp_sid:-default}/triage-pending" ] || exit 0
             fi ;;
     esac
 fi
@@ -914,25 +913,18 @@ pre_bash() {
 }
 
 # ============================================================================
-# PreToolUse · task list (the plugin's tasks MCP, and the built-in tools)
+# PreToolUse · task list (the built-in tools)
 # ============================================================================
-# An MCP server cannot tell which session or which subagent is calling; this
-# hook can. Both are written into the call, overriding whatever the model put
-# there, so each agent owns its own list and the status line can show the
-# main agent's alone.
-pre_tasks() {
-    jq -c '{hookSpecificOutput:{hookEventName:"PreToolUse",
-            updatedInput:(.tool_input + {_session:(.session_id // "default"), _agent:(.agent_id // "main")})}}' \
-        <<<"$INPUT" 2>/dev/null
-    _log
-    exit 0
-}
-
-# The built-in task tools draw their own panel in the chat, a second copy of
-# the list the status line already shows. Send the model to the MCP instead.
+# The kodflow task tools are the mod's (hooks/mod/register.ts): a call it
+# answers never reaches this script, and the mod tells each caller apart by
+# itself. The built-in task tools draw their own panel in the chat, a second
+# copy of the list the status line already shows: refused while the mod's
+# tools answer (lib/beat.sh), let through when they do not, since a session
+# without the mod has no other list.
 pre_builtin_tasks() {
+    [ "$BEAT" = 0 ] || { _log; exit 0; }
     _block "USE THE KODFLOW TASK TOOLS" \
-        "$TOOL draws a second task list in the chat. Use the kodflow tasks MCP instead:" \
+        "$TOOL draws a second task list in the chat. Use the kodflow task tools instead:" \
         "task_create (subject: 40 characters at most), task_update (id, status), task_list," \
         "task_epic / task_focus (one epic per subject). Statuses: pending, in_progress, waiting, completed, deleted."
 }
@@ -1098,31 +1090,51 @@ post_failure() {
 # PreToolUse · triage gate
 # ============================================================================
 # The user wants every message filed in the task list BEFORE anything is done
-# about it. on-user.sh raises triage-pending on each prompt; the first call to
-# a task tool lowers it. Until then the main agent may only read and load
-# tools — enough to understand the request, not to act on it. Subagents are
-# not gated: they work for a task the main agent already filed.
-if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$STATE/triage-pending" ]; then
+# about it. on-user.sh raises triage-pending on each prompt; the main agent's
+# first call to a task tool lowers it (the mod does, the call never reaching
+# this script). Until then the main agent may only read and load tools —
+# enough to understand the request, not to act on it. Subagents are not
+# gated: they work for a task the main agent already filed. The gate holds
+# only while the mod beats: with the mod gone nothing could lift it, so a
+# stale beat lifts it and says why, once.
+SDIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
+BEAT=2; . "$LIB/beat.sh" 2>/dev/null && { kf_beat "$SDIR"; BEAT=$?; }
+if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$SDIR/triage-pending" ]; then
     case "$TOOL" in
-        mcp__*tasks__task_*)
-            rm -f -- "$STATE/triage-pending" 2>/dev/null ;;
+        mcp__*tasks__task_*|mcp__kodflow-hooks__task_*)
+            rm -f -- "$SDIR/triage-pending" 2>/dev/null ;;
         Read|Glob|Grep|LS|ToolSearch|AskUserQuestion)
             ;;
         *)
-            _block "TRIAGE FIRST — file this message in the task list" \
-                "Before acting, classify the user's message with the kodflow task tools:" \
-                "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)" \
-                "task_create always names its epic (epic=0 for none): there is no default." \
-                "context on the task in progress → task_update it · rework of a completed task → task_create \"Rework #N: …\"" \
-                "a question that needs no task → task_list (acknowledges the triage)." \
-                "Reading (Read, Grep, Glob) and ToolSearch stay allowed meanwhile." ;;
+            if [ "$BEAT" != 0 ]; then
+                rm -f -- "$SDIR/triage-pending" 2>/dev/null
+                # A tool with checks of its own below goes on to them, and
+                # the next prompt says why (on-user.sh); any other leaves
+                # here, the one place it can carry the message.
+                case "$TOOL" in
+                    Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__github__*|mcp__gitlab__*|mcp__GitKraken__*) ;;
+                    *) jq -n -c --arg m "${KF_BEAT_LOST:-kodflow-hooks: the mods are unloaded: run /reload-plugins}" '{systemMessage:$m}' 2>/dev/null
+                       exit 0 ;;
+                esac
+            else
+                _block "TRIAGE FIRST — file this message in the task list" \
+                    "Before acting, classify the user's message with the kodflow task tools:" \
+                    "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)" \
+                    "task_create always names its epic (epic=0 for none): there is no default." \
+                    "context on the task in progress → task_update it · rework of a completed task → task_create \"Rework #N: …\"" \
+                    "a question that needs no task → task_list (acknowledges the triage)." \
+                    "Reading (Read, Grep, Glob) and ToolSearch stay allowed meanwhile."
+            fi ;;
     esac
 fi
 
 # Tools this script has nothing to do with leave at once, unlogged: the
 # matcher is wide only so the triage gate above sees every call.
 case "$EV/$TOOL" in
-    PreToolUse/Bash|PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit|PreToolUse/TaskCreate|PreToolUse/TodoWrite|PreToolUse/mcp__*tasks__task_*) ;;
+    PreToolUse/Bash|PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit|PreToolUse/TaskCreate|PreToolUse/TodoWrite) ;;
+    # A task tool reaches this script only from an old install of the tasks
+    # MCP; the mod's own are answered before the shell. Logged, nothing else.
+    PreToolUse/mcp__*tasks__task_*|PreToolUse/mcp__kodflow-hooks__task_*) _log; exit 0 ;;
     PreToolUse/mcp__github__*|PreToolUse/mcp__gitlab__*|PreToolUse/mcp__GitKraken__*)
         pre_forge ;;
     PreToolUse/*) exit 0 ;;
@@ -1133,7 +1145,6 @@ esac
 # ============================================================================
 case "$EV/$TOOL" in
     PreToolUse/Bash)                                        pre_bash ;;
-    PreToolUse/mcp__*tasks__task_create|PreToolUse/mcp__*tasks__task_update|PreToolUse/mcp__*tasks__task_list|PreToolUse/mcp__*tasks__task_epic|PreToolUse/mcp__*tasks__task_focus) pre_tasks ;;
     PreToolUse/TaskCreate|PreToolUse/TodoWrite)             pre_builtin_tasks ;;
     PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit)     pre_edit ;;
     PostToolUse/Write|PostToolUse/Edit|PostToolUse/MultiEdit|PostToolUse/NotebookEdit) post_edit ;;

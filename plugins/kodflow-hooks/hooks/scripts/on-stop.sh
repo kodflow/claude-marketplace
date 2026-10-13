@@ -115,7 +115,7 @@ fi
 
 # Open tasks of the main agent. A task left pending or in progress after the
 # work is done stays on the status line for good, so the turn is asked to
-# settle it. Two sources: the tasks MCP of this plugin
+# settle it. Two sources: the task tools of this plugin (the mod)
 # (<config>/kodflow/sessions/<session>/tasks.json, the main agent's entries),
 # and the built-in tools' one-file-per-task list under <config>/tasks/<list>/
 # (list = CLAUDE_CODE_TASK_LIST_ID or session-<first 8 chars of the session
