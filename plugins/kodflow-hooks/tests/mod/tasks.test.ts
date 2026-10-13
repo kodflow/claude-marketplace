@@ -4,6 +4,8 @@ import { conformance } from "./conformance.ts";
 import {
   TOOLS,
   codePoints,
+  humanContext,
+  humanOpen,
   parse,
   resolveWorkers,
   strip,
@@ -29,14 +31,19 @@ test("the port answers every call of the corpus as tasks.py did", () => {
   expect(failures).toEqual([]);
 });
 
-test("tools: five, in tasks.py's order, epic required, worker offered", () => {
+test("tools: tasks.py's five in its order, then task_assign_human; epic required, worker offered", () => {
   expect(TOOLS.map((t) => t.name)).toEqual([
     "task_create",
     "task_update",
     "task_epic",
     "task_focus",
     "task_list",
+    "task_assign_human",
   ]);
+  const human = TOOLS[5]!;
+  expect(human.inputSchema.required).toEqual(["subject", "epic"]);
+  expect(human.inputSchema.properties.epic.minimum).toBe(1);
+  expect(human.description).toContain("At most 5 open");
   const create = TOOLS[0]!;
   expect(create.inputSchema.required).toEqual(["subject", "epic"]);
   expect(create.description).toContain("REQUIRED");
@@ -149,4 +156,34 @@ test("calls: tool names, envelope, attribution, switch, triage", () => {
   expect(isOff(undefined)).toBe(false);
   expect(lowersTriage(undefined)).toBe(true);
   expect(lowersTriage("a1")).toBe(false);
+});
+
+test("the user's tasks: open ones, and the context a compaction gets back", () => {
+  const data = parse(
+    JSON.stringify({
+      version: 2,
+      next_id: 5,
+      next_epic: 2,
+      epics: [{ id: 1, agent: "main", title: "NAS", created: 1, touched: 1 }],
+      active: { main: 1 },
+      tasks: [
+        { id: "1", agent: "main", epic: 1, subject: "Go for reboot", description: "Say go.", status: "waiting", assignee: "human" },
+        { id: "2", agent: "main", epic: 1, subject: "Touch ID", description: "x".repeat(300), status: "waiting", assignee: "human" },
+        { id: "3", agent: "main", epic: 1, subject: "Answered", status: "completed", assignee: "human" },
+        { id: "4", agent: "main", epic: 1, subject: "Mine", status: "waiting" },
+        { id: "5", agent: "a1", epic: 0, subject: "Foreign", status: "waiting", assignee: "human" },
+      ],
+    }),
+    1,
+  );
+  expect(humanOpen(data).map((t) => t.id)).toEqual(["1", "2"]);
+  const text = humanContext(data)!;
+  expect(text.split("\n")[0]).toBe(
+    "Tasks assigned to the user (task_assign_human), still waiting on them:",
+  );
+  expect(text).toContain("  - #1 Go for reboot (epic #1 NAS): Say go.");
+  expect(text).toContain(`  - #2 Touch ID (epic #1 NAS): ${"x".repeat(200)}…`);
+  expect(text).not.toContain("Answered");
+  expect(text).toContain("task_update(id, status=completed)");
+  expect(humanContext(parse(undefined, 1))).toBeUndefined();
 });

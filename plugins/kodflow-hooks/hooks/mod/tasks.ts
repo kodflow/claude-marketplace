@@ -10,6 +10,11 @@
 // order of validation, timestamps in seconds, lengths in code points. The
 // conformance corpus (tests/mod/conformance.corpus.ts), recorded from tasks.py,
 // holds it to that.
+//
+// One tool came after the port: task_assign_human files a task only the user
+// can do (a "go", a Touch ID, a gesture on a NAS). It is a task like the
+// others, with `assignee: "human"` and the status `waiting`, so the readers
+// of tasks.json that know nothing of the field still count it right.
 
 export const MAX_SUBJECT = 40;
 export const MAX_TITLE = 20;
@@ -21,6 +26,10 @@ export const STATUSES = [
   "deleted",
 ] as const;
 export const MAIN = "main";
+/** `assignee` of a task only the user can do (task_assign_human). */
+export const HUMAN = "human";
+/** At most this many of them open at once: a queue nobody reads is noise. */
+export const MAX_HUMAN_OPEN = 5;
 
 /** A refusal the caller reads: the tool answers `{ deny: message }`. */
 export class TaskError extends Error {
@@ -382,7 +391,7 @@ function claimWorker(
 const inProgressCap = (ctx: Ctx, agent: string): number =>
   agent === MAIN ? 1 + ctx.workers.filter((w) => w.alive).length : 1;
 
-// --- the five tools ----------------------------------------------------------------
+// --- the tools ---------------------------------------------------------------------
 
 /** A tool call checked: whether it writes, and the change it makes. */
 export type Step = { mutates: boolean; run: (data: Data, ctx: Ctx) => string };
@@ -471,6 +480,15 @@ function taskUpdate(agent: string, args: Obj): Step {
         data.tasks.splice(idx, 1);
         return `Task #${taskId} deleted`;
       }
+      // Nobody but the user works on the user's task: no start, no worker
+      if (
+        isHuman(task) &&
+        (status === "in_progress" || status === "pending")
+      ) {
+        throw new TaskError(
+          `#${taskId} is assigned to the user: it stays waiting until they answer, then completed (or deleted when it no longer applies).`,
+        );
+      }
       // One task in progress per worker: an amber cell on the status
       // line must mean someone is on it right now
       const starting =
@@ -524,7 +542,12 @@ function taskList(agent: string): Step {
       const active = activeEpic(data, agent);
       const lines: string[] = [];
       const rows = (tasks: Obj[]) =>
-        lines.push(...tasks.map((t) => `#${t.id} [${t.status}] ${t.subject}`));
+        lines.push(
+          ...tasks.map(
+            (t) =>
+              `#${t.id} [${t.status}] ${t.subject}${isHuman(t) ? " (assigned to the user)" : ""}`,
+          ),
+        );
       if (active) {
         const epic = findEpic(data, agent, active)!;
         const [done, total] = progress(data, agent, active);
@@ -617,12 +640,98 @@ function taskFocus(agent: string, args: Obj): Step {
   };
 }
 
+// --- the user's tasks ----------------------------------------------------------------
+
+const isHuman = (t: Obj): boolean => get(t, "assignee", "") === HUMAN;
+
+/** The main agent's tasks assigned to the user and not yet answered. */
+export function humanOpen(data: Data): Obj[] {
+  return data.tasks.filter(
+    (t) =>
+      get(t, "agent", MAIN) === MAIN &&
+      isHuman(t) &&
+      t.status !== "completed",
+  );
+}
+
+function taskAssignHuman(agent: string, args: Obj): Step {
+  // The user talks to the main agent: a subagent's need reaches them
+  // through the main agent's answer, never as a task of its own list.
+  if (agent !== MAIN)
+    throw new TaskError(
+      "task_assign_human is the main agent's: say in your answer what you need from the user, and the main agent assigns it.",
+    );
+  const subject = checkSubject(args.subject);
+  const wanted = args.epic;
+  return {
+    mutates: true,
+    run(data, ctx) {
+      const epicId =
+        wanted === undefined || wanted === null ? null : parseEpicId(wanted);
+      if (!epicId || !findEpic(data, agent, epicId)) {
+        throw new TaskError(
+          `epic is required: a task for the user belongs to the epic it unblocks; ${describeOpen(data, agent)}. task_epic(title) opens one first.`,
+        );
+      }
+      const open = humanOpen(data);
+      if (open.length >= MAX_HUMAN_OPEN) {
+        throw new TaskError(
+          `the user already has ${open.length} tasks waiting (${open.map((t) => `#${t.id} ${t.subject}`).join(", ")}), the limit is ${MAX_HUMAN_OPEN}: ` +
+            "close the ones they answered with task_update(status=completed), or delete the ones that no longer apply, first.",
+        );
+      }
+      const task = {
+        id: String(data.next_id),
+        agent,
+        epic: epicId,
+        subject,
+        description: or(args.description, ""),
+        status: "waiting",
+        assignee: HUMAN,
+        created: ctx.now,
+        updated: ctx.now,
+      };
+      data.next_id += 1;
+      data.tasks.push(task);
+      touch(data, agent, epicId, ctx.now);
+      return (
+        `Task #${task.id} assigned to the user, waiting: ${subject} in epic #${epicId} ${findEpic(data, agent, epicId)!.title}. ` +
+        `Ask them for it in your reply; once they have answered, task_update(id="${task.id}", status="completed").`
+      );
+    },
+  };
+}
+
+/**
+ * What the model is told again after a compaction: the user's open tasks,
+ * so a "go" asked before the summary is still known to be awaited.
+ * Undefined when there is none.
+ */
+export function humanContext(data: Data): string | undefined {
+  const open = humanOpen(data);
+  if (!open.length) return undefined;
+  const line = (t: Obj): string => {
+    const epic = findEpic(data, MAIN, get(t, "epic", 0));
+    const what = strip(pyStr(or(t.description, "")));
+    const detail = what
+      ? `: ${codePoints(what) > 200 ? [...what].slice(0, 200).join("") + "…" : what}`
+      : "";
+    return `  - #${t.id} ${t.subject}${epic ? ` (epic #${epic.id} ${epic.title})` : ""}${detail}`;
+  };
+  return [
+    "Tasks assigned to the user (task_assign_human), still waiting on them:",
+    ...open.map(line),
+    "Once the user has answered one, close it with task_update(id, status=completed); do not redo what only they can do.",
+  ].join("\n");
+}
+
 export const TOOL_NAMES = [
   "task_create",
   "task_update",
   "task_epic",
   "task_focus",
   "task_list",
+  "task_assign_human",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
@@ -643,6 +752,8 @@ export function plan(tool: ToolName, agent: string, args: Obj): Step {
       return taskFocus(agent, args);
     case "task_list":
       return taskList(agent);
+    case "task_assign_human":
+      return taskAssignHuman(agent, args);
   }
 }
 
@@ -821,5 +932,36 @@ export const TOOLS: readonly {
       "List the active epic's tasks with ids and statuses, one line per other open epic " +
       "(id, title, done/total), and tasks with no epic.",
     inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "task_assign_human",
+    description:
+      "Assign the user a task only they can do: a go or an approval, a Touch ID or a password typed on " +
+      "their machine, a gesture on hardware you cannot reach. The task is filed waiting, marked as the " +
+      "user's, in the epic it unblocks (epic is required), and shows on their status line. Say in your " +
+      "reply what you need from them. Once they have answered, close it with task_update(status=completed); " +
+      "it never goes in_progress. At most 5 open at once. Main agent only: a subagent says what it needs in " +
+      "its answer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        subject: {
+          type: "string",
+          maxLength: MAX_SUBJECT,
+          description:
+            'What the user must do, imperative, 40 characters at most ("Give the go for the NAS reboot").',
+        },
+        description: {
+          type: "string",
+          description: "Exactly what to do or decide, and where.",
+        },
+        epic: {
+          type: "integer",
+          minimum: 1,
+          description: "Required. Id of the epic this unblocks.",
+        },
+      },
+      required: ["subject", "epic"],
+    },
   },
 ];

@@ -1,0 +1,34 @@
+{
+ "about": "The Go-project rule, shared by hooks/scripts/lib/gomod.sh (kf_gomod) and hooks/mod/lint.ts (goModuleOf). Every path is relative to a scratch directory: tree lists the files to create, each case a file (or a directory with dir: true), the project root it is judged under, and the directory of its module, null when it has none.",
+ "tree": [
+  "repo/README.md",
+  "repo/docs/guide.md",
+  "repo/projects/making.codes/go.mod",
+  "repo/projects/making.codes/cmd/app/main.go",
+  "repo/projects/making.codes/internal/web/static/site.css",
+  "repo/projects/making.codes/tools/gen/go.mod",
+  "repo/projects/making.codes/tools/gen/gen.go",
+  "repo/scripts/x.sh",
+  "rooted/go.mod",
+  "rooted/pkg/a/a.go",
+  "above/go.mod",
+  "above/repo/main.go",
+  "repo2/go.mod",
+  "repo2/main.go"
+ ],
+ "cases": [
+  {"name": "a module below the root (making.codes)", "root": "repo", "file": "repo/projects/making.codes/cmd/app/main.go", "module": "repo/projects/making.codes"},
+  {"name": "any file of the module counts, not only .go", "root": "repo", "file": "repo/projects/making.codes/internal/web/static/site.css", "module": "repo/projects/making.codes"},
+  {"name": "the go.mod itself", "root": "repo", "file": "repo/projects/making.codes/go.mod", "module": "repo/projects/making.codes"},
+  {"name": "a nested module wins over its parent", "root": "repo", "file": "repo/projects/making.codes/tools/gen/gen.go", "module": "repo/projects/making.codes/tools/gen"},
+  {"name": "a file not created yet, in a module", "root": "repo", "file": "repo/projects/making.codes/cmd/app/new.go", "module": "repo/projects/making.codes"},
+  {"name": "no go.mod at the root: a root file is not Go", "root": "repo", "file": "repo/README.md", "module": null},
+  {"name": "no go.mod on the way up", "root": "repo", "file": "repo/scripts/x.sh", "module": null},
+  {"name": "a go.mod at the root", "root": "rooted", "file": "rooted/pkg/a/a.go", "module": "rooted"},
+  {"name": "never above the root", "root": "above/repo", "file": "above/repo/main.go", "module": null},
+  {"name": "a file outside the root", "root": "repo", "file": "rooted/pkg/a/a.go", "module": null},
+  {"name": "a sibling whose name starts like the root", "root": "repo", "file": "repo2/main.go", "module": null},
+  {"name": "a directory is its own start", "root": "repo", "file": "repo/projects/making.codes/tools/gen", "dir": true, "module": "repo/projects/making.codes/tools/gen"},
+  {"name": "the root directory itself", "root": "rooted", "file": "rooted", "dir": true, "module": "rooted"}
+ ]
+}

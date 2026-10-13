@@ -50,12 +50,22 @@ count=$((count + 1)); printf '%d' "$count" > "$STATE/stop-count" 2>/dev/null
 
 ctx=""
 
+# This session's edits, from the tracker on-tool.sh fills, and the Go
+# projects they fall in (lib/gomod.sh: the go.mod nearest each file, never
+# above the project root). Neither the daemon nor the CLI is reached for an
+# edit outside a Go project: making.codes has no go.mod at its root, only
+# projects/making.codes/go.mod.
+edited=""
+[ -f "$STATE/edited" ] && edited=$(sort -u "$STATE/edited" 2>/dev/null)
+KF_GOMODS=""
+[ -n "$edited" ] && . "$LIB/gomod.sh" 2>/dev/null && kf_gomods "$PROJECT_DIR" <<<"$edited"
+
 # --- BLOCK: project-linter over HTTP, when a server is listening ------------
 # Its verdict is passed through verbatim when it is a decision; a plain
 # report joins the feedback below. Phases 1..8: tests included, the agent has
 # finished writing; health excluded, too noisy for a turn boundary.
 port=${KTN_LINTER_PORT:-7717}
-if command -v curl >/dev/null 2>&1 && (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+if [ -n "$KF_GOMODS" ] && command -v curl >/dev/null 2>&1 && (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
     body=$(printf '%s' "$INPUT" | jq -c --arg p "${KTN_STOP_PHASES:-structural,signatures,logic,performance,modern,style,comment,tests}" '. + {phases: ($p | split(","))}' 2>/dev/null)
     resp=$(curl -sf --max-time 28 -H 'Content-Type: application/json' -d "${body:-$INPUT}" "http://127.0.0.1:$port/hooks/stop" 2>/dev/null)
     if [ -n "$resp" ] && [ "$resp" != "{}" ] && [ "$resp" != null ]; then
@@ -68,22 +78,30 @@ if command -v curl >/dev/null 2>&1 && (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/de
     fi
 fi
 
-# --- TRANSFORM: this session's edits, from the tracker on-tool.sh fills ------
-edited=""
-[ -f "$STATE/edited" ] && edited=$(sort -u "$STATE/edited" 2>/dev/null)
-
-if [ -n "$edited" ] && command -v project-linter >/dev/null 2>&1; then
-    # Go packages touched this session, and only those: a git diff would pull
-    # in every other session's work on the branch.
-    pkgs=$(printf '%s\n' "$edited" | grep '\.go$' | sed "s|^$PROJECT_DIR/||" | xargs -r -n1 dirname | sort -u | sed 's|^|./|')
-    if [ -n "$pkgs" ]; then
-        # shellcheck disable=SC2086
-        out=$(cd "$PROJECT_DIR" && timeout 20 project-linter lint $pkgs 2>&1 | tail -50)
+# --- TRANSFORM: project-linter on the Go packages this session touched -------
+# Per module, from its own directory, packages relative to it: a git diff
+# would pull in every other session's work on the branch, and a package path
+# from the project root means nothing to a module that does not sit there.
+if [ -n "$KF_GOMODS" ] && command -v project-linter >/dev/null 2>&1; then
+    # macOS ships no timeout(1): the run is then unbounded but still runs
+    limit=(); command -v timeout >/dev/null 2>&1 && limit=(timeout 20)
+    while IFS= read -r mod; do
+        pkgs=() seen=$'\n'
+        while IFS= read -r f; do
+            case "$f" in "$mod"/*.go) ;; *) continue ;; esac
+            kf_gomod "$f" "$PROJECT_DIR" && [ "$KF_GOMOD" = "$mod" ] || continue
+            d=${f%/*}; d=.${d#"$mod"}
+            case "$seen" in *$'\n'"$d"$'\n'*) continue ;; esac
+            seen="$seen$d"$'\n'; pkgs+=("$d")
+        done <<<"$edited"
+        [ ${#pkgs[@]} -gt 0 ] || continue
+        out=$(cd "$mod" && "${limit[@]}" project-linter lint "${pkgs[@]}" 2>&1 | tail -50)
         [ ${#out} -gt 2000 ] && out="${out:0:2000}…(truncated)"
+        rel=${mod#"$PROJECT_DIR"}; rel=${rel#/}
         [ -n "$out" ] && ctx="${ctx:+$ctx
-}project-linter (session scope):
+}project-linter (session scope, ${rel:-.}):
 $out"
-    fi
+    done <<<"$KF_GOMODS"
 fi
 
 # The CLAUDE.md of every directory this session changed must describe what

@@ -1,7 +1,9 @@
 # epics.jq — read side of tasks.json for the hooks (the tasks MCP writes it).
 # Loaded with `jq -L "$LIB" 'include "epics"; ...'`. Every definition
 # tolerates a file of any shape: a v1 file (one epic per agent, a dict) is
-# read as v2, a malformed field as empty, so a hook never fails on it.
+# read as v2, a malformed field as empty, so a hook never fails on it. A
+# task may carry `assignee: "human"` (task_assign_human): it is a waiting
+# task like any other here.
 
 # Any tasks.json → the v2 shape, in memory only.
 def v2:

@@ -15,13 +15,15 @@ blank the attribution text; they need **Claude Code 2.1.293 or later**.
 
 `hooks/mod/register.ts` is wiring only, one `on(...)` per event; the logic
 sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
-`paths.ts`, and for the three guards below `machine-guards.ts` over a port, with
+`paths.ts`, `lint.ts`, and for the three guards below `machine-guards.ts` over a port, with
 `modwall.ts`, `collision.ts`, `zsh.ts`), which never touch `$`: the engine
 follows `$` and `on` only inside register.ts.
 
 | Event | What the mod does |
 |-------|-------------------|
-| `session.start` | registers `task_create`, `task_update`, `task_epic`, `task_focus`, `task_list` (`isDeferred: false`), listed as `mcp__kodflow-hooks__task_*` |
+| `session.start` | registers `task_create`, `task_update`, `task_epic`, `task_focus`, `task_list`, `task_assign_human` (`isDeferred: false`), listed as `mcp__kodflow-hooks__task_*`, and the `/lint-setup` command |
+| `classic.SessionStart` with `source: compact` | adds to the context the tasks still waiting on the user (`task_assign_human`), read fresh from `tasks.json`, so a summary cannot drop a pending "go" |
+| `command.run` on `lint-setup` | checks project-linter for a Go module (below) |
 | `classic.SessionStart`, `prompt.submit`, every `tool.call` | writes the beat, `<config>/kodflow/sessions/<session>/mod-beat` (time in seconds), before the shell hook of the same event runs, once the tools are registered |
 | `tool.call` on a task tool | answers it (below); a refusal is `{ deny }` with the text the model reads, an internal failure a text error, never a crash |
 | `attribution.text` | `""` for `commit` and `pr`; `exemption` and `remedy` untouched |
@@ -202,8 +204,9 @@ read as empty), shared by `on-user.sh`, `on-agent.sh` and `on-stop.sh`.
 
 ## The task list (mod)
 
-Five tools the mod registers and answers itself (`hooks/mod/tasks.ts`):
-`task_create`, `task_update`, `task_epic`, `task_focus`, `task_list`, named
+Six tools the mod registers and answers itself (`hooks/mod/tasks.ts`):
+`task_create`, `task_update`, `task_epic`, `task_focus`, `task_list`,
+`task_assign_human`, named
 `mcp__kodflow-hooks__task_*`. They keep the session task list in
 `<config>/kodflow/sessions/<session>/tasks.json`, `<config>` being
 `CLAUDE_CONFIG_DIR` or `~/.claude` (always an absolute path). They replace the
@@ -226,6 +229,17 @@ files, proven by a corpus recorded from it (Tests, below).
   broken by a rename, written through after 2 s) keeps two processes apart.
   `task_list` writes nothing. Timestamps are in seconds, lengths in code
   points. Each call is logged through `on-mod.sh` and `lib/event.jq`.
+- **Tasks only the user can do.** `task_assign_human(subject, epic,
+  description)` files a "go", a Touch ID, a gesture on a NAS as a task with
+  `assignee: "human"` and the status `waiting`, in the epic it unblocks
+  (required, never 0). Main agent only (a subagent says what it needs in its
+  answer), at most 5 open. `task_update` closes it with `completed` once the
+  user has answered, or `deleted`; it never goes `in_progress` or `pending`.
+  `task_list` marks it "(assigned to the user)", the prompt's epic state lists
+  the open ones ("waiting on the user: …"), and after a compaction the mod
+  puts them back in the context. The field is optional: the status line,
+  `lib/epics.jq` and the Stop rules read such a task as any `waiting` one.
+  Nothing is submitted on the user's behalf (no `$.prompt.submit`).
 - **Statuses:** `pending`, `in_progress`, `waiting` (blocked on the user: a
   decision, an approval, an answer), `completed`, `deleted`. The list must say
   what is true now; the Stop hook flags an active epic with tasks to do and
@@ -365,7 +379,8 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | File | Effect |
 |------|--------|
 | `.claude/protected-paths` | one glob per line; replaces the default list (`node_modules/`, `.git/`, `vendor/`, `dist/`, `build/`, `.env*`, `*.lock`, lockfiles, `go.sum`) |
-| `KTN_LINTER_PORT` (default 7717) | where a project-linter server listens; nothing is called when the port is closed |
+| `KTN_LINTER_PORT` (default 7717) | where a project-linter server listens; nothing is called when the port is closed, nor for a file outside a Go project: the `go.mod` nearest the changed file, never above the project root (`lib/gomod.sh`, `lint.ts`, one fixture file `tests/fixtures/gomod.json`). At turn end project-linter runs from each module's directory on its own packages |
+| `/lint-setup [path]` | checks, for the Go module of `path` (default the session root), the project-linter binary, the daemon's `/health` and the phase configuration (`KTN_*_PHASES`, the module's `.project-linter.yaml`); proposes installing the latest release into `~/.local/bin` and starting `project-linter serve`, each only after a yes in `$.ui.ask`; phase problems are reported, never written |
 | `KTN_PRE_PHASES`, `KTN_STOP_PHASES` | linter phases at edit time and at turn end |
 | `ROOT_OK=1` prefix on a command | that line is exempt from the delegation gate |
 | `KODFLOW_ROOT=off` | the delegation gate, its Stop rule and its prompt line are off for the session |

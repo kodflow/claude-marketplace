@@ -3,9 +3,11 @@
 // One `on` per event, each a few lines that read `$` and hand the work to the
 // pure modules beside this file (tasks.ts, store.ts, calls.ts, paths.ts).
 // The shell scripts keep every hard guard; this module serves the session
-// task list as five tools, blanks the attribution text, and beats: it writes
+// task list as six tools, blanks the attribution text, and beats: it writes
 // <config>/kodflow/sessions/<session>/mod-beat before each event it sees, so
-// the shell hooks know the task tools exist before they gate on them.
+// the shell hooks know the task tools exist before they gate on them. After a
+// compaction it tells the model again which tasks wait on the user, and it
+// serves /lint-setup (lint.ts).
 //
 // Every hook fails open: a throw is caught and the event goes on, except a
 // task tool's own call, which answers the failure as text. KODFLOW_MOD=off
@@ -14,12 +16,14 @@ import type { Register } from "claude-code";
 import {
   TOOLS,
   MAIN,
+  humanContext,
   isTaskError,
   plan,
   resolveWorkers,
   type ToolName,
 } from "./tasks.ts";
 import { load, mutate, type Port } from "./store.ts";
+import { LINT_SETUP, lintSetup, type LintPort } from "./lint.ts";
 import {
   argsOf,
   attributionText,
@@ -78,6 +82,45 @@ async function beat($: any, session?: string, early = false): Promise<void> {
   if (!cfg) return;
   const dir = sessionDir(cfg, session || (await $.session.id()));
   await $.fs.write(beatFile(dir), beatText(Date.now()));
+}
+
+// The user's open tasks, read fresh, for the context a compaction lost
+async function humanAfterCompact(
+  $: any,
+  session: string,
+): Promise<string | undefined> {
+  const cfg = await config($);
+  if (!cfg) return undefined;
+  return humanContext(
+    await load(port($), sessionDir(cfg, session), Math.floor(Date.now() / 1000)),
+  );
+}
+
+async function lintPort($: any): Promise<LintPort> {
+  return {
+    exists: (path) => $.fs.exists(path).catch(() => false),
+    isDir: (path) =>
+      $.fs.stat(path).then(
+        (s: { kind: string }) => s.kind === "directory",
+        () => false,
+      ),
+    read: (path) =>
+      $.fs.read(path).then(
+        (t: string) => t,
+        () => undefined,
+      ),
+    run: (argv, timeoutMs) =>
+      $.process.run(argv, { timeoutMs }).catch(() => undefined),
+    ask: (question, options) =>
+      $.ui.ask(question, options).catch(() => undefined),
+    vars: {
+      KTN_LINTER_PORT: await $.env.get("KTN_LINTER_PORT"),
+      KTN_PRE_PHASES: await $.env.get("KTN_PRE_PHASES"),
+      KTN_STOP_PHASES: await $.env.get("KTN_STOP_PHASES"),
+    },
+    sleep: (ms) => $.clock.sleep(ms),
+    root: await $.session.root(),
+  };
 }
 
 function port($: any): Port {
@@ -181,17 +224,28 @@ function guardPort($: any): GuardPort {
 
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
-    if (!(await off($))) await ensureTools($);
+    if (!(await off($))) {
+      await ensureTools($);
+      await $.command.register({
+        name: "lint-setup",
+        description: LINT_SETUP.description,
+        argumentHint: LINT_SETUP.argumentHint,
+      });
+    }
     await startGuards(guardPort($)).catch(() => undefined);
     return next(e);
   });
 
   on("classic.SessionStart", async ($, e, next) => {
-    if (!(await off($))) {
-      await ensureTools($).catch(() => undefined);
-      await beat($, e.session_id, true);
-    }
-    return next(e);
+    if (await off($)) return next(e);
+    await ensureTools($).catch(() => undefined);
+    await beat($, e.session_id, true);
+    const r = await next(e);
+    if (e.source !== "compact") return r;
+    const text = await humanAfterCompact($, e.session_id).catch(() => undefined);
+    return text
+      ? { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
+      : r;
   }).catch(($, e, next) => next(e));
 
   on("prompt.submit", async ($, e, next) => {
@@ -216,6 +270,14 @@ export const register: Register = (on) => {
         deny: `kodflow task tools failed: ${next.error.message ?? next.error.kind}`,
       };
     return next(e);
+  });
+
+  on("command.run", { command: "lint-setup" }, async ($, e) => {
+    try {
+      return { text: await lintSetup(await lintPort($), e.args ?? "") };
+    } catch (err: any) {
+      return { text: `/lint-setup failed: ${err?.message ?? String(err)}` };
+    }
   });
 
   on("attribution.text", async ($, e, next) => {
