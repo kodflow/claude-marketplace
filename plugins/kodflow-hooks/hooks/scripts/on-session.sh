@@ -32,11 +32,32 @@ _log() {
     local dir=$PROJECT_DIR/.claude/logs/$BRANCH_SAFE
     (
         mkdir -p "$dir" 2>/dev/null || exit 0
-        exec 9>>"$dir/.lock"; flock -w 2 9 2>/dev/null
+        # mkdir is the lock: flock is absent on macOS.
+        local n=0; until mkdir "$dir/.lock.d" 2>/dev/null; do n=$((n+1)); [ $n -ge 10 ] && break; sleep 0.05; done
         printf '%s' "$INPUT" | jq -c --arg b "$BRANCH" -f "$LIB/event.jq" >> "$dir/session.jsonl" 2>/dev/null
+        [ $n -lt 10 ] && rmdir "$dir/.lock.d" 2>/dev/null
     ) >/dev/null 2>&1 </dev/null &
 }
 _context() { jq -n -c --arg c "$1" --arg e "$EV" '{hookSpecificOutput:{hookEventName:$e,additionalContext:$c}}' 2>/dev/null; }
+
+# $1 config dir, $2 roots (one per line), $3 enabled plugins (name@mkt per
+# line) → every hooks.json declaring modules outside the kodflow marketplace.
+_foreign_modules() {
+    local cfg=$1 f r rel mkt plug
+    {
+        [ -d "$cfg/plugins/cache" ] && find "$cfg/plugins/cache" -maxdepth 6 -path '*/hooks/hooks.json' 2>/dev/null
+        printf '%s\n' "$2" | while IFS= read -r r; do
+            [ -n "$r" ] && [ -d "$r" ] && find "$r" -maxdepth 5 -name hooks.json 2>/dev/null
+        done
+    } | while IFS= read -r f; do
+        case "$f" in "$cfg/plugins/cache/kodflow/"*) continue ;; esac
+        case "$f" in "$cfg/plugins/cache/"*)
+            rel=${f#"$cfg/plugins/cache/"}; mkt=${rel%%/*}; rel=${rel#*/}; plug=${rel%%/*}
+            [ -n "$3" ] && ! printf '%s\n' "$3" | grep -qxF "$plug@$mkt" && continue ;;
+        esac
+        jq -e 'has("modules")' "$f" >/dev/null 2>&1 && printf '%s\n' "$f"
+    done
+}
 
 case "$EV" in
 SessionStart)
@@ -63,29 +84,53 @@ $open"
 
 }"'## POST-COMPACTION — standing rules (kodflow-hooks)
 1. MCP first: mcp__github__* / mcp__gitlab__* before gh or glab; mcp__context7__* for library docs.
-2. rtk rewrites Bash commands for compressed output. Byte-exact reads (cat, head, tail, sed, diff, patch, checksums) are never rewritten; prefix NO_RTK= to opt out of a line.
+2. No hook rewrites a Bash command. For compressed output prefix rtk yourself (rtk git status, rtk ls); never on a read whose bytes matter (cat, head, tail, sed, diff, patch, checksums).
 3. Commits: conventional messages, no AI attribution, no .claude/ path in a message. Enforced by this plugin on PreToolUse and by the repo commit-msg hook.
-4. Never commit on main/master — /git creates the branch and the PR. Never --no-verify. Never --force: --force-with-lease.
+4. Never commit on main/master — /git creates the branch and the PR. Never --no-verify, -n or core.hooksPath. A forced push (--force, -f, +refspec) is refused: use --force-with-lease. A subagent never merges and never pushes to the default branch.
 5. Workflow: /project → /warmup → /search → /plan → /refine → /challenge → /goal. /feature and /fix open the tracker item and the branch; /review before merge.
 6. Before finishing: update the CLAUDE.md of every directory this session changed — warmup --update convention, only what changed, at most 1000 lines. The Stop hook reminds you once per directory.
 7. Recover state from .claude/plans/*.md (latest = current task), .claude/goals/*.md (directives), .claude/contexts/*.md (research).
 8. Never delete anything under .claude/ or .devcontainer/ without explicit approval.
 Context was compacted: verify the task state before continuing.'
     else
-        # TRANSFORM: speak only when something is wrong. rtk present and
-        # answering is the normal case and needs no words.
+        # TRANSFORM: speak only when something is wrong. rtk present is the
+        # normal case and needs no words.
         if ! command -v rtk >/dev/null 2>&1; then
             ctx="${ctx:+$ctx
 
-}rtk is not on PATH: Bash output is not compressed this session. Install it (https://github.com/rtk-ai/rtk) or expect larger tool results."
-        elif ! rtk rewrite "ls" >/dev/null 2>&1; then
-            ctx="${ctx:+$ctx
-
-}rtk $(rtk --version 2>/dev/null | head -1) does not support 'rtk rewrite' (needs >= 0.23): Bash output is not compressed this session."
+}rtk is not on PATH: a Bash command prefixed with rtk will fail this session. Install it (https://github.com/rtk-ai/rtk) or run commands without the prefix."
         fi
     fi
+
+    # OBSERVE: what can switch these guards off, or run code beside them. Not
+    # blocked (the settings are the user's), said to the user and to Claude.
+    warn=""
+    cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+    for f in "$cfg/settings.json" "$cfg/settings.local.json" "$PROJECT_DIR/.claude/settings.json" "$PROJECT_DIR/.claude/settings.local.json"; do
+        [ -f "$f" ] && jq -e '.disableAllHooks == true' "$f" >/dev/null 2>&1 \
+            && warn="$warn"$'\n'"- disableAllHooks is true in $f: every hook, these guards included, is off."
+    done
+    [ -n "${CLAUDE_CODE_PLUGIN_DIRS:-}" ] \
+        && warn="$warn"$'\n'"- CLAUDE_CODE_PLUGIN_DIRS is set ($CLAUDE_CODE_PLUGIN_DIRS): plugins load from outside any marketplace."
+    # A hooks.json that declares modules runs TypeScript in the CLI itself.
+    # Outside the kodflow marketplace it is reported: in an enabled plugin of
+    # the cache, in a skills directory, or in a CLAUDE_CODE_PLUGIN_DIRS entry.
+    enabled=$(jq -r '.enabledPlugins // {} | to_entries[] | select(.value == true) | .key' "$cfg/settings.json" "$PROJECT_DIR/.claude/settings.json" 2>/dev/null)
+    roots="$cfg/skills"$'\n'"$PROJECT_DIR/.claude/skills"
+    [ -n "${CLAUDE_CODE_PLUGIN_DIRS:-}" ] && roots="$roots"$'\n'"$(printf '%s' "$CLAUDE_CODE_PLUGIN_DIRS" | tr ':,' '\n\n')"
+    mods=$(_foreign_modules "$cfg" "$roots" "$enabled")
+    [ -n "$mods" ] && warn="$warn"$'\n'"- modules declared outside kodflow (TypeScript run by the CLI):"$'\n'"$(printf '%s\n' "$mods" | sed 's/^/  /')"
+
     # One document per hook: every part above joins a single context.
-    [ -n "$ctx" ] && _context "$ctx"
+    if [ -n "$warn" ]; then
+        ctx="${ctx:+$ctx
+
+}## kodflow-hooks — guards at risk$warn"
+        jq -n -c --arg c "$ctx" --arg m "kodflow-hooks: guards at risk$warn" \
+            '{systemMessage:$m, hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$c}}' 2>/dev/null
+    elif [ -n "$ctx" ]; then
+        _context "$ctx"
+    fi
     _log ;;
 
 SessionEnd)
