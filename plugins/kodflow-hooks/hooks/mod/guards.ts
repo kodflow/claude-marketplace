@@ -8,7 +8,7 @@
 // Not doubled: the staged-secret scan (BLOCK 3), which reads the index blob
 // by blob and stays the shell's alone.
 import { argvOf, fileText, parse, type Parsed } from "./shell.ts";
-import { scan, type Hit } from "./patterns.ts";
+import { scan, type Hit, type Kind, type Rules } from "./patterns.ts";
 
 export type GuardCtx = {
   /** Set when a subagent makes the call. */
@@ -26,6 +26,8 @@ export type GuardCtx = {
   git(dir: string, args: string[]): Promise<string | undefined>;
   /** Main thread only: the merge holds a token (L5) or an exemption. */
   mergeAllowed(): Promise<boolean>;
+  /** The vendored §5 rules (hooks/patterns), undefined when unreadable. */
+  patterns(): Promise<Rules | undefined>;
 };
 
 export type Findings = {
@@ -74,6 +76,7 @@ type State = {
   gdir: string;
   hooks: boolean;
   amend: boolean;
+  scan: (kind: Kind, text: string) => Hit | undefined;
 };
 
 function hit(st: State, h: Hit | undefined): void {
@@ -292,17 +295,17 @@ async function guardGit(
     if (farg) hay += `\n${await fileText(p, k, farg, ctx.read)}`;
     if (st.amend && !given && !farg)
       hay += `\n${(await ctx.git(gdir, ["log", "-1", "--pretty=%B"])) ?? ""}`;
-    hit(st, scan("commit", hay));
+    hit(st, st.scan("commit", hay));
   } else if (sub === "merge") {
     while (y < A.length) {
       const v = A[y]!;
       if (v === "-m") {
-        hit(st, scan("commit", A[y + 1] ?? ""));
+        hit(st, st.scan("commit", A[y + 1] ?? ""));
         y += 2;
         continue;
       }
       if (v === "-F" || v === "--file") {
-        hit(st, scan("commit", await fileText(p, k, A[y + 1] ?? "", ctx.read)));
+        hit(st, st.scan("commit", await fileText(p, k, A[y + 1] ?? "", ctx.read)));
         y += 2;
         continue;
       }
@@ -315,7 +318,7 @@ async function guardGit(
       if (isNoVerify(v)) st.f.noVerify = `--no-verify on git ${sub}`;
     hit(
       st,
-      scan("commit", (await ctx.git(gdir, ["log", "-5", "--pretty=%B"])) ?? ""),
+      st.scan("commit", (await ctx.git(gdir, ["log", "-5", "--pretty=%B"])) ?? ""),
     );
   } else if (sub === "am" || sub === "revert" || sub === "pull") {
     for (const v of rest)
@@ -389,7 +392,7 @@ async function guardGh(
       }
       y++;
     }
-    hit(st, scan("pr", hay));
+    hit(st, st.scan("pr", hay));
   } else if (sub === "pr" && act === "merge") st.f.merge = "gh pr merge";
   else if (sub === "api") {
     let ep = "";
@@ -437,8 +440,8 @@ async function guardGh(
     else if (ep === "graphql") {
       const m = MERGE_WORDS.exec(hay);
       if (m) st.f.merge = `gh api graphql ${m[0]}`;
-      if (/(create|update)PullRequest/.test(hay)) hit(st, scan("pr", hay));
-    } else if (/(^|\/)pulls(\/[^/]+)?\/?$/.test(ep)) hit(st, scan("pr", hay));
+      if (/(create|update)PullRequest/.test(hay)) hit(st, st.scan("pr", hay));
+    } else if (/(^|\/)pulls(\/[^/]+)?\/?$/.test(ep)) hit(st, st.scan("pr", hay));
   }
 }
 
@@ -471,7 +474,7 @@ function guardGlab(st: State, A: string[]): void {
         hay += `\n${v.slice(v.indexOf("=") + 1)}`;
       y++;
     }
-    hit(st, scan("pr", hay));
+    hit(st, st.scan("pr", hay));
   } else if (sub === "mr" && act === "merge") st.f.merge = "glab mr merge";
   else if (sub === "api") {
     y++;
@@ -560,11 +563,13 @@ export async function inspect(
 ): Promise<Findings | undefined> {
   if (!line || !gate(line)) return undefined;
   const p = parse(line);
+  const rules = await ctx.patterns();
   const st: State = {
     f: { commit: false, force: false },
     gdir: "",
     hooks: false,
     amend: false,
+    scan: (kind, text) => scan(kind, text, rules),
   };
   for (let k = 0; k < p.commands.length; k++) {
     const cmd = p.commands[k]!;

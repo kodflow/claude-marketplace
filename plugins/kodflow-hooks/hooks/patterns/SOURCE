@@ -1,0 +1,5 @@
+# Vendored from kodflow/post-commit: scripts/patterns.txt and
+# scripts/patterns-strict.txt at the commit below, byte for byte. Moved
+# only by scripts/sync-post-commit-patterns.sh <sha>; CI compares the copy.
+repo=kodflow/post-commit
+sha=350fe9c81b62000e836ee7018aaa45c0e0ca353c

@@ -102,6 +102,28 @@ done < "$CORPUS"
 echo "  corpus bash-guard: $c_n cases, $c_pass passed, $c_fail failed, $c_gap known gaps"
 [ "$c_fail" -eq 0 ] && [ "$c_n" -gt 0 ] && ok "bash-guard corpus" || bad "bash-guard corpus" "$c_fail case(s) failed"
 
+echo "== PreToolUse Bash · the vendored patterns (hooks/patterns)"
+# The rules are read from kodflow/post-commit's files, vendored beside the
+# scripts. A copy without them, or with a directive it cannot read, refuses a
+# commit message rather than read it as clean; a pull request body too.
+mkdir -p "$T/np/hooks" && cp -R "$S" "$T/np/hooks/scripts"
+np_cmd() { printf '%s' "$(jq -n -c --arg c "$1" --arg cwd "$T/repo" '{session_id:"s",hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$cwd,tool_use_id:"t",tool_input:{command:$c}}')" \
+    | "${HOOK_SHELL:-bash}" "$T/np/hooks/scripts/on-tool.sh" 2>&1 >/dev/null; }
+E=$(np_cmd 'git commit -m "feat: plain"'); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$E" | grep -q 'hooks/patterns unreadable' && ok "no hooks/patterns: a commit is refused" || bad "no hooks/patterns" "rc=$RC $E"
+mkdir -p "$T/np/hooks/patterns"
+cp "$S/../patterns/patterns.txt" "$T/np/hooks/patterns/"
+{ printf '# @scope: commit,mr\n'; cat "$S/../patterns/patterns-strict.txt"; } > "$T/np/hooks/patterns/patterns-strict.txt"
+E=$(np_cmd 'gh pr create --title x --body plain'); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$E" | grep -q 'hooks/patterns unreadable' && ok "an unknown scope: a pull request is refused" || bad "unknown scope" "rc=$RC $E"
+{ cat "$S/../patterns/patterns.txt"; printf 'unclosed[bracket\n'; } > "$T/np/hooks/patterns/patterns.txt"
+cp "$S/../patterns/patterns-strict.txt" "$T/np/hooks/patterns/"
+E=$(np_cmd 'git commit -m "feat: plain"'); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$E" | grep -q 'hooks/patterns unreadable' && ok "a pattern grep cannot compile: a commit is refused" || bad "invalid pattern" "rc=$RC $E"
+cp "$S/../patterns/patterns.txt" "$T/np/hooks/patterns/"
+E=$(np_cmd 'git commit -m "feat: plain"'); RC=$?
+[ "$RC" -eq 0 ] && ok "both files back: a plain commit passes" || bad "patterns restored" "rc=$RC $E"
+
 echo "== PreToolUse · merge exemptions (merge-exemptions.txt)"
 # A copy of the plugin whose exemptions list names o/r and, against the rule,
 # kodflow/claude-marketplace: only the first is honoured.
