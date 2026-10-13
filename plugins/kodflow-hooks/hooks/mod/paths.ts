@@ -38,3 +38,7 @@ export const beatFile = (dir: string): string => `${dir}/mod-beat`;
 /** The beat's content: the time in whole seconds, as the shell compares it. */
 export const beatText = (nowMs: number): string =>
   String(Math.floor(nowMs / 1000));
+
+/** The merge gate's token for one call (L5): the head SHA it was agreed on. */
+export const mergeTokenFile = (dir: string, toolUseId: unknown): string =>
+  `${dir}/merge-ok/${safe(toolUseId)}`;

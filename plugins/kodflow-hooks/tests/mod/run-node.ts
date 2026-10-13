@@ -2,7 +2,8 @@
 // real `mkdir`/`mv`, and several processes writing one tasks.json at once.
 //
 //   node run-node.ts            the conformance corpus, the store on disk,
-//                               then the Go-project rule on disk
+//                               the Go-project rule on disk, then the
+//                               bash-guard corpus against the mod's guards
 //   node run-node.ts --worker DIR N   (internal) N task_create in DIR
 //
 // Node 22.18 or later runs the TypeScript as it is (type stripping).
@@ -26,6 +27,8 @@ import { conformance } from "./conformance.ts";
 import { lock, mutate, type Port } from "../../hooks/mod/store.ts";
 import { plan } from "../../hooks/mod/tasks.ts";
 import { goModuleOf } from "../../hooks/mod/lint.ts";
+import { replay } from "./corpus.ts";
+import { invariants } from "./invariants.ts";
 
 const run = promisify(execFile);
 const HERE = fileURLToPath(import.meta.url);
@@ -205,6 +208,59 @@ try {
   }
 } finally {
   rmSync(tree, { recursive: true, force: true });
+}
+
+console.log("== bash-guard corpus, the mod's guards (a real git repository)");
+// The same stage as scripts/tests/test_hooks.sh: a repository on feat/test,
+// KODFLOW_ROOT off but for the rows marked root, no merge token.
+const lab = mkdtempSync(join(tmpdir(), "kf-guard-"));
+try {
+  const repo = join(lab, "repo");
+  mkdirSync(repo);
+  await run("git", ["-C", repo, "init", "-q", "-b", "feat/test"]);
+  await run("git", ["-C", repo, "-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "chore: seed"]);
+  const corpus = readFileSync(
+    join(dirname(HERE), "..", "fixtures", "bash-guard.jsonl"),
+    "utf8",
+  );
+  const r = await replay(corpus, {
+    projectDir: repo,
+    home: join(lab, "home"),
+    configDir: join(lab, "home", ".claude"),
+    read: async (p) => {
+      try {
+        return readFileSync(p.startsWith("/") ? p : join(repo, p), "utf8");
+      } catch {
+        return undefined;
+      }
+    },
+    git: async (dir, args) => {
+      try {
+        return (await run("git", ["-C", dir, ...args])).stdout;
+      } catch {
+        return undefined;
+      }
+    },
+    mergeAllowed: async () => false,
+  });
+  for (const g of r.gaps) console.log(`  gap  ${g}`);
+  check(
+    r.failures.length === 0 && r.rows > 200,
+    `${r.rows} Bash rows decided as on-tool.sh decides them (${r.passed} passed, ${r.gaps.length} known gaps, ${r.otherTools} rows of other tools left to the shell)`,
+    r.failures.slice(0, 10).join("\n       "),
+  );
+} finally {
+  rmSync(lab, { recursive: true, force: true });
+}
+
+console.log("== invariants over the hooks module");
+{
+  const bad = invariants(join(dirname(HERE), "..", "..", "hooks", "mod"));
+  check(
+    bad.length === 0,
+    "never allow; { result } only from the task tools, the filter and the veil; the secret variables read are SECRET_VARS",
+    bad.join("\n       "),
+  );
 }
 
 console.log(failed ? `${failed} failure(s)` : "all passed");
