@@ -198,5 +198,31 @@ jobs:
       - name: The mod's tests, in the engine (claude plugin test)
         run: claude plugin test plugins/kodflow-hooks
 
+      # kodflow-hud: an optional mod of its own (two panes, toasts), held to
+      # the same two checks. Only the "version" warning is tolerated.
+      - name: The engine reads kodflow-hud as meant
+        run: |
+          set +e
+          claude plugin validate --strict --json plugins/kodflow-hud > validate-hud.json
+          set -e
+          cat validate-hud.json
+          python3 - <<'PY'
+          import json, sys
+          r = json.load(open("validate-hud.json"))
+          parts = [r["manifest"]] + r.get("contents", [])
+          errors = [e for p in parts for e in p.get("errors", [])]
+          warnings = [w for p in parts for w in p.get("warnings", []) if w.get("path") != "version"]
+          notes = " ".join(n for p in parts for n in p.get("notes", []))
+          bad = errors + warnings
+          for item in bad:
+              print("::error::%s" % item)
+          if "./mod/register.tsx hooks:" not in notes:
+              print("::error::the hooks module was not read"); sys.exit(1)
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: kodflow-hud's tests, in the engine (claude plugin test)
+        run: claude plugin test plugins/kodflow-hud
+
       - name: The conformance corpus, a real disk, several processes (node)
         run: node plugins/kodflow-hooks/tests/mod/run-node.ts

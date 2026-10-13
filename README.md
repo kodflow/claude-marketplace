@@ -19,6 +19,7 @@ cd claude-marketplace && ./scripts/install.sh
 | `kodflow-devops` | `/infra` `/audit` `/update` `/ktn` |
 | `kodflow-shell` | `/shell` — and `super-claude` on your PATH |
 | `kodflow-specialists` | 29 language, platform and concern agents |
+| `kodflow-hud` (optional) | `/hud` — Tasks and Agents panes beside the status line (a mod, Claude Code 2.1.293+) |
 
 ## The three ideas worth the install
 
