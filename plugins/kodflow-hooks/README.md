@@ -255,14 +255,19 @@ No file named `mcp.json` or `.mcp.json` (any case, at any path) is ever
 committed: such a file may carry tokens, and a GitHub token once lived in
 clear in the user's global `mcp.json`. For every caller, subagents
 included, the shell refuses `git add` or `git stage` naming one (`-f` or
-not), a `git commit` naming one as a pathspec, a `git commit` whose index
-adds or changes one (`git diff --cached --name-status`, the read the secret
-scan already makes, in the repository the commit runs in), and a
-`git commit -a` when a tracked one is modified in the working tree. The
-forge tools are held to the same rule: a path that `push_files`,
+not) or whose pathspecs would take one in (`.`, a directory, a glob, `-A`,
+`--pathspec-from-file`, ignored files under `-f`: `git status` resolves
+them), a `git commit` whose pathspecs name or take in one, a `git commit`
+whose index adds or changes one (`git diff --cached --name-status`, the
+read the secret scan already makes, in the repository the commit runs in,
+`git -C` joined onto a preceding `cd`), and a `git commit -a` when a
+tracked one is modified in the working tree. A file the same line creates
+before adding it is not there yet when the hook runs (a `known_gap` row);
+the commit that follows a separate add is refused. The forge write tools
+are held to the same rule: a path that `push_files`,
 `create_or_update_file`, a GitLab commit action or GitKraken's
 `git_add`/`git_commit` names, and, for GitKraken naming no file, what the
-repository would take in. A deletion stays allowed, so a repository that
+repository would take in. Reading one on the forge passes. A deletion stays allowed, so a repository that
 still tracks one can be cleaned: `git rm --cached <path>`, then commit, or
 the forge's `delete_file`. Names that merely contain it (`mymcp.json`,
 `mcp.json.tmpl`) pass. The mod doubles the refusal, refusal only and

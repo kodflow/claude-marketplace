@@ -553,13 +553,44 @@ _is_mcpjson() {
     return 1
 }
 
+# $1 the repository, $2 add, add-f, update or commit, then the pathspecs →
+# prints the first mcp.json they would take in, a deletion left out. git
+# status resolves them as git add and git commit do ("XY path", the old path
+# after a rename; Y is the working tree). add-f lists ignored files too.
+_mcpjson_specs() {
+    local dir=$1 mode=$2 e f x w
+    shift 2
+    local -a opt=(--untracked-files=all)
+    case "$mode" in add-f) opt+=(--ignored) ;; update|commit) opt=(--untracked-files=no) ;; esac
+    while IFS= read -r -d '' e; do
+        x=${e:0:1}; w=${e:1:1}; f=${e:3}
+        case "$x" in R|C) IFS= read -r -d '' _ ;; esac
+        _is_mcpjson "$f" || continue
+        case "$w" in
+            D) continue ;;
+            " ") [ "$mode" = commit ] || continue     # staged already: only a commit takes it
+                 case "$x" in D|" ") continue ;; esac ;;
+        esac
+        printf '%s' "$f"; return 0
+    done < <(git -C "$dir" status --porcelain -z "${opt[@]}" -- "$@" 2>/dev/null)
+    return 1
+}
+
+# $1 the --pathspec-from-file argument, $2 the command index, $3 the
+# repository → one pathspec a line, appended to SPECS.
+_specs_from() {
+    local f=$1 l
+    case "$f" in -|/*) ;; *) f=$3/$f ;; esac
+    while IFS= read -r l; do [ -n "$l" ] && SPECS+=("$l"); done <<< "$(_p_file "$f" "$2")"
+}
+
 # $1 command index, A/NAME set. git: its globals, then the subcommand.
 _guard_git() {
     local y=1 na=${#A[@]} gdir=$GDIR v lc sub msg="" farg="" hay
     while [ $y -lt $na ]; do
         v=${A[y]}
         case "$v" in
-            -C) gdir=${A[y+1]:-}; y=$((y+2)); continue ;;
+            -C) v=${A[y+1]:-}; case "$v" in /*) gdir=$v ;; *) gdir=${gdir:+$gdir/}$v ;; esac; y=$((y+2)); continue ;;
             -c|--config-env)
                 lc=$(printf '%s' "${A[y+1]:-}" | tr '[:upper:]' '[:lower:]')
                 case "$lc" in core.hookspath=*) F_HOOKS=1 ;; esac
@@ -584,30 +615,47 @@ _guard_git() {
     esac
     case "$sub" in
         add|stage)
-            # Every word but an option's names a pathspec, -f or not
+            # Every word but an option's names a pathspec, -f or not; then
+            # git status says what `.`, a directory, a glob or -A would take
+            # in. A file the same line creates first is not seen yet.
+            local mode=add all=0 f
+            SPECS=()
             while [ $y -lt $na ]; do
                 v=${A[y]}
                 case "$v" in
-                    --pathspec-from-file|--chmod) y=$((y+2)); continue ;;
+                    --pathspec-from-file) _specs_from "${A[y+1]:-}" "$1" "$gdir"; y=$((y+2)); continue ;;
+                    --pathspec-from-file=*) _specs_from "${v#*=}" "$1" "$gdir" ;;
                     --) ;;
-                    -*) ;;
-                    *) _is_mcpjson "$v" && F_MCPJSON="git $sub $v" ;;
+                    --all|--no-ignore-removal) all=1 ;;
+                    --update) all=1; [ $mode = add ] && mode=update ;;
+                    --force) mode=add-f ;;
+                    --*) ;;
+                    -*) case "$v" in *f*) mode=add-f ;; esac
+                        case "$v" in *A*) all=1 ;; esac
+                        case "$v" in *u*) all=1; [ $mode = add ] && mode=update ;; esac ;;
+                    *) _is_mcpjson "$v" && F_MCPJSON="git $sub $v"; SPECS+=("$v") ;;
                 esac
                 y=$((y+1))
-            done ;;
+            done
+            if [ -z "$F_MCPJSON" ] && { [ ${#SPECS[@]} -gt 0 ] || [ $all = 1 ]; }; then
+                f=$(_mcpjson_specs "$gdir" $mode ${SPECS[@]+"${SPECS[@]}"}) && F_MCPJSON="git $sub would add $f"
+            fi ;;
         commit)
             F_COMMIT=1; F_CGDIR=$gdir
+            SPECS=()
             while [ $y -lt $na ]; do
                 v=${A[y]}
                 case "$v" in
                     --) y=$((y+1))
-                        while [ $y -lt $na ]; do _is_mcpjson "${A[y]}" && F_MCPJSON="git commit ${A[y]}"; y=$((y+1)); done
+                        while [ $y -lt $na ]; do _is_mcpjson "${A[y]}" && F_MCPJSON="git commit ${A[y]}"; SPECS+=("${A[y]}"); y=$((y+1)); done
                         break ;;
+                    --pathspec-from-file) _specs_from "${A[y+1]:-}" "$1" "$gdir"; y=$((y+2)); continue ;;
+                    --pathspec-from-file=*) _specs_from "${v#*=}" "$1" "$gdir" ;;
                     -m|--message|--trailer) msg=$msg$'\n'${A[y+1]:-}; y=$((y+2)); continue ;;
                     --message=*|--trailer=*) msg=$msg$'\n'${v#*=} ;;
                     -F|--file) farg=${A[y+1]:-}; y=$((y+2)); continue ;;
                     --file=*) farg=${v#*=} ;;
-                    -C|-c|-t|--reuse-message|--reedit-message|--author|--date|--cleanup|--template|--fixup|--squash|--pathspec-from-file) y=$((y+2)); continue ;;
+                    -C|-c|-t|--reuse-message|--reedit-message|--author|--date|--cleanup|--template|--fixup|--squash) y=$((y+2)); continue ;;
                     --amend) F_AMEND=1 ;;
                     --all) F_CALL=1 ;;
                     --*) _is_noverify "$v" && F_NV="--no-verify on git commit" ;;
@@ -626,10 +674,14 @@ _guard_git() {
                             esac
                             cl=$rest
                         done ;;
-                    *) _is_mcpjson "$v" && F_MCPJSON="git commit $v" ;;   # a pathspec
+                    *) _is_mcpjson "$v" && F_MCPJSON="git commit $v"; SPECS+=("$v") ;;   # a pathspec
                 esac
                 y=$((y+1))
             done
+            # A pathspec (`.`, a directory) takes the working tree's copy in
+            if [ -z "$F_MCPJSON" ] && [ ${#SPECS[@]} -gt 0 ]; then
+                v=$(_mcpjson_specs "$gdir" commit "${SPECS[@]}") && F_MCPJSON="git commit ${SPECS[*]} takes in $v"
+            fi
             hay=$msg
             [ -n "$farg" ] && hay=$hay$'\n'$(_p_file "$farg" "$1")
             [ "${F_AMEND:-0}" = 1 ] && [ -z "$msg$farg" ] && hay=$hay$'\n'$(git -C "$gdir" log -1 --pretty=%B 2>/dev/null)
@@ -979,7 +1031,7 @@ pre_bash() {
             gh) _guard_gh $k ;;
             glab) _guard_glab $k ;;
             curl|wget|http|https|xh) _guard_http ;;
-            cd) GDIR=${A[1]:-} ;;
+            cd) r=${A[1]:-}; case "$r" in /*|"") GDIR=$r ;; *) GDIR=${GDIR:+$GDIR/}$r ;; esac ;;
         esac
         k=$((k+1))
     done
@@ -1216,15 +1268,16 @@ pre_forge() {
     [ -n "$F_ATTR" ] && _motif_block "${F_ATTR%% *}" "$TOOL BLOCKED — AI reference detected" \
         "Forbidden pattern: ${F_ATTR#* }" \
         "Remove AI attribution (co-authored-by, generated by, 🤖) and, in a commit message, workflow leaks (.claude/ paths, Plan: footers)."
-    # mcp.json, for every caller: a path the tool writes (a deletion is
-    # allowed), else, for a GitKraken add or commit naming no file, what the
+    # mcp.json, for every caller: a path a write tool writes (a deletion, a
+    # read, are allowed), else, for a GitKraken add or commit naming no file, what the
     # repository would take in.
     local MJ="" MDIR="" MALL=0 st f
     eval "$(printf '%s' "$INPUT" | jq -r '.tool_name as $t | .tool_input as $i
         | ($t | test("GitKraken__git_(add|commit)$")) as $gk
-        | [ (if ($t | test("delete_file$")) then empty else ($i.path, $i.file_path) end),
-            ($i.files // [] | .[]? | if type == "string" then . else (.path // .file_path) end),
-            ($i.actions // [] | .[]? | select(.action != "delete") | .file_path) ]
+        | ($t | test("push_files$|create_or_update_file$|create_commit$|GitKraken__git_(add|commit)$")) as $w
+        | [ (if $w then ($i.path, $i.file_path) else empty end),
+            (if $w then ($i.files // [] | .[]? | if type == "string" then . else (.path // .file_path) end) else empty end),
+            (if $w then ($i.actions // [] | .[]? | select(.action != "delete") | .file_path) else empty end) ]
         | map(strings | select(test("(^|/)[.]?mcp[.]json$"; "i"))) as $hit
         | @sh "MJ=\($hit[0] // "") MDIR=\(if $gk and (($i.files // []) | length) == 0 then ($i.directory // ".") else "" end) MALL=\(if $t | test("git_add$") then 1 else 0 end)"' 2>/dev/null)"
     if [ -z "$MJ" ] && [ -n "$MDIR" ]; then

@@ -91,7 +91,31 @@ git -C "$T/repo" config core.excludesFile /dev/null
 forge mcp__GitKraken__git_add '{"directory":"."}';                     expect_mj "GitKraken git_add of every file with an untracked .mcp.json blocked"
 rm -f "$T/repo/.mcp.json"
 forge mcp__GitKraken__git_add '{"directory":"."}';                     expect_rc "GitKraken git_add of every file without one allowed" 0
+forge mcp__github__get_file_contents '{"owner":"o","repo":"r","path":".mcp.json"}'; expect_rc "reading an mcp.json on the forge allowed" 0
+# pathspecs git resolves itself: `.`, -A, a directory, a list in a file
+printf '{}\n' > "$T/repo/.mcp.json"
+bash_cmd 'git add .';                                                  expect_mj "git add . with an untracked .mcp.json blocked"
+bash_cmd 'git add -A && git commit -m "feat: x"';                      expect_mj "git add -A then commit on one line blocked"
+bash_cmd 'git add -u';                                                 expect_rc "git add -u leaves untracked files alone" 0
+printf '.mcp.json\n' > "$T/repo/list.txt"
+bash_cmd 'git add --pathspec-from-file=list.txt';                      expect_mj "git add --pathspec-from-file naming it blocked"
+rm -f "$T/repo/list.txt"
 git -C "$T/repo" config --unset core.excludesFile
+printf '.mcp.json\n' > "$T/repo/.git/info/exclude"
+bash_cmd 'git add .';                                                  expect_rc "git add . skips an ignored .mcp.json" 0
+bash_cmd 'git add -f .';                                               expect_mj "git add -f . takes an ignored .mcp.json in"
+: > "$T/repo/.git/info/exclude"; rm -f "$T/repo/.mcp.json"
+mkdir -p "$T/repo/sub"; printf '{}\n' > "$T/repo/sub/mcp.json"; git -C "$T/repo" add -f sub/mcp.json; git -C "$T/repo" commit -qm "chore: tracked"
+printf '{"a":1}\n' > "$T/repo/sub/mcp.json"
+bash_cmd 'git commit -m "feat: x" -- .';                               expect_mj "git commit -- . with a modified tracked mcp.json blocked"
+bash_cmd 'git commit -m "feat: x" sub';                                expect_mj "git commit <dir> with a modified tracked mcp.json blocked"
+bash_cmd 'git commit -m "feat: x" -- a.txt';                           expect_rc "git commit -- a.txt allowed" 0
+git -C "$T/repo" rm -q --cached sub/mcp.json; git -C "$T/repo" commit -qm "chore: drop"; rm -rf "$T/repo/sub"
+# -C joins onto the cd directory
+mkdir -p "$T/repo/sub/nested"; git -C "$T/repo/sub/nested" init -q -b feat/n
+printf '{}\n' > "$T/repo/sub/nested/.mcp.json"; git -C "$T/repo/sub/nested" add -f .mcp.json
+bash_cmd 'cd sub && git -C nested commit -m "feat: x"';                expect_mj "cd sub && git -C nested commit reads sub/nested's index"
+rm -rf "$T/repo/sub"
 
 echo "== PreToolUse Bash · the input is never rewritten"
 bash_cmd 'git push --force origin feat'

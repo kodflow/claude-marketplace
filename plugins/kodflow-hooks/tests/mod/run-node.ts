@@ -318,6 +318,48 @@ try {
     "GitKraken git_add of every file without one allowed",
     "",
   );
+  check(
+    (await forgeMcpJson("mcp__github__get_file_contents", { owner: "o", repo: "r", path: ".mcp.json" }, base)) === undefined,
+    "reading an mcp.json on the forge allowed",
+    "",
+  );
+  // pathspecs git resolves itself: `.`, -A, a list in a file
+  await g("commit", "-q", "--allow-empty", "-m", "chore: settle");
+  writeFileSync(join(repo, ".mcp.json"), "{}\n");
+  check((await bash("git add .")) === "mcp-json", "git add . with an untracked .mcp.json refused", "");
+  check((await bash("git add -A && git commit -m 'feat: x'")) === "mcp-json", "git add -A then commit on one line refused", "");
+  check((await bash("git add -u")) === "", "git add -u leaves untracked files alone", "");
+  writeFileSync(join(repo, "list.txt"), ".mcp.json\n");
+  check((await bash("git add --pathspec-from-file=list.txt")) === "mcp-json", "git add --pathspec-from-file naming it refused", "");
+  rmSync(join(repo, "list.txt"));
+  await g("config", "--unset", "core.excludesFile");
+  writeFileSync(join(repo, ".git", "info", "exclude"), ".mcp.json\n");
+  check((await bash("git add .")) === "", "git add . skips an ignored .mcp.json", "");
+  check((await bash("git add -f .")) === "mcp-json", "git add -f . takes an ignored .mcp.json in", "");
+  writeFileSync(join(repo, ".git", "info", "exclude"), "");
+  rmSync(join(repo, ".mcp.json"));
+  writeFileSync(join(repo, "sub", "mcp.json"), "{}\n");
+  await g("add", "-f", "sub/mcp.json");
+  await g("commit", "-q", "-m", "chore: tracked");
+  writeFileSync(join(repo, "sub", "mcp.json"), '{"a":1}\n');
+  check((await bash("git commit -m 'feat: x' -- .")) === "mcp-json", "git commit -- . with a modified tracked mcp.json refused", "");
+  check((await bash("git commit -m 'feat: x' sub")) === "mcp-json", "git commit <dir> with a modified tracked mcp.json refused", "");
+  writeFileSync(join(repo, "a.txt"), "x\n");
+  await g("add", "a.txt");
+  await g("commit", "-q", "-m", "chore: a");
+  check((await bash("git commit -m 'feat: x' -- a.txt")) === "", "git commit -- a.txt allowed", "");
+  await g("checkout", "-q", "sub/mcp.json");
+  // -C joins onto the cd directory
+  const nested = join(repo, "sub", "nested");
+  mkdirSync(nested);
+  await run("git", ["-C", nested, "init", "-q", "-b", "feat/n"]);
+  writeFileSync(join(nested, ".mcp.json"), "{}\n");
+  await run("git", ["-C", nested, "add", "-f", ".mcp.json"]);
+  check(
+    (await bash("cd sub && git -C nested commit -m 'feat: x'")) === "mcp-json",
+    "cd sub && git -C nested commit reads sub/nested's index",
+    "",
+  );
 } finally {
   rmSync(lab, { recursive: true, force: true });
 }

@@ -89,6 +89,55 @@ export function mcpJsonRefusal(what: string): Refusal {
   };
 }
 
+type SpecMode = "add" | "add-f" | "update" | "commit";
+
+/**
+ * The first mcp.json a set of pathspecs would take in, a deletion left out.
+ * git status resolves them as git add and git commit do ("XY path", the old
+ * path after a rename; Y is the working tree). add-f lists ignored files too.
+ */
+async function mcpJsonSpecs(
+  ctx: Pick<GuardCtx, "git">,
+  dir: string,
+  mode: SpecMode,
+  specs: string[],
+): Promise<string | undefined> {
+  const opt =
+    mode === "update" || mode === "commit"
+      ? ["--untracked-files=no"]
+      : mode === "add-f"
+        ? ["--untracked-files=all", "--ignored"]
+        : ["--untracked-files=all"];
+  const w = (
+    (await ctx.git(dir, ["status", "--porcelain", "-z", ...opt, "--", ...specs])) ?? ""
+  ).split("\0");
+  for (let i = 0; i < w.length; i++) {
+    const e = w[i]!;
+    if (e.length < 4) continue;
+    const x = e[0]!;
+    const y = e[1]!;
+    const f = e.slice(3);
+    if (x === "R" || x === "C") i++;
+    if (!isMcpJson(f) || y === "D") continue;
+    // staged already: only a commit takes it
+    if (y === " " && (mode !== "commit" || x === "D" || x === " ")) continue;
+    return f;
+  }
+  return undefined;
+}
+
+/** A --pathspec-from-file's pathspecs, one a line. */
+async function specsFrom(
+  ctx: GuardCtx,
+  p: Parsed,
+  k: number,
+  file: string,
+  gdir: string,
+): Promise<string[]> {
+  const f = file === "-" || file.startsWith("/") ? file : `${gdir}/${file}`;
+  return (await fileText(p, k, f, ctx.read)).split("\n").filter(Boolean);
+}
+
 /** A path a skills directory must never receive (plugin machinery). */
 export function modPath(
   path: string,
@@ -209,7 +258,9 @@ async function guardGit(
   while (y < A.length) {
     const v = A[y]!;
     if (v === "-C") {
-      gdir = A[y + 1] ?? "";
+      // joined onto the cd directory, as git does
+      const c = A[y + 1] ?? "";
+      gdir = c.startsWith("/") || !gdir ? c : `${gdir}/${c}`;
       y += 2;
       continue;
     }
@@ -267,28 +318,69 @@ async function guardGit(
     st.f.noVerify = `git -c core.hooksPath on git ${sub}`;
 
   if (sub === "add" || sub === "stage") {
-    // Every word but an option's names a pathspec, -f or not
+    // Every word but an option's names a pathspec, -f or not; then git
+    // status says what `.`, a directory, a glob or -A would take in
+    let mode: SpecMode = "add";
+    let all = false;
+    const specs: string[] = [];
     while (y < A.length) {
       const v = A[y]!;
-      if (v === "--pathspec-from-file" || v === "--chmod") {
+      if (v === "--pathspec-from-file") {
+        specs.push(...(await specsFrom(ctx, p, k, A[y + 1] ?? "", gdir)));
         y += 2;
         continue;
       }
-      if (!v.startsWith("-") && isMcpJson(v)) st.f.mcpJson = `git ${sub} ${v}`;
+      if (v.startsWith("--pathspec-from-file="))
+        specs.push(...(await specsFrom(ctx, p, k, v.slice(21), gdir)));
+      else if (v === "--all" || v === "--no-ignore-removal") all = true;
+      else if (v === "--update") {
+        all = true;
+        if (mode === "add") mode = "update";
+      } else if (v === "--force") mode = "add-f";
+      else if (v.startsWith("--")) {
+        /* another option */
+      } else if (v.startsWith("-")) {
+        if (v.includes("f")) mode = "add-f";
+        if (v.includes("A")) all = true;
+        if (v.includes("u")) {
+          all = true;
+          if (mode === "add") mode = "update";
+        }
+      } else {
+        if (isMcpJson(v)) st.f.mcpJson = `git ${sub} ${v}`;
+        specs.push(v);
+      }
       y++;
+    }
+    if (!st.f.mcpJson && (specs.length || all)) {
+      const f = await mcpJsonSpecs(ctx, gdir, mode, specs);
+      if (f) st.f.mcpJson = `git ${sub} would add ${f}`;
     }
   } else if (sub === "commit") {
     st.f.commit = true;
     st.cgdir = gdir;
+    const specs: string[] = [];
     let msg = "";
     let farg = "";
     let given = false;
     while (y < A.length) {
       const v = A[y]!;
       if (v === "--") {
-        for (const w of A.slice(y + 1))
+        for (const w of A.slice(y + 1)) {
           if (isMcpJson(w)) st.f.mcpJson = `git commit ${w}`;
+          specs.push(w);
+        }
         break;
+      }
+      if (v === "--pathspec-from-file") {
+        specs.push(...(await specsFrom(ctx, p, k, A[y + 1] ?? "", gdir)));
+        y += 2;
+        continue;
+      }
+      if (v.startsWith("--pathspec-from-file=")) {
+        specs.push(...(await specsFrom(ctx, p, k, v.slice(21), gdir)));
+        y++;
+        continue;
       }
       if (v === "-m" || v === "--message" || v === "--trailer") {
         msg += `\n${A[y + 1] ?? ""}`;
@@ -317,7 +409,6 @@ async function guardGit(
           "--template",
           "--fixup",
           "--squash",
-          "--pathspec-from-file",
         ].includes(v)
       ) {
         y += 2;
@@ -347,8 +438,17 @@ async function guardGit(
           }
           cl = r;
         }
-      } else if (isMcpJson(v)) st.f.mcpJson = `git commit ${v}`; // a pathspec
+      } else {
+        // a pathspec
+        if (isMcpJson(v)) st.f.mcpJson = `git commit ${v}`;
+        specs.push(v);
+      }
       y++;
+    }
+    // A pathspec (`.`, a directory) takes the working tree's copy in
+    if (!st.f.mcpJson && specs.length) {
+      const f = await mcpJsonSpecs(ctx, gdir, "commit", specs);
+      if (f) st.f.mcpJson = `git commit ${specs.join(" ")} takes in ${f}`;
     }
     let hay = msg;
     if (farg) hay += `\n${await fileText(p, k, farg, ctx.read)}`;
@@ -644,7 +744,10 @@ export async function inspect(
     else if (name === "glab") guardGlab(st, A);
     else if (["curl", "wget", "http", "https", "xh"].includes(name))
       guardHttp(st, name, A);
-    else if (name === "cd") st.gdir = A[1] ?? "";
+    else if (name === "cd") {
+      const d = A[1] ?? "";
+      st.gdir = d.startsWith("/") || !d || !st.gdir ? d : `${st.gdir}/${d}`;
+    }
   }
   if (st.f.commit && !st.f.mcpJson) {
     const dir = st.cgdir || ctx.projectDir;
@@ -664,8 +767,8 @@ export async function inspect(
 }
 
 /**
- * A forge tool that writes an mcp.json: a path it names (a deletion is
- * allowed), else, for a GitKraken add or commit naming no file, what the
+ * A forge tool that writes an mcp.json: a path a write tool names (a read
+ * and a deletion are allowed), else, for a GitKraken add or commit naming no file, what the
  * repository would take in. pre_forge of on-tool.sh, doubled.
  */
 export async function forgeMcpJson(
@@ -673,9 +776,14 @@ export async function forgeMcpJson(
   input: Record<string, any>,
   ctx: Pick<GuardCtx, "projectDir" | "git">,
 ): Promise<Refusal | undefined> {
-  if (!/^mcp__(github|gitlab|GitKraken)__/.test(tool)) return undefined;
-  const paths: unknown[] = [];
-  if (!/delete_file$/.test(tool)) paths.push(input.path, input.file_path);
+  // A read or a deletion of one stays allowed
+  if (
+    !/^mcp__(github|gitlab)__.*(push_files|create_or_update_file|create_commit)$|^mcp__GitKraken__git_(add|commit)$/.test(
+      tool,
+    )
+  )
+    return undefined;
+  const paths: unknown[] = [input.path, input.file_path];
   for (const f of Array.isArray(input.files) ? input.files : [])
     paths.push(typeof f === "string" ? f : (f?.path ?? f?.file_path));
   for (const a of Array.isArray(input.actions) ? input.actions : [])
