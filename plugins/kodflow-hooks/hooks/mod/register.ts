@@ -14,9 +14,14 @@
 // (blast.ts), the call, then its output compressed (filter.ts). Every tool's
 // result then has its secrets masked (veil.ts) before the model reads it.
 //
+// Gated models (fable.ts): an agent.spawn that would run on one passes only
+// with the session's grant in $.store, asked once while the user is at the
+// prompt; a /model the user types grants it (classic.PreModelSwitch). The
+// hook never writes the model it judged.
+//
 // Every hook fails open: a throw is caught and the event goes on, except a
-// task tool's own call, which answers the failure as text, and a merge,
-// which a failure refuses. KODFLOW_MOD=off turns the whole module into
+// task tool's own call, which answers the failure as text, a merge, which a
+// failure refuses, and a spawn whose raw input names a gated model. KODFLOW_MOD=off turns the whole module into
 // pass-through, with no marker written.
 import type { Register } from "claude-code";
 import {
@@ -42,6 +47,7 @@ import {
   agentsFile,
   beatFile,
   beatText,
+  composerFile,
   configDir,
   mergeTokenFile,
   safe,
@@ -77,6 +83,17 @@ import { blastRadius } from "./blast.ts";
 import { filterResult, versionOk } from "./filter.ts";
 import { veilResult } from "./veil.ts";
 import { mayMerge, mergeFailure, runBash } from "./pipeline.ts";
+import {
+  anyGated,
+  gateMode,
+  grantKey,
+  judgeSpawn,
+  judgeSwitch,
+  parseGated,
+  refusal as fableRefusal,
+  definitionPaths,
+  type SpawnPort,
+} from "./fable.ts";
 
 // Set once every tool registered; the beat is a promise that they did.
 let toolsReady = false;
@@ -423,6 +440,53 @@ async function blast($: any, line: string): Promise<{ deny: string } | undefined
   };
 }
 
+// The gated list as this copy of the plugin ships it (hooks/gated-models.txt)
+const gatedText = ($: any): Promise<string | undefined> =>
+  $.fs.read(`${$.plugin.root}/hooks/gated-models.txt`).catch(() => undefined);
+
+// Who gave the session its grant, and when; the key is the session's.
+async function grantSession($: any, session: string, by: string): Promise<void> {
+  await $.store.set(grantKey(session), { at: Math.floor(Date.now() / 1000), by });
+}
+
+// What agent.spawn's judge reaches; every raw value it reads is kept in `raw`
+// so that a throw can still refuse a spawn naming a gated model.
+async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort> {
+  const session = await $.session.id();
+  return {
+    gated: () => gatedText($),
+    mode: async () => gateMode(await $.env.get("KODFLOW_FABLE")),
+    definition: async (type) => {
+      const cfg = await config($);
+      if (!cfg) return undefined;
+      const installed = await $.fs
+        .read(`${cfg}/plugins/installed_plugins.json`)
+        .catch(() => undefined);
+      for (const path of definitionPaths(type, {
+        project: await projectDir($),
+        config: cfg,
+        installed,
+      })) {
+        const text = await $.fs.read(path).catch(() => undefined);
+        if (text !== undefined) {
+          raw.push(text.slice(0, 4000));
+          return text;
+        }
+      }
+      return undefined;
+    },
+    envModel: async () => {
+      const v = await $.env.get("CLAUDE_CODE_SUBAGENT_MODEL");
+      raw.push(v);
+      return v || undefined;
+    },
+    granted: async () => !!(await $.store.get(grantKey(session))),
+    grant: () => grantSession($, session, "asked at a spawn"),
+    present,
+    ask: (question, options) => $.ui.ask(question, { options, header: "Gated model" }),
+  };
+}
+
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
     if (!(await off($))) {
@@ -454,8 +518,68 @@ export const register: Register = (on) => {
     if (!(await off($))) {
       await ensureTools($);
       await beat($);
+      if ((e.origin as { kind?: unknown } | undefined)?.kind === "composer") {
+        const cfg = await config($);
+        if (cfg)
+          await $.fs
+            .write(composerFile(sessionDir(cfg, await $.session.id())), beatText(Date.now()))
+            .catch(() => undefined);
+      }
     }
     return next(e);
+  }).catch(($, e, next) => next(e));
+
+  // The gated-model rule at the spawn: pass or refuse, never a model written
+  on("agent.spawn", async ($, e, next) => {
+    if (await off($)) return next(e);
+    const raw: unknown[] = [e.model, e.parentModel];
+    const at = { tool: "Agent", tool_use_id: e.tool_use_id, agentId: e.parentAgentId };
+    let verdict;
+    try {
+      verdict = await judgeSpawn(e, await spawnPort($, raw));
+    } catch (err) {
+      const tokens = parseGated(await gatedText($));
+      if (anyGated(raw, tokens)) {
+        journal($, at, "fable", "error-refused", err);
+        return { deny: fableRefusal(String(e.model ?? e.parentModel ?? "a gated model"), "the check failed") };
+      }
+      journal($, at, "fable", "error-passed", err);
+      await $.ui
+        .toast("kodflow-hooks: the gated-model check failed on a spawn naming no gated model; it went on", {
+          timeoutMs: 8000,
+        })
+        .catch(() => undefined);
+      return next(e);
+    }
+    journal($, at, "fable", `${verdict.kind}: ${verdict.why}`);
+    if (verdict.kind === "refuse") return { deny: fableRefusal(verdict.model, verdict.why) };
+    return next(e);
+  }).catch(($, e, next) => next(e));
+
+  // A /model the user types, or the picker, is the consent (D5); a switch from
+  // the SDK asks like a spawn, and is refused with nobody at the prompt
+  on("classic.PreModelSwitch", async ($, e, next) => {
+    const r = await next(e);
+    if (await off($)) return r;
+    const v = judgeSwitch(e, parseGated(await gatedText($)), gateMode(await $.env.get("KODFLOW_FABLE")));
+    const at = { tool: "PreModelSwitch", tool_use_id: e.prompt_id };
+    if (v.kind === "grant") await grantSession($, e.session_id, v.why);
+    let deny: string | undefined;
+    if (v.kind === "ask" && !(await $.store.get(grantKey(e.session_id)))) {
+      let answer = "nobody at the prompt";
+      if (present()) {
+        answer = await $.ui
+          .ask(`Switch this session to ${e.to_model}, a gated model (${v.why})?`, {
+            options: ["Switch", "Stay"],
+            header: "Gated model",
+          })
+          .catch(() => "dismissed");
+      }
+      if (answer === "Switch") await grantSession($, e.session_id, `asked at a ${v.why}`);
+      else deny = fableRefusal(String(e.to_model), `${v.why}; ${answer}`);
+    }
+    journal($, at, "fable", deny ? `refuse: ${v.why}` : `${v.kind}: ${v.why}`);
+    return deny ? { ...r, permissionDecision: "deny", permissionDecisionReason: deny } : r;
   }).catch(($, e, next) => next(e));
 
   on("tool.call", async ($, e, next) => {
