@@ -71,7 +71,9 @@ if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_
             fp_full=0
             case "$fp_tool" in mcp__github__*|mcp__gitlab__*|mcp__GitKraken__*)
                 fp_re='"(message|commit_message|commit_title|squash_commit_message|merge_commit_message|title|body|description|merge_when_pipeline_succeeds|auto_merge|branch)":'
-                if [[ $INPUT =~ $fp_re ]]; then fp_full=1; else case "$fp_tool" in *merge_pull_request|*merge_merge_request) fp_full=1 ;; esac; fi ;;
+                if [[ $INPUT =~ $fp_re ]]; then fp_full=1; else case "$fp_tool" in *merge_pull_request|*merge_merge_request|*GitKraken__git_add) fp_full=1 ;; esac; fi
+                # A file named mcp.json is refused for every caller (pre_forge)
+                case "$INPUT" in *[Mm][Cc][Pp].[Jj][Ss][Oo][Nn]*) fp_full=1 ;; esac ;;
             esac
             if [ $fp_full = 0 ]; then
                 [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]] && exit 0
@@ -544,13 +546,51 @@ _defaults() {
     h=$(git -C "$1" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null) && DEFAULTS="$DEFAULTS${h#origin/} "
 }
 
+# $1 a path → 0 when its basename is mcp.json or .mcp.json, any case. Such a
+# file may carry tokens: it is never added nor committed, only deleted.
+_is_mcpjson() {
+    case "${1##*/}" in [Mm][Cc][Pp].[Jj][Ss][Oo][Nn]|.[Mm][Cc][Pp].[Jj][Ss][Oo][Nn]) return 0 ;; esac
+    return 1
+}
+
+# $1 the repository, $2 add, add-f, update or commit, then the pathspecs →
+# prints the first mcp.json they would take in, a deletion left out. git
+# status resolves them as git add and git commit do ("XY path", the old path
+# after a rename; Y is the working tree). add-f lists ignored files too.
+_mcpjson_specs() {
+    local dir=$1 mode=$2 e f x w
+    shift 2
+    local -a opt=(--untracked-files=all)
+    case "$mode" in add-f) opt+=(--ignored) ;; update|commit) opt=(--untracked-files=no) ;; esac
+    while IFS= read -r -d '' e; do
+        x=${e:0:1}; w=${e:1:1}; f=${e:3}
+        case "$x" in R|C) IFS= read -r -d '' _ ;; esac
+        _is_mcpjson "$f" || continue
+        case "$w" in
+            D) continue ;;
+            " ") [ "$mode" = commit ] || continue     # staged already: only a commit takes it
+                 case "$x" in D|" ") continue ;; esac ;;
+        esac
+        printf '%s' "$f"; return 0
+    done < <(git -C "$dir" status --porcelain -z "${opt[@]}" -- "$@" 2>/dev/null)
+    return 1
+}
+
+# $1 the --pathspec-from-file argument, $2 the command index, $3 the
+# repository → one pathspec a line, appended to SPECS.
+_specs_from() {
+    local f=$1 l
+    case "$f" in -|/*) ;; *) f=$3/$f ;; esac
+    while IFS= read -r l; do [ -n "$l" ] && SPECS+=("$l"); done <<< "$(_p_file "$f" "$2")"
+}
+
 # $1 command index, A/NAME set. git: its globals, then the subcommand.
 _guard_git() {
     local y=1 na=${#A[@]} gdir=$GDIR v lc sub msg="" farg="" hay
     while [ $y -lt $na ]; do
         v=${A[y]}
         case "$v" in
-            -C) gdir=${A[y+1]:-}; y=$((y+2)); continue ;;
+            -C) v=${A[y+1]:-}; case "$v" in /*) gdir=$v ;; *) gdir=${gdir:+$gdir/}$v ;; esac; y=$((y+2)); continue ;;
             -c|--config-env)
                 lc=$(printf '%s' "${A[y+1]:-}" | tr '[:upper:]' '[:lower:]')
                 case "$lc" in core.hookspath=*) F_HOOKS=1 ;; esac
@@ -574,18 +614,50 @@ _guard_git() {
         commit|push|merge|am|rebase|cherry-pick|revert|pull) [ "$F_HOOKS" = 1 ] && F_NV="git -c core.hooksPath on git $sub" ;;
     esac
     case "$sub" in
-        commit)
-            F_COMMIT=1
+        add|stage)
+            # Every word but an option's names a pathspec, -f or not; then
+            # git status says what `.`, a directory, a glob or -A would take
+            # in. A file the same line creates first is not seen yet.
+            local mode=add all=0 f
+            SPECS=()
             while [ $y -lt $na ]; do
                 v=${A[y]}
                 case "$v" in
-                    --) break ;;
+                    --pathspec-from-file) _specs_from "${A[y+1]:-}" "$1" "$gdir"; y=$((y+2)); continue ;;
+                    --pathspec-from-file=*) _specs_from "${v#*=}" "$1" "$gdir" ;;
+                    --) ;;
+                    --all|--no-ignore-removal) all=1 ;;
+                    --update) all=1; [ $mode = add ] && mode=update ;;
+                    --force) mode=add-f ;;
+                    --*) ;;
+                    -*) case "$v" in *f*) mode=add-f ;; esac
+                        case "$v" in *A*) all=1 ;; esac
+                        case "$v" in *u*) all=1; [ $mode = add ] && mode=update ;; esac ;;
+                    *) _is_mcpjson "$v" && F_MCPJSON="git $sub $v"; SPECS+=("$v") ;;
+                esac
+                y=$((y+1))
+            done
+            if [ -z "$F_MCPJSON" ] && { [ ${#SPECS[@]} -gt 0 ] || [ $all = 1 ]; }; then
+                f=$(_mcpjson_specs "$gdir" $mode ${SPECS[@]+"${SPECS[@]}"}) && F_MCPJSON="git $sub would add $f"
+            fi ;;
+        commit)
+            F_COMMIT=1; F_CGDIR=$gdir
+            SPECS=()
+            while [ $y -lt $na ]; do
+                v=${A[y]}
+                case "$v" in
+                    --) y=$((y+1))
+                        while [ $y -lt $na ]; do _is_mcpjson "${A[y]}" && F_MCPJSON="git commit ${A[y]}"; SPECS+=("${A[y]}"); y=$((y+1)); done
+                        break ;;
+                    --pathspec-from-file) _specs_from "${A[y+1]:-}" "$1" "$gdir"; y=$((y+2)); continue ;;
+                    --pathspec-from-file=*) _specs_from "${v#*=}" "$1" "$gdir" ;;
                     -m|--message|--trailer) msg=$msg$'\n'${A[y+1]:-}; y=$((y+2)); continue ;;
                     --message=*|--trailer=*) msg=$msg$'\n'${v#*=} ;;
                     -F|--file) farg=${A[y+1]:-}; y=$((y+2)); continue ;;
                     --file=*) farg=${v#*=} ;;
-                    -C|-c|-t|--reuse-message|--reedit-message|--author|--date|--cleanup|--template|--fixup|--squash|--pathspec-from-file) y=$((y+2)); continue ;;
+                    -C|-c|-t|--reuse-message|--reedit-message|--author|--date|--cleanup|--template|--fixup|--squash) y=$((y+2)); continue ;;
                     --amend) F_AMEND=1 ;;
+                    --all) F_CALL=1 ;;
                     --*) _is_noverify "$v" && F_NV="--no-verify on git commit" ;;
                     -*)   # a short cluster: n is --no-verify, m F C c t take the rest or the next word
                         local cl=${v#-} ch rest
@@ -593,6 +665,7 @@ _guard_git() {
                             ch=${cl:0:1}; rest=${cl:1}
                             case "$ch" in
                                 n) F_NV="-n (--no-verify) on git commit" ;;
+                                a) F_CALL=1 ;;
                                 u|S) break ;;   # -uno, -S<key>: an attached optional argument
                                 m|F|C|c|t)
                                     if [ -z "$rest" ]; then rest=${A[y+1]:-}; y=$((y+1)); fi
@@ -601,9 +674,14 @@ _guard_git() {
                             esac
                             cl=$rest
                         done ;;
+                    *) _is_mcpjson "$v" && F_MCPJSON="git commit $v"; SPECS+=("$v") ;;   # a pathspec
                 esac
                 y=$((y+1))
             done
+            # A pathspec (`.`, a directory) takes the working tree's copy in
+            if [ -z "$F_MCPJSON" ] && [ ${#SPECS[@]} -gt 0 ]; then
+                v=$(_mcpjson_specs "$gdir" commit "${SPECS[@]}") && F_MCPJSON="git commit ${SPECS[*]} takes in $v"
+            fi
             hay=$msg
             [ -n "$farg" ] && hay=$hay$'\n'$(_p_file "$farg" "$1")
             [ "${F_AMEND:-0}" = 1 ] && [ -z "$msg$farg" ] && hay=$hay$'\n'$(git -C "$gdir" log -1 --pretty=%B 2>/dev/null)
@@ -806,6 +884,13 @@ _motif_block() {   # $1 motif, $2 title, rest = lines. The motif line is what te
     _block "$t" "$@" "[motif:$m]"
 }
 
+_mcpjson_block() {   # $1 what adds or commits the file
+    _motif_block mcp-json "BLOCKED — an mcp.json file is never committed ($1)" \
+        "mcp.json and .mcp.json may carry tokens: neither is added nor committed, at any path." \
+        "Deleting one stays allowed: git rm --cached <path>, then commit the deletion." \
+        "A plugin declares its MCP servers in plugin.json (mcpServers), not in a .mcp.json."
+}
+
 # ============================================================================
 # Delegation gate · code in a git repository is produced by a subagent
 # ============================================================================
@@ -920,7 +1005,7 @@ _merge_main() {
 pre_bash() {
     [ -n "$CMD" ] || exit 0
     F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
-    F_MODW=""; F_PLUG=""; GDIR=""; F_MREPO=""
+    F_MODW=""; F_PLUG=""; GDIR=""; F_MREPO=""; F_MCPJSON=""; F_CALL=0; F_CGDIR=""
 
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
     # $'…' string may spell one in escapes, so it is always read. tr, not
@@ -946,7 +1031,7 @@ pre_bash() {
             gh) _guard_gh $k ;;
             glab) _guard_glab $k ;;
             curl|wget|http|https|xh) _guard_http ;;
-            cd) GDIR=${A[1]:-} ;;
+            cd) r=${A[1]:-}; case "$r" in /*|"") GDIR=$r ;; *) GDIR=${GDIR:+$GDIR/}$r ;; esac ;;
         esac
         k=$((k+1))
     done
@@ -973,25 +1058,39 @@ pre_bash() {
             "The repo's commit-msg hook and the post-commit gate block the same thing."
     fi
 
-    # --- BLOCK 3: secrets in the staged blobs (commit only) -----------------
-    # Reads the index, not the working tree. Hook and test sources are
-    # skipped: they carry detection patterns that match themselves. The
-    # alternation is assembled so this file does not itself read as a
-    # credential to a line scanner.
+    # --- BLOCK 3: mcp.json added or changed, secrets in the staged blobs ----
+    # One read of the index serves both. It is the index, not the working
+    # tree, but for git commit -a, which stages the tracked changes first.
+    # A deletion is allowed: it is how a repository is cleaned. Hook and test
+    # sources are skipped by the secret scan: they carry detection patterns
+    # that match themselves. The alternation is assembled so this file does
+    # not itself read as a credential to a line scanner.
+    local hits=""
     if [ "$F_COMMIT" = 1 ]; then
-        local f content kw tok oth pat hits=""
+        local f st content kw tok oth pat cg=${F_CGDIR:-$PROJECT_DIR}
         kw="pass""word|api[_-]?key|secret""_key"
         tok="gh""p_[a-zA-Z0-9]{36}|gh""o_[a-zA-Z0-9]{36}|github""_pat_[a-zA-Z0-9_]+"
         oth="aws[_-]?access[_-]?key|BEGIN RSA PRIV""ATE KEY|BEGIN OPENSSH PRIV""ATE KEY|sk""-[a-zA-Z0-9]{48}|AK""IA[0-9A-Z]{16}"
         pat="(${kw})"'\s*=\s*["\047][^"\047]+'"|${tok}|${oth}"
-        while IFS= read -r -d '' f; do
+        # status, then the path; a rename or a copy names the old path first
+        while IFS= read -r -d '' st && IFS= read -r -d '' f; do
+            case "$st" in R*|C*) IFS= read -r -d '' f || break ;; esac
+            case "$st" in D*) continue ;; esac
+            [ -z "$F_MCPJSON" ] && _is_mcpjson "$f" && F_MCPJSON="$f is staged"
             case "$f" in */hooks/scripts/*|*/.claude/scripts/*|*/.claude/agents/*|*/.githooks/*|*/tests/*|*/fixtures/*|*.bats|*.tpl) continue ;; esac
-            content=$(git -C "$PROJECT_DIR" show ":$f" 2>/dev/null) || continue
+            content=$(git -C "$cg" show ":$f" 2>/dev/null) || continue
             printf '%s' "$content" | grep -qI . || continue      # binary
             printf '%s' "$content" | grep -iEq "$pat" && hits="$hits"$'\n'"  - $f"
-        done < <(git -C "$PROJECT_DIR" diff --cached --name-only -z 2>/dev/null)
-        [ -n "$hits" ] && _motif_block secrets "COMMIT BLOCKED — secrets detected in staged files" "Remove them before committing:$hits"
+        done < <(git -C "$cg" diff --cached --name-status -z 2>/dev/null)
+        if [ "$F_CALL" = 1 ] && [ -z "$F_MCPJSON" ]; then
+            while IFS= read -r -d '' st && IFS= read -r -d '' f; do
+                case "$st" in D*) continue ;; esac
+                _is_mcpjson "$f" && { F_MCPJSON="$f is modified and git commit -a stages it"; break; }
+            done < <(git -C "$cg" diff --name-status -z 2>/dev/null)
+        fi
     fi
+    [ -n "$F_MCPJSON" ] && _mcpjson_block "$F_MCPJSON"
+    [ -n "$hits" ] && _motif_block secrets "COMMIT BLOCKED — secrets detected in staged files" "Remove them before committing:$hits"
 
     # --- BLOCK 3b: plugin machinery under skills, plugins from elsewhere ----
     # cp, tee, sed -i and git clone into a skills directory are not read
@@ -1169,6 +1268,37 @@ pre_forge() {
     [ -n "$F_ATTR" ] && _motif_block "${F_ATTR%% *}" "$TOOL BLOCKED — AI reference detected" \
         "Forbidden pattern: ${F_ATTR#* }" \
         "Remove AI attribution (co-authored-by, generated by, 🤖) and, in a commit message, workflow leaks (.claude/ paths, Plan: footers)."
+    # mcp.json, for every caller: a path a write tool writes (a deletion, a
+    # read, are allowed), else, for a GitKraken add or commit naming no file, what the
+    # repository would take in.
+    local MJ="" MDIR="" MALL=0 st f
+    eval "$(printf '%s' "$INPUT" | jq -r '.tool_name as $t | .tool_input as $i
+        | ($t | test("GitKraken__git_(add|commit)$")) as $gk
+        | ($t | test("push_files$|create_or_update_file$|create_commit$|GitKraken__git_(add|commit)$")) as $w
+        | [ (if $w then ($i.path, $i.file_path) else empty end),
+            (if $w then ($i.files // [] | .[]? | if type == "string" then . else (.path // .file_path) end) else empty end),
+            (if $w then ($i.actions // [] | .[]? | select(.action != "delete") | .file_path) else empty end) ]
+        | map(strings | select(test("(^|/)[.]?mcp[.]json$"; "i"))) as $hit
+        | @sh "MJ=\($hit[0] // "") MDIR=\(if $gk and (($i.files // []) | length) == 0 then ($i.directory // ".") else "" end) MALL=\(if $t | test("git_add$") then 1 else 0 end)"' 2>/dev/null)"
+    if [ -z "$MJ" ] && [ -n "$MDIR" ]; then
+        case "$MDIR" in /*) ;; *) MDIR=$PROJECT_DIR/$MDIR ;; esac
+        if [ "$MALL" = 1 ]; then
+            # "XY path", the old path after a rename; Y is the working tree
+            while IFS= read -r -d '' st; do
+                f=${st:3}
+                case "$st" in R*|C*) IFS= read -r -d '' _ ;; esac
+                case "${st:1:1}" in " "|D) continue ;; esac
+                _is_mcpjson "$f" && { MJ="$f, added with every file"; break; }
+            done < <(git -C "$MDIR" status --porcelain -z --untracked-files=all 2>/dev/null)
+        else
+            while IFS= read -r -d '' st && IFS= read -r -d '' f; do
+                case "$st" in R*|C*) IFS= read -r -d '' f || break ;; esac
+                case "$st" in D*) continue ;; esac
+                _is_mcpjson "$f" && { MJ="$f is staged"; break; }
+            done < <(git -C "$MDIR" diff --cached --name-status -z 2>/dev/null)
+        fi
+    fi
+    [ -n "$MJ" ] && _mcpjson_block "$TOOL: $MJ"
     if [ -n "$AID" ]; then
         [ "$FM" = 1 ] && _motif_block merge "$TOOL BLOCKED — a subagent does not merge" \
             "Merging is the main thread's decision, after the user's explicit OK." "Report the PR and its CI state; stop there."

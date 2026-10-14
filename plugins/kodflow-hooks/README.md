@@ -50,7 +50,7 @@ with its own failure rule. No policy ever answers `allow`, and none answers
 | # | Policy | What it does | A failure |
 |---|--------|--------------|-----------|
 | 1 | merge gate (`merge.ts`) | below | refuses |
-| 2 | guards (`guards.ts`) | the shell's Bash guards doubled, refusal only: same reader (`shell.ts`, a port of on-tool.sh's), same order of blocks, same motifs; the bash-guard corpus is replayed against both. The staged-secret scan stays the shell's alone | is logged, the call goes on |
+| 2 | guards (`guards.ts`) | the shell's Bash guards doubled, refusal only: same reader (`shell.ts`, a port of on-tool.sh's), same order of blocks, same motifs; the bash-guard corpus is replayed against both. The staged-secret scan stays the shell's alone; the mcp.json refusal is doubled (the index read by name only), and the generic `tool.call` hook holds the forge tools to it | is logged, the call goes on |
 | 3 | blast radius (`blast.ts`) | `rm` recursive and forced, `git reset --hard`, a forced push: `$.ui.ask` while the user is at the prompt; nobody there, the call goes on | is logged, the call goes on |
 | 4 | the call | the shell's `PreToolUse` runs beneath, as ever | — |
 | 5 | output filter (`filter.ts`, L3) | a line that is exactly one `git status`, `git log`, `git diff`, `ls -l`, `find` or `grep -rn` gets its stdout shortened (hints, index lines, columns, repeated prefixes); never a read whose bytes count (`cat`, `head`, `tail`, `sed`, `diff`, `git show`, `git cat-file`, …), never a failed, interrupted, persisted, image, background or structured result, only when `stdout` is a string and the engine version is inside `FILTER_VERSIONS` (CI checks the pinned one is). Every other key of the result is kept | returns the result untouched |
@@ -251,9 +251,33 @@ unless the plugin is `name@kodflow` or the marketplace is
 `kodflow/claude-marketplace`. `cp`, `tee`, `sed -i` and `git clone` into a
 skills directory are not read (known gaps).
 
+No file named `mcp.json` or `.mcp.json` (any case, at any path) is ever
+committed: such a file may carry tokens, and a GitHub token once lived in
+clear in the user's global `mcp.json`. For every caller, subagents
+included, the shell refuses `git add` or `git stage` naming one (`-f` or
+not) or whose pathspecs would take one in (`.`, a directory, a glob, `-A`,
+`--pathspec-from-file`, ignored files under `-f`: `git status` resolves
+them), a `git commit` whose pathspecs name or take in one, a `git commit`
+whose index adds or changes one (`git diff --cached --name-status`, the
+read the secret scan already makes, in the repository the commit runs in,
+`git -C` joined onto a preceding `cd`), and a `git commit -a` when a
+tracked one is modified in the working tree. A file the same line creates
+before adding it is not there yet when the hook runs (a `known_gap` row);
+the commit that follows a separate add is refused. The forge write tools
+are held to the same rule: a path that `push_files`,
+`create_or_update_file`, a GitLab commit action or GitKraken's
+`git_add`/`git_commit` names, and, for GitKraken naming no file, what the
+repository would take in. Reading one on the forge passes. A deletion stays allowed, so a repository that
+still tracks one can be cleaned: `git rm --cached <path>`, then commit, or
+the forge's `delete_file`. Names that merely contain it (`mymcp.json`,
+`mcp.json.tmpl`) pass. The mod doubles the refusal, refusal only and
+failing open. A plugin that needs an MCP server declares it in the
+`mcpServers` field of its `plugin.json`, never in a `.mcp.json`; no plugin
+of this marketplace tracks one today.
+
 Every refusal ends with a `[motif:<id>]` line (`root`, `no-verify`,
-`attribution`, `leak`, `secrets`, `force`, `merge`, `push-default`,
-`mod-write`, `plugin-source`): tests
+`attribution`, `leak`, `mcp-json`, `secrets`, `force`, `merge`,
+`push-default`, `mod-write`, `plugin-source`): tests
 compare it, never the wording. The corpus is
 `tests/fixtures/bash-guard.jsonl`, one case per line (`cmd` or `tool` and
 `input`, `rc`, `motif`, `agent`, `root`, `known_gap`), played by

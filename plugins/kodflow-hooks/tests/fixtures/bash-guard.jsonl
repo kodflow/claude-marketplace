@@ -248,3 +248,24 @@
 {"family": "merge", "tool": "mcp__gitlab__merge_merge_request", "input": {"project_id": "1", "merge_request_iid": "4"}, "rc": 2, "motif": "merge"}
 {"family": "merge", "cmd": "gh pr merge-base 3", "rc": 0}
 {"family": "merge", "cmd": "git merge --ff-only origin/feat", "rc": 0}
+{"family": "mcp-json", "cmd": "git add .mcp.json", "rc": 2, "motif": "mcp-json"}
+{"family": "mcp-json", "cmd": "git add -f sub/mcp.json", "rc": 2, "motif": "mcp-json"}
+{"family": "mcp-json", "cmd": "git add --force -- ./.mcp.json", "rc": 2, "motif": "mcp-json"}
+{"family": "mcp-json", "cmd": "git stage a.txt sub/MCP.json", "rc": 2, "motif": "mcp-json"}
+{"family": "mcp-json", "cmd": "cd sub && git add mcp.json && git commit -m 'feat: x'", "rc": 2, "motif": "mcp-json"}
+{"family": "mcp-json", "cmd": "git commit -m 'feat: servers' .mcp.json", "rc": 2, "motif": "mcp-json"}
+{"family": "mcp-json", "cmd": "git commit -m 'feat: servers' -- sub/mcp.json", "rc": 2, "motif": "mcp-json", "agent": true}
+{"family": "mcp-json", "cmd": "git rm --cached .mcp.json", "rc": 0}
+{"family": "mcp-json", "cmd": "git rm --cached .mcp.json && git commit -m 'chore: drop .mcp.json'", "rc": 0}
+{"family": "mcp-json", "cmd": "git add mcp.json.tmpl", "rc": 0}
+{"family": "mcp-json", "cmd": "git add mymcp.json", "rc": 0}
+{"family": "mcp-json", "cmd": "git add docs/mcp.json.md", "rc": 0}
+{"family": "mcp-json", "tool": "mcp__github__push_files", "input": {"owner": "o", "repo": "r", "branch": "f", "message": "feat: x", "files": [{"path": "a/.mcp.json", "content": "{}"}]}, "rc": 2, "motif": "mcp-json", "agent": true}
+{"family": "mcp-json", "tool": "mcp__github__create_or_update_file", "input": {"owner": "o", "repo": "r", "branch": "f", "path": "mcp.json", "content": "{}", "message": "feat: x"}, "rc": 2, "motif": "mcp-json", "agent": true}
+{"family": "mcp-json", "tool": "mcp__gitlab__create_or_update_file", "input": {"project_id": "1", "branch": "f", "file_path": "sub/.mcp.json", "content": "{}", "commit_message": "feat: x"}, "rc": 2, "motif": "mcp-json", "agent": true}
+{"family": "mcp-json", "tool": "mcp__GitKraken__git_add", "input": {"directory": ".", "files": ["sub/.mcp.json"]}, "rc": 2, "motif": "mcp-json", "agent": true}
+{"family": "mcp-json", "tool": "mcp__GitKraken__git_commit", "input": {"directory": ".", "message": "feat: x", "files": ["mcp.json"]}, "rc": 2, "motif": "mcp-json", "agent": true}
+{"family": "mcp-json", "tool": "mcp__github__delete_file", "input": {"owner": "o", "repo": "r", "branch": "f", "path": ".mcp.json", "message": "chore: drop .mcp.json"}, "rc": 0, "agent": true}
+{"family": "mcp-json", "tool": "mcp__github__push_files", "input": {"owner": "o", "repo": "r", "branch": "f", "message": "feat: x", "files": [{"path": "mymcp.json", "content": "{}"}, {"path": "mcp.json.tmpl", "content": "{}"}]}, "rc": 0, "agent": true}
+{"family": "mcp-json", "tool": "mcp__github__get_file_contents", "input": {"owner": "o", "repo": "r", "path": ".mcp.json"}, "rc": 0}
+{"family": "mcp-json", "cmd": "cp x .mcp.json && git add . && git commit -m x", "rc": 2, "motif": "mcp-json", "known_gap": "a file the same line creates is not there yet when the hook runs; the commit after a separate add is refused"}
