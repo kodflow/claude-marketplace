@@ -7,7 +7,8 @@ when_to_use: Use for a bug whose cause is not obvious — a flaky test, an inter
   a wrong result with no exception. Not for a compile error or a stack trace that already
   names the line.
 argument-hint: <symptom> [--loop]
-model: opus
+model: inherit
+effort: high
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

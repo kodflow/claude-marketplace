@@ -5,7 +5,8 @@ description: Extract reusable patterns from the current session and save them to
 when_to_use: Use at the end of a session that produced a reusable insight — a pattern worth
   keeping, a pitfall worth remembering, a convention the project settled on.
 argument-hint: '[<description>] | --list | --status'
-model: sonnet
+model: inherit
+effort: low
 allowed-tools:
 - Read
 - Grep

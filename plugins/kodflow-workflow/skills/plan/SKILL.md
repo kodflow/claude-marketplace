@@ -7,7 +7,8 @@ when_to_use: Use before implementing anything non-trivial — a feature, a refac
   Produces a step-by-step plan in .claude/plans/, validated against the project's constraint
   ledger.
 argument-hint: <description> [--context[=<slug>]] [--goal [--fast]] [--auto]
-model: opus
+model: inherit
+effort: high
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

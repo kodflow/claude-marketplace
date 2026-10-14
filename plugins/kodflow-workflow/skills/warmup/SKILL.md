@@ -11,7 +11,8 @@ when_to_use: >-
   a complex task, after switching projects, and with --update after a structural
   change that made the documentation stale.
 argument-hint: "[--update] [--dry-run] [--constraints]"
-model: opus
+model: inherit
+effort: medium
 allowed-tools:
   - "Read(**/*)"
   - "Glob(**/*)"

@@ -5,7 +5,8 @@ description: Infrastructure automation with Terraform/Terragrunt. Dispatches to 
 when_to_use: 'Use for Terraform, OpenTofu or Terragrunt work: planning a change, reading a
   plan critically, validating, or documenting modules.'
 argument-hint: --init | --plan | --apply | --validate | --docs [--module <path>]
-model: opus
+model: inherit
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

@@ -9,7 +9,8 @@ description: 'Autonomous health-and-heal for the project-linter MCP stack. Dispa
 when_to_use: Use when a session cannot reach project-linter, its hooks misbehave, a fresh container
   starts, or you want a one-command sanity check of the ktn stack.
 argument-hint: '[--check] [--phases <spec>] [--scope <diff|full|show>] [--restart] [--uninstall]'
-model: opus
+model: inherit
+effort: low
 allowed-tools:
 - Read(**/*)
 - Write(.claude/settings.json)

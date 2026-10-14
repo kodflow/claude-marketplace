@@ -10,7 +10,8 @@ when_to_use: Use when existing behaviour is wrong — a crash, a wrong result, a
   a flaky test. For something the project does not do yet, use /feature. To actually find
   the cause once the bug is opened, use /debug.
 argument-hint: <what is broken> [--no-branch] [--local] [--status]
-model: opus
+model: inherit
+effort: medium
 allowed-tools:
 - Bash(git:*)
 - Bash(gh:*)

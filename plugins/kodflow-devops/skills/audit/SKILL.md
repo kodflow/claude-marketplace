@@ -9,7 +9,8 @@ when_to_use: Use after upgrading Claude Code, after editing settings/agents/skil
   skill or hook misbehaves, or as a pre-flight check at the start of a session in a fresh
   environment.
 argument-hint: '[--fix] [--dimension agents|skills|hooks|mcp|settings|security|knowledge]'
-model: sonnet
+model: inherit
+effort: low
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

@@ -13,7 +13,8 @@ when_to_use: >-
   project", "clone X and set it up" — and again whenever a discussion settles a
   rule the project must follow from now on.
 argument-hint: "[name] | --constraint \"<rule>\" | --sync | --status | --owner <org>"
-model: opus
+model: inherit
+effort: medium
 allowed-tools:
   - "Bash(git:*)"
   - "Bash(gh:*)"

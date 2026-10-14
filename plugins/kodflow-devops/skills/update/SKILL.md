@@ -7,7 +7,8 @@ description: 'DevContainer Environment Update from official template. Profile-aw
 when_to_use: Use to sync a project's devcontainer with the upstream template — checking what
   drifted, or applying the update.
 argument-hint: '[--check] [--component plugins|hooks|lifecycle|docs|...]'
-model: sonnet
+model: inherit
+effort: low
 allowed-tools:
 - Bash(curl:*)
 - Bash(git:*)

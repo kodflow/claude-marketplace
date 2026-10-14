@@ -7,7 +7,8 @@ description: 'Multi-language intelligent linting with RLM decomposition. Auto-de
 when_to_use: Use to run the project's linters and fix what they find. Prefers `make lint`
   when a Makefile defines it; otherwise detects the language and picks the right toolchain.
 argument-hint: '[path] [--fix] [--strict]'
-model: opus
+model: inherit
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

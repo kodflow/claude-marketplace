@@ -13,7 +13,8 @@ when_to_use: Use to turn a plan or a loose description into a /goal contract wit
   criteria paired 1:1 with verifiers, so the goal state cannot be reached by a vague claim
   of success.
 argument-hint: <slug> | "<description>" [--bare] [--full <slug>] [--lenses light|full]
-model: opus
+model: inherit
+effort: high
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

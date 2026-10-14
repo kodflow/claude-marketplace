@@ -8,7 +8,8 @@ when_to_use: Use when a week felt expensive and nobody can say why, before or af
   the default model or effort, to size what subagents actually cost, or to find the sessions
   that keep reloading an expired cache. Local workstation only — never in CI.
 argument-hint: '[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project FRAGMENT] [--json]'
-model: sonnet
+model: inherit
+effort: low
 allowed-tools:
 - Bash(python3 "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/usage/scripts/usage_report.py:*)
 - Read(**/*)
