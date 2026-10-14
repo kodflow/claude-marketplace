@@ -29,8 +29,9 @@ Out: <what it must not touch — the boundary the debate settled>
 ## CONSTRAINTS
 <Rules that bind the work: constraint-ledger MUSTs it touches, decisions taken
 during the debate, and anything the user answered. One line each.>
-Models: orchestrator <CLAUDE_TOP> @high · code workers Opus @high · review
-workers Opus @xhigh · mechanical Sonnet @low · workers never inherit · worktree
+Models: orchestrator <CLAUDE_TOP_UNGATED> @high · code workers Sonnet @medium
+(@high on a defect or hook code, Opus @high across modules) · review workers
+Opus @high · mechanical Sonnet @low · workers never inherit · worktree
 isolation where workers write concurrently.
 
 ## ACCEPTANCE
