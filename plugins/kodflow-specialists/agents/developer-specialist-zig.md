@@ -1,10 +1,12 @@
 ---
 name: developer-specialist-zig
-description: Zig specialist — comptime, allocator discipline, error unions, the 0.15 std.Io Writer/Reader
-  interfaces, and the build.zig module graph. Routed when a project contains build.zig, build.zig.zon,
-  or *.zig sources. Returns structured analysis with the exact zig commands run.
+description: Zig specialist — comptime, allocator discipline, error unions, the 0.15 std.Io
+  Writer/Reader interfaces and the build.zig module graph. Use when a change touches .zig files,
+  build.zig or build.zig.zon. Escalate to opus/high when the change spans several modules, threads,
+  or a wire protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
+effort: high
 color: blue
 ---
 
@@ -136,7 +138,8 @@ what `zig fmt` produces is a nitpick, not a finding.
      "fix": "<patch hint>"}
   ],
   "commendations": ["<what the code got right>"],
-  "unverified": ["<claims not backed by a command that ran>"]
+  "unverified": ["<claims not backed by a command that ran>"],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

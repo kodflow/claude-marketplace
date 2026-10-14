@@ -1,11 +1,13 @@
 ---
 name: developer-executor-correctness
-description: Algorithmic correctness analyzer. Detects invariant violations, state machine issues, concurrency
-  bugs, off-by-one errors, and error surfacing problems. Returns condensed JSON with counterexamples and
-  fix patches. Uses Correctness Oracle Framework for systematic detection.
+description: Algorithmic correctness analyzer — invariant violations, state machine flaws,
+  concurrency bugs, off-by-one and swallowed errors; returns JSON with counterexamples and patches.
+  Use when a diff or module needs a proof-style correctness pass. Escalate to opus/max when a
+  counterexample search one xhigh pass did not settle.
 tools: Read, Glob, Grep, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebFetch,
   SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
-model: sonnet
+model: opus
+effort: xhigh
 color: blue
 ---
 
@@ -220,7 +222,8 @@ line plus the highest-severity ones and leave the rest in the report file.
       "pagination": 1,
       "idempotence": 0
     }
-  }
+  },
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

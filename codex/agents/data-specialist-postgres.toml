@@ -1,6 +1,6 @@
 # generated-from: plugins/*/agents/data-specialist-postgres.md
 name = "data-specialist-postgres"
-description = """PostgreSQL specialist — schema design, query optimisation, EXPLAIN analysis, index selection, migration safety. Routed when `postgres` or `psql` binary is present, or when SQL files declare PostgreSQL syntax."""
+description = """PostgreSQL specialist — schema design, query optimisation, EXPLAIN analysis, index selection and migration safety. Use when a task touches .sql files, migrations, psql output, EXPLAIN plans or PostgreSQL syntax. Escalate to opus/high when the change spans several tables or services, locking and concurrency, or a replication protocol."""
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 
@@ -40,7 +40,8 @@ unsafe `ALTER TABLE` on hot tables, naive `OFFSET`-based pagination.
      "severity": "high|medium|low", "fix": "<DDL or query hint>"}
   ],
   "explain_required": true|false,
-  "context7_consulted": ["postgres@16"]
+  "context7_consulted": ["postgres@16"],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

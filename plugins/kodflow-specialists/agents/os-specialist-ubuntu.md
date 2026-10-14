@@ -1,9 +1,12 @@
 ---
 name: os-specialist-ubuntu
-description: Ubuntu specialist agent. Expert in apt/snap, systemd, PPAs, Ubuntu Pro, and LTS release cycles.
-  Queries official Ubuntu documentation for version-specific accuracy. Returns condensed JSON only.
+description: Ubuntu specialist — apt/snap, systemd, PPAs, Ubuntu Pro and LTS release cycles, checked
+  against official documentation; returns JSON. Use when a task touches Ubuntu packages, snaps, PPAs
+  or LTS upgrade behaviour. Escalate to sonnet/medium when the answer needs judgement beyond pattern
+  matching or the findings are ambiguous.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: haiku
+effort: medium
 color: green
 ---
 
@@ -182,7 +185,8 @@ warnings:
     {"description": "...", "command": "...", "sudo": true}
   ],
   "warnings": [],
-  "confidence": "HIGH"
+  "confidence": "HIGH",
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

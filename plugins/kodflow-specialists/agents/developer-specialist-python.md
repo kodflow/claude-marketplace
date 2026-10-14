@@ -1,10 +1,12 @@
 ---
 name: developer-specialist-python
-description: Python specialist agent. Expert in modern Python 3.14+, type hints, async patterns, and PEP
-  standards. Enforces academic-level code quality with mypy strict, ruff, and pytest. Returns structured
-  analysis and recommendations.
+description: Python specialist — modern Python 3.14+, type hints, async patterns, PEP standards,
+  mypy strict, ruff and pytest. Use when a change touches .py files, pyproject.toml or requirements
+  files, or a Python design question. Escalate to opus/high when the change spans several modules,
+  asyncio or thread concurrency, or a protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
+effort: high
 color: blue
 ---
 
@@ -240,7 +242,8 @@ def divide(a: float, b: float) -> Result[float, ValueError]:
   "recommendations": [
     "Add Protocol for repository abstraction",
     "Use Result type for error handling"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

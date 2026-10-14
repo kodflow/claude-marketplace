@@ -1,6 +1,6 @@
 # generated-from: plugins/*/agents/developer-specialist-nodejs.md
 name = "developer-specialist-nodejs"
-description = """Node.js/TypeScript specialist agent. Expert in modern ECMAScript, TypeScript strict mode, async patterns, and npm ecosystem. Enforces academic-level code quality with ESLint, Prettier, and comprehensive type safety. Returns structured analysis and recommendations."""
+description = """Node.js/TypeScript specialist — modern ECMAScript, TypeScript strict mode, async patterns, npm ecosystem, ESLint and Prettier. Use when a change touches .ts or .js files, package.json, tsconfig.json or an npm dependency. Escalate to opus/high when the change spans several packages, async concurrency, or a wire protocol."""
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 
@@ -206,7 +206,8 @@ class UserService {
   "recommendations": [
     "Add Result type for error handling",
     "Extract interface for dependency injection"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

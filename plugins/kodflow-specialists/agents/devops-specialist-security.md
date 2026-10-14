@@ -1,10 +1,12 @@
 ---
 name: devops-specialist-security
-description: DevSecOps security scanning specialist. Expert in vulnerability detection, compliance checking,
-  and secrets scanning. Invoked by devops-orchestrator. Returns condensed JSON results with findings and
-  remediation.
+description: DevSecOps scanning specialist — vulnerability detection, compliance checking and
+  secrets scanning; returns JSON with findings and remediation. Use when a task asks for a
+  vulnerability, CVE, compliance or leaked-secret scan of images, dependencies or infrastructure.
+  Escalate to opus/high when findings span several components or an exploit chain.
 tools: Read, Glob, Grep, SendMessage, TaskUpdate, Bash, WebFetch, mcp__context7__*
 model: sonnet
+effort: high
 color: orange
 ---
 
@@ -112,7 +114,8 @@ critical_findings:
     "Rotate exposed AWS credentials immediately",
     "Enable encryption for S3 bucket",
     "Update base image to fix CVE-2024-XXXX"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

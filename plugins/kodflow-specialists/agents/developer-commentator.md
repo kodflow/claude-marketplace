@@ -1,10 +1,12 @@
 ---
 name: developer-commentator
-description: Orchestrate comprehensive code comment auditing across a project. Dispatches Haiku workers
-  per file to ensure all comments explain WHY (not WHAT), all functions have proper docstrings with params/types/return,
-  and language conventions are respected.
+description: Comment audit orchestrator — dispatches Haiku workers per file so comments explain WHY
+  not WHAT, functions carry docstrings and language conventions hold. Use when comments or
+  docstrings must be audited across a project or directory, not a single file. Escalate to
+  sonnet/high when the audit exposes defects in existing code or an unclear failure.
 tools: Read, Glob, Grep, Bash, Agent, TaskCreate, TaskUpdate, TaskList, WebFetch, mcp__context7__*
-model: opus
+model: sonnet
+effort: medium
 color: blue
 ---
 

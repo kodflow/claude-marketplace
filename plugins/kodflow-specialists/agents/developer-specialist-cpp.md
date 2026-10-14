@@ -1,10 +1,12 @@
 ---
 name: developer-specialist-cpp
-description: C++ specialist agent. Expert in C++23/26, concepts, coroutines, ranges, and modules. Enforces
-  academic-level code quality with Clang-Tidy, AddressSanitizer, and comprehensive testing. Returns structured
-  analysis and recommendations.
+description: C++ specialist — C++23/26, concepts, coroutines, ranges, modules, Clang-Tidy and
+  AddressSanitizer. Use when a change touches .cpp, .hpp or .cc files, CMakeLists.txt, or a C++ API
+  or design question. Escalate to opus/high when the change spans several modules, threads or
+  atomics, or a wire protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
+effort: high
 color: blue
 ---
 
@@ -375,7 +377,8 @@ private:
   "recommendations": [
     "Use concepts instead of SFINAE",
     "Replace error codes with std::expected"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

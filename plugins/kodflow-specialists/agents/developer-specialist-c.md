@@ -1,10 +1,12 @@
 ---
 name: developer-specialist-c
-description: C specialist agent. Expert in memory safety, undefined behavior prevention, and modern C23
-  features. Enforces academic-level code quality with clang-tidy, valgrind, and strict compiler warnings.
-  Returns structured analysis.
+description: C specialist — memory safety, undefined behavior prevention, modern C23, clang-tidy,
+  valgrind and strict compiler warnings. Use when a change touches .c or .h files, Makefile or CMake
+  C targets, or a C API or ABI question. Escalate to opus/xhigh when an autonomous run exceeds 30
+  minutes or a cross-cutting memory or ABI invariant is at stake.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
-model: sonnet
+model: opus
+effort: high
 color: blue
 ---
 
@@ -277,7 +279,8 @@ int db_open(const char *host, int port, Connection **conn);
   "recommendations": [
     "Add bounds checking to array access in process_buffer()",
     "Document ownership semantics for create_user()"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

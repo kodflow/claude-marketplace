@@ -1,10 +1,12 @@
 ---
 name: os-specialist-alpine
-description: Alpine Linux specialist agent. Expert in apk, OpenRC/s6, musl libc, BusyBox, and minimal
-  container images. Queries official Alpine wiki for version-specific accuracy. Returns condensed JSON
-  only.
+description: Alpine Linux specialist — apk, OpenRC/s6, musl libc, BusyBox and minimal images,
+  checked against the official Alpine wiki; returns JSON. Use when a task touches Alpine, apk,
+  musl-specific behaviour or an alpine base image. Escalate to sonnet/medium when the answer needs
+  judgement beyond pattern matching or the findings are ambiguous.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: haiku
+effort: medium
 color: green
 ---
 
@@ -198,7 +200,8 @@ warnings:
     {"description": "...", "command": "...", "sudo": true}
   ],
   "warnings": [],
-  "confidence": "HIGH"
+  "confidence": "HIGH",
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

@@ -1,14 +1,15 @@
 ---
 name: devops-orchestrator
-description: Main DevOps/DevSecOps/FinOps orchestrator using RLM decomposition. Coordinates specialized
-  sub-agents for infrastructure, security, cost, software, sysadmin, and cloud operations. Dispatches
-  sub-agents in parallel via Task tool. Supports both GitHub (PRs) and GitLab (MRs) - auto-detected from
-  git remote.
+description: DevOps/DevSecOps/FinOps orchestrator using RLM decomposition — coordinates sub-agents
+  for infrastructure, security, cost, sysadmin and cloud, on GitHub PRs and GitLab MRs. Use when a
+  task spans containers, clusters, IaC and CI at once. Escalate to opus/xhigh when an autonomous run
+  exceeds 30 minutes or a cross-cutting invariant is at stake.
 tools: Read, Glob, Grep, SendMessage, Task, TaskCreate, TaskUpdate, TaskList, Bash, WebFetch, mcp__github__pull_request_read,
   mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__add_issue_comment, mcp__gitlab__get_merge_request,
   mcp__gitlab__get_merge_request_changes, mcp__gitlab__create_merge_request, mcp__gitlab__list_merge_requests,
   mcp__gitlab__create_merge_request_note, mcp__gitlab__list_pipelines
 model: opus
+effort: high
 color: orange
 ---
 
