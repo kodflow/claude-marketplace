@@ -45,6 +45,7 @@ case "$sid" in
     ''|*'$'*|*'{'*|*/*) sid="" ;;
 esac
 if [ -z "$sid" ] && [ -d "$base" ]; then
+    # shellcheck disable=SC2012 # session ids are UUIDs; ls -t is the portable mtime sort
     newest="$(ls -t "$base"/*/tasks.json 2>/dev/null | head -1)"
     [ -n "$newest" ] && sid="$(basename "$(dirname "$newest")")"
 fi
@@ -107,7 +108,12 @@ EOF
                 since_min: ((($now - (.value.started // $now)) / 60) | floor)})) as $running
     | ($wt | split("\n") | map(select(length > 0) | split("\t")
        | {agent: .[0], path: .[1], branch: .[2], repo: .[3]})) as $wts
-    | def alive($w; $wid): any($running[]; .id == $wid or .type == $w or .id == $w);
+    # The worker_id is the identity when the task has one: another agent of
+    # the same type is not the worker, and a stopped worker stays stopped.
+    # The name stands in only for a task stored without it.
+    | def holds($w; $wid; $agent):
+        if $wid != "" then $agent.id == $wid else $agent.type == $w or $agent.id == $w end;
+      def alive($w; $wid): any($running[] as $r | holds($w; $wid; $r); .);
       def done_ids: [$tasks[] | select(.status == "completed") | .id | tostring];
       done_ids as $done
     | {
@@ -135,7 +141,7 @@ EOF
                               or ($waits_on | length) > 0) } ],
         agents: [ $running[] | .id as $id | .type as $ty
                   | . + {task: (first($tasks[] | select(.status == "in_progress"
-                                   and ((.worker_id // "") == $id or (.worker // "") == $ty))
+                                   and (.worker // "") != "" and holds(.worker; .worker_id // ""; {id: $id, type: $ty}))
                                    | .id | tostring) // null),
                          worktrees: [$wts[] | select(.agent == $id) | del(.agent)]} ]
       }'

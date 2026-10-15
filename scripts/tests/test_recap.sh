@@ -12,6 +12,9 @@
 set -u
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/plugins/kodflow-workflow/skills/recap/scripts/recap.sh"
+# The interpreter under test: the macOS job sets /bin/bash (3.2), so every
+# call below runs recap.sh with it rather than whichever bash PATH finds.
+RUN="${RECAP_BASH:-bash}"
 pass=0; fail=0
 
 check() { # name expected actual
@@ -52,11 +55,12 @@ JSON
 cat > "$s/agents.json" <<'JSON'
 {"agents":{"a-impl-1":{"type":"impl","started":100,"stopped":null,"epic":2},
            "a-gone-1":{"type":"gone","started":100,"stopped":200,"epic":3},
-           "a-idle-1":{"type":"idle","started":100,"stopped":null,"epic":3}}}
+           "a-idle-1":{"type":"idle","started":100,"stopped":null,"epic":3},
+           "a-gone-2":{"type":"gone","started":300,"stopped":null,"epic":3}}}
 JSON
 printf '{"agents":{"a-impl-1":{"paths":["%s"]}}}\n' "$wt" > "$s/worktrees.json"
 
-out="$(CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" state sess-1)"
+out="$(CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" state sess-1)"
 q() { printf '%s' "$out" | jq -r "$1"; }
 
 check "state names the session"            "sess-1"              "$(q .session)"
@@ -67,11 +71,13 @@ check "open main tasks only"               "2 3 4 5 6"           "$(q '[.tasks[]
 check "a human task waits on the user"     "user"                "$(q '.tasks[] | select(.id=="2") | .who')"
 check "a running worker is alive"          "true"                "$(q '.tasks[] | select(.id=="3") | .worker_alive')"
 check "a stopped worker blocks its task"   "true"                "$(q '.tasks[] | select(.id=="4") | .blocked')"
+check "a same-type agent is not the worker" "false"              "$(q '.tasks[] | select(.id=="4") | .worker_alive')"
+check "nor does it take the worker's task" "null"                "$(q '.agents[] | select(.id=="a-gone-2") | .task')"
 check "an open blocker blocks"             "3"                   "$(q '.tasks[] | select(.id=="5") | .waits_on | join(" ")')"
 check "a completed blocker does not"       "false"               "$(q '.tasks[] | select(.id=="6") | .blocked')"
 check "PRs named in a description"         "acme/other#3 acme/widgets#57" \
       "$(q '[.tasks[] | select(.id=="3") | .prs[] | "\(.repo)#\(.number)"] | join(" ")')"
-check "running subagents only"             "a-idle-1 a-impl-1"   "$(q '[.agents[].id] | sort | join(" ")')"
+check "running subagents only"             "a-gone-2 a-idle-1 a-impl-1"   "$(q '[.agents[].id] | sort | join(" ")')"
 check "a subagent's task"                  "3"                   "$(q '.agents[] | select(.id=="a-impl-1") | .task')"
 check "a subagent without a task"          "null"                "$(q '.agents[] | select(.id=="a-idle-1") | .task')"
 check "worktree branch and GitHub repo"    "feat/x acme/widgets" \
@@ -79,31 +85,31 @@ check "worktree branch and GitHub repo"    "feat/x acme/widgets" \
 
 # No session id, or one the engine did not substitute: the newest task list.
 check "literal \${CLAUDE_SESSION_ID} falls back" "sess-1" \
-      "$(CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" state '${CLAUDE_SESSION_ID}' | jq -r .session)"
+      "$(CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" state '${CLAUDE_SESSION_ID}' | jq -r .session)"
 
 # No files at all: an empty answer, not a failure.
 empty="$(mktemp -d)"
 check "no session: source none"            "none" \
-      "$(CLAUDE_CONFIG_DIR="$empty" bash "$SRC" state | jq -r .source)"
+      "$(CLAUDE_CONFIG_DIR="$empty" "$RUN" "$SRC" state | jq -r .source)"
 rm -rf "$empty"
 
 check "a session with no task file: source none" "none" \
-      "$(CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" state sess-unknown | jq -r .source)"
+      "$(CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" state sess-unknown | jq -r .source)"
 
 # A malformed task file reads as empty.
 mkdir -p "$cfg/kodflow/sessions/bad"; echo 'not json' > "$cfg/kodflow/sessions/bad/tasks.json"
 check "malformed tasks.json reads as empty" "0" \
-      "$(CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" state bad | jq '.tasks | length')"
+      "$(CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" state bad | jq '.tasks | length')"
 
 # seen: first call new, same table same, changed table new, stdin too.
 t1='| Qui | Tâche |
 | toi | #2 go |'
-check "seen: first table is new"     "new"  "$(CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" seen sess-1 "$t1")"
-check "seen: same table is same"     "same" "$(CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" seen sess-1 "$t1")"
-check "seen: same table on stdin"    "same" "$(printf '%s\n' "$t1" | CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" seen sess-1)"
-check "seen: a changed cell is new"  "new"  "$(CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" seen sess-1 "$t1 vert")"
+check "seen: first table is new"     "new"  "$(CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" seen sess-1 "$t1")"
+check "seen: same table is same"     "same" "$(CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" seen sess-1 "$t1")"
+check "seen: same table on stdin"    "same" "$(printf '%s\n' "$t1" | CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" seen sess-1)"
+check "seen: a changed cell is new"  "new"  "$(CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" seen sess-1 "$t1 vert")"
 
-CLAUDE_CONFIG_DIR="$cfg" bash "$SRC" bogus >/dev/null 2>&1
+CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" bogus >/dev/null 2>&1
 check "unknown command exits 2"      "2"    "$?"
 
 printf 'recap.sh: %d passed, %d failed\n' "$pass" "$fail"

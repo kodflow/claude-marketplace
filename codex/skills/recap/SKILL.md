@@ -34,7 +34,7 @@ conversation is how a finished task stays "en cours" on screen.
 | Pattern | Action |
 |---------|--------|
 | (no args) | Gather, print the table |
-| `--loop [N]` | Print the table now, then again every N minutes (N = 1 to 59, default 1) |
+| `--loop [N]` | Print the table now, then again every N minutes (N divides 60, default 1) |
 | `--tick` | One loop iteration: the table if anything changed, otherwise one line |
 | `--stop` | End the loop |
 | `--help` | This table |
@@ -68,14 +68,19 @@ say in the one line that subagents and PRs are missing.
 
 ### 2. The PRs and their CI
 
-The PRs to look up: one per `agents[].worktrees[]` with a `repo` (head =
-`<owner>:<branch>`), plus every `tasks[].prs[]`. Open PRs only.
+Two kinds of PR to look up, open ones only:
 
-1. the GitHub tool (`state: open`, `head`), then
-   the GitHub tool for the check runs of its head.
-2. If the GitHub MCP server does not answer: say so in the one line (it is a
-   failure to report, not a missing capability), then
-   `gh pr list -R <repo> --head <branch> --state open --json number,url,isDraft,statusCheckRollup`.
+| Source | Known | GitHub MCP | Fallback (`gh`) |
+|--------|-------|------------|-----------------|
+| `agents[].worktrees[]` with a `repo` | repository and branch | the GitHub tool (`state: open`, `head: <owner>:<branch>`) | `gh pr list -R <repo> --head <branch> --state open --json number,url,isDraft,statusCheckRollup` |
+| `tasks[].prs[]` | repository and number | the GitHub tool (`method: get`), kept if `state` is open | `gh pr view <number> -R <repo> --json number,url,state,isDraft,statusCheckRollup` |
+
+Then the check runs of each PR's head: the GitHub tool
+(`method: get_check_runs`), or the `statusCheckRollup` the fallback already
+returned. A PR found both ways is one PR.
+
+If the GitHub MCP server does not answer, say so in the one line (it is a
+failure to report, not a missing capability), then use the fallback.
 
 CI in one word: `vert` (every required check passed), `rouge` (one failed),
 `en cours`, `aucune`. A draft PR says `brouillon` before it.
@@ -135,10 +140,14 @@ This skill writes none.
 
 ### `--loop [N]`
 
-1. N not an integer from 1 to 59: refuse with the usage line, schedule nothing.
+1. N must divide 60: 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30 or 60. Cron counts
+   `*/N` within each hour, so any other N would fire at uneven gaps (45 gives
+   45 then 15 minutes). Otherwise refuse with the usage line and the nearest
+   accepted value, schedule nothing.
 2. `CronList`; `CronDelete` every job whose prompt is `/recap --tick`. One
    loop per session; a new N replaces the old one.
-3. `CronCreate` with `cron: "*/N * * * *"` (`"* * * * *"` for 1),
+3. `CronCreate` with `cron: "*/N * * * *"` (`"* * * * *"` for 1,
+   `"7 * * * *"` for 60, off the hour),
    `prompt: "/recap --tick"`, `recurring: true`.
 4. Print the table as for a plain `/recap` (it records the fingerprint), then
    one line under it, the only time something goes there:
