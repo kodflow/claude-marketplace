@@ -509,9 +509,17 @@ echo "== Triage gate · file the message before acting"
 TP=$SD/triage-pending
 beat; rm -f "$TP"
 run UserPromptSubmit "" '{"prompt":"fais un truc"}' on-user.sh
-[ "$(cat "$TP" 2>/dev/null)" = prompt ] && ok "a new prompt raises the triage flag with its cause" || bad "triage flag" "$(cat "$TP" 2>/dev/null || echo absent)"
+[ "$(grep -cE '^prompt [0-9]+-[0-9]+-[0-9]+$' "$TP" 2>/dev/null)" = 1 ] && [ "$(wc -l < "$TP" | tr -d ' ')" = 1 ] \
+    && ok "a new prompt raises the triage flag, one line for its message" || bad "triage flag" "$(cat "$TP" 2>/dev/null || echo absent)"
+[ ! -d "$SD/.triage.lock.d" ] && ok "the append lock is released" || bad "triage lock" "left behind"
 beat; run UserPromptSubmit "" '{"prompt":"et aussi"}' on-user.sh
-[ "$(grep -cx prompt "$TP" 2>/dev/null)" = 1 ] && ok "a second prompt keeps one prompt cause" || bad "prompt cause twice" "$(cat "$TP")"
+[ "$(grep -c '^prompt ' "$TP" 2>/dev/null)" = 2 ] && [ "$(sort -u "$TP" | wc -l | tr -d ' ')" = 2 ] \
+    && ok "a second message before the first is filed adds its own line" || bad "two prompts" "$(cat "$TP")"
+beat; bash_cmd 'ls';                                                  expect_rc "two messages unfiled: acting is refused" 2
+printf '%s' "$ERR" | grep -q 'file these 2 messages' && printf '%s' "$ERR" | grep -q 'each needs its own gesture' \
+    && printf '%s' "$ERR" | grep -q 'task_update(id, description=…)' && ok "the refusal counts the messages and names both gestures" || bad "two messages text" "$ERR"
+# The mod dropped the first line (one task_create): one message left
+sed -i.bak 1d "$TP" && rm -f "$TP.bak"
 beat; bash_cmd 'ls';                                                  expect_rc "acting before triage is refused" 2
 printf '%s' "$ERR" | grep -q 'TRIAGE FIRST — file this message' && ok "the refusal says to triage first" || bad "triage message" "$ERR"
 printf '%s' "$ERR" | grep -q 'a question → task_create(epic=0)' && printf '%s' "$ERR" | grep -q 'do not lift this gate' \
@@ -609,6 +617,9 @@ printf '%s' "$TC" | grep -q 'This message has no task' && printf '%s' "$TC" | gr
     && ok "a turn that ends with its message unfiled is reminded" || bad "stop triage" "$OUT"
 triage_stop
 printf '%s' "$TC" | grep -q 'This message has no task' && ok "reminded every turn until filed" || bad "stop triage repeat" "$OUT"
+beat; run UserPromptSubmit "" '{"prompt":"et une autre"}' on-user.sh; triage_stop
+printf '%s' "$TC" | grep -q '2 messages of the user have no task' && printf '%s' "$TC" | grep -q 'either context on a task or a new task' \
+    && ok "two messages unfiled: the reminder counts them" || bad "stop two messages" "$OUT"
 printf 'resume\n' > "$TP"; triage_stop
 printf '%s' "$TC" | grep -q 'never settled' && ! printf '%s' "$TC" | grep -q 'This message has no task' \
     && ok "a resume left unsettled names task_update(status) alone" || bad "stop resume" "$OUT"
@@ -634,8 +645,8 @@ printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("SESSIO
     && ok "resume lists the main agent's open tasks, finished and subagent ones left out" || bad "session review" "$OUT"
 [ -f "$TP" ] && ok "resume holds acting tools until the list is reviewed" || bad "review gate" "flag absent"
 beat; run UserPromptSubmit "" '{"prompt":"reprends"}' on-user.sh
-[ "$(cat "$TP" 2>/dev/null)" = "resume
-prompt" ] && ok "a prompt after a resume adds its cause beside it" || bad "resume then prompt" "$(cat "$TP" 2>/dev/null)"
+[ "$(sed -n 1p "$TP" 2>/dev/null)" = resume ] && sed -n 2p "$TP" | grep -q '^prompt ' && [ "$(wc -l < "$TP" | tr -d ' ')" = 2 ] \
+    && ok "a prompt after a resume adds its cause beside it" || bad "resume then prompt" "$(cat "$TP" 2>/dev/null)"
 rm -f "$TP"
 beat; run SessionStart "" '{"source":"compact"}' on-session.sh
 [ "$(printf '%s\n' "$OUT" | grep -c '^{')" -eq 1 ] && printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("SESSION START") and test("POST-COMPACTION")' >/dev/null 2>&1 \

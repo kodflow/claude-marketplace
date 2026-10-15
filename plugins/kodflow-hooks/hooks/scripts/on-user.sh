@@ -81,11 +81,17 @@ UserPromptSubmit)
         rm -f -- "$STATE/stop-count" 2>/dev/null
         # Every message is triaged into the task list before anything is done
         # about it: on-tool.sh refuses acting tools until the mod settles this
-        # cause (a task of its own, or context on the task in progress). Added
-        # beside a `resume` cause, never over it. Only while the task tools
-        # answer: a gate nothing can lift would stop the session.
-        [ "$BEAT" = 0 ] && mkdir -p "$SDIR" 2>/dev/null \
-            && { grep -qx prompt "$SDIR/triage-pending" 2>/dev/null || printf 'prompt\n' >> "$SDIR/triage-pending"; } 2>/dev/null
+        # message (a task of its own, or context on the task in progress).
+        # One line per message, `prompt <id>`, so two messages sent before
+        # the first is filed need two gestures. Appended under the lock the
+        # mod takes to drop a line (register.ts settleTriage): neither write
+        # loses the other's; a lock not obtained in 2 s is written through.
+        # Only while the task tools answer: a gate nothing can lift would
+        # stop the session.
+        [ "$BEAT" = 0 ] && mkdir -p "$SDIR" 2>/dev/null && (
+            . "$LIB/lock.sh" 2>/dev/null && kf_lock "$SDIR/.triage.lock.d" 2
+            printf 'prompt %s-%s-%s\n' "$(date +%s)" "$$" "$RANDOM" >> "$SDIR/triage-pending"
+        ) 2>/dev/null
         # The user's presence, for on-stop.sh's agent-feedback proposal. The
         # mod writes it on composer prompts only; without the mod this is the
         # nearest reading: a prompt that is not a system turn.

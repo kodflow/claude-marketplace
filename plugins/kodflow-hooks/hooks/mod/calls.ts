@@ -46,21 +46,22 @@ export const mainLoop = (agentId: unknown): boolean =>
   agentId === undefined || agentId === null || agentId === "";
 
 /**
- * The causes a triage-pending file holds, one per line: `prompt` (a user
- * message, on-user.sh) and `resume` (a session that came back with open
- * tasks, on-session.sh). An empty file is the format before causes: a prompt.
+ * The causes a triage-pending file holds, one per line, in order: `prompt
+ * <id>` for each user message not filed yet (on-user.sh, one line per
+ * message) and `resume` (a session that came back with open tasks,
+ * on-session.sh). An empty file is the format before causes: one prompt.
  */
 export function triageCauses(text: string): string[] {
-  const causes = [
-    ...new Set(
-      text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean),
-    ),
-  ];
+  const causes = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
   return causes.length ? causes : ["prompt"];
 }
+
+// A line's kind: its first word. Anything but resume is a message to file.
+const kindOf = (cause: string): "prompt" | "resume" =>
+  cause.split(/\s+/)[0] === "resume" ? "resume" : "prompt";
 
 const given = (v: unknown): boolean =>
   typeof v === "string" ? v.trim() !== "" : v !== undefined && v !== null;
@@ -82,12 +83,33 @@ export function liftsTriage(
   cause: string,
 ): boolean {
   if (!mainLoop(agentId)) return false;
-  if (cause === "resume") return tool === "task_update" && given(args.status);
+  if (kindOf(cause) === "resume")
+    return tool === "task_update" && given(args.status);
   return (
     tool === "task_create" ||
     tool === "task_assign_human" ||
     (tool === "task_update" && given(args.description))
   );
+}
+
+/**
+ * The causes left once a call that succeeded is counted: one gesture files
+ * one message, so it drops the oldest line of each kind it answers, never
+ * two of the same kind. The other messages wait for their own gesture.
+ */
+export function settleCauses(
+  causes: readonly string[],
+  tool: ToolName,
+  args: Record<string, unknown>,
+  agentId: unknown,
+): string[] {
+  const left = [...causes];
+  for (const kind of ["prompt", "resume"] as const) {
+    if (!liftsTriage(tool, args, agentId, kind)) continue;
+    const at = left.findIndex((c) => kindOf(c) === kind);
+    if (at >= 0) left.splice(at, 1);
+  }
+  return left;
 }
 
 /** The payload on-mod.sh logs for a task call, shaped like a PostToolUse. */

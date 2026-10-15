@@ -98,7 +98,11 @@ SessionStart)
     if [ "$beat" = 0 ] && [ -s "$tasks_file" ]; then
         open=$(jq -r -L "$LIB" -f "$LIB/review.jq" "$tasks_file" 2>/dev/null)
         if [ -n "$open" ]; then
-            { grep -qx resume "$sdir/triage-pending" 2>/dev/null || printf 'resume\n' >> "$sdir/triage-pending"; } 2>/dev/null
+            # Under the lock the mod takes to drop a line (on-user.sh)
+            (
+                . "$LIB/lock.sh" 2>/dev/null && kf_lock "$sdir/.triage.lock.d" 2
+                grep -qx resume "$sdir/triage-pending" 2>/dev/null || printf 'resume\n' >> "$sdir/triage-pending"
+            ) 2>/dev/null
             ctx="## SESSION START — review the task list before anything else
 These tasks were left open by earlier work. Nothing is in progress right now: an in_progress status is a leftover of the previous run. With the kodflow task tools, reconcile each one with reality first — completed if its work is done (check before deciding), deleted if it no longer applies, waiting if it is blocked on the user, in_progress only for the one you resume now (task_focus its epic). Then tell the user what you resumed and what you changed.
 $open"

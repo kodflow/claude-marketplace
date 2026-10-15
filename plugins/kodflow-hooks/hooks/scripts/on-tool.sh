@@ -1519,11 +1519,19 @@ if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$SDIR/triage-pending" ]; the
                        exit 0 ;;
                 esac
             else
-                # The gesture each cause still pending waits for
+                # The gesture each cause still pending waits for: one per
+                # message line (`prompt <id>`; an empty file is one message)
                 tg=() title="TRIAGE FIRST — settle the task list left open"
-                if [ ! -s "$SDIR/triage-pending" ] || grep -qvx resume "$SDIR/triage-pending" 2>/dev/null; then
+                n=$(grep -cvxE '(resume)?' "$SDIR/triage-pending" 2>/dev/null); [ -s "$SDIR/triage-pending" ] || n=1
+                if [ "${n:-0}" -gt 1 ] 2>/dev/null; then
+                    title="TRIAGE FIRST — file these $n messages in the task list"
+                    tg+=("$n messages of the user have no task yet, and each needs its own gesture: context on a task → task_update(id, description=…), anything else → a new task (task_create). One task per message, a question included. The task calls alone, before acting:")
+                elif [ "${n:-0}" -eq 1 ] 2>/dev/null; then
                     title="TRIAGE FIRST — file this message in the task list"
-                    tg+=("This message has no task yet: one task per message of the user, a question included. The task call alone, before acting:"
+                    tg+=("This message has no task yet: one task per message of the user, a question included. The task call alone, before acting:")
+                fi
+                if [ "${n:-0}" -ge 1 ] 2>/dev/null; then
+                    tg+=(
                          "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)"
                          "a question → task_create(epic=0), left pending, set completed once answered"
                          "context on the task in progress → task_update(id, description=…) · rework of a completed task → task_create \"Rework #N: …\""

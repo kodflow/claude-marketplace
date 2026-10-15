@@ -23,6 +23,7 @@ import {
   isOff,
   liftsTriage,
   taskTool,
+  settleCauses,
   triageCauses,
 } from "../../hooks/mod/calls.ts";
 
@@ -156,7 +157,19 @@ test("calls: tool names, envelope, attribution, switch, triage", () => {
   expect(isOff("OFF")).toBe(false);
   expect(isOff(undefined)).toBe(false);
   expect(triageCauses("")).toEqual(["prompt"]);
-  expect(triageCauses("prompt\nresume\nprompt\n")).toEqual(["prompt", "resume"]);
+  expect(triageCauses("prompt 1\nresume\n\nprompt 2\n")).toEqual([
+    "prompt 1",
+    "resume",
+    "prompt 2",
+  ]);
+  // One prompt line per message: one filing gesture settles one of them
+  const two = ["prompt 1", "resume", "prompt 2"];
+  expect(settleCauses(two, "task_create", {}, undefined)).toEqual(["resume", "prompt 2"]);
+  expect(settleCauses(two, "task_list", {}, undefined)).toEqual(two);
+  expect(
+    settleCauses(two, "task_update", { id: "1", status: "completed", description: "d" }, undefined),
+  ).toEqual(["prompt 2"]);
+  expect(settleCauses(two, "task_create", {}, "a1")).toEqual(two);
   const lifts = (tool: string, args: object, agent: unknown, cause: string) =>
     liftsTriage(tool as any, args as any, agent, cause);
   expect(lifts("task_create", {}, undefined, "prompt")).toBe(true);
@@ -169,6 +182,7 @@ test("calls: tool names, envelope, attribution, switch, triage", () => {
   expect(lifts("task_focus", { epic: "1" }, undefined, "prompt")).toBe(false);
   expect(lifts("task_update", { id: "1", status: "waiting" }, undefined, "resume")).toBe(true);
   expect(lifts("task_create", {}, undefined, "resume")).toBe(false);
+  expect(lifts("task_create", {}, undefined, "prompt 1792000000-42")).toBe(true);
   expect(lifts("task_create", {}, "a1", "prompt")).toBe(false);
   // A cause this version does not know is read as a prompt
   expect(lifts("task_create", {}, undefined, "other")).toBe(true);

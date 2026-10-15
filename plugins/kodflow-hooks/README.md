@@ -532,13 +532,17 @@ files, proven by a corpus recorded from it (Tests, below).
   when where-things-stand is wanted. A `Stop hook feedback:` turn is *not*
   in that list: it quotes the user's own pending message, so it keeps the gate.
 - **Triage gate.** `<config>/kodflow/sessions/<session>/triage-pending`
-  holds one cause per line, raised while the mod beats: `prompt` for every
-  user message (`on-user.sh`), `resume` for a session start with open tasks
-  (`on-session.sh`); an empty file is read as `prompt`. Until each cause is
-  settled, `PreToolUse` refuses the main agent every tool but the task tools,
+  holds one cause per line, raised while the mod beats: one `prompt <id>`
+  line per user message (`on-user.sh`), so two messages sent before the
+  first is filed need two gestures, and `resume` for a session start with
+  open tasks (`on-session.sh`); an empty file is read as one message. The
+  shell appends and the mod drops lines under the same lock
+  (`.triage.lock.d`, `lib/lock.sh`), the mod replacing the file through a
+  temporary file and `mv`. Until each cause is settled, `PreToolUse` refuses the main agent every tool but the task tools,
   Read, Glob, Grep, LS, ToolSearch and AskUserQuestion, and names the gesture
-  of each cause left. Only the mod settles a cause, on a main-agent task call
-  that succeeded (`liftsTriage`, `calls.ts`): `prompt` by `task_create`,
+  of each cause left, with the number of messages still to file. Only the
+  mod settles a cause, one line per call, on a main-agent task call that
+  succeeded (`liftsTriage`, `settleCauses`, `calls.ts`): a `prompt` by `task_create`,
   `task_assign_human` or `task_update(id, description)`, `resume` by
   `task_update(id, status)`. `task_list`, `task_epic` and `task_focus` settle
   nothing; a refused call leaves the gate; a store that fails lifts it (fail

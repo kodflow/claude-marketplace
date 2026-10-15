@@ -142,9 +142,15 @@ fi
 # with the mod gone the next prompt lifts the gate (on-user.sh).
 tp=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID/triage-pending
 if [ -f "$tp" ] && [ ! -f "$STATE/turn-system" ] && [ -f "${tp%/*}/mod-beat" ]; then
-    if [ ! -s "$tp" ] || grep -qvx resume "$tp" 2>/dev/null; then
+    # One line per message not filed yet (`prompt <id>`); an empty file is one
+    n=$(grep -cvxE '(resume)?' "$tp" 2>/dev/null); [ -s "$tp" ] || n=1
+    how="task_create(epic=id) for work in an open epic (task_epic first for a new subject), task_create(epic=0) for a question or loose request, task_update(id, description) for context on the task in progress; then set it completed once answered or done."
+    if [ "${n:-0}" -gt 1 ] 2>/dev/null; then
         ctx="${ctx:+$ctx
-}This message has no task: one task per message of the user, a question included. File it now: task_create(epic=id) for work in an open epic (task_epic first for a new subject), task_create(epic=0) for a question or loose request, task_update(id, description) for context on the task in progress; then set it completed once answered or done."
+}$n messages of the user have no task, and each needs its own gesture, a question included: either context on a task or a new task. File each one now: $how"
+    elif [ "${n:-0}" -eq 1 ] 2>/dev/null; then
+        ctx="${ctx:+$ctx
+}This message has no task: one task per message of the user, a question included. File it now: $how"
     fi
     grep -qx resume "$tp" 2>/dev/null && ctx="${ctx:+$ctx
 }The tasks left open at the session start were never settled: task_update(id, status=…) each one (in_progress for the one you resume, completed, deleted or waiting for the others)."

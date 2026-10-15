@@ -354,6 +354,23 @@ test("a refused task call leaves the gate; a failing store lifts it (fail open)"
   expect(h.files.has(TP)).toBe(false);
 });
 
+test("one gesture per message: two prompts need two filing calls", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await start($);
+  h.files.set(TP, "prompt 1792000000-1\nprompt 1792000005-2\n");
+  await $.tool.call({ tool: T("task_list") } as any);
+  expect(h.files.get(TP)).toBe("prompt 1792000000-1\nprompt 1792000005-2\n");
+  await $.tool.call({ tool: T("task_create"), subject: "first", epic: 0 } as any);
+  expect(h.files.get(TP)).toBe("prompt 1792000005-2\n");
+  await $.tool.call({ tool: T("task_list") } as any);
+  expect(h.files.get(TP)).toBe("prompt 1792000005-2\n");
+  await $.tool.call({ tool: T("task_update"), id: "1", description: "second" } as any);
+  expect(h.files.has(TP)).toBe(false);
+  // Under its own lock, released, nothing left beside it
+  expect(h.dirs.has(`${DIR}/.triage.lock.d`)).toBe(false);
+  expect([...h.files.keys()].filter((k) => k.endsWith(".tmp"))).toEqual([]);
+});
+
 test("a subagent's task call never touches the gate", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
   await start($);
