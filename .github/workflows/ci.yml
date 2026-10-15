@@ -208,6 +208,8 @@ jobs:
         run: /bin/bash plugins/kodflow-hooks/tests/test_agents.sh
       - name: Router under /bin/bash 3.2
         run: /bin/bash scripts/tests/test_route_agent.sh
+      - name: Cleanup of a subagent's worktree under /bin/bash 3.2
+        run: /bin/bash plugins/kodflow-hooks/tests/test_cleanup.sh
 
   # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
   # are checked by the engine itself, at the version the README names as

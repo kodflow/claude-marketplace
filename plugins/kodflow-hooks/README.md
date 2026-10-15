@@ -18,7 +18,7 @@ need **Claude Code 2.1.293 or later**.
 `hooks/mod/register.ts` is wiring only, one `on(...)` per event; the logic
 sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
 `paths.ts`, `lint.ts`, `shell.ts`, `patterns.ts`, `guards.ts`, `merge.ts`,
-`blast.ts`, `filter.ts`, `veil.ts`, `pipeline.ts`, `fable.ts`, and for the three machine
+`blast.ts`, `filter.ts`, `veil.ts`, `pipeline.ts`, `fable.ts`, `cleanup.ts`, and for the three machine
 guards `machine-guards.ts` over a port, with `modwall.ts`, `collision.ts`,
 `zsh.ts`), which never touch `$`: the engine follows `$` and `on` only inside
 register.ts.
@@ -43,6 +43,8 @@ register.ts.
 | `agent.spawn` | **gated models**: passes or refuses a spawn on the model it would run on, never writes one (below) |
 | `tool.call` on `Skill` | **gated models**: a skill whose frontmatter names one passes only with the session's grant, asked once like a spawn |
 | `classic.PreModelSwitch` | a `/model` the user typed or picked grants the session a gated model; a switch from the SDK asks, and is refused with nobody at the prompt |
+| `tool.call` on `Bash`, `Edit`, `Write`, `MultiEdit`, `NotebookEdit` from a subagent | **cleanup on close**: notes the absolute `.worktrees/<name>` roots its arguments name (`~` and `$HOME` expanded) under its id in `<config>/kodflow/sessions/<session>/worktrees.json`, once per path, without waiting |
+| `tool.call` on `task_update` completing a main-agent task | **cleanup on close**: once the answer is settled, starts `hooks/scripts/cleanup.sh` on the worktrees of the task's worker, and when the completion closes the epic, of every worker of the epic and every subagent started on it; never awaited (below) |
 | `prompt.submit` from the composer | writes `<config>/kodflow/sessions/<session>/composer-at` (seconds), the presence `on-stop.sh` reads before proposing agent feedback |
 
 ### The Bash pipeline
@@ -165,7 +167,7 @@ fails by accident blocks every shell call of the session.
 | `SessionEnd` | `on-session.sh` | — | — | — | one log line with the session's event count (1.5 s budget) |
 | `PreCompact` | `on-session.sh` | — | — | — | log |
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
-| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · while the mod beats: the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists, and the triage directive with the epic mandatory on `task_create` · the delegation line (code in a repository: dispatch or message the epic's subagent) unless `KODFLOW_ROOT=off` · no triage directive on a turn the user did not type · a `systemMessage` when the mod is gone | raise the triage gate (mod beating) and reset the Stop loop counter, except on a turn the user did not type · log |
+| `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · the cleanup notices (`cleanup-notices`, consumed) · while the mod beats: the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists, and the triage directive with the epic mandatory on `task_create` · the delegation line (code in a repository: dispatch or message the epic's subagent) unless `KODFLOW_ROOT=off` · no triage directive on a turn the user did not type · a `systemMessage` when the mod is gone | raise the triage gate (mod beating) and reset the Stop loop counter, except on a turn the user did not type · log |
 | `Notification` | `on-user.sh` | — | — | bell (`terminalSequence`) on idle, permission and elicitation prompts | log |
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR, and rule 6: end with `## Agent feedback`) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · its agent feedback in `agent-feedback.jsonl` · log |
@@ -567,7 +569,48 @@ files, proven by a corpus recorded from it (Tests, below).
 
 `tests/run-tests.sh` runs the mod's node suite (when node can run TypeScript),
 then `test_root_gate.sh`, `test_agents.sh` (routing gate, gated-model fallback,
-agent feedback, on the recorded payloads) and `test_lock.sh`.
+agent feedback, on the recorded payloads), `test_lock.sh` and `test_cleanup.sh`.
+
+### Cleanup on close (`KODFLOW_CLEANUP=off`)
+
+A subagent works in its own worktree and branch; once its PR is merged, the
+worktree, the local branch and the remote branch were removed by hand. The
+mod does it when the main agent completes the task linked to that subagent
+(`task_update` with `worker=`), or closes the epic it worked on.
+
+- **Whose worktree.** Claude Code does not say where a subagent worked, and
+  `agents.json` records no directory. The mod reads every writing call a
+  subagent makes (Bash command, `file_path`) for absolute
+  `<parent>/.worktrees/<name>` paths, the layout rule 5 of the subagent
+  context and the delegation gate impose, and keeps them per agent id in
+  `worktrees.json`. A path read by mistake is harmless: the checks below
+  decide, not the attribution.
+- **When.** In the mod, on the successful `task_update(status=completed)` of
+  a main-agent task: the list before the update still holds the task's
+  `worker_id`, which the update drops. A Stop hook would find the link gone.
+  A worker cleaned after for a task is tied to that task's epic, so the
+  epic's closing tries again what a first attempt left (a PR merged after the
+  task was completed). The epic also brings the subagents `agents.json` saw
+  start on it.
+- **What must hold** (`hooks/scripts/cleanup.sh`), for each worktree: a
+  linked worktree, never the repository's main one; its branch neither the
+  default branch (`<remote>/HEAD`) nor `main` nor `master`; `git status
+  --porcelain` empty; a PR for the branch `MERGED` whose `headRefOid` equals
+  the branch's local head. A squash merge leaves no ancestry, so the heads are
+  compared; a local commit past the merged head is unpublished work. Then
+  `git worktree remove` (never `--force`, run from the main worktree),
+  `git branch -D`, `git push <remote> --delete`.
+- **Otherwise nothing is touched**, and one line names what is missing
+  (uncommitted changes, PR open or absent, heads that differ, gh failing or
+  silent, default branch, main worktree), once per worktree. A removal is
+  said too. The lines go to `cleanup-notices`; `on-user.sh` hands them to the
+  model with the next prompt and consumes them. A path that is no longer a
+  worktree is skipped in silence.
+- **Never in the way.** The script is started without being awaited, so the
+  task call answers at once; `gh pr list` and the push are each bounded by
+  `KODFLOW_CLEANUP_TIMEOUT` seconds (default 15), a timeout or a failure
+  counting as "not known to be merged"; the whole run by 300 s. One run per
+  session at a time (`lib/lock.sh`). Every failure is swallowed.
 
 ## What the log is
 
@@ -629,12 +672,13 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KODFLOW_ROUTE=off` | the routing gate is off for the session |
 | `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
 | `KODFLOW_FEEDBACK=off` | no rule 6, nothing kept, nothing proposed |
+| `KODFLOW_CLEANUP=off` | no worktree, branch or remote branch is removed on close, no notice; `KODFLOW_CLEANUP_TIMEOUT` (seconds, default 15) bounds each `gh` and push call |
 
 ## Tests
 
 ```
 bash scripts/tests/test_hooks.sh
-bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh
+bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh + test_cleanup.sh
 claude plugin validate --json plugins/kodflow-hooks
 claude plugin test plugins/kodflow-hooks         # tests/mod/*.test.ts, in the engine
 node plugins/kodflow-hooks/tests/mod/run-node.ts # corpora, real disk, several processes, invariants

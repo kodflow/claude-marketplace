@@ -135,6 +135,18 @@ UserPromptSubmit)
         [ -n "$state" ] && ctx="${ctx:+$ctx$NL}$state"
     fi
 
+    # What the cleanup after a completed task or epic did, or left and why
+    # (hooks/scripts/cleanup.sh, run by the mod). Taken by a rename, so a
+    # line the cleanup appends meanwhile waits for the next prompt.
+    if [ -s "$SDIR/cleanup-notices" ]; then
+        taken=$SDIR/.cleanup-notices.$$
+        if mv -f "$SDIR/cleanup-notices" "$taken" 2>/dev/null; then
+            notes=$(head -c 4000 "$taken" 2>/dev/null)
+            rm -f -- "$taken" 2>/dev/null
+            [ -n "$notes" ] && ctx="${ctx:+$ctx$NL}$notes"
+        fi
+    fi
+
     # Every message is sorted before any work, so a remark about the task in
     # progress does not become a new task and a new subject does not become
     # the tail of an unrelated epic; a question gets a task of its own, closed
