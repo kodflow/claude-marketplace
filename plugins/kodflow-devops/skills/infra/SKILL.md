@@ -148,11 +148,12 @@ TaskCreate × N (where N ≤ 5, only for present clouds):
 ### Cloud routing (PR7 — Skills Architecture v1.3)
 
 ```bash
-# Cloud dispatch via route-agent.sh phase=apply, expand_from=.cloud[]
+# apply goes to the infrastructure specialist, and to the Kubernetes one when
+# the profile has k8s: true (_shared/routing-table.jsonl)
 ROUTER="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/route-agent.sh
 DISPATCH=$(bash "$ROUTER" --skill /infra --phase apply \
   --profile .claude/state/profile.json)
-# Returns one dispatch per cloud in the .cloud[] facet.
+# Returns the Agent-tool arguments (subagent_type, resolved_model, effort) per specialist.
 ```
 
 Each task embeds a task-contract v1 block:

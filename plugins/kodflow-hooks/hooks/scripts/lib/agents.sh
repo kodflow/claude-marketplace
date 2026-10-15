@@ -13,13 +13,16 @@
 #   kf_agent_def TYPE CFG PROJECT → KF_AGENT_DEF, the definition's path
 #   kf_skill_def NAME CFG PROJECT → KF_SKILL_DEF, a skill's SKILL.md
 #   kf_fm_model FILE              → KF_FM_MODEL, its frontmatter model
+#   kf_fm_effort FILE             → KF_FM_EFFORT, its frontmatter effort
 
 KF_AGENTS_LIB=${BASH_SOURCE[0]%/*}
 
 # hooks/gated-models.txt: one token a line, # and blank lines skipped. CI
-# holds it byte-identical to skills/_shared/gated-models.txt.
+# holds it byte-identical to skills/_shared/gated-models.txt. KF_GATED_FILE
+# names the list from another layout: skills/_shared/scripts/ carries a copy
+# of this file for route-agent.sh, and the list sits one level up there.
 kf_gated_load() {
-    local f=$KF_AGENTS_LIB/../../gated-models.txt line
+    local f=${KF_GATED_FILE:-$KF_AGENTS_LIB/../../gated-models.txt} line
     # Unreadable, the list falls back to the policy's model: an unreadable
     # file must not make every model ungated
     KF_GATED=""
@@ -123,19 +126,28 @@ kf_skill_def() {
 }
 
 # The first frontmatter block only, at most 60 lines, CRLF, quotes and a
-# trailing comment stripped. A file with no frontmatter has no model.
-kf_fm_model() {
-    KF_FM_MODEL=""
+# trailing comment stripped. A file with no frontmatter has no value.
+_kf_fm_get() {
     [ -r "$1" ] || return 1
-    KF_FM_MODEL=$(awk '
+    awk -v key="$2" '
         { sub(/[[:space:]]+$/, "") }
         NR == 1 { sub(/^\357\273\277/, ""); if ($0 != "---") exit; next }
         NR > 61 || $0 == "---" { exit }
-        /^model:/ {
-            v = $0; sub(/^model:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
+        index($0, key ":") == 1 {
+            v = $0; sub(/^[A-Za-z]+:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
             sub(/[[:space:]]+$/, "", v)
             if (v ~ /^".*"$/ || v ~ /^'\''.*'\''$/) v = substr(v, 2, length(v) - 2)
             print v; exit
-        }' "$1" 2>/dev/null)
+        }' "$1" 2>/dev/null
+}
+
+kf_fm_model() {
+    KF_FM_MODEL=$(_kf_fm_get "$1" model)
     [ -n "$KF_FM_MODEL" ]
+}
+
+# Its frontmatter effort, the same way.
+kf_fm_effort() {
+    KF_FM_EFFORT=$(_kf_fm_get "$1" effort)
+    [ -n "$KF_FM_EFFORT" ]
 }

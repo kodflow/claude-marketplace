@@ -71,6 +71,20 @@ jobs:
           diff plugins/kodflow-workflow/skills/_shared/gated-models.txt plugins/kodflow-hooks/hooks/gated-models.txt \
             || { echo "::error::gated-models.txt differs between _shared and kodflow-hooks"; exit 1; }
 
+      # route-agent.sh carries agents.sh, the hooks' reader of agent
+      # definitions (project, user, installed plugin), because a plugin is
+      # installed alone and cannot source a sibling's file. One source, two
+      # places: the copies must not drift.
+      - name: The router's agent reader is the hooks' agents.sh
+        run: |
+          diff plugins/kodflow-hooks/hooks/scripts/lib/agents.sh plugins/kodflow-workflow/skills/_shared/scripts/agents.sh \
+            || { echo "::error::agents.sh differs between kodflow-hooks and _shared/scripts"; exit 1; }
+
+      # One case per exit code of the router, against a fixture plugin cache,
+      # and the shipped routing table against the shipped agents.
+      - name: The router resolves, namespaces and refuses as documented
+        run: bash scripts/tests/test_route_agent.sh
+
       # Context cost, not correctness: pinned model/effort, description and
       # SKILL.md budgets, copied memory blocks, bare cross-plugin references.
       # Every finding is a warning until a check is named in COST_CHECKS_STRICT
@@ -192,6 +206,8 @@ jobs:
         run: /bin/bash plugins/kodflow-hooks/tests/test_root_gate.sh
       - name: Routing gate, gated-model fallback and agent feedback under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-hooks/tests/test_agents.sh
+      - name: Router under /bin/bash 3.2
+        run: /bin/bash scripts/tests/test_route_agent.sh
 
   # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
   # are checked by the engine itself, at the version the README names as

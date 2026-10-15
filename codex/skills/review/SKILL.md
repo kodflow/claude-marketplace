@@ -137,12 +137,12 @@ layer rather than a hand-maintained table that drifts:
 
 ```bash
 bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
-  --profile "$SCRATCH/repo-profile.json"               # reads ~/.codex/agents/routing-table.jsonl
-# --phase review = the /review rules (language fanout + protobuf/asn1); --profile = the file
+  --profile "$SCRATCH/repo-profile.json"               # reads _shared/routing-table.jsonl
+# --phase review = the /review rules (language fanout + react, postgres, protobuf); --profile = the file
 # Phase 0.5 wrote (.languages). A missing --phase or an absent profile exits 2/20 every run.
 ```
 
-The routing table provides guard+priority selection, `agent_template:
+The routing table (`_shared/routing-table.jsonl`, shipped with the plugin) provides guard+priority selection, `agent_template:
 developer-specialist-{language}` multi-language fan-out, and tool routes (e.g.
 `developer-specialist-react` when react detected, `data-specialist-postgres` for psql).
 Per-extension correctness for the common stacks (corrected names — verified on disk):
