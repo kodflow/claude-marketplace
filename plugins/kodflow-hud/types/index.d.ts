@@ -24,6 +24,14 @@ export type HudTask = {
   updated: number;
   /** Pull request URLs the subject or description cites. */
   prs: string[];
+  /** What the task is about in full: the tree's detail line. */
+  description?: string;
+  /** The task it is a subtask of (task_create parent=), by id. */
+  parent?: string;
+  /** The tasks it waits on (task_create blocked_by=), by id. */
+  blockedBy?: string[];
+  /** A short handle (T0, C6) the tree shows in place of the id. */
+  ref?: string;
 };
 
 /** An open epic: one with a task left to do, or the active one still empty. */
@@ -31,6 +39,8 @@ export type HudEpic = {
   id: number;
   title: string;
   agent: string;
+  /** Opened, in seconds. */
+  created: number;
   touched: number;
   tasks: HudTask[];
 };
@@ -63,6 +73,16 @@ export type HudActivity = {
   last: number;
 };
 
+/**
+ * What a loop runs on, as the session said it: the model the Agent call or
+ * the spawn resolved, the effort the call asked for. A field nobody gave
+ * stays absent: the tree then leaves its cell empty.
+ */
+export type HudModel = { model?: string; effort?: string };
+
+/** Who worked a task while it was in progress, kept once it moves on. */
+export type HudSeen = { worker?: string; workerId?: string };
+
 export type HudCiState = "pass" | "fail" | "pending" | "none" | "error";
 
 export type HudCi = { state: HudCiState; at: number };
@@ -74,6 +94,10 @@ declare module "claude-code" {
       agents: HudAgent[];
       activity: Record<string, HudActivity>;
       ci: Record<string, HudCi>;
+      /** By `<session>:<loop>` (loop "main" or a subagent's id): what it runs on. */
+      models: Record<string, HudModel>;
+      /** By `<agent>:<task id>`: the worker last seen on the task. */
+      seen: Record<string, HudSeen>;
       /** `<session>:<task>:<state>` already toasted, so each is toasted once. */
       toasted: string[];
       /**

@@ -2,9 +2,10 @@
 //
 // Two panes and a few toasts, beside the status line and never in its place
 // (the context segment, the epics' pills and the rest stay there):
-//   « Tâches »  the open epics of tasks.json, who works each task, how that
-//               worker stands, how long since it moved, the silent ones, and
-//               the tasks waiting on the person in a column of their own;
+//   « Tâches »  the open epics of tasks.json as a tree (subtasks, what each
+//               task waits on, the critical path) or as a graph by state,
+//               who works each task, on what model, how long since it moved,
+//               the silent ones and the ones waiting on the person;
 //   « Agents »  per loop (the main one and each subagent), the folder it
 //               works in, its last files by operation, its last call.
 //
@@ -15,8 +16,10 @@
 // adds nothing to what the model reads and can stop nothing. Every hook
 // fails open.
 //
-// The logic lives in the pure modules beside this file (board.ts,
-// activity.ts, alerts.ts, ci.ts, view.tsx); what is here reads `$`.
+// The logic lives in the pure modules beside this file (board.ts, tree.ts,
+// layout.tsx, models.ts, activity.ts, alerts.ts, ci.ts, view.tsx); the
+// « Tâches » pane's selection and folding live in its surface module,
+// client.tsx; what is here reads `$`.
 
 import { atom, read, update } from "claude-code";
 import type { Register } from "claude-code";
@@ -25,6 +28,8 @@ import type {
   HudAgent,
   HudBoard,
   HudCi,
+  HudModel,
+  HudSeen,
   HudTask,
 } from "../../types";
 import { MAIN, parseBoard, parseTasks, type Ctx } from "./board.ts";
@@ -32,7 +37,17 @@ import { fold, observe, prune } from "./activity.ts";
 import { alertsFor, trimKeys } from "./alerts.ts";
 import { CI_EVERY_MS, ciState, prsToCheck } from "./ci.ts";
 import { configDir, dirname, sessionDir, tasksFile } from "./paths.ts";
-import { agentsView, tasksView } from "./view.tsx";
+import { agentsView } from "./view.tsx";
+import { buildTree } from "./tree.ts";
+import { draw, initialUi, screenOf } from "./layout.tsx";
+import {
+  fromAgentCall,
+  keepSession,
+  merge,
+  modelKey,
+  parseModels,
+  seenFrom,
+} from "./models.ts";
 
 const boardAtom = atom(
   { plugin: "kodflow-hud", key: "board" } as const,
@@ -57,6 +72,14 @@ const toastedAtom = atom(
   { plugin: "kodflow-hud", key: "toasted" } as const,
   [] as string[],
 );
+const modelsAtom = atom(
+  { plugin: "kodflow-hud", key: "models" } as const,
+  {} as Record<string, HudModel>,
+);
+const seenAtom = atom(
+  { plugin: "kodflow-hud", key: "seen" } as const,
+  {} as Record<string, HudSeen>,
+);
 const primedAtom = atom({ plugin: "kodflow-hud", key: "primed" } as const, "");
 const tickAtom = atom({ plugin: "kodflow-hud", key: "tick" } as const, 0);
 
@@ -79,6 +102,8 @@ let polling = false;
 let checking = false;
 let lastSession = "";
 let lastMtime: number | undefined = -1;
+let modelsMtime: number | undefined = -1;
+let modelsPath = "";
 let allTasks: HudTask[] = [];
 let lastCi = 0;
 let root: string | undefined;
@@ -112,6 +137,57 @@ async function gitRoot($: any, dir: string): Promise<string> {
 async function tasksPath($: any, session: string): Promise<string | undefined> {
   const cfg = configDir(await $.env.get("CLAUDE_CONFIG_DIR"), home);
   return cfg ? tasksFile(sessionDir(cfg, session)) : undefined;
+}
+
+/** Fold what a source says of some loops into the models kept. */
+async function noteModels(
+  $: any,
+  said: Record<string, HudModel>,
+): Promise<void> {
+  const session = await $.session.id();
+  const fold = (before: Record<string, HudModel>) => {
+    const after = keepSession(before, session);
+    for (const [id, m] of Object.entries(said)) {
+      const key = modelKey(session, id);
+      after[key] = merge(after[key], m);
+    }
+    return after;
+  };
+  // Folded inside the update, on the latest record: two Agent results
+  // arriving together each keep the other's entry
+  const now = await read($, modelsAtom);
+  if (!same(now, fold(now))) await update($, modelsAtom, fold);
+}
+
+/**
+ * kodflow-hooks' agent-models.tsv, when its time moved, and the main loop's
+ * model: what the tree's model column reads beside the calls seen live.
+ */
+async function pollModels($: any, tasks: string): Promise<void> {
+  const path = tasks.replace(/tasks\.json$/, "agent-models.tsv");
+  const mtime = await $.fs.stat(path).then(
+    (s: { mtimeMs: number }) => s.mtimeMs,
+    () => undefined,
+  );
+  const said: Record<string, HudModel> = {};
+  // Another session's file is read afresh whatever its time says; a read
+  // that failed is not remembered as done, so the next poll tries again
+  if (mtime !== undefined && (path !== modelsPath || mtime !== modelsMtime)) {
+    const text: string | undefined = await $.fs
+      .read(path)
+      .catch(() => undefined);
+    if (text !== undefined) {
+      Object.assign(said, parseModels(text));
+      modelsMtime = mtime;
+      modelsPath = path;
+    }
+  } else if (mtime === undefined) {
+    modelsMtime = undefined;
+    modelsPath = path;
+  }
+  const main = await $.session.model().catch(() => undefined);
+  if (typeof main === "string" && main) said[MAIN] = { model: main };
+  if (Object.keys(said).length) await noteModels($, said);
 }
 
 function ctxOf(
@@ -151,9 +227,12 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
         const board = parseBoard(text);
         if (!same(await read($, boardAtom), board))
           await update($, boardAtom, () => board);
+        const seen = seenFrom(allTasks, await read($, seenAtom), session);
+        if (seen) await update($, seenAtom, () => seen);
         lastSession = session;
         lastMtime = mtime;
       }
+      await pollModels($, path);
     }
     const listed = await $.agent.list().catch(() => []);
     const agents: HudAgent[] = listed.map((a: any) => ({
@@ -320,7 +399,22 @@ export const register: Register = (on, options) => {
     if (r?.deny === undefined) {
       await record($, e, r).catch(() => undefined);
       if (TASK_TOOL.test(String(e.tool))) kick($);
+      if (e.tool === "Agent" && !r?.isError) {
+        const said = fromAgentCall(e as { effort?: unknown }, r?.result);
+        if (said)
+          await noteModels($, { [said.id]: said.model }).catch(() => undefined);
+      }
     }
+    return r;
+  }).catch(($, e, next) => next(e));
+
+  // The model core resolved for a subagent it started, whoever asked
+  on("agent.spawn", async ($, e, next) => {
+    const r: any = await next(e);
+    if (r?.deny === undefined && typeof r?.agentId === "string" && r.model)
+      await noteModels($, { [r.agentId]: { model: String(r.model) } }).catch(
+        () => undefined,
+      );
     return r;
   }).catch(($, e, next) => next(e));
 
@@ -328,24 +422,41 @@ export const register: Register = (on, options) => {
     "ui.render",
     { component: "Pane", requestId: TASKS_PANE },
     async ($, e) => {
-      const els = $.ui.resolve(e);
+      const els: any = $.ui.resolve(e);
       await read($, tickAtom);
-      const [board, agents, activity, ciMap] = await Promise.all([
+      const [board, agents, activity, ciMap, models, seen] = await Promise.all([
         read($, boardAtom),
         read($, agentsAtom),
         read($, activityAtom),
         read($, ciAtom),
+        read($, modelsAtom),
+        read($, seenAtom),
       ]);
-      return tasksView(
-        els,
-        {
-          board,
-          ctx: ctxOf(await $.clock.now(), agents, activity, settings.silentMs),
-          ci: ciMap,
-        },
-        e.props.bodyColumns,
-        e.props.scroll.bodyRows,
-      );
+      const model = buildTree({
+        board,
+        ctx: ctxOf(await $.clock.now(), agents, activity, settings.silentMs),
+        ci: ciMap,
+        models,
+        seen,
+        session: await $.session.id(),
+      });
+      const width = e.props.bodyColumns;
+      const rows = e.props.scroll.bodyRows;
+      // Where the surface runs modules (terminal, desktop) the tree takes
+      // keys and clicks; elsewhere it is drawn still, at its first state
+      // (the table may name Client where the surface then drops it)
+      const { Client } = els;
+      if (Client && (e.surface === "terminal" || e.surface === "desktop"))
+        return (
+          <Client
+            key="tree"
+            module="./client.tsx"
+            props={{ model, width, rows }}
+            width={width}
+            height={rows}
+          />
+        );
+      return draw(els, screenOf(model, initialUi(model), width, rows), width);
     },
   );
 

@@ -553,8 +553,28 @@ files, proven by a corpus recorded from it (Tests, below).
   `PreToolUse` matcher is the catch-all for this; tools the script does not
   handle are decided without jq (~6 ms per call, measured, the delegation gate
   included).
-- **Limits:** task subjects 40 characters, epic titles 20, refused beyond:
-  they are shown in full on the status line.
+- **The task tree.** `task_create` and `task_update` also take `parent`
+  (the id of the task this one is a subtask of), `blocked_by` (the ids it
+  waits on, a list; `"3, 4"` is read too) and `ref` (a short handle, `T0`,
+  `C6`), stored on the task as `parent`, `blockedBy` and `ref` only once set.
+  A parent exists in the caller's list, is in the same epic, and the tree
+  stays three levels deep at most (task, subtask, sub-subtask), counting the
+  subtasks of a task that moves; a task under itself or under one of its own
+  subtasks, a blocker that does not exist, a task waiting on itself, and a
+  wait that closes a cycle (`#1 waiting on #3 would be a cycle, #3 already
+  waits on #1 (#3 → #2 → #1)`) are refused with the reason, and a refused
+  call changes nothing. `parent=""`, `blocked_by=[]` and `ref=""` clear one.
+  A deleted task's subtasks move up a level and the tasks waiting on it stop
+  waiting. kodflow-hud draws the tree; nothing else reads these fields.
+- **Limits:** task subjects 18 characters (the title column of kodflow-hud's
+  tree; tasks.py allowed 40), refs 5, epic titles 20, refused beyond with the
+  limit and where the detail goes (`description`). A subject written longer
+  before the limit stays as written: it is never rewritten, the tree cuts it.
+- **Format version.** The tree's fields keep the file at version 2: the
+  status line (`internal/adapter/tasks/provider.go`) decodes named fields
+  with `encoding/json`, which skips the others, and never reads `version`;
+  `lib/epics.jq` picks the fields it uses. A version-2 file with the new
+  fields reads as before in both, and a file without them is unchanged.
 - **v1 files** (one epic per agent, a dict) are read as v2 and rewritten by
   the next change; the hooks read both shapes.
 - **Running subagents** are recorded next to it, in `agents.json`, by the
@@ -645,7 +665,13 @@ from `mcp/tasks.py` before it was removed (38 scenarios, 184 calls: the 26
 tests of its suite, the worker cases, the order of validation, code points,
 `task_list` writing nothing, the agent id made path-safe, a worker judged by its id alone): each step keeps the
 file before, the call, the answer and the file after, and the port must match
-every one (`conformance.ts`, run by `claude plugin test` and by node).
+every one (`conformance.ts`, run by `claude plugin test` and by node). One
+change since is deliberate, the 18-character subject: the corpus is replayed
+amended for it (its long subjects shortened, its limits and refusal text
+moved, every other byte as recorded), and `task_create` and `task_update`,
+whose text changed, must still take every argument tasks.py gave them, as
+it gave them. `tests/mod/tasks.test.ts` holds the tree: parent, depth,
+cycles, blockers, refs, a deletion's links, the file left at version 2.
 `tests/mod/register.test.ts` runs the wiring in the engine's own test kit,
 with the host in memory: registration, the temporary file and `mv` under the
 lock, refusals as `{ deny }`, the cap read from `$.agent.list()`, the beat

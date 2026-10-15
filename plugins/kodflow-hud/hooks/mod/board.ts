@@ -6,6 +6,10 @@
 // open as the status line counts it: a task left to do, or the agent's active
 // epic while it has no task yet. Tasks filed under no epic (epic 0) form one
 // more group, "Tâches", as the status line names its pill for them.
+//
+// A task may also carry the tree's fields (kodflow-hooks writes them only
+// once set): `parent`, `blockedBy`, `ref`. A file without them is a flat
+// list, every task at the top.
 
 import type {
   HudActivity,
@@ -51,6 +55,13 @@ function toTask(raw: Obj): HudTask {
   if (raw.worker) task.worker = text(raw.worker);
   if (raw.worker_id) task.workerId = text(raw.worker_id);
   if (raw.assignee) task.assignee = text(raw.assignee);
+  if (raw.description) task.description = text(raw.description);
+  if (raw.parent) task.parent = text(raw.parent);
+  if (Array.isArray(raw.blockedBy)) {
+    const ids = raw.blockedBy.map(text).filter((id: string) => id !== "");
+    if (ids.length) task.blockedBy = ids;
+  }
+  if (raw.ref) task.ref = text(raw.ref);
   return task;
 }
 
@@ -90,6 +101,7 @@ export function parseBoard(fileText: string | undefined): HudBoard {
       id: e.id,
       title: text(e.title),
       agent,
+      created: num(e.created) || num(e.touched),
       touched: num(e.touched),
       tasks: own,
     });
@@ -101,6 +113,7 @@ export function parseBoard(fileText: string | undefined): HudBoard {
       id: 0,
       title: NO_EPIC_TITLE,
       agent: MAIN,
+      created: Math.min(...loose.map((t) => t.updated)),
       touched: 0,
       tasks: loose,
     });
@@ -184,9 +197,3 @@ export function ago(ms: number): string {
   if (h < 24) return `${h}h${String(m % 60).padStart(2, "0")}`;
   return `${Math.floor(h / 24)}j`;
 }
-
-/** Tasks waiting on the person: `assignee: human`, not yet completed. */
-export const humanTasks = (board: HudBoard): HudTask[] =>
-  board.epics.flatMap((e) =>
-    e.tasks.filter((t) => t.assignee === "human" && t.status !== "completed"),
-  );

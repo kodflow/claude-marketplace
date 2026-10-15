@@ -1,7 +1,10 @@
 // tasks.test.ts — the pure modules, under `claude plugin test`.
 import { test, expect } from "claude-code/testing";
-import { conformance } from "./conformance.ts";
+import { call, conformance } from "./conformance.ts";
 import {
+  MAIN,
+  MAX_REF,
+  MAX_SUBJECT,
   TOOLS,
   codePoints,
   humanContext,
@@ -216,4 +219,161 @@ test("the user's tasks: open ones, and the context a compaction gets back", () =
   expect(text).not.toContain("Answered");
   expect(text).toContain("task_update(id, status=completed)");
   expect(humanContext(parse(undefined, 1))).toBeUndefined();
+});
+
+// --- the task tree: parent, blocked_by, ref ------------------------------------
+
+const NOW = 1791900000;
+
+/** A list of one epic (#1) and the calls made on it, step by step. */
+function session() {
+  let file: string | undefined = JSON.stringify({
+    version: 2,
+    next_id: 1,
+    next_epic: 3,
+    epics: [
+      { id: 1, agent: "main", title: "Tree", created: NOW, touched: NOW },
+      { id: 2, agent: "main", title: "Other", created: NOW, touched: NOW },
+    ],
+    active: { main: 1 },
+    tasks: [],
+  });
+  const run = (tool: any, args: Record<string, unknown>) => {
+    const got = call(file, tool, MAIN, args, NOW, []);
+    file = got.file;
+    return got.answer;
+  };
+  const task = (id: string) =>
+    JSON.parse(file!).tasks.find((t: any) => t.id === id);
+  return { run, task, file: () => JSON.parse(file!) };
+}
+
+test("subject: 18 characters at most, the limit and where the detail goes in the refusal", () => {
+  const s = session();
+  expect(MAX_SUBJECT).toBe(18);
+  expect(s.run("task_create", { subject: "x".repeat(18), epic: 1 }).error).toBe(false);
+  const long = s.run("task_create", { subject: "x".repeat(19), epic: 1 });
+  expect(long.error).toBe(true);
+  expect(long.text).toContain("subject is 19 characters, the limit is 18");
+  expect(long.text).toContain("move the detail to description");
+  const update = s.run("task_update", { id: "1", subject: "y".repeat(19) });
+  expect(update.error).toBe(true);
+  expect(update.text).toContain("the limit is 18");
+});
+
+test("a longer subject already in the file is kept as written, never rewritten", () => {
+  const before = JSON.stringify({
+    version: 2,
+    next_id: 2,
+    next_epic: 1,
+    epics: [],
+    active: {},
+    tasks: [{ id: "1", agent: "main", epic: 0, subject: "A subject written before the limit", status: "pending", created: 1, updated: 1 }],
+  });
+  const got = call(before, "task_update", MAIN, { id: "1", status: "completed" }, NOW, []);
+  expect(got.answer.error).toBe(false);
+  expect(JSON.parse(got.file!).tasks[0].subject).toBe("A subject written before the limit");
+});
+
+test("parent: a subtask in its parent's epic, three levels at most, no cycle", () => {
+  const s = session();
+  s.run("task_create", { subject: "Top", epic: 1, ref: "C6" });
+  expect(s.run("task_create", { subject: "Mid", epic: 1, parent: "1" }).error).toBe(false);
+  expect(s.run("task_create", { subject: "Leaf", epic: 1, parent: "#2" }).error).toBe(false);
+  expect(s.task("2").parent).toBe("1");
+  expect(s.task("3").parent).toBe("2");
+  // A fourth level is refused, with the limit
+  const deep = s.run("task_create", { subject: "Too deep", epic: 1, parent: "3" });
+  expect(deep.error).toBe(true);
+  expect(deep.text).toContain("would reach 4 levels, the limit is 3");
+  // A parent that does not exist, or in another epic
+  const missing = s.run("task_create", { subject: "Orphan", epic: 1, parent: "99" });
+  expect(missing.text).toBe("parent: no task #99 in this agent's list to file #4 under");
+  const other = s.run("task_create", { subject: "Elsewhere", epic: 2, parent: "1" });
+  expect(other.text).toContain("a subtask is filed in its parent's epic");
+  // A task under its own subtask is a cycle
+  const cycle = s.run("task_update", { id: "1", parent: "3" });
+  expect(cycle.error).toBe(true);
+  expect(cycle.text).toContain("that would be a cycle");
+  expect(s.run("task_update", { id: "2", parent: "2" }).text).toContain("cycle");
+  // Moving a task with children counts their levels too
+  s.run("task_create", { subject: "Second", epic: 1 });
+  s.run("task_create", { subject: "Under 2nd", epic: 1, parent: "4" });
+  const moved = s.run("task_update", { id: "2", parent: "5" });
+  expect(moved.text).toContain("would reach 4 levels");
+  // "" takes it out of any
+  expect(s.run("task_update", { id: "3", parent: "" }).error).toBe(false);
+  expect(Object.hasOwn(s.task("3"), "parent")).toBe(false);
+  // A refusal changes nothing: the file is as it was
+  expect(s.task("2").parent).toBe("1");
+});
+
+test("blocked_by: existing tasks, not itself, no cycle however long; [] clears", () => {
+  const s = session();
+  s.run("task_create", { subject: "A", epic: 1 });
+  s.run("task_create", { subject: "B", epic: 1, blocked_by: ["1"] });
+  s.run("task_create", { subject: "C", epic: 1, blocked_by: "2, #1, 2" });
+  expect(s.task("2").blockedBy).toEqual(["1"]);
+  expect(s.task("3").blockedBy).toEqual(["2", "1"]);
+  expect(s.run("task_create", { subject: "D", epic: 1, blocked_by: ["9"] }).text).toBe(
+    "blocked_by: no task #9 in this agent's list",
+  );
+  expect(s.run("task_update", { id: "1", blocked_by: ["1"] }).text).toBe(
+    "blocked_by: #1 cannot wait on itself",
+  );
+  const cycle = s.run("task_update", { id: "1", blocked_by: ["3"] });
+  expect(cycle.error).toBe(true);
+  expect(cycle.text).toBe(
+    "blocked_by: #1 waiting on #3 would be a cycle, #3 already waits on #1 (#3 → #2 → #1)",
+  );
+  expect(Object.hasOwn(s.task("1"), "blockedBy")).toBe(false);
+  expect(s.run("task_update", { id: "3", blocked_by: [] }).error).toBe(false);
+  expect(Object.hasOwn(s.task("3"), "blockedBy")).toBe(false);
+});
+
+test("ref: 5 characters at most, \"\" clears it", () => {
+  const s = session();
+  expect(s.run("task_create", { subject: "Policy", epic: 1, ref: "C1–C5" }).error).toBe(false);
+  expect(s.task("1").ref).toBe("C1–C5");
+  const long = s.run("task_update", { id: "1", ref: "C1-C55" });
+  expect(long.error).toBe(true);
+  expect(long.text).toContain("ref is 6 characters, the limit is 5");
+  expect(s.run("task_update", { id: "1", ref: "" }).error).toBe(false);
+  expect(Object.hasOwn(s.task("1"), "ref")).toBe(false);
+});
+
+test("a deleted task leaves no dangling link: subtasks go up, waiting stops", () => {
+  const s = session();
+  s.run("task_create", { subject: "Root", epic: 1 });
+  s.run("task_create", { subject: "Mid", epic: 1, parent: "1" });
+  s.run("task_create", { subject: "Leaf", epic: 1, parent: "2", blocked_by: ["2"] });
+  s.run("task_create", { subject: "After", epic: 1, blocked_by: ["2", "1"] });
+  expect(s.run("task_update", { id: "2", status: "deleted" }).error).toBe(false);
+  expect(s.task("3").parent).toBe("1");
+  expect(Object.hasOwn(s.task("3"), "blockedBy")).toBe(false);
+  expect(s.task("4").blockedBy).toEqual(["1"]);
+});
+
+test("the file stays version 2, the new fields only on the tasks that set them", () => {
+  const s = session();
+  s.run("task_create", { subject: "Plain", epic: 1 });
+  s.run("task_create", { subject: "Linked", epic: 1, parent: "1", blocked_by: ["1"], ref: "T0" });
+  const data = s.file();
+  expect(data.version).toBe(2);
+  expect(Object.keys(data.tasks[0]).sort()).toEqual(
+    ["agent", "created", "description", "epic", "id", "status", "subject", "updated"],
+  );
+  expect(data.tasks[1]).toMatchObject({ parent: "1", blockedBy: ["1"], ref: "T0" });
+});
+
+test("tools: subject at 18, parent, blocked_by and ref offered on create and update", () => {
+  for (const tool of [TOOLS[0]!, TOOLS[1]!]) {
+    const props = tool.inputSchema.properties;
+    expect(props.subject.maxLength).toBe(18);
+    expect(props.parent.type).toBe("string");
+    expect(props.blocked_by).toMatchObject({ type: "array", items: { type: "string" } });
+    expect(props.ref.maxLength).toBe(MAX_REF);
+    expect(tool.description).toContain("18 characters");
+  }
+  expect(TOOLS[5]!.inputSchema.properties.subject.maxLength).toBe(18);
 });

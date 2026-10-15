@@ -1,40 +1,19 @@
-// view.tsx — the two panes' trees, from plain data. No `$`: the elements
-// come in from the surface's table (`$.ui.resolve(e)`) and the size from the
-// pane's own props, so a test can draw them at any width.
+// view.tsx — the « Agents » pane's tree, from plain data. No `$`: the
+// elements come in from the surface's table (`$.ui.resolve(e)`) and the size
+// from the pane's own props, so a test can draw it at any width. The
+// « Tâches » pane is drawn by layout.tsx (the tree and the graph), in its
+// surface module client.tsx.
 //
-// The vocabulary is the status line's (internal/presentation/renderer): an
-// epic is its title and done/total in mauve; ■ a task done, an amber ■ the
-// task under way, □ one left to do. What the status line does not draw is
-// added here: who works each task and how that worker stands, how long since
-// it last moved, the silent flag, the tasks waiting on the person, and where
-// each agent works. Below a width, columns drop off from the right; below
-// the pane's height, completed tasks fold into one line per epic.
+// For each loop, where it works and the files it last read (violet), wrote
+// (orange) or committed (green), as filetree colours them.
 
-import type {
-  HudActivity,
-  HudAgent,
-  HudBoard,
-  HudCi,
-  HudOp,
-  HudTask,
-} from "../../types";
-import {
-  LIVE,
-  MAIN,
-  activityOf,
-  ago,
-  humanTasks,
-  judge,
-  loopLabel,
-  type Ctx,
-} from "./board.ts";
+import type { HudActivity, HudAgent, HudOp } from "../../types";
+import { LIVE, MAIN, activityOf } from "./board.ts";
 import { shortFile, tilde } from "./paths.ts";
 
 /** The two elements every surface's table has, all these trees use. */
 export type Els = { Box: any; Text: any };
 
-export const MAUVE = "#d7afd7"; // the status line's epic ground, 256-colour 182
-export const AMBER = "#d78700"; // the cell under way
 export const OP_COLOR: Record<HudOp, string> = {
   read: "#af87ff",
   write: "#ff8700",
@@ -42,15 +21,8 @@ export const OP_COLOR: Record<HudOp, string> = {
 };
 const OP_MARK: Record<HudOp, string> = { read: "R", write: "W", commit: "C" };
 
-/** Columns at which the rows gain a field, narrowest first. */
-export const WIDE = { age: 48, worker: 76, human: 100 } as const;
-
-const ICON: Record<string, { glyph: string; color?: string; dim?: boolean }> = {
-  completed: { glyph: "■", dim: true },
-  in_progress: { glyph: "■", color: AMBER },
-  waiting: { glyph: "◇", color: "warning" },
-  pending: { glyph: "□" },
-};
+/** Columns from which an agent's row shows the time of its last call. */
+export const WIDE = { age: 48 } as const;
 
 const stateColor = (state: string): string =>
   state === "running" || state === MAIN
@@ -58,166 +30,6 @@ const stateColor = (state: string): string =>
     : LIVE.has(state)
       ? "warning"
       : "inactive";
-
-const CI_MARK: Record<string, { text: string; color: string } | undefined> = {
-  pass: { text: "CI ✓", color: "success" },
-  fail: { text: "CI ✗", color: "error" },
-  pending: { text: "CI …", color: "warning" },
-  error: { text: "CI ?", color: "inactive" },
-  none: undefined,
-};
-
-export type TasksData = {
-  board: HudBoard;
-  ctx: Ctx;
-  ci: Readonly<Record<string, HudCi>>;
-};
-
-function taskRow(
-  { Box, Text }: Els,
-  task: HudTask,
-  data: TasksData,
-  width: number,
-  prefix = "task",
-) {
-  const icon = ICON[task.status] ?? ICON.pending!;
-  const v = judge(task, data.ctx);
-  const wide = width >= WIDE.worker;
-  const meta: any[] = [];
-  if (wide && (task.workerId || task.agent !== MAIN)) {
-    meta.push(
-      <Text color={stateColor(v.state)}>● </Text>,
-      <Text dimColor>
-        {task.worker || loopLabel(v.loop, data.ctx.agents)} {v.state}{" "}
-      </Text>,
-    );
-  }
-  if (width >= WIDE.age && task.status !== "completed")
-    meta.push(<Text dimColor>{ago(data.ctx.now - v.last)}</Text>);
-  if (v.silent)
-    meta.push(
-      <Text color="error" bold>
-        {wide ? " silencieux" : " !"}
-      </Text>,
-    );
-  if (wide)
-    for (const pr of task.prs) {
-      const mark = CI_MARK[data.ci[pr]?.state ?? "none"];
-      if (mark) meta.push(<Text color={mark.color}> {mark.text}</Text>);
-    }
-  return (
-    <Box key={`${prefix}-${task.id}`} flexDirection="row">
-      <Text
-        {...(icon.color && { color: icon.color })}
-        {...(icon.dim && { dimColor: true })}
-      >
-        {icon.glyph}{" "}
-      </Text>
-      <Box flexGrow={1} flexShrink={1}>
-        <Text dimColor={task.status === "completed"} wrap="truncate-end">
-          #{task.id} {task.subject}
-        </Text>
-      </Box>
-      {meta.length > 0 && (
-        <Box flexShrink={0} paddingLeft={1}>
-          {meta}
-        </Box>
-      )}
-    </Box>
-  );
-}
-
-/** Lines the board takes with every task shown. */
-const fullLines = (board: HudBoard): number =>
-  board.epics.reduce((n, e) => n + 1 + e.tasks.length, 0);
-
-function board(els: Els, data: TasksData, width: number, rows: number) {
-  const { Box, Text } = els;
-  if (!data.board.found)
-    return (
-      <Text dimColor>
-        Aucune liste de tâches pour cette session (kodflow-hooks la tient).
-      </Text>
-    );
-  if (data.board.epics.length === 0)
-    return <Text dimColor>Aucun epic ouvert.</Text>;
-  const fold = fullLines(data.board) > rows;
-  return (
-    <Box flexDirection="column">
-      {data.board.epics.map((epic) => {
-        const done = epic.tasks.filter((t) => t.status === "completed");
-        const shown = fold
-          ? epic.tasks.filter((t) => t.status !== "completed")
-          : epic.tasks;
-        const owner =
-          epic.agent !== MAIN && width >= WIDE.worker
-            ? ` · ${loopLabel(epic.agent, data.ctx.agents)}`
-            : "";
-        return (
-          <Box key={`epic-${epic.id}`} flexDirection="column">
-            <Text color={MAUVE} bold wrap="truncate-end">
-              {epic.id ? `#${epic.id} ` : ""}
-              {epic.title || `#${epic.id}`} {done.length}/{epic.tasks.length}
-              {owner}
-            </Text>
-            {fold && done.length > 0 && (
-              <Text dimColor>
-                ■ {done.length} terminée{done.length > 1 ? "s" : ""}
-              </Text>
-            )}
-            {shown.map((t) => taskRow(els, t, data, width))}
-          </Box>
-        );
-      })}
-    </Box>
-  );
-}
-
-function humans(els: Els, list: HudTask[], data: TasksData, width: number) {
-  const { Box, Text } = els;
-  return (
-    <Box key="human" flexDirection="column">
-      <Text bold>Pour toi ({list.length})</Text>
-      {list.map((t) => taskRow(els, t, data, width, "human"))}
-    </Box>
-  );
-}
-
-/** The « Tâches » pane: the open epics, and the person's tasks apart. */
-export function tasksView(
-  els: Els,
-  data: TasksData,
-  width: number,
-  rows: number,
-) {
-  const { Box } = els;
-  const mine = humanTasks(data.board);
-  if (mine.length === 0)
-    return (
-      <Box key="tasks" flexDirection="column">
-        {board(els, data, width, rows)}
-      </Box>
-    );
-  if (width >= WIDE.human) {
-    const side = Math.min(40, Math.floor(width / 3));
-    return (
-      <Box key="tasks" flexDirection="row">
-        <Box flexDirection="column" flexGrow={1} flexShrink={1}>
-          {board(els, data, width - side - 1, rows)}
-        </Box>
-        <Box flexDirection="column" width={side} flexShrink={0} paddingLeft={1}>
-          {humans(els, mine, data, side - 1)}
-        </Box>
-      </Box>
-    );
-  }
-  return (
-    <Box key="tasks" flexDirection="column">
-      {board(els, data, width, rows - mine.length - 1)}
-      {humans(els, mine, data, width)}
-    </Box>
-  );
-}
 
 export type AgentsData = {
   agents: readonly HudAgent[];

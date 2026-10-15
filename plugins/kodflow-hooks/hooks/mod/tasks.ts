@@ -15,9 +15,21 @@
 // can do (a "go", a Touch ID, a gesture on a NAS). It is a task like the
 // others, with `assignee: "human"` and the status `waiting`, so the readers
 // of tasks.json that know nothing of the field still count it right.
+//
+// The task tree came after it too (kodflow-hud draws it): three optional
+// fields a task carries only once set, so a file without them is read as
+// before and every reader that ignores them (the status line decodes named
+// fields, lib/epics.jq picks the ones it uses) reads version 2 unchanged:
+// `parent`, the task it is a subtask of (three levels at most); `blockedBy`,
+// the tasks it waits on; `ref`, a short handle (T0, C6) the tree shows.
 
-export const MAX_SUBJECT = 40;
+/** The title column of the task tree; tasks.py allowed 40. */
+export const MAX_SUBJECT = 18;
 export const MAX_TITLE = 20;
+/** A ref is a handle (T0, C6, #12), not a name. */
+export const MAX_REF = 5;
+/** Task, subtask, sub-subtask. */
+export const MAX_DEPTH = 3;
 export const STATUSES = [
   "pending",
   "in_progress",
@@ -202,9 +214,35 @@ const checkSubject = (subject: unknown): string =>
     subject,
     "subject",
     MAX_SUBJECT,
-    "it is shown in full on the status line. Shorten it to an imperative title " +
-      "and move the detail to description.",
+    "it is the title column of the task tree and is shown in full on the status line. " +
+      "Shorten it to an imperative title and move the detail to description.",
   );
+
+/** A ref given: the handle, or "" to clear it. */
+function checkRef(value: unknown): string {
+  const v = strip(pyStr(value));
+  const n = codePoints(v);
+  if (n > MAX_REF)
+    throw new TaskError(
+      `ref is ${n} characters, the limit is ${MAX_REF}: a short handle such as T0 or C6, ` +
+        'shown in the tree\'s identifier column; ref="" clears it.',
+    );
+  return v;
+}
+
+/** A task id as a caller spells it: "12", "#12" or 12. */
+const idOf = (value: unknown): string => strip(pyStr(value)).replace(/^#+/, "");
+
+/** blocked_by given: a list of ids (or one, or "3, 4"), once each, in order. */
+function checkIds(value: unknown): string[] {
+  const items = Array.isArray(value) ? value : pyStr(value).split(/[\s,]+/);
+  const ids: string[] = [];
+  for (const item of items) {
+    const id = idOf(item);
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
 
 const checkTitle = (title: unknown): string =>
   checkText(
@@ -391,6 +429,149 @@ function claimWorker(
 const inProgressCap = (ctx: Ctx, agent: string): number =>
   agent === MAIN ? 1 + ctx.workers.filter((w) => w.alive).length : 1;
 
+// --- the tree ------------------------------------------------------------------------
+
+const taskOf = (data: Data, agent: string, id: string): Obj | undefined =>
+  data.tasks.find((t) => t.id === id && get(t, "agent", MAIN) === agent);
+
+/** 1 for a task with no parent; a parent naming nothing ends the chain. */
+function depthOf(data: Data, agent: string, task: Obj): number {
+  const seen = new Set<string>();
+  let depth = 1;
+  for (let t = task; truthy(t.parent) && !seen.has(t.id); depth++) {
+    seen.add(t.id);
+    const up = taskOf(data, agent, pyStr(t.parent));
+    if (!up) break;
+    t = up;
+  }
+  return depth;
+}
+
+/** Levels under a task: 0 for a leaf, 1 with children, 2 with grandchildren. */
+function heightOf(data: Data, agent: string, id: string, seen = new Set<string>()): number {
+  if (seen.has(id)) return 0;
+  seen.add(id);
+  let height = 0;
+  for (const t of data.tasks)
+    if (get(t, "agent", MAIN) === agent && pyStr(get(t, "parent", "")) === id)
+      height = Math.max(height, 1 + heightOf(data, agent, t.id, seen));
+  return height;
+}
+
+/**
+ * File `task` under `parentId`, "" taking it out of any: the parent exists in
+ * the agent's list, is in the same epic, is neither the task nor under it,
+ * and the task with its own subtasks still fits in MAX_DEPTH levels.
+ */
+function setParent(data: Data, agent: string, task: Obj, parentId: string): void {
+  if (!parentId) {
+    delete task.parent;
+    return;
+  }
+  const parent = taskOf(data, agent, parentId);
+  if (!parent)
+    throw new TaskError(
+      `parent: no task #${parentId} in this agent's list to file #${task.id} under`,
+    );
+  for (let t: Obj | undefined = parent, i = 0; t && i <= data.tasks.length; i++) {
+    if (t.id === task.id)
+      throw new TaskError(
+        `parent: #${task.id} cannot go under #${parentId}, which is #${task.id} itself or one of its subtasks: that would be a cycle`,
+      );
+    t = truthy(t.parent) ? taskOf(data, agent, pyStr(t.parent)) : undefined;
+  }
+  const epic = get(task, "epic", 0);
+  if (get(parent, "epic", 0) !== epic)
+    throw new TaskError(
+      `parent: #${parentId} is in epic #${get(parent, "epic", 0)} and #${task.id} in epic #${epic}: a subtask is filed in its parent's epic`,
+    );
+  const depth = depthOf(data, agent, parent) + 1 + heightOf(data, agent, task.id);
+  if (depth > MAX_DEPTH)
+    throw new TaskError(
+      `parent: under #${parentId}, #${task.id} would reach ${depth} levels, the limit is ${MAX_DEPTH} ` +
+        "(task, subtask, sub-subtask): file it higher up, or split the subject into its own task",
+    );
+  task.parent = parentId;
+}
+
+/** The chain from `from` to `to` along blockedBy, when there is one. */
+function waitPath(data: Data, agent: string, from: string, to: string): string[] | undefined {
+  const seen = new Set<string>();
+  const walk = (id: string): string[] | undefined => {
+    if (id === to) return [id];
+    if (seen.has(id)) return undefined;
+    seen.add(id);
+    const t = taskOf(data, agent, id);
+    for (const next of Array.isArray(t?.blockedBy) ? t!.blockedBy : []) {
+      const rest = walk(pyStr(next));
+      if (rest) return [id, ...rest];
+    }
+    return undefined;
+  };
+  return walk(from);
+}
+
+/**
+ * Make `task` wait on `ids`, [] for none: each one exists in the agent's
+ * list, is not the task, and does not already wait on it, however far.
+ */
+function setBlockers(data: Data, agent: string, task: Obj, ids: string[]): void {
+  if (!ids.length) {
+    delete task.blockedBy;
+    return;
+  }
+  for (const id of ids) {
+    if (id === task.id)
+      throw new TaskError(`blocked_by: #${task.id} cannot wait on itself`);
+    if (!taskOf(data, agent, id))
+      throw new TaskError(`blocked_by: no task #${id} in this agent's list`);
+    const path = waitPath(data, agent, id, task.id);
+    if (path)
+      throw new TaskError(
+        `blocked_by: #${task.id} waiting on #${id} would be a cycle, #${id} already waits on #${task.id} ` +
+          `(${path.map((p) => `#${p}`).join(" → ")})`,
+      );
+  }
+  task.blockedBy = ids;
+}
+
+/** A deleted task leaves no dangling link: its subtasks go up a level. */
+function unlink(data: Data, agent: string, gone: Obj): void {
+  for (const t of data.tasks) {
+    if (get(t, "agent", MAIN) !== agent) continue;
+    if (pyStr(get(t, "parent", "")) === gone.id) {
+      if (truthy(gone.parent)) t.parent = gone.parent;
+      else delete t.parent;
+    }
+    if (Array.isArray(t.blockedBy) && t.blockedBy.some((b: unknown) => pyStr(b) === gone.id)) {
+      t.blockedBy = t.blockedBy.filter((b: unknown) => pyStr(b) !== gone.id);
+      if (!t.blockedBy.length) delete t.blockedBy;
+    }
+  }
+}
+
+/** What task_create and task_update take beyond tasks.py's arguments. */
+type TreeArgs = { parent?: string; blockers?: string[]; ref?: string };
+
+const given = (v: unknown): boolean => v !== undefined && v !== null;
+
+function treeArgs(args: Obj): TreeArgs {
+  const out: TreeArgs = {};
+  if (given(args.parent)) out.parent = idOf(args.parent);
+  if (given(args.blocked_by)) out.blockers = checkIds(args.blocked_by);
+  if (given(args.ref)) out.ref = checkRef(args.ref);
+  return out;
+}
+
+function applyTree(data: Data, agent: string, task: Obj, tree: TreeArgs): void {
+  if (tree.parent !== undefined) setParent(data, agent, task, tree.parent);
+  if (tree.blockers !== undefined) setBlockers(data, agent, task, tree.blockers);
+  if (tree.ref !== undefined) {
+    if (tree.ref) task.ref = tree.ref;
+    else delete task.ref;
+  }
+}
+
 // --- the tools ---------------------------------------------------------------------
 
 /** A tool call checked: whether it writes, and the change it makes. */
@@ -398,6 +579,7 @@ export type Step = { mutates: boolean; run: (data: Data, ctx: Ctx) => string };
 
 function taskCreate(agent: string, args: Obj): Step {
   const subject = checkSubject(args.subject);
+  const tree = treeArgs(args);
   const wanted = args.epic;
   return {
     mutates: true,
@@ -430,6 +612,7 @@ function taskCreate(agent: string, args: Obj): Step {
         created: ctx.now,
         updated: ctx.now,
       };
+      applyTree(data, agent, task, tree);
       data.next_id += 1;
       data.tasks.push(task);
       touch(data, agent, epicId, ctx.now);
@@ -462,6 +645,7 @@ function taskUpdate(agent: string, args: Obj): Step {
   }
   if (subject !== undefined && subject !== null)
     subject = checkSubject(subject);
+  const tree = treeArgs(args);
   // worker only means something on a start; with any other status it is
   // ignored, and leaving in_progress drops the link anyway
   const worker =
@@ -478,8 +662,11 @@ function taskUpdate(agent: string, args: Obj): Step {
       touch(data, agent, get(task, "epic", 0), ctx.now);
       if (status === "deleted") {
         data.tasks.splice(idx, 1);
+        unlink(data, agent, task);
         return `Task #${taskId} deleted`;
       }
+      // The tree is checked before anything moves: a refusal leaves it as it was
+      applyTree(data, agent, task, tree);
       // Nobody but the user works on the user's task: no start, no worker
       if (
         isHuman(task) &&
@@ -813,6 +1000,33 @@ export function resolveWorkers(
 
 // --- what the model reads -------------------------------------------------------------
 
+const TREE =
+  " Optional, for the user's task tree: parent=<id> files it as a subtask (three levels at most, in its " +
+  "parent's epic), blocked_by=[<id>, ...] names the tasks it waits on (no cycle), ref names a short handle " +
+  "of 5 characters at most (T0, C6). A pending task whose blockers are all completed shows as ready, one " +
+  "with a blocker left as blocked; the longest blocked_by chain is the epic's critical path.";
+
+/** The tree's arguments, the same on task_create and task_update. */
+const TREE_PROPS: Obj = {
+  parent: {
+    type: "string",
+    description:
+      'Id of the task this one is a subtask of, in the same epic; three levels at most. "" for none.',
+  },
+  blocked_by: {
+    type: "array",
+    items: { type: "string" },
+    description:
+      "Ids of the tasks this one waits on; [] for none. A cycle is refused.",
+  },
+  ref: {
+    type: "string",
+    maxLength: MAX_REF,
+    description:
+      'Short handle shown in the tree, 5 characters at most ("T0", "C6"). "" clears it.',
+  },
+};
+
 const WORKFLOW =
   " Work is grouped in epics, one per subject; several can be open at once, one is active (the one being " +
   "worked on) and every task names its epic explicitly. The user's status line shows every open epic live, so the list must say what is true at every " +
@@ -832,9 +1046,10 @@ export const TOOLS: readonly {
       "of the epic the task belongs to (task_list, or the Epics line given with each prompt, lists them), " +
       "or 0 for a task outside any epic; open a new subject with task_epic first. task_focus the epic when " +
       'you start its work. A change to an already completed task is a new task "Rework #N: ..." in that ' +
-      "task's epic. subject: at most 40 characters, " +
-      'imperative, no final punctuation ("Add the effort gauge"); detail goes in description. New tasks ' +
-      "start pending." +
+      "task's epic. subject: at most 18 characters, the title column of the task tree, " +
+      'imperative, no final punctuation ("Add effort gauge"); detail goes in description, which the tree ' +
+      "shows under the selected task. New tasks start pending." +
+      TREE +
       WORKFLOW,
     inputSchema: {
       type: "object",
@@ -842,7 +1057,8 @@ export const TOOLS: readonly {
         subject: {
           type: "string",
           maxLength: MAX_SUBJECT,
-          description: "Short imperative title, 40 characters at most.",
+          description:
+            "Short imperative title, 18 characters at most; the detail goes in description.",
         },
         description: { type: "string", description: "What needs to be done." },
         epic: {
@@ -851,6 +1067,7 @@ export const TOOLS: readonly {
           description:
             "Required. Id of one of your epics, or 0 for no epic. No default.",
         },
+        ...TREE_PROPS,
       },
       required: ["subject", "epic"],
     },
@@ -867,7 +1084,10 @@ export const TOOLS: readonly {
       "subagent goes in_progress once that subagent has started, with worker=<its type or id> so the task is " +
       "tied to it. With worker, the start is refused if that subagent is stopped or already holds another " +
       "task; without it, a start beyond the worker count is refused. The link is dropped when the task " +
-      "leaves in_progress. A refusal lists the running subagents and who holds each task in progress.",
+      "leaves in_progress. A refusal lists the running subagents and who holds each task in progress. " +
+      "subject: at most 18 characters, the detail goes in description. parent, blocked_by and ref " +
+      'change the task\'s place in the tree (parent="" or blocked_by=[] or ref="" clears one); a deleted ' +
+      "task's subtasks move up a level and the tasks waiting on it stop waiting.",
     inputSchema: {
       type: "object",
       properties: {
@@ -876,7 +1096,11 @@ export const TOOLS: readonly {
           description: "Task id, as returned by task_create.",
         },
         status: { type: "string", enum: [...STATUSES] },
-        subject: { type: "string", maxLength: MAX_SUBJECT },
+        subject: {
+          type: "string",
+          maxLength: MAX_SUBJECT,
+          description: "New title, 18 characters at most.",
+        },
         description: { type: "string" },
         worker: {
           type: "string",
@@ -884,6 +1108,7 @@ export const TOOLS: readonly {
             "With status=in_progress: the running subagent that takes the task, by " +
             "type (its name) or agent id. Optional.",
         },
+        ...TREE_PROPS,
       },
       required: ["id"],
     },
@@ -949,7 +1174,7 @@ export const TOOLS: readonly {
           type: "string",
           maxLength: MAX_SUBJECT,
           description:
-            'What the user must do, imperative, 40 characters at most ("Give the go for the NAS reboot").',
+            'What the user must do, imperative, 18 characters at most ("Go for NAS reboot").',
         },
         description: {
           type: "string",
