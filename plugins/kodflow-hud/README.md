@@ -5,10 +5,11 @@ toasts, nothing else: the status line keeps the context gauge, the epics'
 pills and everything it already draws, and this mod shows only what it does
 not.
 
-- **Tâches** — the open epics of the session's task list, and for each task
-  the worker it was handed to, how that worker really stands, how long since
-  anything moved, a *silent* flag, and the tasks waiting on the person in a
-  column of their own.
+- **Tâches** — the open epics of the session's task list as a tree (R12):
+  subtasks under their task, for each one the worker it was handed to, the
+  model and effort that worker runs on, how long since it moved, what it
+  waits on or unblocks, the critical path in the margin, and the tasks
+  waiting on the person. Tab turns it into a graph by state (R4).
 - **Agents** — for each loop (the main one and every subagent), the folder it
   works in, the files it last read, wrote or committed, and the time of its
   last call.
@@ -45,30 +46,129 @@ waiting below that; `/hud` seats it at any width.
 
 ## What it looks like
 
-Captures in text, as the terminal draws them (colours described in brackets).
+Captures in text of the drawn tree, read back by the tests at the pane's
+minimum: 90 columns with its frame (88 of body) by 20 rows. Colour is the
+text's alone — mauve the epic and the critical path, amber the task under
+way, green done, teal ready, red blocked or silent, blue the model — and no
+cell paints a background, so a transparent terminal shows through.
 
-**Tâches**, 120 columns, the person's tasks in their own column:
-
-```
-#7 SDK status-line 1/4 [mauve]                                                  Pour toi (1)
-■ #21 Read the renderer [dim]                                                   □ #24 Approve the palette    0s
-■ #22 Wire the pane                      ● hud running 2m  CI ✓ [amber ■, green]
-■ #23 Draft the README                                   14m silencieux [red]
-□ #24 Approve the palette                                  0s
-Tâches 0/1 [mauve]
-◇ #25 Ask for the token                                    6m [amber ◇]
-```
-
-**Tâches**, 40 columns and 4 rows: the worker column goes, the age stays from
-48 columns down to nothing, the silent flag shrinks to `!`, and the completed
-tasks fold into one line per epic when the board is taller than the pane:
+**R12, the tree** (the view a pane opens on):
 
 ```
-#7 SDK status-line 1/4
-■ 1 terminée
-■ #22 Wire the pane
-■ #23 Draft the README !
+─ Tâches · #1 Routage model/effort ─────────────────────────────────────────────────────
+  TÂCHE                            AGENT              MODÈLE         ÂGE  LIENS
+  ◆ #1     Routage model/effort    7 / 15             ━━━━━─────  1 h 52
+  ├▸ ✓ T0     Événements réels     main               opus           2 h  ⇢ C6 C7
+  ├▸ ✓ C1–C5  Policy et routage    main               opus        1 h 20  ⇢ C9
+┃ ├▾ ● C6     Porte Fable          mkt-routing-pr     opus·xhigh  12 min  ⇢ C9
+  │  ├─ ✓ agent.spawn              main               opus        20 min
+┃ │  ├▾ ● Grant de session         mkt-routing-pr     opus·xhigh   3 min  ⇢ #10
+  │  │  ├─ ✓ Test resume           main               opus         8 min
+┃ │  │  └─ ⊘ Test parallèle                                               ⇠ #8
+  │  └─ ○ Repli shell
+┃ ├─ ◇ C7     Feedback agents      toi                             6 min  ⇢ C9
+┃ ├▸ ▶ C8     Spécialistes ×5      prête                                  ⇢ C9
+┃ └─ ⊘ C9     CI et PR                                                    ⇠ C6 C7 C8
+┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10      bloqué par toi (C7)
+● C6  Porte Fable   mkt-routing-pr · opus·xhigh · 12 min · ⇢ C9 · silencieux
+  Le mod juge, il ne réécrit jamais e.model
+────────────────────────────────────────────────────────────────────────────────────────
+Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue
 ```
+
+**R4, the graph** (tab, or a click on « Graphe »):
+
+```
+─ Tâches · #1 Routage model/effort ─────────────────────────────────────────────────────
+FAIT · PRÊT                    EN COURS · ATTENTE             BLOQUÉ
+✓ T0    Événements réels ──┬─▶ ● C6    Porte Fable ───────┐
+  main · opus · 2 h        │     mkt-routing-pr · 12 min  │
+                           └─▶ ◇ C7    Feedback agents ───┤
+                                 attend toi · 6 min       │
+✓ C1–C5 Policy et routage ────────────────────────────────┼─▶ ⊘ C9    CI et PR
+  main · opus · 1 h 20                                    │     attend C6 C7 C8
+▶ C8    Spécialistes ×5 ──────────────────────────────────┘
+  prête · personne dessus
+
+
+
+
+┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+prochaine action  ▶ C8 prête, personne dessus                     t'attend  ◇ C7 · 6 min
+┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10
+livrable  ⊘ C9 CI et PR · attend C6 C7 C8
+────────────────────────────────────────────────────────────────────────────────────────
+Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue
+```
+
+### The tree, column by column
+
+Every column is a Box of a fixed width, a gap of 2 between them; what goes
+in one is cut to it first, counted in terminal cells (string-width's count:
+wide characters and emoji two, the ambiguous glyphs ✓ ● ◆ ▶ ┃ ⇢ one), so
+nothing is lined up with spaces and a long title never shifts a column.
+
+| Column | Cells | What |
+|--------|-------|------|
+| margin | 2 | `┃` for a task on the critical path |
+| tree | 31 | 3 a level, the glyph 2, the ref 7 (top level), the title 18, cut with `…` |
+| agent | 17 | the worker (the `kodflow-specialists:developer-` prefix dropped), `main`, `toi` for the person's, `prête` for a ready task |
+| model | 10 | `opus·xhigh`, `sonnet·med`: the family and the effort, shortened to fit |
+| age | 6 | right-aligned: `45 s`, `12 min`, `1 h 20`, `2 h`, `3 j`; red when silent |
+| links | 14 | `⇠ C6 C7 C8` what it waits on, else `⇢ C9` what it unblocks, three then `+n` |
+
+Glyphs: `✓` done, `●` under way, `◇` waiting (mauve: on the person), `▶`
+ready — pending, every blocker done, nobody on it —, `⊘` blocked — pending
+with a blocker left —, `○` a subtask left to do under a task not done
+(whoever takes the task takes it). `▸`/`▾` a task with subtasks, folded or
+not. The critical path is the longest `blockedBy` chain of tasks not done,
+down to the epic's final tasks; every task on a chain of that length gets the
+margin, the footer names the chains and the task that waits on the person
+(« bloqué par toi » when it is on the path).
+
+Rows, at 20: the title, the headers, the epic (done/total, a progress bar,
+its age), 11 tasks, a rule, the critical path, two lines on the selection
+(its glyph, ref, title, agent, model, age, links, CI, then its description)
+and the views' bar. One top-level task is open at a time.
+
+Narrower than 88 cells of body the links go, then the model under 72, then
+the agent under 60: at 60 columns with the frame, the tree and the age. Fewer
+than 20 rows, the finished top-level branches fold into « ✓ fait (n) »
+first, then the detail drops to one line, then to none, then the list
+scrolls with the selection.
+
+### The graph
+
+Three columns of 26 — FAIT · PRÊT, EN COURS · ATTENTE, BLOQUÉ — and two
+gutters of 5; each top-level task on two rows, its title then its agent and
+age. A gutter joins its links on a vertical (`┬ ┐ ┤ ┼ ┘ └`), links that
+share no lane on stretches of their own; a task feeding the right-hand column
+directly runs on a lane the middle one leaves free, as a solid line, so no
+two lines cross. Links within a column, or
+leftwards, are not drawn (the tree shows them). The footer gives the next
+action (a ready task, on the path first), what waits on the person, the
+critical path and the deliverable (the epic's final task, and what it waits
+on).
+
+### Keys and mouse
+
+| Key or click | Effect |
+|--------------|--------|
+| `↑` `↓` | choose a task |
+| `⏎` (or space) | fold or unfold it; opening a top-level task folds the other |
+| `tab` | tree ↔ graph |
+| click on a task | choose it; on a task with subtasks, or a second click, fold it |
+| click on « Arbre » / « Graphe » | that view |
+
+The tree is a `Client` region (`hooks/mod/client.tsx`, a surface module):
+the engine hands it keys once a click has given it the focus (Escape gives
+the focus back) and every pointer event over it, in cells
+(`ClientSurface.onKey`, `ClientSurface.onPointer` in the engine's
+`claude-code` typings). The selection, the open branches and the view live
+in that instance's state, across redraws. The terminal and the desktop draw
+a `Client`; VS Code and the mobile app do not, and get the same tree drawn
+still, at its first state.
 
 **Agents**, 80 columns:
 
@@ -81,23 +181,22 @@ tasks fold into one line per epic when the board is taller than the pane:
   R internal/presentation/renderer/powerline.go
 ```
 
-The vocabulary is the status line's (`internal/presentation/renderer`): an
-epic is its title and done/total in mauve (256-colour 182); `■` a task done
-(dim), an amber `■` the task under way, `□` one left to do; `◇` a task
-waiting. The tasks under no epic form the group the status line calls
-`Tâches`. A worker's dot is green while it runs, amber while it waits or
-idles, grey once stopped. A file is violet when read (`R`), orange when
-written (`W`), green once committed (`C`), as filetree colours them.
+A worker's dot is green while it runs, amber while it waits or idles, grey
+once stopped. A file is violet when read (`R`), orange when written (`W`),
+green once committed (`C`), as filetree colours them.
 
 ## Where each thing comes from
 
 | Shown | Source |
 |-------|--------|
 | epics and tasks | `<config>/kodflow/sessions/<session>/tasks.json` (version 2, kodflow-hooks' file), re-read whenever its modification time moves, looked at every 3 s and right after a `task_*` call |
-| worker, its state | the task's `worker` / `worker_id`, matched against `$.agent.list()` |
+| worker, its state | the task's `worker` / `worker_id`, matched against `$.agent.list()`; kept once the task moves on (tasks.json drops it) |
+| subtasks, links, ref | the task's `parent`, `blockedBy`, `ref` (kodflow-hooks' `task_create` / `task_update`) |
+| ready, blocked, critical path | derived from those links, nothing typed |
+| model · effort | a subagent's: the Agent call's `effort` and its result's `resolvedModel`, the model `agent.spawn` resolved, and kodflow-hooks' `agent-models.tsv` (its PostToolUse record); the main loop's: `$.session.model()`, no effort (none is said to a mod). A loop no source names has an empty cell, never a guess |
 | time since it moved | the later of the task's `updated` and the last tool call of its loop (worker, else the agent that owns it) |
 | silent | in progress, and its loop stopped, gone from the list, or quiet for `silentMinutes` |
-| the person's column | tasks with `assignee: "human"`, when tasks.json carries the field |
+| `toi` | tasks with `assignee: "human"`, when tasks.json carries the field |
 | folder of a loop | the last call that names one: a file tool's file, Grep/Glob/LS's `path`, a leading `cd X` or `git -C X` in a shell command (the status line's `activity/dir.go`), taken to the root of its git work tree |
 | files of a loop | Read (read); Write, Edit, MultiEdit, NotebookEdit (write); a `git commit` turns the loop's writes under that repository to commit. Kept 45 s, eight per loop, five shown at most |
 | CI | `gh pr checks <url>` for the GitHub pull request URLs an open task cites, every 5 minutes at most |
@@ -190,7 +289,16 @@ claude plugin test plugins/kodflow-hud                        # pure modules and
 ```
 
 `tests/pure.test.ts` holds the pure modules (board, silence, toasts,
-activity, paths, CI). `tests/wiring.test.tsx` loads the module in the engine
+activity, paths, CI). `tests/tree.test.tsx` draws the « Tâches » pane through
+the engine and reads it back as text (`tests/capture.ts`, which cuts every
+Box to its width as the terminal lays it out): both views at 90 by 20, line
+for line, every line 88 cells and no background; the columns dropping at 86,
+70 and 58; the folds, then the detail, under 20 rows; ↑ ↓ ⏎ tab and clicks on
+a task and on the views' bar, through the `Client`'s own key and pointer
+listeners; the same tree on the surfaces with no `Client`; the derived
+states, the critical path, the cells (model·effort, links, ages, wide
+glyphs) and a model column filled only from what the session said.
+`tests/wiring.test.tsx` loads the module in the engine
 with the host in memory and a mocked clock: panes mounted at several widths
 on the terminal and desktop surfaces, results returned untouched, refused
 calls not recorded, toasts once per task and state, CI at most every five
