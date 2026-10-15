@@ -628,3 +628,35 @@ test("a new session's agent-models.tsv is read even when its time matches the la
   await clock.advance(3_000);
   expect(await row()).toContain("haiku·high");
 });
+
+test("a failed read of agent-models.tsv is tried again on the next poll", async ($, on) => {
+  let fail = true;
+  on(
+    "fs.read",
+    { path: TASKS.replace("tasks.json", "agent-models.tsv") } as any,
+    async (_$: any, e: any, next: any) => (fail ? { deny: "EIO" } : next(e)),
+  );
+  const { h, clock } = host(on);
+  h.files.set(TASKS, {
+    text: tasksJson(
+      [task("1", "Work", "in_progress", { worker: "w", worker_id: "a1" })],
+      EPIC,
+    ),
+    mtimeMs: 1,
+  });
+  h.files.set(TASKS.replace("tasks.json", "agent-models.tsv"), {
+    text: "a1\tclaude-sonnet-5-5\tmedium\tgeneral-purpose\n",
+    mtimeMs: 2,
+  });
+  await start($, clock);
+  const row = async () => {
+    const ui = await mount($, 88, 20);
+    const line = capture(await drawnIn(ui)).split("\n")[3]!;
+    await ui.unmount();
+    return line;
+  };
+  expect(await row()).not.toContain("sonnet");
+  fail = false;
+  await clock.advance(3_000);
+  expect(await row()).toContain("sonnet·med");
+});

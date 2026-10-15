@@ -170,14 +170,21 @@ async function pollModels($: any, tasks: string): Promise<void> {
     () => undefined,
   );
   const said: Record<string, HudModel> = {};
-  // Another session's file is read afresh whatever its time says
-  if (mtime !== undefined && (path !== modelsPath || mtime !== modelsMtime))
-    Object.assign(
-      said,
-      parseModels(await $.fs.read(path).catch(() => undefined)),
-    );
-  modelsMtime = mtime;
-  modelsPath = path;
+  // Another session's file is read afresh whatever its time says; a read
+  // that failed is not remembered as done, so the next poll tries again
+  if (mtime !== undefined && (path !== modelsPath || mtime !== modelsMtime)) {
+    const text: string | undefined = await $.fs
+      .read(path)
+      .catch(() => undefined);
+    if (text !== undefined) {
+      Object.assign(said, parseModels(text));
+      modelsMtime = mtime;
+      modelsPath = path;
+    }
+  } else if (mtime === undefined) {
+    modelsMtime = undefined;
+    modelsPath = path;
+  }
   const main = await $.session.model().catch(() => undefined);
   if (typeof main === "string" && main) said[MAIN] = { model: main };
   if (Object.keys(said).length) await noteModels($, said);
