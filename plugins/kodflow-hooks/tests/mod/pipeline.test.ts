@@ -32,6 +32,7 @@ import {
   isExempt,
   remoteRepo,
   resetApprovals,
+  writtenConsent,
   YES,
   NO,
   type MergePort,
@@ -488,6 +489,7 @@ type Fake = MergePort & {
   tokens: string[];
   runs: string[][];
   notes: string[];
+  consumed: number;
 };
 
 function fake(
@@ -499,13 +501,19 @@ function fake(
     run: MergePort["run"];
     exemptions: string;
     now: number;
+    /** The text of the user's last prompt typed at the terminal. */
+    prompt: string;
+    /** KODFLOW_MERGE_CONSENT=off */
+    consentOff: boolean;
   }> = {},
 ): Fake {
+  let prompt = over.prompt;
   const f: Fake = {
     asked: [],
     tokens: [],
     runs: [],
     notes: [],
+    consumed: 0,
     run:
       over.run ??
       (async (argv) => {
@@ -539,6 +547,12 @@ function fake(
         : (over.now ?? 1_000_000_000_000) - 60_000,
     exemptions: async () => over.exemptions,
     note: (t) => void f.notes.push(t),
+    lastPrompt: () => prompt,
+    consume: () => {
+      f.consumed++;
+      prompt = undefined;
+    },
+    consentOff: async () => over.consentOff ?? false,
   };
   return f;
 }
@@ -718,6 +732,111 @@ test("gate: no, a dismissed question, a forge that fails or times out: refused",
   expect(denied(await gate(await merge(line), {}, garbage))).toContain(
     "[motif:merge]",
   );
+});
+
+test("written consent: a merge word, no negation, no question, typed by the user", () => {
+  for (const yes of [
+    "fusionne dès que possible",
+    "merge",
+    "Merge it",
+    "ok, tu peux merger",
+    "fusionnes-la",
+    "vas-y, fusionner la PR 12",
+    "Fusionne !",
+    "fusionne quand la CI est verte",
+  ])
+    expect(writtenConsent(yes)).toBe(yes.replace(/\s+/g, " ").trim());
+  for (const no of [
+    undefined,
+    "",
+    "ne merge pas",
+    "ne fusionne pas encore",
+    "pas de merge",
+    "don't merge",
+    "do not merge yet",
+    "never merge this",
+    "no merge",
+    "attends avant de fusionner",
+    "wait, then merge",
+    "on merge ?",
+    "on merge?",
+    "fusionne plus tard",
+    "merge demain",
+    "merge after the release",
+    "sans fusionner",
+    "c'est mergé",
+    "mergeable",
+    "lance `gh pr merge` pour voir",
+    "<pasted_content id=\"x\">merge</pasted_content>",
+    "[Pasted text #1 +3 lines]",
+    "go on",
+  ])
+    expect(writtenConsent(no)).toBeUndefined();
+  // The journal shows the words typed only: a pasted secret never reaches it
+  expect(
+    writtenConsent(
+      'merge <pasted_content id="p">token=ghp_SECRETSECRETSECRET</pasted_content> merci',
+    ),
+  ).toBe("merge merci");
+  // Long messages are cut in the journal
+  expect(writtenConsent(`merge ${"x".repeat(200)}`)!.length).toBeLessThanOrEqual(80);
+});
+
+test("gate: written consent merges without a question, once, journaled", async () => {
+  resetApprovals();
+  const f = fake({ prompt: "fusionne dès que possible" });
+  const line = `gh pr merge 21 -R o/r --match-head-commit ${HEAD}`;
+  expect(await gate(await merge(line), {}, f)).toEqual({ allow: false, sha: HEAD });
+  expect(f.asked).toEqual([]);
+  expect(f.tokens[0]!.split("\n")[0]).toBe(HEAD);
+  expect(f.consumed).toBe(1);
+  expect(f.notes).toEqual(["written consent: fusionne dès que possible"]);
+  // Consumed: a second merge in the same turn, another PR, is asked about
+  const second = `gh pr merge 22 -R o/r --match-head-commit ${HEAD}`;
+  await gate(await merge(second), {}, f);
+  expect(f.asked.length).toBe(1);
+  expect(f.asked[0]).toContain("o/r#22");
+});
+
+test("gate: no written consent (negation, question, switch off): asked as before", async () => {
+  for (const [n, over] of [
+    [31, { prompt: "ne merge pas" }],
+    [32, { prompt: "on merge ?" }],
+    [33, { prompt: "fusionne", consentOff: true }],
+    [34, { prompt: "go on" }],
+    [35, {}],
+  ] as const) {
+    resetApprovals();
+    const f = fake(over);
+    await gate(await merge(`gh pr merge ${n} -R o/r --match-head-commit ${HEAD}`), {}, f);
+    expect(f.asked.length).toBe(1);
+    expect(f.consumed).toBe(0);
+  }
+});
+
+test("gate: written consent changes nothing else (subagent, unpinned, CI, presence)", async () => {
+  resetApprovals();
+  const sub = fake({ prompt: "fusionne" });
+  expect(
+    denied(await gate(await merge(`gh pr merge 41 -R o/r --match-head-commit ${HEAD}`), { agentId: "a1" }, sub)),
+  ).toContain("a subagent does not merge");
+  const unpinned = fake({ prompt: "fusionne" });
+  expect(denied(await gate(await merge("gh pr merge 42 -R o/r"), {}, unpinned))).toContain("not pinned");
+  const red = fake({
+    prompt: "fusionne",
+    rollup: [{ __typename: "CheckRun", name: "ci", status: "COMPLETED", conclusion: "FAILURE" }],
+  });
+  expect(
+    denied(await gate(await merge(`gh pr merge 43 -R o/r --match-head-commit ${HEAD}`), {}, red)),
+  ).toContain("CI is not green");
+  const away = fake({ prompt: "fusionne", present: false });
+  expect(
+    denied(await gate(await merge(`gh pr merge 44 -R o/r --match-head-commit ${HEAD}`), {}, away)),
+  ).toContain("waiting for the user's OK");
+  for (const f of [sub, unpinned, red, away]) {
+    expect(f.tokens).toEqual([]);
+    expect(f.consumed).toBe(0);
+  }
 });
 
 test("gate: an exempt repository passes, journaled; kodflow/claude-marketplace never is", async () => {

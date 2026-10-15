@@ -64,13 +64,34 @@ const unshown: string[] = [];
 // When the user last typed a prompt at the terminal (origin `composer`)
 let lastComposerMs: number | undefined;
 
-/** prompt.submit: remember a prompt the user typed, for the presence rule. */
-export function notePrompt(origin: unknown, nowMs: number): void {
-  if ((origin as { kind?: unknown } | undefined)?.kind === "composer") lastComposerMs = nowMs;
+// What that prompt said, until a merge took it as its written consent
+let lastComposerText: string | undefined;
+
+/**
+ * prompt.submit: remember a prompt the user typed, for the presence rule
+ * and the merge gate's written consent. Any other origin (a notification, a
+ * subagent's message) changes nothing.
+ */
+export function notePrompt(
+  origin: unknown,
+  nowMs: number,
+  text?: unknown,
+): void {
+  if ((origin as { kind?: unknown } | undefined)?.kind !== "composer") return;
+  lastComposerMs = nowMs;
+  lastComposerText = typeof text === "string" ? text : undefined;
 }
 
 /** When the user last typed a prompt at the terminal, for any presence rule. */
 export const lastComposerAt = (): number | undefined => lastComposerMs;
+
+/** The last prompt typed at the terminal, unless a merge already used it. */
+export const lastComposerPrompt = (): string | undefined => lastComposerText;
+
+/** A merge used the last prompt as its consent: it serves no other. */
+export const consumeComposerPrompt = (): void => {
+  lastComposerText = undefined;
+};
 
 // A collision the user chose to go past: path -> the foreign edit's time.
 // A newer edit by the other session asks again.
@@ -185,7 +206,11 @@ export async function guardWrite<R>(
     (o) => newest(path, o, now),
     () => undefined,
   );
-  if (hit && hit.at > (acknowledged.get(path) ?? 0) && !present(lastComposerMs, p.now())) {
+  if (
+    hit &&
+    hit.at > (acknowledged.get(path) ?? 0) &&
+    !present(lastComposerMs, p.now())
+  ) {
     // Nobody typed a prompt lately: asking would hold the edit until someone
     // comes back. Journaled, and the edit goes on.
     p.log(

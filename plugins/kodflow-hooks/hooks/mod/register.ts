@@ -62,9 +62,11 @@ import {
 } from "./paths.ts";
 import {
   admit,
+  consumeComposerPrompt,
   endGuards,
   guardWrite,
   lastComposerAt,
+  lastComposerPrompt,
   notePrompt,
   modsReport,
   startGuards,
@@ -486,7 +488,11 @@ function mergePort($: any, e: any): MergePort {
     now: () => Date.now(),
     lastComposerAt: () => lastComposerAt(),
     exemptions: () => $.fs.read(`${$.plugin.root}/merge-exemptions.txt`),
-    note: (text) => journal($, e, "merge", `exempt: ${text}`),
+    note: (text) => journal($, e, "merge", text),
+    lastPrompt: () => lastComposerPrompt(),
+    consume: () => consumeComposerPrompt(),
+    consentOff: async () =>
+      (await $.env.get("KODFLOW_MERGE_CONSENT")) === "off",
   };
 }
 
@@ -658,7 +664,7 @@ export const register: Register = (on) => {
   }).catch(($, e, next) => next(e));
 
   on("prompt.submit", async ($, e, next) => {
-    notePrompt(e.origin, Date.now());
+    notePrompt(e.origin, Date.now(), e.text);
     if (!(await off($))) {
       await ensureTools($);
       await beat($);
