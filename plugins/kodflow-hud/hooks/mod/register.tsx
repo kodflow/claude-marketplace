@@ -5,9 +5,11 @@
 //   « Tâches »  the open epics of tasks.json as a tree (subtasks, what each
 //               task waits on, the critical path) or as a graph by state,
 //               who works each task, on what model, how long since it moved,
-//               the silent ones and the ones waiting on the person;
-//   « Agents »  per loop (the main one and each subagent), the folder it
-//               works in, its last files by operation, its last call.
+//               the silent ones and the ones waiting on the person; the
+//               view a session starts on, its tab counting the tasks left;
+//   « Agents »  only while a subagent runs, its tab counting them: the main
+//               loop, then each subagent with its role, model, state, task,
+//               folder and last files (syncPanes opens, retitles, closes).
 // And a few words of each reply in colour (colors.ts): the transcript draws
 // `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
 //
@@ -41,6 +43,7 @@ import { alertsFor, trimKeys } from "./alerts.ts";
 import { CI_EVERY_MS, ciState, prsToCheck } from "./ci.ts";
 import { configDir, dirname, sessionDir, tasksFile } from "./paths.ts";
 import { agentsView } from "./view.tsx";
+import { running } from "./who.ts";
 import { buildTree } from "./tree.ts";
 import { draw, initialUi, screenOf } from "./layout.tsx";
 import {
@@ -101,6 +104,20 @@ const PANES = [
   { id: AGENTS_PANE, title: "Agents" },
 ] as const;
 
+/** « Tâches (2) »: the tasks left to do across the open epics. */
+export const tasksTitle = (board: HudBoard): string => {
+  const n = board.epics
+    .flatMap((e) => e.tasks)
+    .filter((t) => t.status !== "completed").length;
+  return n ? `Tâches (${n})` : "Tâches";
+};
+
+/** « Agents (1) »: the subagents at work, the main loop not counted. */
+export const agentsTitle = (agents: readonly HudAgent[]): string => {
+  const n = running(agents).length;
+  return n ? `Agents (${n})` : "Agents";
+};
+
 /** How often tasks.json's time, the agents and the TTLs are looked at. */
 export const POLL_MS = 3_000;
 /** The elapsed times redraw on this step, not on every poll. */
@@ -111,6 +128,11 @@ const TASK_TOOL = /^mcp__kodflow-hooks__task_(create|update|epic|focus)$/;
 // costs one re-read of tasks.json; everything drawn is in `$.state`.
 let polling = false;
 let checking = false;
+let syncing = false;
+// Whether the Agents tab opens by itself when a subagent starts: autoOpen at
+// first; off once the person closes that tab or runs /hud off, on again with
+// /hud or /hud agents
+let agentsWanted = true;
 let lastSession = "";
 let lastMtime: number | undefined = -1;
 let modelsMtime: number | undefined = -1;
@@ -248,11 +270,16 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
     const listed = await $.agent.list().catch(() => []);
     const agents: HudAgent[] = listed.map((a: any) => ({
       id: a.id,
-      label: a.name || a.type || a.description || a.id.slice(0, 8),
+      // Its name, else the few words of its task: its type is its role,
+      // shown beside the name, so it does not stand in for one
+      label: a.name || a.description || a.type || a.id.slice(0, 8),
       status: a.status,
+      ...(a.name && { name: String(a.name) }),
+      ...(a.type && { type: String(a.type) }),
     }));
     if (!same(await read($, agentsAtom), agents))
       await update($, agentsAtom, () => agents);
+    await syncPanes($).catch(() => undefined);
     const pruned = prune(await read($, activityAtom), now);
     if (pruned) await update($, activityAtom, () => pruned);
 
@@ -272,7 +299,8 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
     for (const a of alerts) $.ui.toast(a.text);
 
     const tick = Math.floor(now / TICK_MS);
-    if ((await read($, tickAtom)) !== tick) await update($, tickAtom, () => tick);
+    if ((await read($, tickAtom)) !== tick)
+      await update($, tickAtom, () => tick);
     if (ci && now - lastCi >= CI_EVERY_MS) {
       lastCi = now;
       void checkCi($);
@@ -319,14 +347,64 @@ async function record($: any, e: any, r: any): Promise<void> {
   }));
 }
 
+/**
+ * The panes as the counts want them, every poll. « Tâches » carries the
+ * tasks left, « Agents » the subagents at work, retitled only when the count
+ * moved; the Agents tab opens when a subagent starts (unless the person
+ * closed it, or turned autoOpen off and never asked) and closes when none is
+ * left, so the main loop alone never gets a tab. An open or a retitle may
+ * raise the pane it names: the pane shown before is shown again after, so
+ * the « Tâches » view the session starts on stays in front.
+ */
+async function syncPanes($: any): Promise<void> {
+  if (syncing) return;
+  syncing = true;
+  try {
+    const panes: any[] = await $.ui.panes().catch(() => []);
+    if (!Array.isArray(panes)) return;
+    const find = (id: string) => panes.find((p) => p.id === id);
+    const shown = panes.find((p) => p.isShown);
+    const tTitle = tasksTitle(await read($, boardAtom));
+    const agents = await read($, agentsAtom);
+    const aTitle = agentsTitle(agents);
+    let moved = false;
+    const tasks = find(TASKS_PANE);
+    if (tasks && tasks.title !== tTitle) {
+      await $.ui.open({ id: TASKS_PANE, title: tTitle });
+      moved = true;
+    }
+    const pane = find(AGENTS_PANE);
+    if (running(agents).length === 0) {
+      if (pane) await $.ui.close({ id: AGENTS_PANE });
+    } else if (pane ? pane.title !== aTitle : agentsWanted) {
+      await $.ui.open({ id: AGENTS_PANE, title: aTitle });
+      moved = true;
+    }
+    if (!moved || !shown) return;
+    const after: any[] = await $.ui.panes().catch(() => []);
+    const front = after.find((p) => p.isShown);
+    const back = after.find((p) => p.id === shown.id);
+    if (back && front?.id !== shown.id)
+      await $.ui.open({ id: back.id, title: back.title });
+  } finally {
+    syncing = false;
+  }
+}
+
 async function openPanes(
   $: any,
   which: readonly { id: string; title: string }[],
 ) {
   const placed: string[] = [];
+  const board = await read($, boardAtom);
+  const agents = await read($, agentsAtom);
   for (const p of which) {
-    const r = await $.ui.open({ id: p.id, title: p.title });
-    if (r.isPlaced) placed.push(p.title);
+    const title = p.id === TASKS_PANE ? tasksTitle(board) : agentsTitle(agents);
+    // The Agents tab stands only while a subagent runs: asked for now, it
+    // opens with the first one
+    if (p.id === AGENTS_PANE && running(agents).length === 0) continue;
+    const r = await $.ui.open({ id: p.id, title });
+    if (r.isPlaced) placed.push(title);
   }
   return placed;
 }
@@ -353,8 +431,7 @@ function kick($: any): void {
 }
 
 export const register: Register = (on, options) => {
-  settings.silentMs =
-    Math.max(1, Number(options.silentMinutes ?? 10)) * 60_000;
+  settings.silentMs = Math.max(1, Number(options.silentMinutes ?? 10)) * 60_000;
   settings.ci = options.ci !== false;
   const autoOpen = options.autoOpen !== false;
 
@@ -366,12 +443,14 @@ export const register: Register = (on, options) => {
       description:
         "kodflow-hud: open the Tasks and Agents panes (/hud tasks, /hud agents, /hud off)",
     });
+    agentsWanted = autoOpen;
+    // Unasked, the engine seats a pane only where it has room (144 columns);
+    // below that it waits, and /hud seats it at any width. Only « Tâches »
+    // opens here, so it is the view the session starts on: the Agents tab
+    // comes with the first subagent (syncPanes)
+    if (autoOpen) await $.ui.open(PANES[0]).catch(() => undefined);
     $.clock.every(POLL_MS, () => kick($));
     kick($);
-    // Unasked, the engine seats a pane only where it has room (144 columns);
-    // below that it waits, and /hud seats it at any width
-    if (autoOpen)
-      for (const p of PANES) void $.ui.open(p).catch(() => undefined);
     return next(e);
   }).catch(($, e, next) => next(e));
 
@@ -385,24 +464,37 @@ export const register: Register = (on, options) => {
   on("command.run", { command: "hud" }, async ($, e) => {
     const arg = e.args.trim().toLowerCase();
     if (arg === "off" || arg === "close") {
+      agentsWanted = false;
       for (const p of PANES)
         await $.ui.close({ id: p.id }).catch(() => undefined);
       return { text: "kodflow-hud: panes closed." };
     }
-    const which =
-      arg === "tasks" || arg === "tâches" || arg === "taches"
-        ? PANES.filter((p) => p.id === TASKS_PANE)
-        : arg === "agents"
-          ? PANES.filter((p) => p.id === AGENTS_PANE)
-          : PANES;
+    const tasksOnly = arg === "tasks" || arg === "tâches" || arg === "taches";
+    const agentsOnly = arg === "agents";
+    if (!tasksOnly) agentsWanted = true;
+    const which = tasksOnly
+      ? PANES.filter((p) => p.id === TASKS_PANE)
+      : agentsOnly
+        ? PANES.filter((p) => p.id === AGENTS_PANE)
+        : PANES;
     kick($);
     const placed = await openPanes($, which);
+    if (agentsOnly && !placed.length)
+      return {
+        text: "kodflow-hud: no subagent is running; the Agents tab opens with the first one.",
+      };
     return {
       text: placed.length
         ? `kodflow-hud: ${placed.join(", ")} open.`
         : "kodflow-hud: no room to seat a pane here (a -p run or a host without panes).",
     };
   });
+
+  // The person closing the Agents tab means it: it stays closed until /hud
+  on("ui.close", async ($, e, next) => {
+    if (e.origin === "person" && e.id === AGENTS_PANE) agentsWanted = false;
+    return next(e);
+  }).catch(($, e, next) => next(e));
 
   // Observation only: the call runs first, its result goes back as it came
   on("tool.call", async ($, e, next) => {
@@ -477,13 +569,24 @@ export const register: Register = (on, options) => {
     async ($, e) => {
       const els = $.ui.resolve(e);
       await read($, tickAtom);
-      const [agents, activity] = await Promise.all([
+      const [agents, activity, models, board] = await Promise.all([
         read($, agentsAtom),
         read($, activityAtom),
+        read($, modelsAtom),
+        read($, boardAtom),
       ]);
       return agentsView(
         els,
-        { agents, activity, now: await $.clock.now(), home },
+        {
+          agents,
+          activity,
+          now: await $.clock.now(),
+          home,
+          models,
+          board,
+          session: await $.session.id(),
+          silentMs: settings.silentMs,
+        },
         e.props.bodyColumns,
         e.props.scroll.bodyRows,
       );

@@ -16,6 +16,16 @@ export type Host = {
   agents: { id: string; type: string; name?: string; status: string }[];
   toasts: string[];
   opened: string[];
+  /** Every open, with the title it carried, in order. */
+  titles: string[];
+  /**
+   * The open panes, oldest first, and the one shown. An open, a retitle
+   * included, raises its pane here: the worst case the engine leaves open,
+   * which the module must undo to keep « Tâches » in front.
+   */
+  panes: { id: string; title: string }[];
+  shown: string | undefined;
+  closed: string[];
   commands: string[];
   runs: string[][];
   checks: { exitCode: number; stdout: string };
@@ -34,6 +44,10 @@ export function host(
     agents: [],
     toasts: [],
     opened: [],
+    titles: [],
+    panes: [],
+    shown: undefined,
+    closed: [],
     commands: [],
     runs: [],
     checks: { exitCode: 0, stdout: "build\tpass\t1m\turl" },
@@ -50,8 +64,28 @@ export function host(
   });
   on("ui.open", async (_$: any, e: any) => {
     h.opened.push(e.id);
+    h.titles.push(`${e.id}=${e.title ?? e.id}`);
+    const title = e.title ?? e.id;
+    const at = h.panes.find((p) => p.id === e.id);
+    if (at) at.title = title;
+    else h.panes.push({ id: e.id, title });
+    h.shown = e.id;
     return { value: { isPlaced: true } };
   });
+  on("ui.close", async (_$: any, e: any) => {
+    h.closed.push(e.id);
+    h.panes = h.panes.filter((p) => p.id !== e.id);
+    if (h.shown === e.id) h.shown = h.panes[h.panes.length - 1]?.id;
+    return { value: undefined };
+  });
+  on("ui.panes", async () => ({
+    value: h.panes.map((p) => ({
+      ...p,
+      isShown: p.id === h.shown,
+      isFocused: false,
+      isPlaced: true,
+    })),
+  }));
   on("ui.toast", async (_$: any, e: any) => {
     h.toasts.push(e.text);
     return { value: undefined };
