@@ -1,6 +1,12 @@
 // conformance.ts — replays the corpus recorded from tasks.py on the port,
 // then the user's tasks (conformance.human.corpus.ts), added after it.
 //
+// One change since is deliberate: a subject holds 18 characters, not 40, to
+// fit the task tree's title column. The corpus is replayed amended for it
+// (AMEND: its long subjects shortened, its limits and its refusal text
+// moved), every other byte as recorded; the two tools whose text changed
+// keep every argument tasks.py gave them (CHANGED).
+//
 // Pure: run by tasks.test.ts under `claude plugin test` and by run-node.ts
 // under plain node, so the parity holds wherever either is available.
 import {
@@ -70,14 +76,61 @@ export function call(
   }
 }
 
+const OLD_REFUSAL =
+  "subject is 41 characters, the limit is 40: it is shown in full on the status line.";
+const NEW_REFUSAL =
+  "subject is 19 characters, the limit is 18: it is the title column of the task tree and is shown in full on the status line.";
+
+/** The corpus' text with the 18-character subject in place of the 40. */
+const AMEND: readonly [RegExp, string][] = [
+  [/(?<!x)x{41}(?!x)/g, "x".repeat(19)],
+  [/(?<!x)x{40}(?!x)/g, "x".repeat(18)],
+  [/(?<!y)y{41}(?!y)/g, "y".repeat(19)],
+  [/(?:😀){41}/gu, "😀".repeat(19)],
+  [/(?:😀){40}/gu, "😀".repeat(18)],
+  [/Freeze golden renders/g, "Freeze goldens"],
+  [/Give the go for the reboot/g, "Go for the reboot"],
+  [new RegExp(OLD_REFUSAL, "g"), NEW_REFUSAL],
+];
+
+export function amended(corpus: unknown): unknown {
+  let text = JSON.stringify(corpus);
+  for (const [from, to] of AMEND) text = text.replace(from, to);
+  return JSON.parse(text);
+}
+
+/** The tools whose description and subject limit moved since tasks.py. */
+const CHANGED = new Set(["task_create", "task_update"]);
+
+/** A changed tool still takes every argument tasks.py's did, as it did. */
+function keepsArguments(ported: any, recorded: any): boolean {
+  if (ported?.name !== recorded.name) return false;
+  const want = recorded.inputSchema;
+  const got = ported.inputSchema;
+  if (!equal(got.required, want.required)) return false;
+  return Object.entries(want.properties).every(([name, prop]: [string, any]) => {
+    const now = got.properties[name];
+    if (!now || now.type !== prop.type || !equal(now.enum, prop.enum)) return false;
+    return name === "subject" || equal(now, prop);
+  });
+}
+
 /** Every difference between the port and the corpus, as readable lines. */
 export function conformance(): { calls: number; failures: string[] } {
   const failures: string[] = [];
   let calls = 0;
-  // The tools tasks.py had come first and are its own, word for word
-  if (!equal(PORTED.slice(0, RECORDED.length), RECORDED))
-    failures.push("tools: names, descriptions or schemas differ from tasks.py");
-  for (const scenario of [...CORPUS, ...HUMAN_CORPUS] as any[]) {
+  // The tools tasks.py had come first and are its own, word for word, but
+  // the two the task tree changed
+  (RECORDED as any[]).forEach((recorded, i) => {
+    const ported = PORTED[i];
+    const same = CHANGED.has(recorded.name)
+      ? keepsArguments(ported, recorded)
+      : equal(ported, recorded);
+    if (!same)
+      failures.push(`tools: ${recorded.name} differs from tasks.py`);
+  });
+  const scenarios = amended([...CORPUS, ...HUMAN_CORPUS]) as any[];
+  for (const scenario of scenarios) {
     const files = new Map<string, string | undefined>();
     let workers: Worker[] = [];
     scenario.steps.forEach((step: any, i: number) => {
