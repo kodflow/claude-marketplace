@@ -113,6 +113,11 @@ expect_rc "a plugin removed mid-session: the index follows installed_plugins.jso
 installed kodflow-specialists; touch "$CFG/plugins/installed_plugins.json"
 run on-tool.sh "$(agent "Fix the golang race")"
 [ "$RC" -eq 2 ] && ok "and an install brings its specialists back" || bad "reinstall" "rc=$RC"
+# The same change with no newer mtime (one clock second, as macOS's test -nt sees it)
+installed some-other-plugin; touch -r "$SD/routing-installed.tsv" "$CFG/plugins/installed_plugins.json"
+run on-tool.sh "$(agent "Fix the golang race")"
+expect_rc "a change in the same second is seen: freshness is by content" 0
+installed kodflow-specialists
 touch -t 200001010000 "$SD/routing-installed.tsv"; printf 'stale\n' > "$SD/routing-installed.tsv"; touch -t 200001010000 "$SD/routing-installed.tsv"
 run on-tool.sh "$(agent "Fix the golang race")"
 [ "$RC" -eq 2 ] && grep -q golang "$SD/routing-installed.tsv" && ok "an index older than the shipped one is rebuilt" || bad "stale index" "rc=$RC"
