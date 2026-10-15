@@ -270,8 +270,7 @@ async function glabMrMerge(
 function apiMerge(tool: "gh" | "glab", A: string[], ep: string): Found {
   const label = `${tool} api ${ep}`;
   const pinned = fieldValue(A, "sha");
-  const fix = (sha: string) =>
-    `${show(dropField(A, "sha"))} -f sha=${sha}`;
+  const fix = (sha: string) => `${show(dropField(A, "sha"))} -f sha=${sha}`;
   if (tool === "gh") {
     const m = /^\/?repos\/([^/]+\/[^/]+)\/pulls\/(\d+)\/merge\/?$/.exec(ep);
     if (!m)
@@ -506,8 +505,14 @@ export type MergePort = {
   lastComposerAt(): number | undefined;
   /** The versioned exemptions (merge-exemptions.txt), one repository a line. */
   exemptions(): Promise<string | undefined>;
-  /** Journal an exemption used. */
+  /** Journal an exemption or a written consent used. */
   note(text: string): void;
+  /** The last prompt typed at the terminal, until a merge consumed it. */
+  lastPrompt(): string | undefined;
+  /** That prompt served one merge: it serves no other. */
+  consume(): void;
+  /** KODFLOW_MERGE_CONSENT=off: the question every time. */
+  consentOff(): Promise<boolean>;
 };
 
 /** Never exempt, whatever the file says: the guards' own repository. */
@@ -621,6 +626,31 @@ export async function readHead(port: MergePort, t: Target): Promise<Head> {
   return { sha, ci, detail: status ? `pipeline ${status}` : "no pipeline" };
 }
 
+// A word that merges, standing alone (not "mergé", "mergeable", "merge-ok")
+const CONSENT_WORD =
+  /(?<![\p{L}\p{N}_-])(merge|merger|fusionne|fusionner|fusionnes)(?![\p{L}\p{N}_]|-(?!(?:la|le|les)(?![\p{L}\p{N}_])))/iu;
+// Anything that holds the merge back: a negation, a wait, a later
+const HOLD_WORD =
+  /(?<![\p{L}\p{N}_])(ne|n'|n’|pas|jamais|sans|aucun|aucune|plus tard|tard|attends|attendez|attendre|attend|don't|don’t|dont|do not|not|never|no|wait|hold|stop|later|before|avant)(?![\p{L}\p{N}_])/iu;
+const CONSENT_EXCERPT = 80;
+
+/**
+ * The user's written consent in their last prompt, as the journal shows it,
+ * or undefined. Only the words they typed count: a pasted block, a paste
+ * placeholder or a `code span` is dropped first. A question, a negation or a
+ * wait anywhere is no consent; when in doubt, the gate asks.
+ */
+export function writtenConsent(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  const own = text
+    .replace(/<pasted_content\b[^>]*>[\s\S]*?<\/pasted_content>/gi, " ")
+    .replace(/\[Pasted text[^\]]*\]/gi, " ")
+    .replace(/`[^`]*`/g, " ");
+  if (/[?¿]/.test(own) || HOLD_WORD.test(own) || !CONSENT_WORD.test(own))
+    return undefined;
+  return text.replace(/\s+/g, " ").trim().slice(0, CONSENT_EXCERPT);
+}
+
 const approvals = new Map<string, number>();
 const approvalKey = (t: Target, sha: string) =>
   `${t.host}:${t.repo}#${t.number}@${sha}`;
@@ -665,7 +695,7 @@ export async function gate(
     );
   const t = c.target;
   if (isExempt(await port.exemptions().catch(() => undefined), t.repo)) {
-    port.note(`merge exemption used for ${t.label}`);
+    port.note(`exempt: merge exemption used for ${t.label}`);
     return { allow: false, sha: t.pinned ?? "" };
   }
   let head: Head;
@@ -710,6 +740,18 @@ export async function gate(
       "No message typed at the prompt in the last 10 minutes: no one is there to answer.",
       "Report the PR, its head and its green CI, and wait for the user.",
     );
+  // The user already wrote it, in the prompt that is still the last one:
+  // no question. A failed switch read keeps the question.
+  const consent = (await port.consentOff().catch(() => true))
+    ? undefined
+    : writtenConsent(port.lastPrompt());
+  if (consent !== undefined) {
+    await port.writeToken(tokenText(t, head.sha, now));
+    port.consume();
+    approvals.set(key, now);
+    port.note(`written consent: ${consent}`);
+    return { allow: false, sha: head.sha };
+  }
   let answer: string;
   try {
     answer = await port.ask(

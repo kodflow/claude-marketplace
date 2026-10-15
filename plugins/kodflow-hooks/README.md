@@ -81,6 +81,22 @@ A subagent never merges. From the main thread a merge passes only:
    and lets the call go on intact; the yes holds five minutes per
    (repository, number, SHA).
 
+**Written consent.** When the user's last prompt typed at the terminal
+(`origin.kind` `composer`) already says it, the question is skipped: a word
+that merges standing alone (`merge`, `merger`, `fusionne`, `fusionner`,
+`fusionnes`), no question mark, no negation, wait or later (`ne`, `pas`,
+`jamais`, `attends`, `plus tard`, `not`, `wait`, `later`, `before`…), counted
+on the words typed only (a pasted block, a paste placeholder and a `code span`
+are dropped first). That prompt writes the same token as a yes and serves one
+merge: it is consumed, and the next merge without a new message is asked
+about. Each use is journaled `merge: written consent: <first 80 characters>`.
+Everything above still holds: a subagent, an unpinned or moved head, a CI not
+green are refused whatever the prompt says. `KODFLOW_MERGE_CONSENT=off`
+(environment or the `env` block of the settings) keeps the question every
+time; a failed read of that switch keeps it too. Accepted gap: the presence
+rule comes first, so a consent written more than 10 minutes ago gives
+"waiting for the user's OK", never a merge.
+
 `on-tool.sh` refuses a main-thread merge without that token, fresh and naming
 a SHA the call carries, and spends it. The one exception is
 `merge-exemptions.txt` (versioned, fingerprinted, changed by pull request

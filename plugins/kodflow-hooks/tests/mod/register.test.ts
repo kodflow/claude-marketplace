@@ -714,7 +714,7 @@ test("merge: the user typed, CI green, pinned: asked, yes writes the token and t
   on("tool.call", { tool: "Bash" }, async () => (reached++, out("merged")) as any);
   await start($);
   await $.prompt
-    .submit({ text: "merge it", origin: { kind: "composer" } } as any)
+    .submit({ text: "go on", origin: { kind: "composer" } } as any)
     .catch(() => undefined);
   const r: any = await $.tool.call({
     tool: "Bash",
@@ -726,6 +726,66 @@ test("merge: the user typed, CI green, pinned: asked, yes writes the token and t
   expect(refusal(r)).toBeUndefined();
   expect(reached).toBe(1);
   expect(h.files.get(`${DIR}/merge-ok/toolu_m1`)?.split("\n")[0]).toBe(HEAD);
+});
+
+// The AskUserQuestion answers and the merges that reached the shell
+function mergeHost(on: any, env: Record<string, string> = {}) {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, ...env });
+  h.gh = ghView();
+  const seen = { asked: 0, reached: 0 };
+  on("tool.call", { tool: "AskUserQuestion" }, async (_$: any, e: any) => {
+    seen.asked++;
+    const q = e.questions?.[0]?.question ?? "";
+    return { result: { questions: e.questions, answers: { [q]: "Merge" } } } as any;
+  });
+  on("tool.call", { tool: "Bash" }, async () => (seen.reached++, out("merged")) as any);
+  return { h, seen };
+}
+const say = ($: any, text: string, kind = "composer") =>
+  $.prompt.submit({ text, origin: { kind } } as any).catch(() => undefined);
+const mergeCall = ($: any, n: number) =>
+  $.tool.call({
+    tool: "Bash",
+    tool_use_id: `toolu_w${n}`,
+    command: `gh pr merge ${n} -R o/r --match-head-commit ${HEAD}`,
+  } as any);
+
+test("merge: written consent at the prompt merges without a question, for one merge only", async ($, on) => {
+  const { h, seen } = mergeHost(on);
+  await start($);
+  await say($, "fusionne dès que possible");
+  const r: any = await mergeCall($, 51);
+  expect(refusal(r)).toBeUndefined();
+  expect(seen.asked).toBe(0);
+  expect(seen.reached).toBe(1);
+  expect(h.files.get(`${DIR}/merge-ok/toolu_w51`)?.split("\n")[0]).toBe(HEAD);
+  // Consumed: the next merge, without a new message, is asked about
+  await mergeCall($, 52);
+  expect(seen.asked).toBe(1);
+});
+
+test("merge: a negation, a question, a notification or the switch off: asked", async ($, on) => {
+  const { seen } = mergeHost(on);
+  await start($);
+  await say($, "ne merge pas");
+  await mergeCall($, 61);
+  expect(seen.asked).toBe(1);
+  await say($, "on merge ?");
+  await mergeCall($, 62);
+  expect(seen.asked).toBe(2);
+  // Only a prompt typed at the terminal counts, never a notification
+  await say($, "go on");
+  await say($, "fusionne", "task-notification");
+  await mergeCall($, 63);
+  expect(seen.asked).toBe(3);
+});
+
+test("merge: KODFLOW_MERGE_CONSENT=off keeps the question", async ($, on) => {
+  const { seen } = mergeHost(on, { KODFLOW_MERGE_CONSENT: "off" });
+  await start($);
+  await say($, "fusionne");
+  await mergeCall($, 71);
+  expect(seen.asked).toBe(1);
 });
 
 test("blast radius: asked while the user is there, passes when nobody is (fail open)", async ($, on) => {
