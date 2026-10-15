@@ -38,7 +38,7 @@ test("a served workspace: one /status, then the view; the counts on the status l
   assert.deepEqual(w.requests.map((r) => r.split("?")[0]), ["/status", "/api/view"]);
   assert.match(w.requests[1]!, /workspace=%2Fw%2Frepo&wait=0$/);
   assert.equal(w.last().kind, "ready");
-  assert.equal(drawn(w.last()), "ktn: 6 constats · 1 E · 2 W · 3 I");
+  assert.equal(drawn(w.last()), "6 constats · 1 E · 2 W · 3 I");
   assert.equal(bandOf(w.last()), undefined, "nothing to act on: no band");
   // The next look sends the revision and gets a 204: nothing redrawn
   w.daemon = async () => ({ status: 204, text: "" });
@@ -55,7 +55,7 @@ test("clean: zero findings is drawn as clean, and only then", async () => {
       ? { status: 200, text: statusJson() }
       : { status: 200, text: modelJson({ totals: counts(0, 0, 0), tree: { nodes: [] } }) };
   await c.refresh();
-  assert.equal(drawn(w.last()), "ktn: ✓ aucun constat");
+  assert.equal(drawn(w.last()), "✓ aucun constat");
 });
 
 test("endpoint.json absent: unreachable, the command to run, and not one request", async () => {
@@ -65,7 +65,7 @@ test("endpoint.json absent: unreachable, the command to run, and not one request
   assert.deepEqual(w.requests, []);
   assert.equal(w.last().kind, "unreachable");
   assert.equal(w.last().launch, "command");
-  assert.equal(drawn(w.last()), "ktn: daemon injoignable");
+  assert.equal(drawn(w.last()), "daemon injoignable");
   assert.ok(texts(bandOf(w.last())).includes("KTN_USER_DAEMON=1 ktn-linter daemon ensure"));
 });
 
@@ -168,7 +168,7 @@ test("100 000 findings: the totals say so, the window is capped, the drawing sta
     p.startsWith("/status") ? { status: 200, text: statusJson() } : { status: 200, text };
   await c.refresh();
   assert.equal(w.last().kind, "ready");
-  assert.equal(drawn(w.last()), "ktn: 100000 constats · 100000 E · 0 W · 0 I");
+  assert.equal(drawn(w.last()), "100000 constats · 100000 E · 0 W · 0 I");
   const model = w.emitted.at(-1)!.model!;
   assert.equal(model.nodes.length, 1_000);
   assert.equal(model.truncated, true);
@@ -215,7 +215,7 @@ test("a refusal by a policy or a hook is not 'unreachable', and offers no launch
   await c.refresh();
   assert.equal(w.last().kind, "policy");
   assert.equal(w.last().launch, "none");
-  assert.equal(drawn(w.last()), "ktn: requête refusée (politique)");
+  assert.equal(drawn(w.last()), "requête refusée (politique)");
   assert.ok(!texts(bandOf(w.last(), () => undefined)).includes("Lancer le daemon"));
 });
 

@@ -62,14 +62,14 @@ test("served: the counts on the status line, nothing in the band", async ($, on)
   h.answer = async (url) => ({ status: 200, text: url.includes("/status") ? status() : model() });
   await start($, clock);
   expect(h.fetches.map((f) => f.socketPath)).toEqual([SOCKET, SOCKET]);
-  expect(h.statuses.at(-1)).toBe("ktn: 6 constats · 1 E · 2 W · 3 I");
+  expect(h.statuses.at(-1)).toBe("6 constats · 1 E · 2 W · 3 I");
 });
 
 test("clean: drawn as clean", async ($, on) => {
   const { h, clock } = goProject(on);
   h.answer = async (url) => ({ status: 200, text: url.includes("/status") ? status() : model(counts(0, 0, 0)) });
   await start($, clock);
-  expect(h.statuses.at(-1)).toBe("ktn: ✓ aucun constat");
+  expect(h.statuses.at(-1)).toBe("✓ aucun constat");
 });
 
 test("no endpoint.json: unreachable, the command in the band, no request at all", async ($, on) => {
@@ -77,7 +77,7 @@ test("no endpoint.json: unreachable, the command in the band, no request at all"
   h.files.clear();
   await start($, clock);
   expect(h.fetches).toEqual([]);
-  expect(h.statuses.at(-1)).toBe("ktn: daemon injoignable");
+  expect(h.statuses.at(-1)).toBe("daemon injoignable");
   for (const surface of SURFACES) {
     const ui = await mountBand($, surface);
     expect(await ui.find({ text: /daemon injoignable/ })).toBeDefined();
@@ -105,7 +105,7 @@ test("nothing on the socket: the launch button; two presses run one absolute com
   expect(h.runs.length).toBe(1);
   expect(h.runs[0]!.argv).toEqual([EXE, "daemon", "ensure"]);
   expect(h.runs[0]!.init?.cwd).toBe("/");
-  expect(h.statuses.at(-1)).toBe("ktn: 6 constats · 1 E · 2 W · 3 I");
+  expect(h.statuses.at(-1)).toBe("6 constats · 1 E · 2 W · 3 I");
 });
 
 test("another protocol: incompatible in the band, then silence", async ($, on) => {
@@ -131,7 +131,7 @@ test("pending approval: the daemon's command in the band", async ($, on) => {
       ? { status: 200, text: status({ pending_workspaces: [{ root: "/w/repo", reason: "repository not approved", command }] }) }
       : { status: 403, text: "workspace /w/repo is not served: declare it first (POST /workspace/declare)\n" };
   await start($, clock);
-  expect(h.statuses.at(-1)).toBe("ktn: workspace en attente d'approbation");
+  expect(h.statuses.at(-1)).toBe("workspace en attente d'approbation");
   for (const surface of SURFACES) {
     const ui = await mountBand($, surface);
     expect(await ui.find({ type: "Code", text: command })).toBeDefined();
@@ -160,7 +160,7 @@ test("a refusal by a policy is its own state, and offers no launch", async ($, o
     throw new Error("blocked by the organization's web-fetch policy");
   };
   await start($, clock);
-  expect(h.statuses.at(-1)).toBe("ktn: requête refusée (politique)");
+  expect(h.statuses.at(-1)).toBe("requête refusée (politique)");
   const ui = await mountBand($, "terminal");
   expect(await ui.find({ type: "Button", key: "ktn-launch" })).toBeUndefined();
 });
@@ -175,14 +175,14 @@ test("a silent daemon: unreachable at wait + 5 s, one request in flight, the lat
   };
   await start($, clock);
   await clock.advance(5_000);
-  expect(h.statuses.at(-1)).toBe("ktn: daemon injoignable");
+  expect(h.statuses.at(-1)).toBe("daemon injoignable");
   const n = h.fetches.length;
   await $.command.run({ command: "ktn-view", args: "" } as any);
   await clock.advance(1_000);
   expect(h.fetches.length).toBe(n);
   gate?.();
   await clock.advance(60_000);
-  expect(h.statuses.at(-1)).toBe("ktn: daemon injoignable");
+  expect(h.statuses.at(-1)).toBe("daemon injoignable");
 });
 
 test("the command answers at once while a request hangs", async ($, on) => {
@@ -190,5 +190,5 @@ test("the command answers at once while a request hangs", async ($, on) => {
   h.answer = () => new Promise(() => undefined);
   await start($, clock);
   const { text } = await $.command.run({ command: "ktn-view", args: "" } as any);
-  expect(text).toContain("ktn ·");
+  expect(text).toContain("ktn: ");
 });

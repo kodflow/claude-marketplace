@@ -13,8 +13,18 @@
       "type": "string",
       "title": "Activation",
       "description": "auto: in a Go project only, as ktn-linter resolves one. always: in every project (the safety net when the probe says undetermined). off: never.",
-      "options": ["auto", "always", "off"],
+      "options": [
+        "auto",
+        "always",
+        "off"
+      ],
       "default": "auto"
+    },
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open the pane at start",
+      "description": "Open the ktn pane when a Go session starts. Off by default: the engine seats a pane nobody asked for only from 144 columns, and once you have opened it with /ktn-view it seats it again from 110, in every later session.",
+      "default": false
     }
   }
 }

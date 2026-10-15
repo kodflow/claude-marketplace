@@ -104,7 +104,82 @@ has no host commands, the command is shown to copy instead.
 Every string from the daemon is cleaned of control characters before it is
 drawn, by a plain loop: no regular expression runs on external data.
 
-## One predicate, one table
+## The pane
+
+`/ktn-view` opens it in a Go project (`/ktn-view off` closes it); out of one
+the command answers and opens nothing. At the top, the synthesis: the state,
+the workspace, the totals by severity and by phase, how long since the last
+answer, the launch button when the daemon is down. Below, the findings as a
+**collapsible tree**, the way the daemon serves it: directories folded with
+their counts, only the children of the ones opened. A press on a directory or
+a file opens or folds it (the key of each row is the model's stable
+`dir:` / `file:` id, never a line or a counter); the opened ids live in
+`$.state` and come back after a hot reload. The pane does not window the
+tree: the engine scrolls it natively, the daemon bounds it, and a window
+that stops short says "… N de plus, voir l'UI web". The drawing stops its
+rows below the engine's 100 000 characters.
+
+While the pane is placed, and only then, one timer exists: a chain of
+one-shot timers, 3 s apart, each long-polling the daemon (`wait=20`, raced
+at 25 s). Closed, nothing is left armed. A press may send one request beside
+a long-poll that waits on a daemon that answers; the long-poll's answer,
+about a tree nobody looks at any more, is dropped.
+
+**Ouvrir l'UI web** mints a bootstrap link over the socket (`POST /ui/boot`,
+same uid) on the press, never before. The daemon grants only read-only
+`view` sessions. The token is held in a module variable and drawn in the
+pane's `Link` alone: never in `$.state`, which every plugin can read, never
+in the command's text, which the model reads. The link's label is the URL
+without its fragment.
+
+`autoOpen` is **off** by default, as kodflow/ktn-linter#774 recommended: the engine seats a pane
+nobody asked for only from 144 columns, and once you have opened it with
+`/ktn-view` it seats it again from 110, in every later session.
+
+| `autoOpen` | Effect |
+|---|---|
+| `false` (default) | the pane opens on `/ktn-view` |
+| `true` | the pane opens when a Go session starts |
+
+## What it looks like
+
+`tmux capture-pane` of a terminal at 144 columns, fullscreen layout, against a
+test daemon (`KTN_USER_DAEMON=1`, private `HOME` and `XDG_*`), the pane opened
+by `/ktn-view` and three folders opened from the keyboard (the scratch path
+shortened, three of the six findings shown):
+
+```
+│ktn · 6 constats · 0 E · 2 W · 4 I
+│…/scratchpad/kws
+│phases 2:1 5:1 6:2 7:2
+│actualisé il y a 0 s · moteur init
+│http://127.0.0.1:8080/
+│▾ .  6 · 2W 4I
+│  ▾ pkg/  6 · 2W 4I
+│    ▾ api/  6 · 2W 4I
+│      ▾ handler.go  6 · 2W 4I
+│        L1 KTN-SC-ST1000 at least one file in a package should…
+│        L5 KTN-FUNC-MAXPARAM function 'Serve' has 7 parameters…
+│        L6 KTN-VAR-USEANY prefer any to interface{}
+```
+
+Under the prompt: `⚠ kodflow-ktn: 6 constats · 0 E · 2 W · 4 I`. The
+daemon stopped, the band above the prompt shows the button:
+
+```
+ktn · daemon injoignable — aucun daemon sur le socket
+[ Lancer le daemon ]
+```
+
+A workspace waiting for approval, at 110 columns:
+
+```
+ktn · en attente d'approbation — repository not approved                  [-]
+à lancer dans votre propre terminal :
+ktn-linter admin workspace approve "/…/scratchpad/kws2"
+```
+
+## One predicate, one table — and the view model
 
 `tests/fixtures/resolve-project.json` is ktn-linter's golden table for the
 resolver (`pkg/daemonaddr/project_roots_external_test.go`), transcribed row
@@ -113,6 +188,12 @@ resolver at that commit before it was committed. The pure tests replay every
 row; changing an expected value fails them, as it fails the Go test. To move
 the pin: copy the table again from the new commit, re-run the Go resolver on
 each tree, then update `KTN_LINTER_SHA` in `hooks/mod/contract.ts`.
+
+`tests/fixtures/view/` holds ktn-linter's golden view models
+(`pkg/view/testdata/golden`), byte for byte at the commit `SOURCE` names. The
+pure tests read every one back whole, check that the expansions the mod sends
+are the golden queries' own, and draw them under the 100 000-character
+limit.
 
 ## Tests
 

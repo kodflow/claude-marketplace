@@ -111,10 +111,22 @@ export type KtnSnap = {
   daemon?: KtnDaemon;
 };
 
+/** The pane's tree: the window of the view model the last answer served. */
+export type KtnTree = {
+  workspace: string;
+  nodes: KtnNode[];
+  truncated: boolean;
+  hidden: number;
+};
+
 declare module "claude-code" {
   interface PluginState {
     "kodflow-ktn": {
       snap: KtnSnap;
+      /** The pane's tree; absent until a model was served. */
+      tree: KtnTree;
+      /** The dir: and file: ids the person opened in the pane. No secret. */
+      expanded: string[];
     };
   }
 }

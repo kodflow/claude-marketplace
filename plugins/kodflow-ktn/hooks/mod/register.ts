@@ -21,13 +21,20 @@
 //
 // The daemon is reached through client.ts (pure, port-injected) and drawn by
 // view.ts (pure): what is here is the port and the wiring.
+//
+// The pane (#777) is opened by /ktn-view, or at the start with `autoOpen`
+// (off by default: the engine seats an unasked pane only from 144 columns,
+// and once the person has opened it, it seats it again from 110, session
+// after session — measured by #774). While it is placed, and only then, a
+// tick long-polls the daemon; closed, no timer is left.
 
 import type { Register } from "claude-code";
-import type { KtnActivation, KtnDaemon, KtnSnap } from "../../types";
-import { Client, type Port } from "./client.ts";
+import type { KtnActivation, KtnDaemon, KtnModel, KtnSnap, KtnTree } from "../../types";
+import { Client, type Port, type UiLink } from "./client.ts";
 import {
   COMMAND,
   MIN_ENGINE,
+  PANE_ID,
   PROBE_MAX_CALLS,
   PROBE_MAX_MS,
 } from "./contract.ts";
@@ -41,9 +48,11 @@ import {
   type Activation,
   type Resolution,
 } from "./project.ts";
-import { band, safe, stateLine, statusText } from "./view.ts";
+import { band, pane, safe, stateLine, statusText } from "./view.ts";
 
 const SNAP = { plugin: "kodflow-ktn", key: "snap" } as const;
+const TREE = { plugin: "kodflow-ktn", key: "tree" } as const;
+const EXPANDED = { plugin: "kodflow-ktn", key: "expanded" } as const;
 
 // The module's own copy: the fast source. A reload starts it over, and the
 // next reconciliation rebuilds it from the disk; `$.state` keeps what is drawn.
@@ -54,6 +63,15 @@ let started = false;
 let activation: Activation = "auto";
 let client: Client | undefined;
 let lastStatus: string | undefined;
+let autoOpen = false;
+/** The dir: and file: ids opened in the pane. */
+let expanded: string[] = [];
+/**
+ * The web UI's bootstrap link. Held HERE and drawn in the pane's tree alone:
+ * never in `$.state`, which any plugin reads, never in the command's text,
+ * which the model reads.
+ */
+let uiLink: UiLink | undefined;
 
 // $.state takes JSON data: no undefined anywhere in it
 const plain = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -78,7 +96,54 @@ const isLive = (a: KtnActivation) => a !== "inert" && a !== "floor";
 function standDown($: any): void {
   client?.stop();
   lastStatus = undefined;
+  uiLink = undefined;
   $.ui.status(undefined);
+  void $.ui.close({ id: PANE_ID }).catch(() => undefined);
+}
+
+/** Whether this mod's pane is placed now, by the engine's own record. */
+async function placed($: any): Promise<boolean> {
+  const panes = await $.ui.panes().catch(() => []);
+  return panes.some((p: any) => p.id === PANE_ID && p.isPlaced);
+}
+
+/** Opens the pane and starts the tick when the surface placed it. */
+async function openPane($: any): Promise<boolean> {
+  const r = await $.ui.open({ id: PANE_ID, title: "ktn" }).catch(() => undefined);
+  const isPlaced = r?.isPlaced === true;
+  if (isPlaced) client?.setTicking(true);
+  return isPlaced;
+}
+
+async function writeTree($: any, model: KtnModel): Promise<void> {
+  const tree: KtnTree = {
+    workspace: snap.workspace ?? "",
+    nodes: model.nodes,
+    truncated: model.truncated,
+    hidden: model.hidden,
+  };
+  await $.state.set(TREE, plain(tree)).catch(() => undefined);
+}
+
+/** A press on a directory or a file of the tree: open it, or fold it. */
+async function toggle($: any, id: string): Promise<void> {
+  if (!client) return;
+  expanded = expanded.includes(id) ? expanded.filter((x) => x !== id) : [...expanded, id];
+  await $.state.set(EXPANDED, expanded).catch(() => undefined);
+  client.setExpand(expanded);
+  client.nudge();
+}
+
+/** "Ouvrir l'UI web": a fresh link, kept in the module, drawn in the pane. */
+async function openUi($: any): Promise<void> {
+  if (!client) return;
+  const r = await client.mint();
+  if ("error" in r) {
+    $.ui.toast(`ktn: UI web indisponible (${r.error})`);
+    return;
+  }
+  uiLink = r;
+  $.ui.invalidate("ui.render");
 }
 
 /** The engine, as client.ts sees it. */
@@ -90,9 +155,10 @@ function portOf($: any, canRun: boolean): Port {
     home: () => $.env.get("HOME"),
     fetch: (url, init) => $.http.fetch(url, init),
     run: canRun ? (argv, init) => $.process.run(argv, init) : undefined,
-    emit: (daemon: KtnDaemon) => {
+    emit: (daemon: KtnDaemon, model: KtnModel | undefined) => {
       if (snap.activation !== "active") return;
       void publish($, { ...snap, daemon }).then(() => status($));
+      if (model) void writeTree($, model);
     },
   };
 }
@@ -128,10 +194,16 @@ async function probe($: any): Promise<void> {
       workspace,
       daemon: same ? snap.daemon : { kind: "loading", launch: "none" },
     });
+    if (!same) {
+      expanded = [];
+      uiLink = undefined;
+      client?.setExpand([]);
+    }
     client?.setWorkspace(workspace);
     status($);
     // Off the start's path: the hook that probed has returned long ago
     if (!same) void client?.refresh();
+    if (!same && autoOpen) await openPane($);
   } finally {
     probing = false;
   }
@@ -152,8 +224,11 @@ async function reconcile($: any): Promise<void> {
   const held = await $.state.get(SNAP).catch(() => undefined);
   if (held && held.value === undefined) await publish($, snap);
   if (snap.activation !== "active" || !client) return;
+  // A pane the engine placed since (a wider terminal, a surface attaching)
+  // starts the tick; one that went away stops it
+  client.setTicking(await placed($));
   await client.reconcile();
-  void client.refresh({ waitS: 0 });
+  if (!client.ticking) void client.refresh({ waitS: 0 });
 }
 
 /** The session's start, or a surface attaching to a session that had none. */
@@ -162,13 +237,19 @@ async function start($: any, surfaces: readonly string[]): Promise<void> {
   const v = await $.session.version().catch(() => undefined);
   if (!atLeast(v?.base ?? v?.version, MIN_ENGINE)) {
     await publish($, { activation: "floor" });
-    $.ui.status(`ktn: Claude Code ${MIN_ENGINE} ou plus requis`);
+    $.ui.status(`Claude Code ${MIN_ENGINE} ou plus requis`);
     return;
   }
   // Host commands are the CLI's (`$.process` is "CLI only"): on a session
   // the terminal does not draw, the button becomes a command to copy
   const canRun = surfaces.includes("terminal");
   client = new Client(portOf($, canRun));
+  // A hot reload keeps $.state: the person's opened folders come back
+  const held = await $.state.get(EXPANDED).catch(() => undefined);
+  if (Array.isArray(held?.value)) {
+    expanded = held.value.filter((x: unknown) => typeof x === "string").slice(0, 500);
+    client.setExpand(expanded);
+  }
   await $.command
     .register({
       name: "ktn-view",
@@ -187,7 +268,7 @@ async function start($: any, surfaces: readonly string[]): Promise<void> {
 function commandText(): string {
   switch (snap.activation) {
     case "active":
-      return `${stateLine(snap).text} (workspace ${snap.workspace ?? "?"})`;
+      return `${stateLine(snap).text.replace("ktn · ", "ktn: ")} (workspace ${snap.workspace ?? "?"})`;
     case "undetermined":
       return "ktn: projet indéterminé (sonde interrompue) ; activation: always pour forcer";
     case "probing":
@@ -208,6 +289,7 @@ function launch(): void {
 
 export const register: Register = (on, options) => {
   activation = parseActivation(options.activation);
+  autoOpen = options.autoOpen === true;
 
   // ONE session.start: two without a matcher keep the module from loading
   on("session.start", async ($, e, next) => {
@@ -247,12 +329,44 @@ export const register: Register = (on, options) => {
   // Answers from what the module holds: never a daemon call, which would
   // hold the prompt up to 30 s (#774). A person's act: the breaker gives way
   // and a refresh leaves in the background.
-  on("command.run", { command: "ktn-view" }, async () => {
+  on("command.run", { command: "ktn-view" }, async ($, e) => {
+    const arg = String(e.args ?? "").trim().toLowerCase();
+    if (arg === "off" || arg === "close") {
+      client?.setTicking(false);
+      await $.ui.close({ id: PANE_ID }).catch(() => undefined);
+      return { text: "ktn: panneau fermé" };
+    }
+    // Out of a Go project: the text alone, no pane
     if (snap.activation === "active" && client) {
-      client.userAction();
-      void client.refresh({ waitS: 0, force: true });
+      await openPane($);
+      client.nudge();
     }
     return { text: commandText() };
+  });
+
+  // The person closed the pane (its mark, ctrl+x x): the tick goes with it
+  on("ui.close", async ($, e, next) => {
+    const result = await next(e);
+    if (e.id === PANE_ID) client?.setTicking(false);
+    return result;
+  }).catch(($, e, next) => next(e));
+
+  on("ui.render", { component: "Pane", requestId: "ktn-view" }, async ($, e) => {
+    const els: any = $.ui.resolve(e);
+    const held = (await $.state.get(SNAP).catch(() => undefined))?.value ?? snap;
+    const tree = (await $.state.get(TREE).catch(() => undefined))?.value;
+    const now: number = await $.clock.now();
+    const link =
+      uiLink && (uiLink.expiresAt === 0 || uiLink.expiresAt > now)
+        ? { url: uiLink.url, label: uiLink.url.split("#")[0]! }
+        : undefined;
+    return safe(els, () =>
+      pane(els, { snap: held, tree, link, now }, {
+        launch,
+        toggle: (id) => void toggle($, id),
+        openUi: () => void openUi($),
+      }),
+    );
   });
 
   // The band above the prompt, while there is something to act on

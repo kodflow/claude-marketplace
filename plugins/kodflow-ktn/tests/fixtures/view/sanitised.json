@@ -1,0 +1,113 @@
+{
+  "name": "sanitised",
+  "query": "workspace=/work/example\u0026expand=dir:cmd\u0026expand=file:cmd/tool%20x.go",
+  "findings": [
+    {
+      "file": "cmd/tool\tx.go",
+      "line": 4,
+      "column": 1,
+      "rule": "KTN-COMMENT-FUNC",
+      "message": "doc says \u001b[31mred\u001b[0m\u0000 and\nbreaks",
+      "phase": 7
+    }
+  ],
+  "model": {
+    "schema": "v1",
+    "rev": 1760000000000,
+    "workspace": "/work/example",
+    "state": "watching",
+    "totals": {
+      "findings": 1,
+      "severity": {
+        "error": 0,
+        "warning": 1,
+        "info": 0
+      },
+      "phase": {
+        "7": 1
+      }
+    },
+    "tree": {
+      "nodes": [
+        {
+          "id": "dir:.",
+          "kind": "dir",
+          "name": ".",
+          "depth": 0,
+          "expanded": true,
+          "counts": {
+            "findings": 1,
+            "severity": {
+              "error": 0,
+              "warning": 1,
+              "info": 0
+            },
+            "phase": {
+              "7": 1
+            }
+          }
+        },
+        {
+          "id": "dir:cmd",
+          "kind": "dir",
+          "name": "cmd",
+          "parent": "dir:.",
+          "depth": 1,
+          "expanded": true,
+          "counts": {
+            "findings": 1,
+            "severity": {
+              "error": 0,
+              "warning": 1,
+              "info": 0
+            },
+            "phase": {
+              "7": 1
+            }
+          }
+        },
+        {
+          "id": "file:cmd/tool x.go",
+          "kind": "file",
+          "name": "tool x.go",
+          "parent": "dir:cmd",
+          "depth": 2,
+          "expanded": true,
+          "counts": {
+            "findings": 1,
+            "severity": {
+              "error": 0,
+              "warning": 1,
+              "info": 0
+            },
+            "phase": {
+              "7": 1
+            }
+          }
+        },
+        {
+          "id": "finding:d95a4a1c9ab78e85",
+          "kind": "finding",
+          "name": "KTN-COMMENT-FUNC",
+          "parent": "file:cmd/tool x.go",
+          "depth": 3,
+          "expanded": false,
+          "line": 4,
+          "column": 1,
+          "rule": "KTN-COMMENT-FUNC",
+          "severity": "warning",
+          "phase": 7,
+          "message": "doc says  [31mred [0m  and breaks"
+        }
+      ]
+    },
+    "window": {
+      "offset": 0,
+      "limit": 200,
+      "returned": 4,
+      "total": 4
+    },
+    "truncated": false,
+    "activity": []
+  }
+}
