@@ -631,7 +631,7 @@ const CONSENT_WORD =
   /(?<![\p{L}\p{N}_-])(merge|merger|fusionne|fusionner|fusionnes)(?![\p{L}\p{N}_]|-(?!(?:la|le|les)(?![\p{L}\p{N}_])))/iu;
 // Anything that holds the merge back: a negation, a wait, a later
 const HOLD_WORD =
-  /(?<![\p{L}\p{N}_])(ne|n'|n’|pas|jamais|sans|aucun|aucune|plus tard|tard|attends|attendez|attendre|attend|don't|don’t|dont|do not|not|never|no|wait|hold|stop|later|before|avant)(?![\p{L}\p{N}_])/iu;
+  /(?<![\p{L}\p{N}_])(ne|n'|n’|pas|jamais|sans|aucun|aucune|plus tard|tard|attends|attendez|attendre|attend|don't|don’t|dont|do not|not|never|no|wait|hold|stop|later|before|avant|after|après|tomorrow|demain)(?![\p{L}\p{N}_])/iu;
 const CONSENT_EXCERPT = 80;
 
 /**
@@ -648,7 +648,7 @@ export function writtenConsent(text: string | undefined): string | undefined {
     .replace(/`[^`]*`/g, " ");
   if (/[?¿]/.test(own) || HOLD_WORD.test(own) || !CONSENT_WORD.test(own))
     return undefined;
-  return text.replace(/\s+/g, " ").trim().slice(0, CONSENT_EXCERPT);
+  return own.replace(/\s+/g, " ").trim().slice(0, CONSENT_EXCERPT);
 }
 
 const approvals = new Map<string, number>();

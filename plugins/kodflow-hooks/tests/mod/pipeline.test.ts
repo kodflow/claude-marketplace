@@ -743,6 +743,7 @@ test("written consent: a merge word, no negation, no question, typed by the user
     "fusionnes-la",
     "vas-y, fusionner la PR 12",
     "Fusionne !",
+    "fusionne quand la CI est verte",
   ])
     expect(writtenConsent(yes)).toBe(yes.replace(/\s+/g, " ").trim());
   for (const no of [
@@ -760,6 +761,8 @@ test("written consent: a merge word, no negation, no question, typed by the user
     "on merge ?",
     "on merge?",
     "fusionne plus tard",
+    "merge demain",
+    "merge after the release",
     "sans fusionner",
     "c'est mergé",
     "mergeable",
@@ -769,6 +772,12 @@ test("written consent: a merge word, no negation, no question, typed by the user
     "go on",
   ])
     expect(writtenConsent(no)).toBeUndefined();
+  // The journal shows the words typed only: a pasted secret never reaches it
+  expect(
+    writtenConsent(
+      'merge <pasted_content id="p">token=ghp_SECRETSECRETSECRET</pasted_content> merci',
+    ),
+  ).toBe("merge merci");
   // Long messages are cut in the journal
   expect(writtenConsent(`merge ${"x".repeat(200)}`)!.length).toBeLessThanOrEqual(80);
 });
