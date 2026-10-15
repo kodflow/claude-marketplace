@@ -1,6 +1,6 @@
 # Generic Lint-Fix-Iterate (18+ Languages)
 
-> Invoked from lint.md for any language except Go-with-project-linter.
+> Invoked from lint.md for any language except Go-with-ktn-linter.
 > Follows the same Makefile-first pattern as lint.sh and on-stop-quality.sh.
 
 ## Tool Mapping

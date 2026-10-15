@@ -103,7 +103,9 @@ fi
 # --- Tool availability (extended for PR2a/PR2b — Skills Arch v1.3) ---
 tools_json() {
     local result="{}"
-    for tool in project-linter eslint ruff golangci-lint cargo-clippy rubocop phpstan ktlint swiftlint luacheck shellcheck hadolint clang-tidy mypy tsc prettier wrangler psql postgres; do
+    # project-linter is ktn-linter's old name: reported so /lint can fall back on
+    # it when ktn-linter is absent, never preferred to it.
+    for tool in ktn-linter project-linter eslint ruff golangci-lint cargo-clippy rubocop phpstan ktlint swiftlint luacheck shellcheck hadolint clang-tidy mypy tsc prettier wrangler psql postgres; do
         local safe_name
         safe_name=$(echo "$tool" | tr '-' '_')
         if command -v "$tool" &>/dev/null; then

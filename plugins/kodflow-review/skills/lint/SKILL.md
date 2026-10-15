@@ -1,7 +1,7 @@
 ---
 name: lint
 description: 'Multi-language intelligent linting with RLM decomposition. Auto-detects project
-  language(s) and dispatches to the appropriate workflow. Go projects with project-linter: 148
+  language(s) and dispatches to the appropriate workflow. Go projects with ktn-linter: 148
   rules across 8 phases with Agent Teams. Other languages: lint-fix-iterate loop with language-specific
   tools. Makefile-first: uses `make lint` when available.'
 when_to_use: Use to run the project's linters and fix what they find. Prefers `make lint`
@@ -60,7 +60,7 @@ Use this output for ALL routing decisions below. DO NOT re-check markers individ
 detection_order:
   - marker: "go.mod"
     language: "go"
-    check_ktn: true  # Also check for project-linter binary
+    check_ktn: true  # Also check for ktn-linter (project-linter, the old name, as a fallback)
 
   - marker: "Cargo.toml"
     language: "rust"
@@ -138,18 +138,19 @@ IF Makefile exists with "lint" target:
   → DONE (skip language-specific dispatch)
 ```
 
-### Go with project-linter
+### Go with ktn-linter
 
 ```text
-IF "go" detected AND (project-linter binary exists OR cmd/project-linter/ dir exists):
+IF "go" detected AND (tools.ktn_linter OR ./builds/ktn-linter OR cmd/ktn-linter/ dir exists
+                      OR, only when none of those, tools.project_linter — the old name):
   → Read `go.md`
-  → Execute full 8-phase project-linter workflow
+  → Execute full 8-phase ktn-linter workflow
 ```
 
-### Go without project-linter
+### Go without ktn-linter
 
 ```text
-IF "go" detected AND no project-linter:
+IF "go" detected AND neither ktn-linter nor project-linter:
   → Read `generic.md`
   → Use golangci-lint fallback
 ```
@@ -181,7 +182,7 @@ IF multiple languages detected AND no Agent Teams:
 
 | Action | Module |
 |--------|--------|
-| Go project-linter gateway | Read `go.md` |
+| Go ktn-linter gateway | Read `go.md` |
 | Generic lint-fix-iterate (18+ languages) | Read `generic.md` |
 | Go: 148 rules by phase | Read `rules.md` |
 | Go: Execution workflow & agent teams | Read `execution.md` |
@@ -199,7 +200,7 @@ IF multiple languages detected AND no Agent Teams:
   Languages detected : Go, TypeScript
   Mode               : Agent Teams (1 teammate per language)
 
-  Go (project-linter 8-phase):
+  Go (ktn-linter 8-phase):
     Issues fixed     : 47
     Iterations       : 3
     DTOs detected    : 4

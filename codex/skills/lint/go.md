@@ -1,29 +1,31 @@
 # Go Linting Gateway
 
-> Invoked from lint.md when Go is detected with project-linter available.
+> Invoked from lint.md when Go is detected with ktn-linter available.
 
 ## Prerequisites
 
 1. Verify `go.mod` exists in project root
-2. Check for project-linter binary:
+2. Resolve the linter. `ktn-linter` first; `project-linter`, its old name, only
+   when no `ktn-linter` exists (an old install), and then with its old `lint`
+   subcommand:
 
 ```bash
-# Check binary
-ls ./builds/project-linter 2>/dev/null
-
-# If missing, build it
-if [ -d ./cmd/project-linter ]; then
-    go build -o ./builds/project-linter ./cmd/project-linter
+KTN="" RUN=run
+if [ -x ./builds/ktn-linter ]; then KTN=./builds/ktn-linter
+elif [ -d ./cmd/ktn-linter ] && mkdir -p ./builds && go build -o ./builds/ktn-linter ./cmd/ktn-linter; then KTN=./builds/ktn-linter
+elif command -v ktn-linter >/dev/null 2>&1; then KTN=ktn-linter
+elif [ -x ./builds/project-linter ]; then KTN=./builds/project-linter RUN=lint
+elif command -v project-linter >/dev/null 2>&1; then KTN=project-linter RUN=lint
 fi
 ```
 
-3. If project-linter not available (no binary, no source): fall back to `generic.md` with `golangci-lint`
+3. If `KTN` is empty (no binary, no source): fall back to `generic.md` with `golangci-lint`
 
 ## Execution
 
-Once project-linter is confirmed available, execute the full 8-phase workflow:
+Once ktn-linter is confirmed available, execute the full 8-phase workflow:
 
-1. **Run project-linter**: Refer to `execution.md` Step 1
+1. **Run ktn-linter**: Refer to `execution.md` Step 1
 2. **Parse & classify**: Refer to `rules.md` for phase mapping
 3. **DTO detection**: Refer to `dto.md` when KTN-STRUCT-ONEFILE or KTN-STRUCT-CTOR
 4. **Execute fixes**: Refer to `execution.md` for Agent Teams or sequential mode
