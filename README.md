@@ -14,7 +14,7 @@ cd claude-marketplace && ./scripts/install.sh
 
 | Plugin | Skills |
 |--------|--------|
-| `kodflow-workflow` | `/project` `/warmup` `/search` `/plan` `/challenge` `/refine` `/git` `/feature` `/fix` `/flow` |
+| `kodflow-workflow` | `/project` `/warmup` `/search` `/plan` `/challenge` `/refine` `/git` `/feature` `/fix` `/flow` `/recap` |
 | `kodflow-review` | `/review` `/debug` `/adr` `/learn` `/lint` |
 | `kodflow-devops` | `/infra` `/audit` `/update` `/ktn` |
 | `kodflow-shell` | `/shell` — and `super-claude` on your PATH |

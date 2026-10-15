@@ -15,6 +15,7 @@ Index, by lane:
 | verify | `/review` `/debug` `/lint` |
 | ship | `/git` `/adr` |
 | keep | `/learn` |
+| observe | `/recap` |
 | machine | `/audit` `/update` `/ktn` `/infra` |
 
 `/goal` appears in every route and is **not** a skill — see the last card.
@@ -365,6 +366,20 @@ is what makes the single wave safe.
 | reads | `diagrams.md` · `reference.md` · the live inventory script |
 | writes | nothing |
 | gate | `--check` reports drift and never edits the map to resolve it |
+
+---
+
+## /recap
+
+`kodflow-workflow` · inherit · **Where the work stands, in one table**
+
+**Type** `/recap [--loop [N] | --stop]`
+
+| | |
+|---|---|
+| reads | the kodflow-hooks task list, the running subagents and their worktrees, the open PRs and their CI |
+| writes | nothing but its own fingerprint (`recap-last`) · a `/recap --tick` cron job on `--loop` |
+| gate | **an iteration with nothing new prints one line**, never the table again |
 
 ---
 
