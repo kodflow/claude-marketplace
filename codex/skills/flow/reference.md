@@ -322,20 +322,21 @@ Seven dimensions, each scored, each naming the specific files at fault.
 
 ## /ktn
 
-`kodflow-devops` · opus · **Heal the project-linter MCP stack**
+`kodflow-devops` · opus · **Heal the ktn-linter stack**
 
 **Type** `/ktn [--check] [--phases <spec>] [--scope <diff|full|show>] [--restart] [--uninstall]`
 
 | | |
 |---|---|
-| reads | the binary version, the MCP entry, the hook wiring, the daemon on :7717, the phase config |
-| writes | the binary, the MCP config, the settings, the daemon state |
+| reads | the binary version, `ktn-linter hook doctor --json`, the MCP entry, `ktn-linter daemon status` (KTN_USER_DAEMON=1), the phase config |
+| writes | the binary, the phase config; the hooks, the MCP entry and the daemon only through `ktn-linter hook install`, `mcp install`, `daemon ensure` |
 | after | — |
-| then | itself, on a schedule or when the daemon is stale |
-| gate | idempotent: it does nothing when the stack is already healthy, and asks for a restart only when the settings actually changed |
+| then | itself, on a schedule or when hook doctor reports a defect |
+| gate | idempotent: it does nothing when the stack is already healthy, and asks for a restart only when `hook install` actually wrote the settings |
 
-Five agents in **one** message, not a sequence — they are file-disjoint, which
-is what makes the single wave safe.
+Four agents in two waves — binary and phases, then hooks and daemon, which
+run the binary the first wave installs. No agent writes a hook entry or
+signals a process itself.
 
 ---
 

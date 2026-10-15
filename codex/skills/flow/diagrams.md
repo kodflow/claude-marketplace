@@ -119,7 +119,7 @@ The whole thing. Default view.
   ──────────────────────────────────────────────────────────────────────────────
   /audit    seven dimensions scored, every file at fault named  ──▶ /search --refresh
   /update   re-sync the devcontainer from the upstream template
-  /ktn      five agents in ONE wave, heal the project-linter stack
+  /ktn      four agents in two waves, heal the ktn-linter stack
   /infra    --plan ──tfplan──▶ --apply
   ◆ --apply refuses to run without the tfplan that --plan wrote
 ```
@@ -222,7 +222,7 @@ The whole thing. Default view.
   /audit   seven dimensions scored, every file at fault named
            --> /search --refresh
   /update  re-sync the devcontainer from the upstream template
-  /ktn     five agents in ONE wave, heal the project-linter stack
+  /ktn     four agents in two waves, heal the ktn-linter stack
   /infra   --plan --tfplan--> --apply
   <> --apply refuses to run without the tfplan that --plan wrote
 ```
