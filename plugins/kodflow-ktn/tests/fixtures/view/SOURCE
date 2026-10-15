@@ -1,0 +1,10 @@
+# Copied from kodflow/ktn-linter: pkg/view/testdata/golden/*.json at the
+# commit below, byte for byte. ktn-linter generates them (`make generate`,
+# cmd/gen-view-fixtures) and replays them in its own Go test
+# (TestRenderGolden); the mod's pure tests read the same files, so a change of
+# the view model's wire reaches both sides or neither. Moved by copying the
+# eight files again from a newer commit and updating sha= here and
+# KTN_LINTER_SHA in hooks/mod/contract.ts.
+repo=kodflow/ktn-linter
+path=pkg/view/testdata/golden
+sha=bb5c349d2009ef79df8df1b9a5e2ba7758cb1827

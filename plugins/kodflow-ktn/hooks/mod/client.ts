@@ -13,7 +13,11 @@
 // and no signal, so when the race's own timer (the request's wait + 5 s)
 // fires first, the state turns unreachable at once, but no second request
 // leaves until the first one has settled; and its late answer is dropped
-// (the generation moved on).
+// (the generation moved on). One exception, bounded: while a pane's
+// long-poll waits on a HEALTHY daemon (it is answering, just holding the
+// request for up to 20 s), a person's press may send one request beside it,
+// and the long-poll's answer — now about a tree the person no longer looks
+// at — is dropped by the same generation. Never more than two.
 //
 // No timer exists unless a pane is placed (#777 sets `ticking`): the status
 // line is refreshed by the turn's end, the pane by a chain of one-shot
@@ -26,13 +30,16 @@ import {
   LAUNCH_POLL_MS,
   LAUNCH_TIMEOUT_MS,
   MAX_TEXT,
+  MAX_WAIT_S,
   PROTOCOL_VERSION,
   RACE_SLACK_MS,
+  UI_BOOT,
   VIEW_ROUTE,
 } from "./contract.ts";
 import {
   classifyRejection,
   isNotServed,
+  parseJson,
   parseModel,
   parseStatus,
   refusalOf,
@@ -64,7 +71,13 @@ export type Port = {
 };
 
 const TIMEOUT = Symbol("timeout");
+/** An answer to a request someone else's has superseded: not a failure, nothing to draw. */
+const STALE = Symbol("stale");
+type Outcome = Answer | Failure | typeof STALE;
 const isFailure = (x: Answer | Failure): x is Failure => "kind" in x;
+
+/** A bootstrap link to the web UI: the token rides in the fragment. */
+export type UiLink = { url: string; expiresAt: number };
 
 /** The tick's period while a pane is placed (#777). */
 export const TICK_MS = 3_000;
@@ -82,8 +95,10 @@ export class Client {
   endpointText: string | undefined = undefined;
   handshaken = false;
   incompatible = false;
-  /** True while the underlying fetch has not settled. */
-  inflight = false;
+  /** Underlying fetches not settled yet: 0, 1, or 2 (a long-poll and a press). */
+  inflight = 0;
+  /** True while the request in flight is a long-poll. */
+  longPolling = false;
   gen = 0;
   failures = 0;
   breakerUntil = 0;
@@ -159,10 +174,12 @@ export class Client {
   }
 
   /** One request over the socket, raced; a failure is a value, never a throw. */
-  private async request(path: string, waitS: number, method?: string): Promise<Answer | Failure> {
+  private async request(path: string, waitS: number, method?: string): Promise<Outcome> {
     const socketPath = this.endpoint!.socket;
     const mine = ++this.gen;
-    this.inflight = true;
+    const long = waitS > 0;
+    this.inflight++;
+    if (long) this.longPolling = true;
     const underlying: Promise<Answer | Failure> = this.port
       .fetch(`http://ktn${path}`, method ? { socketPath, method } : { socketPath })
       .then(
@@ -170,15 +187,16 @@ export class Client {
         (err) => classifyRejection(err),
       )
       .finally(() => {
-        this.inflight = false;
+        this.inflight--;
+        if (long) this.longPolling = false;
       });
     const r = await this.race(underlying, waitS * 1_000 + RACE_SLACK_MS);
+    if (mine !== this.gen) return STALE;
     if (r === TIMEOUT) {
       // Whatever it says later is about a request nobody waits for any more
       this.gen++;
       return { kind: "silent", detail: "le daemon ne répond pas" };
     }
-    if (mine !== this.gen) return { kind: "silent", detail: "réponse périmée" };
     return r;
   }
 
@@ -249,10 +267,14 @@ export class Client {
 
   /**
    * One look at the daemon. `waitS` is the long-poll (0 for the status line);
-   * `force` passes the breaker (a person's own act).
+   * `force` passes the breaker (a person's own act); `interactive` may go
+   * beside a long-poll that is waiting on a daemon that answers (a press on
+   * the tree), and supersedes it.
    */
-  async refresh(opts: { waitS?: number; force?: boolean } = {}): Promise<void> {
-    if (this.stopped || !this.workspace || this.inflight) return;
+  async refresh(opts: { waitS?: number; force?: boolean; interactive?: boolean } = {}): Promise<void> {
+    if (this.stopped || !this.workspace) return;
+    const beside = opts.interactive === true && this.inflight === 1 && this.longPolling && this.handshaken;
+    if (this.inflight > 0 && !beside) return;
     try {
       await this.refreshOnce(opts.waitS ?? 0, opts.force === true);
     } catch (err) {
@@ -278,6 +300,7 @@ export class Client {
     if (this.incompatible) return;
     if (!this.handshaken) {
       const st = await this.request("/status", 0);
+      if (st === STALE) return;
       if (isFailure(st)) return this.failed(st);
       if (st.status !== 200) return this.failed({ kind: "broken", detail: `HTTP ${st.status} sur /status` });
       const parsed = parseStatus(st.text, this.workspace);
@@ -286,6 +309,7 @@ export class Client {
       this.handshaken = true;
     }
     const r = await this.request(`${VIEW_ROUTE}?${this.query(waitS)}`, waitS);
+    if (r === STALE) return;
     if (isFailure(r)) return this.failed(r);
     if (r.status === 204) return this.served(now, undefined);
     if (r.status === 200) {
@@ -319,6 +343,7 @@ export class Client {
   /** Not served: waiting for the person's approval, or refused outright. */
   private async notServed(reason: string): Promise<void> {
     const st = await this.request("/status", 0);
+    if (st === STALE) return;
     if (!isFailure(st) && st.status === 200) {
       const parsed = parseStatus(st.text, this.workspace);
       if (parsed.ok && parsed.pending) {
@@ -357,6 +382,26 @@ export class Client {
   userAction(): void {
     this.failures = 0;
     this.breakerUntil = 0;
+  }
+
+  /**
+   * A person's act (the command, a press): the breaker and the backoff give
+   * way, and a look leaves now — the tick's next one, or one beside a
+   * long-poll that is waiting on a daemon that answers.
+   */
+  nudge(): void {
+    this.userAction();
+    if (!this.ticking) {
+      void this.refresh({ waitS: 0, force: true });
+      return;
+    }
+    if (this.tickRunning) {
+      void this.refresh({ waitS: 0, force: true, interactive: true });
+      return;
+    }
+    this.timer?.cancel();
+    this.timer = undefined;
+    this.arm(0);
   }
 
   /** The pane changed what it shows opened: the next answer must be whole. */
@@ -417,7 +462,7 @@ export class Client {
     }
   }
 
-  /** The pane is placed (or no longer): the tick exists only then. */
+  /** The pane is placed (or no longer): the tick, and its long-poll, exist only then. */
   setTicking(on: boolean): void {
     this.ticking = on && !this.stopped;
     if (!this.ticking) {
@@ -426,7 +471,37 @@ export class Client {
       this.waitS = 0;
       return;
     }
+    this.waitS = MAX_WAIT_S;
     this.arm(0);
+  }
+
+  /**
+   * A bootstrap link to the web UI, minted over the socket (same uid) on the
+   * person's press: `POST /ui/boot`. The token is returned to the caller and
+   * kept by it in a module variable, drawn in the pane's tree alone — never
+   * written to `$.state` (any plugin reads it) nor to the command's text
+   * (the model reads it).
+   */
+  async mint(): Promise<UiLink | { error: string }> {
+    if (!this.endpoint) return { error: "daemon injoignable" };
+    const socketPath = this.endpoint.socket;
+    const underlying = this.port
+      .fetch(`http://ktn${UI_BOOT}`, { socketPath, method: "POST" })
+      .then(
+        (r) => ({ status: Number(r?.status) || 0, text: typeof r?.text === "string" ? r.text : "" }),
+        (err) => classifyRejection(err),
+      );
+    const r = await this.race(underlying, RACE_SLACK_MS);
+    if (r === TIMEOUT) return { error: "le daemon ne répond pas" };
+    if (isFailure(r)) return { error: r.detail };
+    if (r.status !== 200) return { error: clean(r.text, 160).trim() || `HTTP ${r.status}` };
+    const raw: any = parseJson(r.text);
+    const url = raw?.url;
+    // Only the loopback listener the daemon serves; anything else is not drawn
+    if (typeof url !== "string" || url.length > 2_000 || !(url.startsWith("http://127.0.0.1:") || url.startsWith("http://localhost:") || url.startsWith("http://[::1]:")))
+      return { error: "lien de l'UI inattendu" };
+    const expiresAt = Date.parse(String(raw?.expires_at));
+    return { url, expiresAt: Number.isFinite(expiresAt) ? expiresAt : 0 };
   }
 
   /** Arms the ONE timer of the chain, if none is armed. */

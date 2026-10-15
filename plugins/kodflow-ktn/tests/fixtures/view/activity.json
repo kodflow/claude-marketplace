@@ -1,0 +1,100 @@
+{
+  "name": "activity",
+  "query": "workspace=/work/example",
+  "findings": [
+    {
+      "file": "pkg/api/handler.go",
+      "line": 12,
+      "column": 1,
+      "rule": "KTN-FUNC-MAXPARAM",
+      "message": "function has 7 parameters, the maximum is 5",
+      "phase": 2
+    }
+  ],
+  "model": {
+    "schema": "v1",
+    "rev": 1760000000000,
+    "workspace": "/work/example",
+    "state": "watching",
+    "totals": {
+      "findings": 1,
+      "severity": {
+        "error": 0,
+        "warning": 1,
+        "info": 0
+      },
+      "phase": {
+        "2": 1
+      }
+    },
+    "tree": {
+      "nodes": [
+        {
+          "id": "dir:.",
+          "kind": "dir",
+          "name": ".",
+          "depth": 0,
+          "expanded": true,
+          "counts": {
+            "findings": 1,
+            "severity": {
+              "error": 0,
+              "warning": 1,
+              "info": 0
+            },
+            "phase": {
+              "2": 1
+            }
+          }
+        },
+        {
+          "id": "dir:pkg",
+          "kind": "dir",
+          "name": "pkg",
+          "parent": "dir:.",
+          "depth": 1,
+          "expanded": false,
+          "counts": {
+            "findings": 1,
+            "severity": {
+              "error": 0,
+              "warning": 1,
+              "info": 0
+            },
+            "phase": {
+              "2": 1
+            }
+          }
+        }
+      ]
+    },
+    "window": {
+      "offset": 0,
+      "limit": 200,
+      "returned": 2,
+      "total": 2
+    },
+    "truncated": false,
+    "activity": [
+      {
+        "agent": "claude",
+        "session": "4f1c",
+        "files": [
+          "pkg/api/handler.go",
+          "main.go"
+        ],
+        "last_event": "edits.record",
+        "at": "2026-10-15T09:30:00Z"
+      },
+      {
+        "agent": "codex",
+        "session": "rollout-7",
+        "files": [
+          "pkg/store/db.go"
+        ],
+        "last_event": "brief",
+        "at": "2026-10-15T08:30:00Z"
+      }
+    ]
+  }
+}

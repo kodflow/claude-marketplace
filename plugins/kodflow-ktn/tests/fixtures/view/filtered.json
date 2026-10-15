@@ -1,0 +1,172 @@
+{
+  "name": "filtered",
+  "query": "workspace=/work/example\u0026severity=error,warning\u0026phase=2,6\u0026expand=dir:pkg",
+  "findings": [
+    {
+      "file": "pkg/api/handler.go",
+      "line": 12,
+      "column": 1,
+      "rule": "KTN-FUNC-MAXPARAM",
+      "message": "function has 7 parameters, the maximum is 5",
+      "phase": 2
+    },
+    {
+      "file": "pkg/api/handler.go",
+      "line": 40,
+      "column": 6,
+      "rule": "KTN-INTERFACE-NAMING",
+      "message": "interface Doer should be named for its role",
+      "phase": 6
+    },
+    {
+      "file": "pkg/api/handler.go",
+      "line": 52,
+      "column": 1,
+      "rule": "KTN-COMMENT-FUNC",
+      "message": "exported function Serve has no doc comment",
+      "phase": 7
+    },
+    {
+      "file": "pkg/api/handler.go",
+      "line": 88,
+      "column": 1,
+      "rule": "KTN-COMMENT-FUNC",
+      "message": "exported function Serve has no doc comment",
+      "phase": 7
+    },
+    {
+      "file": "pkg/store/db.go",
+      "line": 3,
+      "column": 2,
+      "rule": "KTN-VAR-USEANY",
+      "message": "use any instead of interface{}",
+      "phase": 5
+    },
+    {
+      "file": "pkg/store/db.go",
+      "line": 77,
+      "column": 9,
+      "rule": "KTN-VAR-DEADSTORE",
+      "message": "value assigned to err is never read",
+      "phase": 6
+    },
+    {
+      "file": "main.go",
+      "line": 1,
+      "column": 1,
+      "rule": "KTN-COMMENT-PKGDOC",
+      "message": "package main has no descriptive comment",
+      "phase": 7
+    }
+  ],
+  "model": {
+    "schema": "v1",
+    "rev": 1760000000000,
+    "workspace": "/work/example",
+    "state": "watching",
+    "totals": {
+      "findings": 7,
+      "severity": {
+        "error": 1,
+        "warning": 4,
+        "info": 2
+      },
+      "phase": {
+        "2": 1,
+        "5": 1,
+        "6": 2,
+        "7": 3
+      }
+    },
+    "tree": {
+      "nodes": [
+        {
+          "id": "dir:.",
+          "kind": "dir",
+          "name": ".",
+          "depth": 0,
+          "expanded": true,
+          "counts": {
+            "findings": 3,
+            "severity": {
+              "error": 1,
+              "warning": 2,
+              "info": 0
+            },
+            "phase": {
+              "2": 1,
+              "6": 2
+            }
+          }
+        },
+        {
+          "id": "dir:pkg",
+          "kind": "dir",
+          "name": "pkg",
+          "parent": "dir:.",
+          "depth": 1,
+          "expanded": true,
+          "counts": {
+            "findings": 3,
+            "severity": {
+              "error": 1,
+              "warning": 2,
+              "info": 0
+            },
+            "phase": {
+              "2": 1,
+              "6": 2
+            }
+          }
+        },
+        {
+          "id": "dir:pkg/api",
+          "kind": "dir",
+          "name": "api",
+          "parent": "dir:pkg",
+          "depth": 2,
+          "expanded": false,
+          "counts": {
+            "findings": 2,
+            "severity": {
+              "error": 0,
+              "warning": 2,
+              "info": 0
+            },
+            "phase": {
+              "2": 1,
+              "6": 1
+            }
+          }
+        },
+        {
+          "id": "dir:pkg/store",
+          "kind": "dir",
+          "name": "store",
+          "parent": "dir:pkg",
+          "depth": 2,
+          "expanded": false,
+          "counts": {
+            "findings": 1,
+            "severity": {
+              "error": 1,
+              "warning": 0,
+              "info": 0
+            },
+            "phase": {
+              "6": 1
+            }
+          }
+        }
+      ]
+    },
+    "window": {
+      "offset": 0,
+      "limit": 200,
+      "returned": 4,
+      "total": 4
+    },
+    "truncated": false,
+    "activity": []
+  }
+}

@@ -55,6 +55,22 @@ export const ANCHORS = [
 /** pkg/view/wire.go `RoutePath`, mounted on the socket only. */
 export const VIEW_ROUTE = "/api/view";
 
+/** pkg/view/query.go `MaxWait`: the long-poll's wait while a pane is placed. */
+export const MAX_WAIT_S = 20;
+
+/**
+ * pkg/serve/ui.go `uiBootPath`: the socket route that mints a bootstrap link
+ * to the web UI, of class `view` (read-only, pkg/webui) — the only class it
+ * grants, so a token that went through a mod never opens an admin session.
+ */
+export const UI_BOOT = "/ui/boot";
+
+/**
+ * A rendered tree draws its first 100 000 characters (the engine's limit):
+ * the pane stops its rows at this budget and says how many it left out.
+ */
+export const RENDER_BUDGET = 90_000;
+
 /** pkg/view/wire.go `CodeWorkspaceNotServed`. */
 export const NOT_SERVED = "workspace_not_served";
 
@@ -90,3 +106,5 @@ export const MAX_TEXT = 300;
 export const PLUGIN = "kodflow-ktn";
 /** `/ktn` belongs to kodflow-devops (#774): the mod's command is this one. */
 export const COMMAND = "ktn-view";
+/** The pane's id, the same word. */
+export const PANE_ID = "ktn-view";

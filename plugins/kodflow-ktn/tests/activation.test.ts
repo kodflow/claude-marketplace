@@ -43,7 +43,7 @@ test("under the version floor: one status line, nothing else", async ($, on) => 
   const { h, clock } = host(on, { version: "2.1.296" });
   lay(h, "/w/repo", [".git/", "go.mod"]);
   await start($, clock);
-  expect(h.statuses).toEqual(["ktn: Claude Code 2.1.299 ou plus requis"]);
+  expect(h.statuses).toEqual(["Claude Code 2.1.299 ou plus requis"]);
   expect(h.listed).toEqual([]);
   expect(h.commands).toEqual([]);
 });
