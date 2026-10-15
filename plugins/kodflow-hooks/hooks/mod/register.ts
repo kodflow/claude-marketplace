@@ -23,6 +23,10 @@
 // task tool's own call, which answers the failure as text, a merge, which a
 // failure refuses, and a spawn whose raw input names a gated model. KODFLOW_MOD=off turns the whole module into
 // pass-through, with no marker written.
+//
+// Cleanup on close (cleanup.ts): the worktrees a subagent writes into are
+// noted; a task_update that completes a worker's task, or closes an epic,
+// hands them to hooks/scripts/cleanup.sh, started without waiting for it.
 import type { Register } from "claude-code";
 import {
   TOOLS,
@@ -85,6 +89,14 @@ import { blastRadius } from "./blast.ts";
 import { filterResult, versionOk } from "./filter.ts";
 import { veilResult } from "./veil.ts";
 import { mayMerge, mergeFailure, runBash } from "./pipeline.ts";
+import {
+  WRITING_TOOLS,
+  claim,
+  closingOf,
+  note,
+  worktreePaths,
+  type Closing,
+} from "./cleanup.ts";
 import {
   anyGated,
   gateMode,
@@ -224,8 +236,15 @@ async function serve(
   const agent = e.agentId ? safe(e.agentId) : MAIN;
   const nowSec = () => Math.floor(Date.now() / 1000);
   let answer: { result: string } | { deny: string };
+  let closing: Closing | undefined;
   try {
     const step = plan(tool, agent, argsOf(e));
+    // The main agent completing a task: the list before the update is kept,
+    // since the update drops the task's worker link
+    const completing =
+      tool === "task_update" &&
+      agent === MAIN &&
+      argsOf(e).status === "completed";
     let workers: ReturnType<typeof resolveWorkers> = [];
     if (tool === "task_update") {
       const listed = await $.agent.list().catch(() => undefined);
@@ -236,9 +255,12 @@ async function serve(
       );
     }
     const text = step.mutates
-      ? await mutate(io, dir, (data) =>
-          step.run(data, { now: nowSec(), workers }),
-        )
+      ? await mutate(io, dir, (data) => {
+          const before = completing ? JSON.parse(JSON.stringify(data)) : undefined;
+          const out = step.run(data, { now: nowSec(), workers });
+          if (before) closing = closingOf(before, data, argsOf(e).id);
+          return out;
+        })
       : step.run(await load(io, dir, nowSec()), { now: nowSec(), workers });
     answer = { result: text };
   } catch (err) {
@@ -257,6 +279,9 @@ async function serve(
     await settleTriage(io, dir, tool, argsOf(e), e.agentId).catch(
       () => undefined,
     );
+  // Started, never awaited: gh and git push reach the network, and the
+  // answer to the task call does not wait on them
+  if ("result" in answer && closing) void cleanupAfter($, dir, closing);
   // One line in .claude/logs/<branch>/session.jsonl, through lib/event.jq
   const payload = logPayload(session, await $.session.root(), e, answer);
   await $.process
@@ -266,6 +291,44 @@ async function serve(
     })
     .catch(() => undefined);
   return answer;
+}
+
+// The worktrees of the workers a completion closes, to cleanup.sh, which
+// removes only what is merged, published and clean (KODFLOW_CLEANUP=off:
+// nothing). Every failure is swallowed: the task call has already answered.
+async function cleanupAfter($: any, dir: string, closing: Closing): Promise<void> {
+  try {
+    if (isOff(await $.env.get("KODFLOW_CLEANUP"))) return;
+    const io = port($);
+    const paths = await claim(io, dir, closing, await io.read(agentsFile(dir)));
+    if (!paths.length) return;
+    await $.process.run(
+      ["bash", `${$.plugin.root}/hooks/scripts/cleanup.sh`, dir, ...paths],
+      { timeoutMs: 300_000 },
+    );
+  } catch {
+    // fail open
+  }
+}
+
+// The worktrees a subagent writes into, noted once per path and session
+const noted = new Set<string>();
+async function noteWorktrees($: any, e: any): Promise<void> {
+  try {
+    const text =
+      typeof e.command === "string" ? e.command : JSON.stringify(argsOf(e));
+    const paths = worktreePaths(text.slice(0, 20_000), await $.env.get("HOME"));
+    if (!paths.length) return;
+    const cfg = await config($);
+    if (!cfg) return;
+    const dir = sessionDir(cfg, await $.session.id());
+    const fresh = paths.filter((p) => !noted.has(`${dir}\t${e.agentId}\t${p}`));
+    if (!fresh.length) return;
+    await note(port($), dir, String(e.agentId), fresh);
+    for (const p of fresh) noted.add(`${dir}\t${e.agentId}\t${p}`);
+  } catch {
+    // fail open
+  }
 }
 
 // Drop from triage-pending the causes this call settled: the file goes with
@@ -710,6 +773,7 @@ export const register: Register = (on) => {
     // Before next: the shell's PreToolUse runs inside it and reads the beat
     await beat($).catch(() => undefined);
     if (tool) return serve($, tool, e);
+    if (e.agentId && WRITING_TOOLS.has(e.tool)) void noteWorktrees($, e);
     // A forge tool writing an mcp.json: refused for every caller, as the
     // shell does; doubled, so a failure lets the call on to the shell
     if (/^mcp__(github|gitlab|GitKraken)__/.test(e.tool)) {

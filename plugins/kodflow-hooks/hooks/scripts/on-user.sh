@@ -135,6 +135,41 @@ UserPromptSubmit)
         [ -n "$state" ] && ctx="${ctx:+$ctx$NL}$state"
     fi
 
+    # What the cleanup after a completed task or epic did, or left and why
+    # (hooks/scripts/cleanup.sh, run by the mod). Taken by a rename, so a
+    # line the cleanup appends meanwhile waits for the next prompt. Whole
+    # lines up to 4000 bytes ride on this prompt; the others are carried in
+    # cleanup-notices.rest, read first next time, and counted here, so none
+    # is lost and none is cut. Only this hook writes the .rest file.
+    rest=$SDIR/cleanup-notices.rest
+    if [ -s "$SDIR/cleanup-notices" ] || [ -s "$rest" ]; then
+        taken=$SDIR/.cleanup-notices.$$
+        : > "$taken" 2>/dev/null
+        [ -s "$rest" ] && cat "$rest" >> "$taken" 2>/dev/null
+        if [ -s "$SDIR/cleanup-notices" ] && mv -f "$SDIR/cleanup-notices" "$taken.new" 2>/dev/null; then
+            cat "$taken.new" >> "$taken" 2>/dev/null; rm -f -- "$taken.new" 2>/dev/null
+        fi
+        notes="" used=0 held=0
+        : > "$taken.rest" 2>/dev/null
+        while IFS= read -r line || [ -n "$line" ]; do
+            [ -n "$line" ] || continue
+            # the first line always goes, so one longer than the budget is not held for ever
+            if [ "$held" -eq 0 ] && { [ "$used" -eq 0 ] || [ $(( used + ${#line} + 1 )) -le 4000 ]; }; then
+                notes="${notes:+$notes$NL}$line"; used=$(( used + ${#line} + 1 ))
+            else
+                printf '%s\n' "$line" >> "$taken.rest"; held=$((held + 1))
+            fi
+        done < "$taken"
+        if [ "$held" -gt 0 ]; then
+            mv -f "$taken.rest" "$rest" 2>/dev/null
+            notes="${notes:+$notes$NL}kodflow cleanup: $held more cleanup notice(s) held for the next prompt."
+        else
+            rm -f -- "$taken.rest" "$rest" 2>/dev/null
+        fi
+        rm -f -- "$taken" 2>/dev/null
+        [ -n "$notes" ] && ctx="${ctx:+$ctx$NL}$notes"
+    fi
+
     # Every message is sorted before any work, so a remark about the task in
     # progress does not become a new task and a new subject does not become
     # the tail of an unrelated epic; a question gets a task of its own, closed

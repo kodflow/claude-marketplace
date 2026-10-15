@@ -32,6 +32,12 @@ import { forgeMcpJson } from "../../hooks/mod/guards.ts";
 import { loadRules } from "../../hooks/mod/patterns.ts";
 import { invariants } from "./invariants.ts";
 import { judgeSpawn, judgeSwitch, parseGated, type SpawnPort } from "../../hooks/mod/fable.ts";
+import {
+  claim,
+  closingOf,
+  note,
+  worktreePaths,
+} from "../../hooks/mod/cleanup.ts";
 
 const run = promisify(execFile);
 const HERE = fileURLToPath(import.meta.url);
@@ -425,6 +431,121 @@ console.log("== the gated-model rule on the recorded payloads (tests/fixtures)")
     "",
   );
   check(judgeSwitch(sw, parseGated(gated), "on").kind === "pass", "the recorded /model haiku passes ungated", "");
+}
+
+console.log("== cleanup on close: whose worktree, when, and the script it runs");
+{
+  const H = "/h/x";
+  const eq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  check(
+    eq(
+      worktreePaths(
+        "git -C ~/P/repo worktree add ~/P/.worktrees/repo-a -b feat/a origin/main && cd /p/.worktrees/repo-b/src",
+        H,
+      ),
+      [`${H}/P/.worktrees/repo-a`, "/p/.worktrees/repo-b"],
+    ),
+    "worktree roots read from a command, ~ expanded, sub-paths cut at the root",
+  );
+  check(
+    eq(worktreePaths('{"file_path":"$HOME/.worktrees/r-x/a.ts"}', H), [`${H}/.worktrees/r-x`]),
+    "$HOME expanded in a file path",
+  );
+  check(
+    eq(worktreePaths("ls .worktrees/rel && echo /a/.worktrees/ /b/.worktrees/..", H), []),
+    "a relative path, a bare .worktrees/ and .. are not worktrees",
+  );
+
+  // A task handed to a worker, then completed: the link is dropped by the
+  // update, closingOf reads it from the list as it was before
+  const W = [{ id: "agent-1", type: "dev", alive: true }];
+  let data: any = undefined;
+  const apply = (tool: any, agent: string, args: any) => {
+    const step = plan(tool, agent, args);
+    const d = data ?? JSON.parse(JSON.stringify({ version: 2, next_id: 1, next_epic: 1, epics: [], active: {}, tasks: [] }));
+    step.run(d, { now: 1, workers: W });
+    data = d;
+  };
+  apply("task_epic", "main", { title: "Feature" });
+  apply("task_create", "main", { subject: "Build it", epic: 1 });
+  apply("task_create", "main", { subject: "Review it", epic: 1 });
+  apply("task_update", "main", { id: "1", status: "in_progress", worker: "dev" });
+  let before = structuredClone(data);
+  apply("task_update", "main", { id: "1", status: "completed" });
+  check(
+    eq(closingOf(before, data, "#1"), { workers: ["agent-1"], epic: 1, epicClosed: false }),
+    "a completed task names its worker, epic still open",
+    JSON.stringify(closingOf(before, data, "#1")),
+  );
+  before = structuredClone(data);
+  apply("task_update", "main", { id: "2", status: "completed" });
+  check(
+    eq(closingOf(before, data, "2"), { workers: [], epic: 1, epicClosed: true }),
+    "the last task of an epic closes it",
+    JSON.stringify(closingOf(before, data, "2")),
+  );
+  before = structuredClone(data);
+  apply("task_update", "main", { id: "2", status: "completed" });
+  check(closingOf(before, data, "2") === undefined, "a task already completed triggers nothing");
+
+  const root = mkdtempSync(join(tmpdir(), "kf-clean-"));
+  try {
+    const dir = join(root, "s");
+    await note(disk, dir, "agent-1", ["/w/.worktrees/r-a"]);
+    await note(disk, dir, "agent-1", ["/w/.worktrees/r-a", "/w/.worktrees/r-b"]);
+    await note(disk, dir, "agent-2", ["/w/.worktrees/r-c"]);
+    await note(disk, dir, "agent-3", ["/w/.worktrees/r-d"]);
+    const agents = JSON.stringify({ agents: { "agent-3": { type: "x", epic: 1 } } });
+    check(
+      eq(await claim(disk, dir, { workers: ["agent-1"], epic: 1, epicClosed: false }, agents), [
+        "/w/.worktrees/r-a",
+        "/w/.worktrees/r-b",
+      ]),
+      "a task's worker: its worktrees, each once",
+    );
+    check(
+      eq(await claim(disk, dir, { workers: [], epic: 1, epicClosed: true }, agents), [
+        "/w/.worktrees/r-a",
+        "/w/.worktrees/r-b",
+        "/w/.worktrees/r-d",
+      ]),
+      "an epic closed: the workers of its tasks and the subagents started on it, not the others",
+    );
+    check(
+      eq(await claim(disk, dir, { workers: [], epic: 2, epicClosed: false }, agents), []),
+      "no worker, epic open: nothing",
+    );
+
+    // The whole way through: a real repository, a merged PR, the script
+    const T = join(root, "git");
+    mkdirSync(join(T, "bin"), { recursive: true });
+    const git = (...a: string[]) => run("git", a);
+    await git("init", "-q", "--bare", "-b", "main", join(T, "remote.git"));
+    await git("clone", "-q", join(T, "remote.git"), join(T, "repo"));
+    const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@e.invalid", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@e.invalid" };
+    const g = (...a: string[]) => run("git", a, { env });
+    await g("-C", join(T, "repo"), "commit", "-q", "--allow-empty", "-m", "seed");
+    await g("-C", join(T, "repo"), "push", "-q", "origin", "main");
+    const wt = join(T, ".worktrees", "repo-z");
+    await g("-C", join(T, "repo"), "worktree", "add", "-q", "-b", "feat/z", wt);
+    await g("-C", wt, "commit", "-q", "--allow-empty", "-m", "feat: z");
+    await g("-C", wt, "push", "-q", "-u", "origin", "feat/z");
+    const head = (await g("-C", wt, "rev-parse", "HEAD")).stdout.trim();
+    writeFileSync(
+      join(T, "bin", "gh"),
+      `#!/bin/bash\necho '[{"number":1,"state":"MERGED","headRefOid":"${head}","url":"u"}]'\n`,
+      { mode: 0o755 },
+    );
+    await note(disk, dir, "agent-9", worktreePaths(`cd ${wt} && git commit`, H));
+    const paths = await claim(disk, dir, { workers: ["agent-9"], epic: 3, epicClosed: false }, undefined);
+    const script = join(dirname(HERE), "..", "..", "hooks", "scripts", "cleanup.sh");
+    await run("bash", [script, dir, ...paths], { env: { ...env, PATH: `${join(T, "bin")}:${process.env.PATH}` } });
+    check(!existsSync(wt), "end to end: the worktree of a merged PR is removed");
+    const branches = (await g("-C", join(T, "remote.git"), "branch", "--list", "feat/z")).stdout.trim();
+    check(branches === "", "end to end: its remote branch is deleted");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 console.log("== invariants over the hooks module");
