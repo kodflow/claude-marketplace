@@ -1,17 +1,27 @@
-# /ktn — Phase 2: parallel agent dispatch
+# /ktn — Phase 2: agent dispatch
 
-Five specialists, one message, one concern each. Read this when Phase 1
+Four specialists in two waves, one concern each. Read this when Phase 1
 (pre-flight) has completed and the reconcile decision is made.
 
-## Phase 2 — Parallel agent dispatch (single message, 5 Task calls)
+## Phase 2 — Agent dispatch (two messages, 2 Task calls each)
 
-**MANDATORY: spawn all 5 agents in ONE assistant message** so they execute
-concurrently. Each agent receives a self-contained prompt + permission to
-write its own file only. When route-agent.sh answers with its `general-purpose`
-fallback (exit 10), the prompt carries `[general-purpose-ok]`, the `marker` of
-that JSON: the kodflow-hooks routing gate reads it as a deliberate dispatch.
+**Wave 1** — `binary` and `phases` in ONE assistant message, so they run
+concurrently. **Wave 2** — `hooks` and `daemon` in ONE message, sent once wave
+1 has returned: both run the binary wave 1 installs or upgrades. Each agent
+receives a self-contained prompt and acts on its own concern only. When
+route-agent.sh answers with its `general-purpose` fallback (exit 10), the
+prompt carries `[general-purpose-ok]`, the `marker` of that JSON: the
+kodflow-hooks routing gate reads it as a deliberate dispatch.
 
-### Agent A — `binary`
+Every write of a hook entry, of the per-user daemon's state and of the MCP
+entry goes through ktn-linter's own subcommands. No agent edits a
+`settings.json`, kills a process or binds a port (kodflow/ktn-linter#771).
+
+The binary is `ktn-linter`. `project-linter` is the old name: an agent finding
+only that one on PATH reports it and uses it for read-only probes, and the
+binary agent installs `ktn-linter` in its place.
+
+### Agent A — `binary` (wave 1)
 
 ```yaml
 # PR4 — Skills Architecture v1.3: routed via route-agent.sh to
@@ -19,58 +29,79 @@ that JSON: the kodflow-hooks routing gate reads it as a deliberate dispatch.
 # call returns {subagent_type, resolved_model, effort}; pass them
 # through to the Task primitive.
 subagent_type: kodflow-specialists:devops-executor-linux
-description: "project-linter binary health + upgrade"
+description: "ktn-linter binary health + upgrade"
 prompt: |
-  You manage the project-linter binary lifecycle. Goal: make sure the local
-  project-linter binary is present and matches the latest GitHub release.
+  You manage the ktn-linter binary lifecycle. Goal: ktn-linter and ktn-hook
+  (the client its command hooks run, shipped in the same archive) are
+  present, side by side, at the latest release.
 
   Mode: {{READ_ONLY ? "read-only — REPORT ONLY, do not write" : "reconcile"}}
 
   STEP 1 — Detect current state
-    a. resolved_path = `command -v project-linter || echo absent`
-    b. local_version = `project-linter version 2>/dev/null | head -1` (parse
-       `project-linter version X.Y.Z`). If output contains "dev" → dev_build=true.
-    c. latest_tag = WebFetch
-       https://api.github.com/repos/kodflow/project-linter/releases/latest →
-       extract `.tag_name` (strip leading `v`).
+    a. resolved_path = `command -v ktn-linter || echo absent`
+       If absent, legacy_path = `command -v project-linter || echo absent`
+       (the old name: reported, never upgraded in place).
+    b. local_version = `ktn-linter version 2>/dev/null | head -1` (parse
+       `ktn-linter version X.Y.Z`). If output contains "dev" → dev_build=true.
+    c. hook_client = ktn-hook in the directory of the real binary, present
+       and executable? Follow the symlinks with plain `readlink` — macOS's
+       has no `-f`, and an empty result would look for ./ktn-hook:
+         p=$resolved_path
+         while [ -L "$p" ]; do
+             t=$(readlink "$p")
+             case "$t" in /*) p=$t ;; *) p=$(dirname "$p")/$t ;; esac
+         done
+         hook_client=$(dirname "$p")/ktn-hook
+    d. latest_tag = WebFetch
+       https://api.github.com/repos/kodflow/ktn/releases/latest →
+       extract `.tag_name` (strip leading `v`). kodflow/ktn is the public
+       mirror of the releases; the source repository is private.
 
   STEP 2 — Decide
-    - absent → INSTALL
+    - absent (only project-linter, or nothing) → INSTALL
     - dev_build=true → SKIP (refuse upgrade over dev build, surface warning)
     - local_version < latest_tag (semver) → UPGRADE
+    - ktn-hook missing beside the binary → INSTALL (same directory)
     - else → NO-OP
 
   STEP 3 — Act (skip entirely in --check mode)
     INSTALL path:
-      target_dir = first writable of:
-        /usr/local/bin (try sudo -n mv)
-        ~/.local/bin
-        ~/bin
-      mkdir -p $target_dir && ensure on $PATH
-      asset_url = https://github.com/kodflow/project-linter/releases/download/v{{latest_tag}}/project-linter-{{GOOS}}-{{GOARCH}}
-      curl -fsSL "$asset_url" -o /tmp/project-linter.new
-      chmod +x /tmp/project-linter.new
-      mv /tmp/project-linter.new $target_dir/project-linter
+      target_dir = the directory of an existing ktn-linter, else the first
+        writable of ~/.local/bin, ~/bin (must be on $PATH)
+      asset = ktn-linter_{{GOOS}}_{{GOARCH}}.tar.gz
+      base  = https://github.com/kodflow/ktn/releases/download/v{{latest_tag}}
+      work=$(mktemp -d)
+      curl -fsSL "$base/$asset" -o "$work/$asset"
+      curl -fsSL "$base/checksums.txt" -o "$work/checksums.txt"
+      verify: the sha256 of "$work/$asset" (sha256sum, or shasum -a 256)
+        equals the checksums.txt line naming "$asset" — refuse otherwise
+      tar -xzf "$work/$asset" -C "$work" ktn-linter ktn-hook
+      for each of ktn-linter, ktn-hook: copy to a temporary file in
+        target_dir, chmod 755, mv over the final name (same-directory rename)
     UPGRADE path:
-      Prefer `project-linter upgrade` (atomic rename in same dir, ErrDevBuild aware).
-      If that fails OR dev_build=true, fall back to INSTALL path with --force semantics.
+      Prefer `ktn-linter upgrade` (atomic rename in the same dir, dev-build
+      aware). If ktn-hook is still missing or older afterwards, or the
+      upgrade fails, fall back to the INSTALL path.
 
   STEP 4 — Verify
-    `project-linter version` reports the expected version.
+    `ktn-linter version` reports the expected version and ktn-hook sits
+    beside it (`ktn-linter hook doctor` in wave 2 reports a client of
+    another build as `client_build`).
 
   RETURN exactly this JSON on the last line of your reply:
   {
     "agent": "binary",
     "status": "ok|fixed|skipped|error",
     "action": "noop|installed|upgraded|refused-dev-build",
-    "before": "absent|X.Y.Z|dev",
+    "before": "absent|X.Y.Z|dev|project-linter X.Y.Z",
     "after":  "X.Y.Z",
-    "path":   "/usr/local/bin/project-linter|...",
+    "path":   "~/.local/bin/ktn-linter|...",
+    "hook_client": "present|missing",
     "notes":  "..."
   }
 ```
 
-### Agent B — `mcp`
+### Agent B — `phases` (wave 1)
 
 ```yaml
 # PR4 — Skills Architecture v1.3: routed via route-agent.sh to
@@ -78,348 +109,19 @@ prompt: |
 # call returns {subagent_type, resolved_model, effort}; pass them
 # through to the Task primitive.
 subagent_type: kodflow-specialists:devops-executor-linux
-description: "mcp.json project-linter registration"
+description: ".ktn-linter.yaml phase configuration"
 prompt: |
-  You own the project-linter entry inside /workspace/mcp.json.
-
-  Mode: {{UNINSTALL ? "uninstall" : (READ_ONLY ? "read-only" : "reconcile")}}
-
-  Canonical schema for this repo: the postStart merger writes the merged
-  config under the top-level `.servers` key (see
-  /etc/mcp/mcp.json.tpl — `{"servers": {...}}`), with the Go feature
-  fragment defining project-linter as `command: "project-linter", args: ["serve"]`
-  (port 7717 is the upstream default in cmd/project-linter/cmd/serve.go).
-  Some setups use the legacy `.mcpServers` key — accept either on read,
-  but write to `.servers` to match this repo's template.
-
-  STEP 1 — Read current mcp.json
-    If file absent → drift=missing-file; the postStart MCP merger will
-    regenerate it from /etc/mcp/mcp.json.tpl on next container start, so in
-    that case we only write a minimal stub IFF reconcile mode AND the
-    template merger is unavailable. Otherwise report drift and exit.
-
-  STEP 2 — Detect drift
-    Required shape (under `.servers` for this repo, but accept `.mcpServers`
-    on read):
-      "project-linter": {
-        "command": "project-linter",
-        "args": ["serve"]          (canonical; "--port" "7717" also valid)
-      }
-    drift = none if either args==["serve"] OR args==["serve","--port","7717"];
-            missing-entry | mismatched-args | missing-file otherwise.
-
-  STEP 3 — Act (skip in --check mode)
-    Prefer the canonical upstream entrypoint:
-      project-linter mcp install --port=7717
-    which writes mcp.json + merges .claude/settings.json in one idempotent
-    call (see upstream cmd/project-linter/cmd/mcp_install.go).
-    If `project-linter mcp install` is unavailable (older binary, missing
-    subcommand), fall back to a `jq` merge that writes ONLY the
-    project-linter entry under `.servers`, preserving every other server:
-      jq '.servers["project-linter"] = {command:"project-linter",args:["serve"]}' \
-        mcp.json > mcp.json.new && mv mcp.json.new mcp.json
-    NEVER rewrite the whole file by hand.
-
-    UNINSTALL mode: remove project-linter from .servers AND .mcpServers
-    (delete both keys; idempotent if absent):
-      jq 'del(.servers["project-linter"], .mcpServers["project-linter"])' \
-        mcp.json > mcp.json.new && mv mcp.json.new mcp.json
-
-  STEP 4 — Verify
-    `jq -e '(.servers["project-linter"]? // .mcpServers["project-linter"]?) | (.command == "project-linter" and (.args[0]? == "serve"))' mcp.json`
-    For uninstall: the inverse — both keys must be null.
-
-  RETURN:
-  {
-    "agent": "mcp",
-    "status": "ok|fixed|error",
-    "drift":  "none|missing-entry|mismatched-args|missing-file",
-    "wrote_file": true|false,
-    "schema_key": "servers|mcpServers",
-    "notes":  "..."
-  }
-```
-
-### Agent C — `settings`
-
-```yaml
-# PR4 — Skills Architecture v1.3: routed via route-agent.sh to
-# devops-executor-linux instead of general-purpose. The route-agent
-# call returns {subagent_type, resolved_model, effort}; pass them
-# through to the Task primitive.
-subagent_type: kodflow-specialists:devops-executor-linux
-description: ".claude/settings.json hook wiring"
-prompt: |
-  You own the project-linter HTTP hook entries inside /workspace/.claude/settings.json.
-
-  Mode: {{UNINSTALL ? "uninstall" : (READ_ONLY ? "read-only" : "reconcile")}}
-
-  Required entries (idempotency key = URL prefix "http://localhost:7717"):
-
-    hooks.PreToolUse[]:
-      { "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "http",
-                    "url":  "http://localhost:7717/hooks/pre-tool-use",
-                    "timeout": 5 }] }
-
-    hooks.PostToolUse[]:
-      { "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "http",
-                    "url":  "http://localhost:7717/hooks/post-tool-use",
-                    "timeout": 15 }] }
-
-  STEP 1 — Read settings.json (create empty {} if absent and reconcile mode).
-  STEP 2 — Detect drift
-    For each of {pre, post}: missing-entry if no hooks-array entry contains
-    any inner hook with URL starting with "http://localhost:7717/hooks/".
-    DO NOT touch unrelated existing hooks (e.g. command-type git-guard, rtk,
-    post-edit). Merge as a NEW item appended to the existing PreToolUse /
-    PostToolUse arrays.
-  STEP 3 — Act (skip in --check mode)
-    Use `jq` deep-merge. NEVER overwrite the whole settings.json.
-    If PreToolUse[] / PostToolUse[] don't exist yet, create them as arrays.
-    If the matcher "Edit|Write|MultiEdit" already exists but lacks the HTTP
-    hook, append the HTTP hook into THAT entry's "hooks" array — do NOT
-    create a duplicate matcher entry.
-
-    UNINSTALL mode: delete every inner hook whose URL startswith
-    "http://localhost:7717/hooks/" from both PreToolUse and PostToolUse,
-    then drop any matcher whose hooks array becomes empty:
-      jq '(.hooks.PreToolUse, .hooks.PostToolUse) |= (map(.hooks |= map(select((.url? // "") | startswith("http://localhost:7717/") | not)) | select(.hooks | length > 0)))' \
-        settings.json > settings.json.new && mv settings.json.new settings.json
-    DO NOT touch unrelated hooks (git-guard, rtk, post-edit, …).
-
-  STEP 4 — Verify
-    `jq -e '
-      (.hooks.PreToolUse  // []) | any(.hooks[]?; .url? // "" | startswith("http://localhost:7717/")) and
-      (.hooks.PostToolUse // []) | any(.hooks[]?; .url? // "" | startswith("http://localhost:7717/"))
-    ' settings.json`
-
-  CRITICAL: if you write this file, the host will print a session-restart
-  prompt. Claude Code re-reads settings.json only at session start.
-
-  RETURN:
-  {
-    "agent": "settings",
-    "status": "ok|fixed|error",
-    "drift":  "none|pre-missing|post-missing|both-missing|file-missing",
-    "wrote_file": true|false,
-    "added_entries": ["pre"|"post"|...],
-    "notes":  "..."
-  }
-```
-
-### Agent D — `daemon`
-
-```yaml
-# PR4 — Skills Architecture v1.3: routed via route-agent.sh to
-# devops-executor-linux instead of general-purpose. The route-agent
-# call returns {subagent_type, resolved_model, effort}; pass them
-# through to the Task primitive.
-subagent_type: kodflow-specialists:devops-executor-linux
-description: "project-linter daemon health + freshness on :7717"
-prompt: |
-  You verify and (if needed) respawn the project-linter MCP daemon on
-  127.0.0.1:7717. You DO NOT write any file.
-
-  Mode: {{UNINSTALL ? "uninstall" : (READ_ONLY ? "read-only" : (FORCE_RESTART ? "force-restart" : "reconcile"))}}
-
-  Canonical daemon command (matches Go feature MCP fragment in this repo):
-    project-linter serve --port=7717
-  (NOT `project-linter mcp serve` — the upstream entrypoint is the top-level
-  `serve` subcommand defined in cmd/project-linter/cmd/serve.go.)
-
-  CRITICAL: "healthy" and "running the current binary" are two INDEPENDENT
-  gates. A daemon whose binary was rebuilt or replaced keeps serving from
-  its in-memory image — /health still returns 200, but the analyzer code is
-  frozen at the pre-rebuild commit. Linux marks this with
-  `/proc/<pid>/exe → <path> (deleted)`. Reusing such a daemon means phantom
-  findings against on-disk source the user has already fixed (issue #361).
-
-  STEP 1 — Preconditions
-    If `command -v project-linter` fails → status=skipped, reason=binary-missing,
-    return immediately (Agent A will install it; you respawn on next /ktn run
-    after session restart).
-    Resolve BIN_REAL once for later freshness checks:
-      BIN=$(command -v project-linter)
-      BIN_REAL=$(readlink -f "$BIN" 2>/dev/null || echo "$BIN")
-
-  STEP 2 — Probe liveness
-    health = curl -fsS --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:7717/health
-    ready  = same on /ready
-    Decide alive = (health == 200).
-
-  STEP 3 — Discover the port owner (PID by port, NOT by pgrep pattern)
-    pgrep on a command-line pattern is fragile: this template's MCP fragment
-    spawns `project-linter serve --port 7717` (space-separated), but upstream
-    install-hooks.sh spawns `project-linter mcp serve --port=7717`. Port
-    ownership is unambiguous and covers every invocation shape.
-
-      DAEMON_PID=""
-      if command -v ss >/dev/null 2>&1; then
-          DAEMON_PID=$(ss -H -ltnp 'sport = :7717' 2>/dev/null \
-              | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)
-      fi
-      if [ -z "$DAEMON_PID" ] && command -v lsof >/dev/null 2>&1; then
-          DAEMON_PID=$(lsof -tiTCP:7717 -sTCP:LISTEN 2>/dev/null | head -1 || true)
-      fi
-
-  STEP 4 — Freshness gate (independent from liveness, FAIL-CLOSED)
-    # Default to STALE when alive but unverifiable. The whole point of the
-    # gate is to refuse reuse of a daemon we can't prove is running the
-    # current binary — silently leaving STALE=false on "I don't know" is
-    # exactly the fail-open hole that issue #361 exists to close.
-    STALE=false
-    STALE_REASON=""
-    DAEMON_EXE_RAW=""
-
-    if [ "$alive" = "true" ]; then
-        if [ -z "$DAEMON_PID" ]; then
-            # Daemon answers /health but ss/lsof couldn't identify the owner
-            # (e.g. busybox container with no port-discovery tools, namespace
-            # boundary, locked-down /proc). We cannot verify freshness →
-            # treat as stale so the reconcile path kills + respawns.
-            STALE=true
-            STALE_REASON="missing-exe-path"
-        elif [ ! -r "/proc/$DAEMON_PID/exe" ]; then
-            # PID known but /proc/<pid>/exe unreadable (perm, hidepid=2,
-            # PID raced and exited). Same conclusion: cannot verify →
-            # stale.
-            STALE=true
-            STALE_REASON="missing-exe-path"
-        else
-            DAEMON_EXE_RAW=$(readlink "/proc/$DAEMON_PID/exe" 2>/dev/null || true)
-
-            if [ -z "$DAEMON_EXE_RAW" ]; then
-                STALE=true
-                STALE_REASON="missing-exe-path"
-            else
-                # Kernel marker for an unlinked inode whose process still
-                # holds the old image. Canonical "rebuilt while running"
-                # signature on Linux.
-                case "$DAEMON_EXE_RAW" in
-                    *"(deleted)"*)
-                        STALE=true
-                        STALE_REASON="exe-deleted"
-                        ;;
-                esac
-
-                # Different on-disk paths with the same inode (hardlink /
-                # install copy) are acceptable; only a real mismatch
-                # triggers restart.
-                if [ "$STALE" = "false" ] \
-                        && [ "$DAEMON_EXE_RAW" != "$BIN_REAL" ]; then
-                    if [ ! -f "$DAEMON_EXE_RAW" ] || [ ! -f "$BIN_REAL" ]; then
-                        STALE=true
-                        STALE_REASON="inode-mismatch"
-                    else
-                        d_ino=$(stat -c %i "$DAEMON_EXE_RAW" 2>/dev/null || echo a)
-                        b_ino=$(stat -c %i "$BIN_REAL"       2>/dev/null || echo b)
-                        if [ "$d_ino" != "$b_ino" ]; then
-                            STALE=true
-                            STALE_REASON="inode-mismatch"
-                        fi
-                    fi
-                fi
-            fi
-        fi
-    fi
-
-  STEP 5 — Act (skip writes in --check mode)
-    UNINSTALL mode: SIGTERM the actual port owner, escalate to SIGKILL if it
-    lingers; do NOT respawn. Fallback to pkill only if PID discovery failed.
-      if [ -n "$DAEMON_PID" ] && kill -0 "$DAEMON_PID" 2>/dev/null; then
-          kill -TERM "$DAEMON_PID" || true
-          for _ in 1 2 3; do kill -0 "$DAEMON_PID" 2>/dev/null || break; sleep 1; done
-          kill -0 "$DAEMON_PID" 2>/dev/null && kill -KILL "$DAEMON_PID" || true
-      else
-          pkill -f 'project-linter serve'     || true
-          pkill -f 'project-linter mcp serve' || true   # legacy form
-      fi
-      return status=fixed, action=stopped.
-
-    NEEDS_RESPAWN = (not alive) OR STALE OR force-restart
-    If NEEDS_RESPAWN:
-      # Read-only mode never writes/spawns — surface drift only.
-      if READ_ONLY: return without acting (see RETURN below).
-
-      # 5a. Kill the actual port owner first (TERM → KILL escalation).
-      if [ -n "$DAEMON_PID" ] && kill -0 "$DAEMON_PID" 2>/dev/null; then
-          kill -TERM "$DAEMON_PID" || true
-          for _ in 1 2 3; do kill -0 "$DAEMON_PID" 2>/dev/null || break; sleep 1; done
-          kill -0 "$DAEMON_PID" 2>/dev/null && kill -KILL "$DAEMON_PID" || true
-      else
-          # Fallback if ss/lsof unavailable (e.g. busybox container).
-          pkill -f 'project-linter serve'     || true
-          pkill -f 'project-linter mcp serve' || true   # legacy form
-      fi
-      sleep 1
-
-      # 5b. Prefer the canonical Makefile bootstrap when present (matches
-      # upstream scripts/install-hooks.sh / Makefile:hooks-install).
-      if [ -f "$WORKSPACE/Makefile" ] && \
-         grep -qE '^hooks-install:' "$WORKSPACE/Makefile"; then
-          (cd "$WORKSPACE" && make hooks-install) && return
-      fi
-
-      # 5c. Direct respawn fallback.
-      nohup "$BIN" serve --port=7717 \
-        >/tmp/project-linter-mcp.log 2>&1 < /dev/null & disown
-      # Poll /health up to 5 s.
-      for i in 1 2 3 4 5; do
-        sleep 1
-        curl -fsS --max-time 1 http://127.0.0.1:7717/health >/dev/null 2>&1 && break
-      done
-
-  STEP 6 — Smoke-test hook endpoint (only after a successful respawn or when alive=true && !STALE)
-    curl -fsS -X POST http://127.0.0.1:7717/hooks/post-tool-use \
-      -H 'content-type: application/json' \
-      -d '{"session_id":"ktn-skill","cwd":"/workspace","tool_input":{},"tool_response":{}}' \
-      > /dev/null
-
-  RETURN:
-  {
-    "agent": "daemon",
-    "status": "ok|fixed|skipped|error",
-    "before_health": "200|503|connection-refused|...",
-    "after_health":  "200|...",
-    "fresh":         true|false,
-    "stale_reason":  null|"exe-deleted"|"inode-mismatch"|"missing-exe-path",
-    "action": "noop|respawned|forced-restart|stopped",
-    "pid":    <int|null>,
-    "exe":    "<DAEMON_EXE_RAW or null>",
-    "bin":    "<BIN_REAL>",
-    "notes":  "..."
-  }
-
-  Status decision matrix:
-    - alive && !STALE && !force-restart   → status=ok,    action=noop
-    - alive &&  STALE && READ_ONLY        → status=ok,    action=noop  (surfaces drift via fresh=false)
-    - alive &&  STALE && !READ_ONLY       → status=fixed, action=respawned
-    - !alive && !READ_ONLY                → status=fixed, action=respawned
-    - force-restart && !READ_ONLY         → status=fixed, action=forced-restart
-    - error during kill/respawn           → status=error, notes=<diagnostic>
-```
-
-### Agent E — `phases`
-
-```yaml
-# PR4 — Skills Architecture v1.3: routed via route-agent.sh to
-# devops-executor-linux instead of general-purpose. The route-agent
-# call returns {subagent_type, resolved_model, effort}; pass them
-# through to the Task primitive.
-subagent_type: kodflow-specialists:devops-executor-linux
-description: ".project-linter.yaml phase configuration"
-prompt: |
-  You manage /workspace/.project-linter.yaml. Upstream default active set is
+  You manage /workspace/.ktn-linter.yaml. Upstream default active set is
   {1..7} (phase 8 = `tests` is opt-in). Don't touch the file unless a
-  PHASES_SPEC was provided OR the file is invalid.
+  PHASES_SPEC was provided OR the file is invalid. When only
+  .project-linter.yaml exists (the old name), read it, report it, and write
+  any change to .ktn-linter.yaml instead.
 
   PHASES_SPEC: {{PHASES_SPEC or "(none)"}}
   SCOPE_SPEC: {{SCOPE_SPEC or "(none)"}}
   Mode: {{READ_ONLY ? "read-only" : "reconcile"}}
 
-  STEP 1 — Read .project-linter.yaml if present.
+  STEP 1 — Read .ktn-linter.yaml if present.
     Parse `phases.enabled` and `phases.disabled`. Reject if BOTH are set
     (ErrPhasesEnabledDisabledMutex) — surface drift=mutex-violation.
     Reject legacy `max_phase:` (ErrMaxPhaseRemoved) — drift=legacy-max-phase.
@@ -466,7 +168,7 @@ prompt: |
   {
     "agent": "phases",
     "status": "ok|fixed|error",
-    "drift": "none|mutex-violation|legacy-max-phase|invalid-alias|out-of-range|invalid-review-scope|none-spec-applied",
+    "drift": "none|mutex-violation|legacy-max-phase|invalid-alias|out-of-range|invalid-review-scope|legacy-file-name|none-spec-applied",
     "active_set": [1,2,3,4,5,6,7],
     "source": "default|yaml|cli",
     "review_scope": "diff|full",
@@ -474,6 +176,144 @@ prompt: |
     "wrote_file": true|false,
     "notes": "..."
   }
+```
+
+### Agent C — `hooks` (wave 2)
+
+```yaml
+# PR4 — Skills Architecture v1.3: routed via route-agent.sh to
+# devops-executor-linux instead of general-purpose. The route-agent
+# call returns {subagent_type, resolved_model, effort}; pass them
+# through to the Task primitive.
+subagent_type: kodflow-specialists:devops-executor-linux
+description: "ktn-linter hooks + mcp.json entry"
+prompt: |
+  You check ktn-linter's command hooks and its MCP entry, and let ktn-linter
+  repair them. You NEVER edit a settings.json yourself: `ktn-linter hook
+  install` is the one writer of those entries, `hook uninstall` the one
+  remover, `hook doctor` the one judge.
+
+  Mode: {{UNINSTALL ? "uninstall" : (READ_ONLY ? "read-only" : "reconcile")}}
+
+  STEP 1 — Preconditions
+    BIN=$(command -v ktn-linter) — if absent → reason=binary-missing (Agent A
+    reports why). A binary that answers exit 40 to `hook doctor` predates
+    `hook install` (ktn-linter v1.46.0) → reason=binary-too-old. Either way
+    nothing below that runs ktn-linter is attempted: in reconcile and
+    read-only mode return status=skipped (missing) or error (too old). In
+    UNINSTALL mode still run STEP 3 UNINSTALL b (the mcp.json entry needs no
+    binary) and return status=error with the hook removal reported as not
+    done, naming `ktn-linter hook uninstall` to run once a current binary is
+    installed.
+
+  STEP 2 — Judge
+    before=$(ktn-linter hook doctor --json)   # exit 0 sound, 1 with defects
+    Keep `.ok` and every `.defects[].code` (not_installed, missing_entry,
+    stale_entry, legacy_http, client_missing, client_build,
+    unreadable_file, hooks_path) for the report.
+
+  STEP 3 — Act (skip entirely in --check mode)
+    RECONCILE, in this order:
+      a. ktn-linter hook install
+         Its output says, per host, `(written)` or `(unchanged)`;
+         wrote_file = any `(written)`. It replaces our entries of an older
+         form — the per-project HTTP hooks included — in place, and keeps
+         every other byte of the file.
+      b. after=$(ktn-linter hook doctor --json) — must report "ok": true.
+         A defect hook install cannot fix (hooks_path: the git hooks
+         directory in force lacks commit-msg; unreadable_file) is reported
+         with its message, never patched by hand.
+      c. ktn-linter mcp install
+         Run AFTER (a): with the user-level hooks in place it writes the
+         mcp.json entry only, not the per-project hooks — before (a), every
+         event would be delivered twice. In ktn-linter's own repository
+         `make hooks-install` is the same bootstrap and may be run instead.
+    UNINSTALL (b runs even when a cannot, see STEP 1):
+      a. ktn-linter hook uninstall   (wrote_file = any `(written)`)
+      b. delete the entry from mcp.json, preserving every other server:
+         jq 'del(.servers["ktn-linter"], .mcpServers["ktn-linter"],
+                 .servers["project-linter"], .mcpServers["project-linter"])' \
+           mcp.json > mcp.json.new && mv mcp.json.new mcp.json
+
+  STEP 4 — Verify
+    reconcile: `ktn-linter hook doctor --json` → `.ok == true`, and
+      `jq -e '(.servers["ktn-linter"]? // .mcpServers["ktn-linter"]?) != null' mcp.json`
+    uninstall: `ktn-linter hook doctor --json` → a `not_installed` defect,
+      and no ktn-linter / project-linter key left in mcp.json.
+
+  CRITICAL: when wrote_file is true the host prints a session-restart prompt.
+  Claude Code re-reads settings.json only at session start.
+
+  RETURN:
+  {
+    "agent": "hooks",
+    "status": "ok|fixed|skipped|error",
+    "doctor_before": {"ok": true|false, "defects": ["legacy_http", ...]},
+    "doctor_after":  {"ok": true|false, "defects": [...]},
+    "hook_binary": "<.hook_binary of the doctor report>",
+    "wrote_file": true|false,
+    "mcp": "registered|written|removed|missing",
+    "notes":  "..."
+  }
+```
+
+### Agent D — `daemon` (wave 2)
+
+```yaml
+# PR4 — Skills Architecture v1.3: routed via route-agent.sh to
+# devops-executor-linux instead of general-purpose. The route-agent
+# call returns {subagent_type, resolved_model, effort}; pass them
+# through to the Task primitive.
+subagent_type: kodflow-specialists:devops-executor-linux
+description: "ktn-linter per-user daemon"
+prompt: |
+  You check ktn-linter's daemon through ktn-linter alone. You DO NOT write
+  any file, probe any port, or signal any process: no kill, no pkill, no
+  `serve` started by hand.
+
+  Mode: {{UNINSTALL ? "uninstall" : (READ_ONLY ? "read-only" : (FORCE_RESTART ? "force-restart" : "reconcile"))}}
+  KTN_USER_DAEMON: {{USER_DAEMON}}
+
+  STEP 1 — Preconditions
+    If `command -v ktn-linter` fails → status=skipped,
+    reason=binary-missing.
+
+  STEP 2 — Without the per-user daemon (KTN_USER_DAEMON is not 1)
+    The daemon is per project: the MCP server registered in mcp.json starts
+    it with the session (Agent C keeps that entry). There is nothing here to
+    start, stop or restart. Return status=ok, action=not-applicable, with
+    this note: "per-project daemon: restart the Claude Code session, or run
+    `make hooks-install` (ktn-linter's own repository) / `ktn-linter mcp
+    install` to re-register it". With --restart, say exactly that.
+
+  STEP 3 — With the per-user daemon (KTN_USER_DAEMON=1, kodflow/ktn-linter#757)
+    before = exit code of `ktn-linter daemon status`
+             (0 healthy; 1-5: see ktn-linter's runbook — keep its output)
+    READ-ONLY: report `before`, act on nothing.
+    RECONCILE: before != 0 → `ktn-linter daemon ensure` (the one path that
+      (re)launches it); else noop.
+    FORCE-RESTART: `ktn-linter daemon stop`, then `ktn-linter daemon ensure`.
+    UNINSTALL: `ktn-linter daemon stop` (endpoint.json is kept; nothing is
+      respawned).
+    after = exit code of `ktn-linter daemon status`.
+
+  RETURN:
+  {
+    "agent": "daemon",
+    "status": "ok|fixed|skipped|error",
+    "mode": "per-user|per-project",
+    "before_status": <int|null>,
+    "after_status":  <int|null>,
+    "action": "noop|ensured|restarted|stopped|not-applicable",
+    "notes":  "..."
+  }
+
+  Status decision matrix (per-user):
+    - before == 0 && !force-restart       → status=ok,    action=noop
+    - before != 0 && READ_ONLY            → status=ok,    action=noop  (drift surfaced via before_status)
+    - before != 0 && !READ_ONLY, after==0 → status=fixed, action=ensured
+    - force-restart && !READ_ONLY         → status=fixed, action=restarted
+    - after != 0 after ensure             → status=error, notes=<daemon status output>
 ```
 
 ---

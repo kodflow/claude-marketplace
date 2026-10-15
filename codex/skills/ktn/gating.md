@@ -1,15 +1,16 @@
 # /ktn — Phase 0: project gating
 
-project-linter is a Go linter. Running the stack in a non-Go repository is pure
+ktn-linter is a Go linter. Running the stack in a non-Go repository is pure
 cost, so this gate gets the first word and can stop the skill outright.
 
 ## Phase 0 — Project gating (Go detection, MANDATORY first step)
 
-> project-linter only lints Go code. Running `/ktn` on a non-Go project would
-> install a binary, wire hooks, and spawn a daemon that will never be used.
-> Before doing anything irreversible (binary download, settings.json merge,
-> daemon respawn) the skill MUST confirm a Go project is present — or get
-> explicit user opt-in to proceed anyway.
+> ktn-linter only lints Go code. Running `/ktn` on a non-Go project would
+> install a binary, install hooks, and register a daemon that will never be
+> used. Before doing anything irreversible (binary download, `ktn-linter hook
+> install`, `ktn-linter mcp install`, `ktn-linter daemon ensure`) the skill
+> MUST confirm a Go project is present — or get explicit user opt-in to
+> proceed anyway.
 
 ### Step 0.1 — Scan
 
@@ -77,13 +78,13 @@ that surfaces a Submit / Cancel UI:
 ```json
 {
   "questions": [{
-    "question": "No Go files detected in this project (no go.mod, no *.go, no BUILD.bazel with Go rules). project-linter only lints Go code — running /ktn here will install a binary, wire hooks in .claude/settings.json, and spawn an HTTP daemon on :7717 that nothing will ever call. Proceed anyway?",
+    "question": "No Go files detected in this project (no go.mod, no *.go, no BUILD.bazel with Go rules). ktn-linter only lints Go code — running /ktn here will install a binary, run `ktn-linter hook install` on your user settings, and register a daemon that nothing will ever call. Proceed anyway?",
     "header": "No Go found",
     "multiSelect": false,
     "options": [
       {
         "label": "No, cancel",
-        "description": "Stop /ktn now. No files written, no daemon spawned. (Recommended — re-run /ktn from a Go project root.)"
+        "description": "Stop /ktn now. No files written, no daemon started. (Recommended — re-run /ktn from a Go project root.)"
       },
       {
         "label": "Yes, proceed anyway",
@@ -124,9 +125,9 @@ Abort banner:
   Probes : go.mod  go.work  **/*.go  Gopkg.toml
            .golangci.yml  BUILD.bazel(with go_*)
 
-  No files were written. No daemon was spawned.
+  No files were written. No daemon was started.
   Re-run /ktn from a directory that contains Go code, or pass
-  --check to inspect the current project-linter state without
+  --check to inspect the current ktn-linter state without
   any writes.
 ═══════════════════════════════════════════════════════════════
 ```
