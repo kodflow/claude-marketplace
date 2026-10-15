@@ -41,6 +41,7 @@ register.ts.
 | `tool.call` on `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | **collision-guard**: when another session of this machine, beating within 30 min, wrote the same file within 30 min (its `edits.tsv`), asks Continue / Move to a worktree (the model is told to call `EnterWorktree`) / Cancel, but only when the user typed a prompt at the terminal (`origin.kind` `composer`, noted by `prompt.submit`) in the last 10 minutes, the presence rule of the merge gate: otherwise it journals the collision to the debug log and lets the edit through, so a night run never waits on a question; once written, notes `<seconds>\t<path>` in `<config>/kodflow/sessions/<session>/edits.tsv` (no prompt, no content); `<config>/projects` is never checked |
 | `session.end` | empties this session's `edits.tsv` |
 | `agent.spawn` | **gated models**: passes or refuses a spawn on the model it would run on, never writes one (below) |
+| `tool.call` on `Skill` | **gated models**: a skill whose frontmatter names one passes only with the session's grant, asked once like a spawn |
 | `classic.PreModelSwitch` | a `/model` the user typed or picked grants the session a gated model; a switch from the SDK asks, and is refused with nobody at the prompt |
 | `prompt.submit` from the composer | writes `<config>/kodflow/sessions/<session>/composer-at` (seconds), the presence `on-stop.sh` reads before proposing agent feedback |
 
@@ -155,7 +156,7 @@ fails by accident blocks every shell call of the session.
 | `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` · from the main thread: a merge without the mod's token or an exemption | — | log; a main-thread merge is tagged `root_guard: merge` (refused), `merge-ok` or `merge-exempt` |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
 | `PreToolUse` · Agent/Task | `on-tool.sh` | gated-model fallback first, every caller, no jq; then the main thread only | a gated model when the mod does not beat · from the main thread, a `general-purpose` dispatch whose description names an installed specialist's technology (routing gate, below) | — | log, `root_guard: route-deny`, `route-override` or `route-noindex` |
-| `PreToolUse` · Skill | `on-tool.sh` | — | a skill whose frontmatter names a gated model, without the session's grant | — | — |
+| `PreToolUse` · Skill | `on-tool.sh` | the mod does not beat | a skill whose frontmatter names a gated model | — | — |
 | `PostToolUse` · Task/Agent | `on-tool.sh` | — | — | — | `agent-models.tsv` (agent id, resolved model, per-call effort) · log tagged `root_guard: dispatch` |
 | `PostToolUse` · SubagentHandback | `on-tool.sh` | — | — | — | the report's agent feedback, as at `SubagentStop` |
 | `PostToolUse` · other | `on-tool.sh` | — | — | — | log |
@@ -367,20 +368,22 @@ session — Fable today (model-policy §6).
   so parallel dispatches put one question. A built-in with no file
   (`Explore`, a workflow's agents) is judged on the last two. It passes or
   refuses, and never writes `model`. A gated one passes with the session's
-  grant (`$.store` `fable:<session>`, mirrored as `<session>/fable-granted`
-  for the shell); else, to a user who typed in the last 10 minutes,
+  grant (`$.store` `fable:<session>`, never a file: whatever runs a tool could
+  write one); else, to a user who typed in the last 10 minutes,
   `$.ui.ask` once, a yes granting the session; nobody there, a refusal with
   the reason (`[motif:fable]`). A throw refuses only when a raw input names a
   gated model; otherwise the spawn goes on, with a toast and a log line.
 - **A `/model` the user types** (recorded: `source: command`), or picks, is
   the consent: `classic.PreModelSwitch` grants the session. From the SDK it
   asks like a spawn.
+- **A skill** whose frontmatter names a gated model would switch the main
+  conversation to it (no switch event was recorded for that): the mod judges
+  the `Skill` call on its `SKILL.md` the same way (`tool.call`).
 - **The shell**, while the mod does not beat, refuses any Agent call whose
-  per-call `model` or definition frontmatter names a gated model, from every
-  caller, without jq (bash regexes, a bounded awk read of the frontmatter,
-  quote- and CRLF-safe). It always refuses a `Skill` whose frontmatter names
-  one without the grant: a skill's model switches the main conversation, and
-  no mod event judges that switch.
+  per-call `model` or definition frontmatter names a gated model, and any
+  `Skill` whose frontmatter does, from every caller, without jq (bash
+  regexes, a bounded awk read of the frontmatter, quote- and CRLF-safe). It
+  trusts no grant: without the mod, only `KODFLOW_FABLE=allow` lets one through.
 - `SessionStart` says once, to the user and to Claude, when the session itself
   starts on a gated model (the payload's `model`, absent in a headless run,
   else the settings', else `ANTHROPIC_MODEL`).
@@ -415,7 +418,6 @@ before opening any issue on kodflow/claude-marketplace.
 | `turn.step` or another plugin rewriting a spawn's model after this mod | not judged; modwall refuses user-tier modules from outside kodflow, a managed one is not judged |
 | A `Skill` called from inside a subagent | not recorded; judged as from the main thread |
 | `[general-purpose-ok]` | written by the model as easily as by a skill: the routing gate steers |
-| `<session>/fable-granted` | a plain file the shell reads as the grant: anything that can write under `<config>/kodflow/sessions/` can grant itself. The mod's own grant is in `$.store`; the file only serves the shell |
 | A foreground subagent's model in its feedback | its `PostToolUse Agent` comes after its `SubagentStop` (recorded): the frontmatter's model is named instead |
 
 ## The task list (mod)

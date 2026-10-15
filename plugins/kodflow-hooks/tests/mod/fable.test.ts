@@ -135,7 +135,7 @@ test("a fable frontmatter, the user present: asked once, the yes holds for the s
   expect(h.asked.length).toBe(1);
   expect(h.asked[0]).toContain("frontmatter model");
   expect(h.store.get(`fable:${SID}`)).toEqual(expect.objectContaining({ by: "asked at a spawn" }));
-  expect(h.files.get(`${CFG}/kodflow/sessions/${SID}/fable-granted`)).toMatch(/^\d{10}\nasked at a spawn\n$/);
+  expect([...h.files.keys()].some((k) => k.endsWith("/fable-granted"))).toBe(false);
   expect(h.spawned.every((s) => s.model === undefined)).toBe(true);
 });
 
@@ -362,4 +362,24 @@ test("two parallel gated spawns put one question to the user", async ($, on) => 
   ]);
   expect([a.deny, b.deny]).toEqual([undefined, undefined]);
   expect(h.asked.length).toBe(1);
+});
+
+test("a skill pinned to a gated model: refused with nobody there, granted once asked", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  const skills = `${CFG}/plugins/cache/kodflow/kodflow-specialists/abc123/skills`;
+  h.files.set(`${skills}/deep/SKILL.md`, "---\nname: deep\nmodel: claude-fable-5-1\neffort: high\n---\nx\n");
+  h.files.set(`${skills}/calm/SKILL.md`, "---\nname: calm\nmodel: inherit\neffort: low\n---\nx\n");
+  let ran = 0;
+  on("tool.call", { tool: "Skill" }, async () => (ran++, { result: "loaded" }) as any);
+  await $.session.start({ source: "startup", cwd: "/repo" });
+  const calm: any = await $.tool.call({ tool: "Skill", skill: "kodflow-specialists:calm" } as any);
+  expect(calm.deny ?? (calm.isError ? calm.text : undefined)).toBeUndefined();
+  const no: any = await $.tool.call({ tool: "Skill", skill: "kodflow-specialists:deep" } as any);
+  expect(String(no.deny ?? no.text)).toContain("[motif:fable]");
+  await $.prompt.submit({ text: "go", origin: { kind: "composer" } } as any).catch(() => undefined);
+  h.answer = "Allow it for this session";
+  const yes: any = await $.tool.call({ tool: "Skill", skill: "kodflow-specialists:deep" } as any);
+  expect(yes.deny ?? (yes.isError ? yes.text : undefined)).toBeUndefined();
+  expect(ran).toBe(2);
+  expect(h.asked[0]).toContain("This skill would run on claude-fable-5-1");
 });

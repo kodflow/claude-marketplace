@@ -184,7 +184,7 @@ run on-tool.sh "$(agent "probe" "" "x" fable)" KODFLOW_FABLE=off
 expect_rc "KODFLOW_FABLE=off passes" 0
 mkdir -p "$SD"; date +%s > "$SD/fable-granted"
 run on-tool.sh "$(agent "probe" "" "x" fable)"
-expect_rc "the session's grant (fable-granted, written by the mod) passes" 0
+[ "$RC" -eq 2 ] && ok "a grant file someone wrote grants nothing" || bad "self-grant" "rc=$RC"
 rm -f "$SD/fable-granted"
 # A skill pinned to a gated model would switch the main conversation to it
 mkdir -p "$IP/skills/deep-skill" "$IP/skills/calm"
@@ -195,14 +195,16 @@ run on-tool.sh "$(skill kodflow-specialists:deep-skill)"
 [ "$RC" -eq 2 ] && motif fable && ok "a skill pinned to a gated model is refused" || bad "skill fable" "rc=$RC $ERR"
 date +%s > "$SD/mod-beat"
 run on-tool.sh "$(skill kodflow-specialists:deep-skill)"
-[ "$RC" -eq 2 ] && ok "mod or not: no mod event judges a skill's switch" || bad "skill fable beat" "rc=$RC"
+expect_rc "with the mod beating, the skill is the mod's to judge" 0
 rm -f "$SD/mod-beat"
 run on-tool.sh "$(skill kodflow-specialists:calm)"
 expect_rc "a skill on model: inherit passes" 0
 date +%s > "$SD/fable-granted"
 run on-tool.sh "$(skill kodflow-specialists:deep-skill)"
-expect_rc "a granted session runs the gated skill" 0
+[ "$RC" -eq 2 ] && ok "nor for a skill" || bad "self-grant skill" "rc=$RC"
 rm -f "$SD/fable-granted"
+run on-tool.sh "$(skill kodflow-specialists:deep-skill)" KODFLOW_FABLE=allow
+expect_rc "KODFLOW_FABLE=allow runs the gated skill without the mod" 0
 date +%s > "$SD/mod-beat"
 run on-tool.sh "$(agent "probe" "" "x" fable)"
 expect_rc "a fresh mod beat leaves the judgement to the mod" 0

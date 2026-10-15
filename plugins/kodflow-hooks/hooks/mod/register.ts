@@ -49,7 +49,6 @@ import {
   beatText,
   composerFile,
   configDir,
-  grantFile,
   mergeTokenFile,
   safe,
   sessionDir,
@@ -90,7 +89,9 @@ import {
   grantKey,
   failClosedTokens,
   forced,
+  judgeSkill,
   judgeSpawn,
+  skillPaths,
   judgeSwitch,
   isGated,
   parseGated,
@@ -448,14 +449,11 @@ async function blast($: any, line: string): Promise<{ deny: string } | undefined
 const gatedText = ($: any): Promise<string | undefined> =>
   $.fs.read(`${$.plugin.root}/hooks/gated-models.txt`).catch(() => undefined);
 
-// Who gave the session its grant, and when; the key is the session's. The
-// same grant is written as <session>/fable-granted for the shell, which
-// judges skill frontmatter and the dispatches made while the mod is gone.
+// Who gave the session its grant, and when; the key is the session's. Only
+// $.store holds it: a file under the session directory could be written by
+// any tool call, so the shell never reads a grant and refuses without the mod.
 async function grantSession($: any, session: string, by: string): Promise<void> {
-  const at = Math.floor(Date.now() / 1000);
-  await $.store.set(grantKey(session), { at, by });
-  const cfg = await config($);
-  if (cfg) await $.fs.write(grantFile(sessionDir(cfg, session)), `${at}\n${by}\n`).catch(() => undefined);
+  await $.store.set(grantKey(session), { at: Math.floor(Date.now() / 1000), by });
 }
 
 // One spawn judged at a time: two parallel dispatches on a gated model put
@@ -464,7 +462,7 @@ let judging: Promise<unknown> = Promise.resolve();
 
 // What agent.spawn's judge reaches; every raw value it reads is kept in `raw`
 // so that a throw can still refuse a spawn naming a gated model.
-async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort> {
+async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort & { skillFile: (s: string) => Promise<string | undefined> }> {
   const session = await $.session.id();
   return {
     gated: () => gatedText($),
@@ -495,6 +493,21 @@ async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort> {
     },
     envForce: async () => forced(await $.env.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE")),
     granted: async () => !!(await $.store.get(grantKey(session))),
+    skillFile: async (skill: string) => {
+      const cfg = await config($);
+      if (!cfg) return undefined;
+      const installed = await $.fs
+        .read(`${cfg}/plugins/installed_plugins.json`)
+        .catch(() => undefined);
+      for (const path of skillPaths(skill, { project: await projectDir($).catch(() => undefined), config: cfg, installed })) {
+        const text = await $.fs.read(path).catch(() => undefined);
+        if (text !== undefined) {
+          raw.push(text.slice(0, 4000));
+          return text;
+        }
+      }
+      return undefined;
+    },
     grant: () => grantSession($, session, "asked at a spawn"),
     present,
     ask: (question, options) => $.ui.ask(question, { options, header: "Gated model" }),
@@ -570,6 +583,32 @@ export const register: Register = (on) => {
     }
     journal($, at, "fable", `${verdict.kind}: ${verdict.why}`);
     if (verdict.kind === "refuse") return { deny: fableRefusal(verdict.model, verdict.why) };
+    return next(e);
+  }).catch(($, e, next) => next(e));
+
+  // A skill pinned to a gated model would switch the main conversation to it
+  on("tool.call", { tool: "Skill" }, async ($, e, next) => {
+    const raw: unknown[] = [];
+    const skill = String((argsOf(e as any) as any)?.skill ?? "").replace(/^\//, "");
+    const at = { tool: "Skill", tool_use_id: e.tool_use_id, agentId: e.agentId };
+    let verdict;
+    try {
+      if (await off($) || !skill) return next(e);
+      const run = judging.then(async () => judgeSkill(skill, await spawnPort($, raw)));
+      judging = run.catch(() => undefined);
+      verdict = await run;
+    } catch (err) {
+      if (anyGated(raw, failClosedTokens(await gatedText($)))) {
+        journal($, at, "fable", "error-refused", err);
+        return { deny: fableRefusal(skill, "the check failed") };
+      }
+      journal($, at, "fable", "error-passed", err);
+      return next(e);
+    }
+    if (verdict.kind === "refuse") {
+      journal($, at, "fable", `refuse: ${verdict.why}`);
+      return { deny: fableRefusal(verdict.model, verdict.why) };
+    }
     return next(e);
   }).catch(($, e, next) => next(e));
 

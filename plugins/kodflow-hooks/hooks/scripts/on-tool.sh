@@ -75,7 +75,6 @@ _fable_fast() {
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
     local L=${BASH_SOURCE[0]%/*}/lib sd m="" t="" why=""
     _fable_sd; sd=$FABLE_SD
-    [ -f "$sd/fable-granted" ] && return 0
     if . "$L/beat.sh" 2>/dev/null && kf_beat "$sd"; then return 0; fi
     . "$L/agents.sh" 2>/dev/null || return 0
     # The engine's precedence: CLAUDE_CODE_SUBAGENT_MODEL under _FORCE first,
@@ -98,21 +97,21 @@ _fable_fast() {
 }
 
 # A skill whose frontmatter names a model switches the main conversation to
-# it. No mod event judges that switch (none was recorded for it), so the
-# shell does, mod or not: a gated model passes only with the session's grant,
-# the file the mod writes beside its store when the user said yes.
+# it. The mod judges the Skill call (fable.ts, judgeSkill) and holds the
+# grant; without it the shell refuses a gated one outright. No file grants
+# anything here: whatever can run a tool could write it.
 _fable_skill() {
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
     local L=${BASH_SOURCE[0]%/*}/lib sk="" cwd=""
     _fable_sd
-    [ -f "$FABLE_SD/fable-granted" ] && return 0
+    if . "$L/beat.sh" 2>/dev/null && kf_beat "$FABLE_SD"; then return 0; fi
     [[ $INPUT =~ \"skill\":\ ?\"([^\"]*)\" ]] && sk=${BASH_REMATCH[1]#/}
     [ -n "$sk" ] || return 0
     [[ $INPUT =~ \"cwd\":\ ?\"([^\"]*)\" ]] && cwd=${BASH_REMATCH[1]}
     . "$L/agents.sh" 2>/dev/null || return 0
     kf_skill_def "$sk" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_PROJECT_DIR:-$cwd}" && kf_fm_model "$KF_SKILL_DEF" || return 0
     kf_is_gated "$KF_FM_MODEL" || return 0
-    _fable_refuse "$KF_FM_MODEL" "the frontmatter of the skill $sk" "Ask the user: a /model they type grants the session, and the skill can then run."
+    _fable_refuse "$KF_FM_MODEL" "the frontmatter of the skill $sk" "The kodflow mod that asks for that yes is not loaded in this session: load it (Claude Code 2.1.293+, /reload-plugins), or run without the skill."
 }
 
 # FAST PATH, no jq. The PreToolUse matcher is the catch-all so the triage gate

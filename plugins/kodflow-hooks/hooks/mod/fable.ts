@@ -95,6 +95,30 @@ export function installPaths(json: string | undefined, plugin: string): string[]
  * (the current cache version, as installed_plugins.json names it); a bare
  * name in the project, then the user's agents, then any installed plugin.
  */
+/** Where a skill's SKILL.md can live, in the same order as an agent's definition. */
+export function skillPaths(
+  skill: string,
+  where: { project?: string; config: string; installed?: string },
+): string[] {
+  const i = skill.indexOf(":");
+  const name = i > 0 ? skill.slice(i + 1) : skill;
+  if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(name)) return [];
+  if (i > 0) return installPaths(where.installed, skill.slice(0, i)).map((p) => `${p}/skills/${name}/SKILL.md`);
+  const paths: string[] = [];
+  if (where.project) paths.push(`${where.project}/.claude/skills/${name}/SKILL.md`);
+  paths.push(`${where.config}/skills/${name}/SKILL.md`);
+  let data: any;
+  try {
+    data = JSON.parse(where.installed ?? "");
+  } catch {
+    data = undefined;
+  }
+  for (const entries of Object.values(data?.plugins ?? {}))
+    for (const e of Array.isArray(entries) ? (entries as any[]) : [])
+      if (typeof e?.installPath === "string") paths.push(`${e.installPath}/skills/${name}/SKILL.md`);
+  return [...new Set(paths)];
+}
+
 export function definitionPaths(
   subagentType: string,
   where: { project?: string; config: string; installed?: string },
@@ -209,7 +233,27 @@ export async function judgeSpawn(
   const def = type ? await port.definition(type) : undefined;
   const c = candidate(e, def, await port.envModel(), await port.envForce());
   if (!isGated(c.model, tokens)) return { kind: "pass", why: `ungated (${c.source})`, model: c.model };
-  const why = `${c.source} model of ${type || "the agent"}`;
+  return consent(c.model, `${c.source} model of ${type || "the agent"}`, mode, port, "dispatch");
+}
+
+/**
+ * A skill whose frontmatter names a model switches the main conversation to
+ * it (no switch event was recorded for that): the same rule as a spawn, on
+ * the SKILL.md's frontmatter alone.
+ */
+export async function judgeSkill(skill: string, port: SpawnPort & { skillFile: (s: string) => Promise<string | undefined> }): Promise<Verdict> {
+  const mode = await port.mode();
+  if (mode === "off") return { kind: "pass", why: "KODFLOW_FABLE=off" };
+  const tokens = parseGated(await port.gated());
+  if (!tokens.length) return { kind: "pass", why: "nothing gated" };
+  const model = frontmatterModel(await port.skillFile(skill));
+  if (!model || !isGated(model, tokens)) return { kind: "pass", why: "ungated skill", model };
+  return consent(model, `frontmatter model of the skill ${skill}`, mode, port, "skill");
+}
+
+// A gated candidate: the mode, the session's grant, then the user's yes
+async function consent(model: string, why: string, mode: Gate, port: SpawnPort, what: string): Promise<Verdict> {
+  const c = { model };
   if (mode === "pass") return { kind: "pass", why: `KODFLOW_FABLE (${why})`, model: c.model };
   if (await port.granted()) return { kind: "pass", why: `session grant (${why})`, model: c.model };
   if (!port.present())
@@ -217,7 +261,7 @@ export async function judgeSpawn(
   let answer: string;
   try {
     answer = await port.ask(
-      `This dispatch would run on ${c.model}, a gated model (${why}). Allow gated models for the rest of this session?`,
+      `This ${what} would run on ${c.model}, a gated model (${why}). Allow gated models for the rest of this session?`,
       [ASK_YES, ASK_NO],
     );
   } catch {

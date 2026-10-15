@@ -45,9 +45,6 @@ export const beatText = (nowMs: number): string =>
  */
 export const composerFile = (dir: string): string => `${dir}/composer-at`;
 
-/** The session's gated-model grant, mirrored from $.store for the shell. */
-export const grantFile = (dir: string): string => `${dir}/fable-granted`;
-
 /** The merge gate's token for one call (L5): the head SHA it was agreed on. */
 export const mergeTokenFile = (dir: string, toolUseId: unknown): string =>
   `${dir}/merge-ok/${safe(toolUseId)}`;
