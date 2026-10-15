@@ -49,6 +49,26 @@ test("markup inside a code block is never interpreted", () => {
   expect(blocks("```sh\necho {{r:x}}")).toEqual([
     { markdown: "```sh\necho {{r:x}}" },
   ]);
+  // A longer fence holds shorter fences and tildes; its own closes it
+  expect(
+    blocks("````md\n```\n{{r:a}}\n~~~\n{{r:b}}\n````\n\n{{r:c}}"),
+  ).toEqual([
+    { markdown: "````md\n```\n{{r:a}}\n~~~\n{{r:b}}\n````" },
+    { runs: [{ text: "c", color: "red", bold: true }] },
+  ]);
+  // A fence line with text after it does not close
+  expect(blocks("```\n``` x\n{{r:a}}\n```")).toEqual([
+    { markdown: "```\n``` x\n{{r:a}}\n```" },
+  ]);
+  // A double-backtick span holding a single backtick
+  expect(blocks("use ``a ` {{r:x}}`` here")).toEqual([
+    { markdown: "use ``a ` {{r:x}}`` here" },
+  ]);
+  expect(runs("``a ` {{r:x}}`` et {{r:y}}")).toEqual([
+    { text: "``a ` {{r:x}}``" },
+    { text: " et " },
+    { text: "y", color: "red", bold: true },
+  ]);
   expect(blocks("tape `{{r:x}}` tel quel")).toEqual([
     { markdown: "tape `{{r:x}}` tel quel" },
   ]);

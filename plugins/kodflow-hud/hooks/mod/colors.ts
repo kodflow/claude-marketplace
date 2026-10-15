@@ -22,33 +22,50 @@ export type Block = { markdown: string } | { runs: Run[] };
 const MARK = /\{\{([rovp]):([^{}]+?)\}\}/g;
 const HAS_MARK = /\{\{[rovp]:[^{}]+?\}\}/;
 // Inline code, `like this`: a mark inside it is shown as typed
-const INLINE_CODE = /(`+)[^`]*?\1/g;
+// (CommonMark: a run of backticks closed by a run of the same length, a
+// shorter run inside it is code too)
+const INLINE_CODE = /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g;
+// A fence opens on three backticks or tildes or more and closes on a line
+// of the same character, at least as long, with nothing after it
+const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
 
 /** Splits on blank lines; a fenced code block stays one block. */
 export function paragraphs(text: string): { text: string; code: boolean }[] {
   const out: { text: string; code: boolean }[] = [];
   let buf: string[] = [];
-  let fence = false;
+  let fence = "";
   const flush = (code: boolean) => {
     if (buf.length) out.push({ text: buf.join("\n"), code });
     buf = [];
   };
+  const closes = (line: string): boolean => {
+    const m = /^ {0,3}(`+|~+)\s*$/.exec(line);
+    return !!m && m[1]![0] === fence[0] && m[1]!.length >= fence.length;
+  };
   for (const line of text.split("\n")) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      if (!fence) flush(false);
+    if (fence) {
       buf.push(line);
-      if (fence) flush(true);
-      fence = !fence;
+      if (closes(line)) {
+        flush(true);
+        fence = "";
+      }
       continue;
     }
-    if (!fence && line.trim() === "") {
+    const open = FENCE_OPEN.exec(line);
+    if (open) {
+      flush(false);
+      buf.push(line);
+      fence = open[1]!;
+      continue;
+    }
+    if (line.trim() === "") {
       flush(false);
       continue;
     }
     buf.push(line);
   }
   // An unclosed fence is still code: never interpreted
-  flush(fence);
+  flush(!!fence);
   return out;
 }
 
