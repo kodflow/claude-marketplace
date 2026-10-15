@@ -24,6 +24,68 @@ export const MIN_ENGINE = "2.1.299";
 export const PROBE_MAX_CALLS = 3;
 export const PROBE_MAX_MS = 250;
 
+/**
+ * pkg/daemonaddr/socket.go `ProtocolVersion`: the daemon's wire version, the
+ * `protocol_version` of /status and the `schema` of every /api/view answer.
+ */
+export const PROTOCOL_VERSION = "v1";
+
+/** pkg/daemonctl/files.go `EndpointSchema`: endpoint.json's layout version. */
+export const ENDPOINT_SCHEMA = 1;
+
+/**
+ * pkg/daemonctl/layout.go `CheckSocketPath`: the daemon refuses to bind a
+ * socket path over 96 bytes (the engine itself reaches 107, the Linux
+ * `sun_path` limit, measured by #774). A pointer naming a longer one was not
+ * written by a daemon that could serve it.
+ */
+export const SOCKET_MAX_BYTES = 96;
+
+/**
+ * pkg/userdirs `Anchor()`: endpoint.json sits under HOME alone, whatever
+ * XDG_STATE_HOME says, so a client finds it when the state is redirected.
+ * base_xdg.go: `~/.local/state`; base_darwin.go: `~/Library/Application
+ * Support`. Windows (LOCALAPPDATA) is out of the mod's support (#774).
+ */
+export const ANCHORS = [
+  ".local/state/ktn-linter/endpoint.json",
+  "Library/Application Support/ktn-linter/endpoint.json",
+] as const;
+
+/** pkg/view/wire.go `RoutePath`, mounted on the socket only. */
+export const VIEW_ROUTE = "/api/view";
+
+/** pkg/view/wire.go `CodeWorkspaceNotServed`. */
+export const NOT_SERVED = "workspace_not_served";
+
+/**
+ * pkg/view/build.go `MaxResponseBytes` is 1 MiB; the engine's fetch takes
+ * 4 MiB. Past 1.5 MiB the answer is not one a daemon of this protocol sends,
+ * and parsing it would hold the worker every mod shares: it is refused unread.
+ */
+export const MAX_BODY_CHARS = 1_572_864;
+
+/** pkg/view/build.go `MaxLimit`: the most nodes one window holds. */
+export const MAX_NODES = 1_000;
+
+/**
+ * `$.http.fetch` has one fixed deadline, 30 s, and no signal (#774). The mod
+ * races its own: the request's wait plus 5 s.
+ */
+export const RACE_SLACK_MS = 5_000;
+
+/** After this many failures in a row, the turn's refresh waits its backoff. */
+export const BREAKER_AFTER = 5;
+export const BACKOFF_MIN_MS = 3_000;
+export const BACKOFF_MAX_MS = 60_000;
+
+/** The launch button: `daemon ensure` gets 10 s, then a look every 500 ms for 10 s. */
+export const LAUNCH_TIMEOUT_MS = 10_000;
+export const LAUNCH_POLL_MS = 500;
+
+/** What a daemon string may take in a drawing, and an error the button shows. */
+export const MAX_TEXT = 300;
+
 /** The plugin's name, which `$.state` keys and the pane id are scoped by. */
 export const PLUGIN = "kodflow-ktn";
 /** `/ktn` belongs to kodflow-devops (#774): the mod's command is this one. */
