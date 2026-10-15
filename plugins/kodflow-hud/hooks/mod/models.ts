@@ -60,17 +60,29 @@ export function fromAgentCall(
 /**
  * The worker of every task in progress, added to what was seen before:
  * tasks.json drops the link when a task leaves in_progress, the tree still
- * names who did it. Undefined when nothing changed.
+ * names who did it. Keyed by session too, as task ids start over in each
+ * session's file; only the current session's are kept, so the record is
+ * bounded by one list. Undefined when nothing changed.
  */
+export const seenKey = (session: string, t: Pick<HudTask, "agent" | "id">) =>
+  `${session}:${t.agent}:${t.id}`;
+
 export function seenFrom(
   tasks: readonly HudTask[],
   before: Readonly<Record<string, HudSeen>>,
+  session: string,
 ): Record<string, HudSeen> | undefined {
-  let out: Record<string, HudSeen> | undefined;
+  const prefix = `${session}:`;
+  const stale = Object.keys(before).some((k) => !k.startsWith(prefix));
+  let out: Record<string, HudSeen> | undefined = stale
+    ? Object.fromEntries(
+        Object.entries(before).filter(([k]) => k.startsWith(prefix)),
+      )
+    : undefined;
   for (const t of tasks) {
     if (t.status !== "in_progress" || !(t.worker || t.workerId)) continue;
-    const key = `${t.agent}:${t.id}`;
-    const was = before[key];
+    const key = seenKey(session, t);
+    const was = (out ?? before)[key];
     if (was?.worker === t.worker && was?.workerId === t.workerId) continue;
     out ??= { ...before };
     out[key] = {

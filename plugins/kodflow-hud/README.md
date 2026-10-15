@@ -149,7 +149,9 @@ two lines cross. Links within a column, or
 leftwards, are not drawn (the tree shows them). The footer gives the next
 action (a ready task, on the path first), what waits on the person, the
 critical path and the deliverable (the epic's final task, and what it waits
-on).
+on). Narrower than 88 cells the three columns share what is left; under 40 a
+node no longer holds its glyph, ref and title, and the graph says so in place
+of its lanes.
 
 ### Keys and mouse
 

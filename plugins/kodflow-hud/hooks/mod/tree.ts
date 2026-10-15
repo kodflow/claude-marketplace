@@ -17,6 +17,7 @@
 import type { HudBoard, HudCi, HudModel, HudSeen, HudTask } from "../../types";
 import { MAIN, judge, loopLabel, type Ctx } from "./board.ts";
 import { cells, fit } from "./width.ts";
+import { seenKey } from "./models.ts";
 
 export type NodeState =
   | "done"
@@ -77,6 +78,8 @@ export type TreeData = {
   ci: Readonly<Record<string, HudCi>>;
   models: Readonly<Record<string, HudModel>>;
   seen: Readonly<Record<string, HudSeen>>;
+  /** The session the board was read for: the `seen` keys carry it. */
+  session: string;
 };
 
 /** "45 s", "12 min", "1 h 20", "12 h", "3 j": six cells at most. */
@@ -236,7 +239,7 @@ export function buildTree(data: TreeData): TreeModel {
     const node = (t: HudTask, depth: number, path: Set<string>): TreeNode => {
       const state = stateOf(t);
       const v = judge(t, ctx);
-      const seen = data.seen[`${t.agent}:${t.id}`];
+      const seen = data.seen[seenKey(data.session, t)];
       const workerId = t.workerId || seen?.workerId;
       const worker = t.worker || seen?.worker;
       const loop = workerId || t.agent;

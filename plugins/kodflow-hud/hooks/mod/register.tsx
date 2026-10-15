@@ -195,7 +195,7 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
         const board = parseBoard(text);
         if (!same(await read($, boardAtom), board))
           await update($, boardAtom, () => board);
-        const seen = seenFrom(allTasks, await read($, seenAtom));
+        const seen = seenFrom(allTasks, await read($, seenAtom), session);
         if (seen) await update($, seenAtom, () => seen);
         lastSession = session;
         lastMtime = mtime;
@@ -405,6 +405,7 @@ export const register: Register = (on, options) => {
         ci: ciMap,
         models,
         seen,
+        session: await $.session.id(),
       });
       const width = e.props.bodyColumns;
       const rows = e.props.scroll.bodyRows;

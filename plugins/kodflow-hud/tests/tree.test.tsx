@@ -6,6 +6,16 @@ import { capture, widths } from "./capture.ts";
 import { buildTree, linkCell, modelCell, span } from "../hooks/mod/tree.ts";
 import { parseBoard, type Ctx } from "../hooks/mod/board.ts";
 import { cells, fit } from "../hooks/mod/width.ts";
+import {
+  graphScreen,
+  initialUi,
+  treeScreen,
+  type Cell,
+} from "../hooks/mod/layout.tsx";
+import { seenFrom } from "../hooks/mod/models.ts";
+
+const cellText = (line: Cell[]): string =>
+  line.map((c) => (c.spans ?? []).map((s) => s.text).join("")).join("");
 
 const MIN = 60;
 const task = (
@@ -316,6 +326,7 @@ const treeOf = (tasks: object[]) =>
     ci: {},
     models: {},
     seen: {},
+    session: "s",
   }).epics[0]!;
 
 test("derived states: ready when every blocker is done, blocked otherwise, todo under an open parent", () => {
@@ -457,4 +468,68 @@ test("R4: links that share no lane get their own stretch; one crossing a column 
     "  prête · personne dessus                                       attend P1",
   ]);
   expect(lines.join("\n")).not.toContain("┼");
+});
+
+test("every line of a screen adds up to its width, the fold line of a narrow pane too", () => {
+  const model = buildTree({
+    board: parseBoard(tasksJson(MAQUETTE, EPIC)),
+    ctx,
+    ci: {},
+    models: {},
+    seen: {},
+    session: "s",
+  });
+  for (const [w, r] of [
+    [88, 20],
+    [58, 19],
+    [40, 8],
+    [30, 6],
+  ] as const) {
+    const screen = treeScreen(model, initialUi(model), w, r);
+    expect(
+      screen.lines.some((l) => l.length === 2 && cellText(l).includes("fait")),
+    ).toBe(r < 20);
+    // Never wider than the body: a row whose columns dropped is shorter
+    const graph = graphScreen(model, initialUi(model), w, r);
+    for (const line of [...screen.lines, ...graph.lines])
+      expect(line.reduce((n, c) => n + c.w, 0)).toBeLessThanOrEqual(w);
+  }
+});
+
+test("the worker seen on a task is the session's: ids start over, the old ones go", () => {
+  const t = (id: string, status: string, over: object = {}) =>
+    ({
+      id,
+      subject: "x",
+      status,
+      epic: 1,
+      agent: "main",
+      updated: 1,
+      prs: [],
+      ...over,
+    }) as any;
+  const a = seenFrom(
+    [t("3", "in_progress", { worker: "hud", workerId: "a1" })],
+    {},
+    "A",
+  )!;
+  expect(a).toEqual({ "A:main:3": { worker: "hud", workerId: "a1" } });
+  // Session B: its #3 never had that worker, and A's entries are dropped
+  const b = seenFrom([t("3", "completed")], a, "B")!;
+  expect(b).toEqual({});
+  expect(seenFrom([t("3", "completed")], b, "B")).toBeUndefined();
+  const tree = buildTree({
+    board: parseBoard(
+      tasksJson(
+        [task("3", "Done", "completed"), task("4", "Next", "pending")],
+        EPIC,
+      ),
+    ),
+    ctx,
+    ci: {},
+    models: {},
+    seen: a,
+    session: "B",
+  });
+  expect(tree.epics[0]!.nodes[0]!.agent).toBe("main");
 });

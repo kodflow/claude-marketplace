@@ -384,10 +384,10 @@ function epicLine(epic: TreeEpic, cols: Cols): Cell[] {
   return out;
 }
 
-function foldLine(count: number): Cell[] {
+function foldLine(count: number, cols: Cols): Cell[] {
   return [
     cell(W.margin),
-    cell(W.tree, [
+    cell(cols.tree, [
       dim("└─ "),
       span("✓", { color: GREEN }),
       dim(` fait (${count})`),
@@ -451,11 +451,11 @@ function critLine(epic: TreeEpic | undefined, width: number): Cell[] {
           dim(you.age ? ` · ${you.age}` : ""),
         ]
     : [];
-  const tailW = Math.min(
-    cells(tail.map((s) => s.text).join("")),
-    Math.max(0, width - 20),
-  );
-  const headW = 19;
+  const headW = Math.min(19, width);
+  // The chains keep 8 cells before who waits is given any, and the gap of 2
+  const fits = width - headW - 8 - W.gap;
+  const tailW =
+    fits > 0 ? Math.min(cells(tail.map((s) => s.text).join("")), fits) : 0;
   const midW = Math.max(0, width - headW - tailW - (tailW ? 2 : 0));
   const out: Cell[] = [cell(headW, head), cell(midW, chainSpans(epic))];
   if (tailW) out.push(cell(2), cell(tailW, tail));
@@ -561,7 +561,7 @@ export function treeScreen(
       let foldShown = false;
       for (const v of rows) {
         if (folded.has(v.top.id)) {
-          if (!foldShown) out.push({ line: foldLine(finished.length) });
+          if (!foldShown) out.push({ line: foldLine(finished.length, cols) });
           foldShown = true;
           continue;
         }
@@ -867,21 +867,26 @@ export function graphScreen(
 ): Screen {
   const sel = findNode(model, ui.sel);
   const epic = sel?.epic ?? model.epics[0];
-  const colW =
-    width >= FULL.links ? 26 : Math.max(8, Math.floor((width - 10) / 3));
+  const colW = width >= FULL.links ? 26 : Math.floor((width - 10) / 3);
+  // Under 40 cells a node no longer holds its glyph, its ref and a title
+  const fits = colW >= 10;
   const lines: Cell[][] = [];
   const push = (l: Cell[]) => lines.push(l);
   push(titleLine(model, epic, width));
-  push([
-    cell(colW, [dim("FAIT · PRÊT")]),
-    cell(5),
-    cell(colW, [dim("EN COURS · ATTENTE")]),
-    cell(5),
-    cell(colW, [dim("BLOQUÉ")]),
-  ]);
+  push(
+    fits
+      ? [
+          cell(colW, [dim("FAIT · PRÊT")]),
+          cell(5),
+          cell(colW, [dim("EN COURS · ATTENTE")]),
+          cell(5),
+          cell(colW, [dim("BLOQUÉ")]),
+        ]
+      : [cell(width, [dim("le graphe veut 40 colonnes")])],
+  );
   const footer = 6; // rule, three lines, the bar's two
   const room = Math.max(0, rows - 2 - footer);
-  if (epic) {
+  if (epic && fits) {
     const { at, count, edges } = lanesOf(epic);
     const byLane: (TreeNode | undefined)[][] = [[], [], []];
     for (const n of epic.nodes) {
