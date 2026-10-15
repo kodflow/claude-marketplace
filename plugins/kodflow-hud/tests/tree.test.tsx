@@ -1,7 +1,7 @@
 // tree.test.tsx — the « Tâches » pane's tree and graph, drawn by the engine
 // through the plugin, read back as the terminal lays them out (capture.ts).
 import { test, expect } from "claude-code/testing";
-import { SEC, host, start, tasksJson, PANE, TASKS } from "./host.ts";
+import { CFG, SEC, host, start, tasksJson, PANE, TASKS } from "./host.ts";
 import { capture, widths } from "./capture.ts";
 import { buildTree, linkCell, modelCell, span } from "../hooks/mod/tree.ts";
 import { parseBoard, type Ctx } from "../hooks/mod/board.ts";
@@ -594,4 +594,37 @@ test("two Agent results landing together each keep their model", async ($, on) =
   const text = capture(await drawnIn(ui));
   expect(text).toMatch(/First +one +opus·xhigh/);
   expect(text).toMatch(/Second +two +haiku·low/);
+});
+
+test("a new session's agent-models.tsv is read even when its time matches the last one's", async ($, on) => {
+  let sid = "s-one";
+  const { h, clock } = host(on, { session: () => sid });
+  const dir = (s: string) => `${CFG}/kodflow/sessions/${s}`;
+  for (const [s, id, model] of [
+    ["s-one", "a1", "claude-opus-5-5"],
+    ["s-two", "a2", "claude-haiku-5-5"],
+  ] as const) {
+    h.files.set(`${dir(s)}/tasks.json`, {
+      text: tasksJson(
+        [task("1", "Work", "in_progress", { worker: "w", worker_id: id })],
+        EPIC,
+      ),
+      mtimeMs: 7,
+    });
+    h.files.set(`${dir(s)}/agent-models.tsv`, {
+      text: `${id}\t${model}\thigh\tgeneral-purpose\n`,
+      mtimeMs: 7,
+    });
+  }
+  await start($, clock);
+  const row = async () => {
+    const ui = await mount($, 88, 20);
+    const line = capture(await drawnIn(ui)).split("\n")[3]!;
+    await ui.unmount();
+    return line;
+  };
+  expect(await row()).toContain("opus·high");
+  sid = "s-two";
+  await clock.advance(3_000);
+  expect(await row()).toContain("haiku·high");
 });

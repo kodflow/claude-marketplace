@@ -103,6 +103,7 @@ let checking = false;
 let lastSession = "";
 let lastMtime: number | undefined = -1;
 let modelsMtime: number | undefined = -1;
+let modelsPath = "";
 let allTasks: HudTask[] = [];
 let lastCi = 0;
 let root: string | undefined;
@@ -169,12 +170,14 @@ async function pollModels($: any, tasks: string): Promise<void> {
     () => undefined,
   );
   const said: Record<string, HudModel> = {};
-  if (mtime !== undefined && mtime !== modelsMtime)
+  // Another session's file is read afresh whatever its time says
+  if (mtime !== undefined && (path !== modelsPath || mtime !== modelsMtime))
     Object.assign(
       said,
       parseModels(await $.fs.read(path).catch(() => undefined)),
     );
   modelsMtime = mtime;
+  modelsPath = path;
   const main = await $.session.model().catch(() => undefined);
   if (typeof main === "string" && main) said[MAIN] = { model: main };
   if (Object.keys(said).length) await noteModels($, said);

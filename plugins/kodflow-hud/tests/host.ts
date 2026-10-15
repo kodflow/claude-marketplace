@@ -21,7 +21,10 @@ export type Host = {
   checks: { exitCode: number; stdout: string };
 };
 
-export function host(on: any): {
+export function host(
+  on: any,
+  opts: { session?: () => string } = {},
+): {
   h: Host;
   clock: ReturnType<typeof mock.clock>;
 } {
@@ -37,7 +40,7 @@ export function host(on: any): {
   };
   const clock = mock.clock(on, { now: NOW });
   mock.env(on, { CLAUDE_CONFIG_DIR: CFG, HOME: "/u/dev" });
-  on("session.id", async () => ({ value: SID }));
+  on("session.id", async () => ({ value: opts.session?.() ?? SID }));
   on("session.root", async () => ({ value: "/w/repo" }));
   on("session.model", async () => ({ value: "claude-opus-5-5" }));
   on("session.start", async (_$: any, e: any) => ({ cwd: e.cwd ?? "/w/repo" }));
