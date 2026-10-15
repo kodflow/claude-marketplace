@@ -1,0 +1,20 @@
+{
+  "name": "kodflow-ktn",
+  "description": "ktn-linter's findings beside the prompt, as a mod (function hooks, Claude Code 2.1.299 or later). It completes the hooks ktn-linter installs and replaces none: they keep delivering the findings to the model, this mod only shows them. Active in a Go project only (the same predicate as ktn-linter's own resolver); inert where nothing draws (-p, the Agent SDK, Kepler).",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "activation": {
+      "type": "string",
+      "title": "Activation",
+      "description": "auto: in a Go project only, as ktn-linter resolves one. always: in every project (the safety net when the probe says undetermined). off: never.",
+      "options": ["auto", "always", "off"],
+      "default": "auto"
+    }
+  }
+}

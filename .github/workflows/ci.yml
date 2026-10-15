@@ -297,3 +297,78 @@ jobs:
       # shell job plays against on-tool.sh) and the module's invariants.
       - name: The conformance corpus, a real disk, several processes (node)
         run: node plugins/kodflow-hooks/tests/mod/run-node.ts
+
+  # kodflow-ktn: ktn-linter's mod. Its floor is Claude Code 2.1.299, the
+  # oldest version kodflow/ktn-linter#774 measured, above the engine the job
+  # above pins: it gets an engine of its own, pinned and bumped by hand.
+  # Nothing here can redden ktn-linter's release: this repository publishes
+  # the plugin, by commit (git-subdir), and ktn-linter does not depend on it.
+  mod-ktn:
+    runs-on: ubuntu-latest
+    env:
+      CLAUDE_CODE_VERSION: 2.1.301
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '24' }
+
+      # The pure modules — the activation predicate replayed on ktn-linter's
+      # golden table, the reducer, the renderer — under node alone: no engine,
+      # no npm dependency, the TypeScript run as it is. This step never waits
+      # on Claude Code, so it stays meaningful when the engine lane cannot run.
+      - name: kodflow-ktn's pure modules (node --test)
+        run: node --test plugins/kodflow-ktn/tests/pure/*.spec.ts
+
+      - name: Claude Code, pinned
+        run: |
+          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          claude --version
+
+      # As for the other mods, plus two facts of the mod's contract: exactly
+      # one session.start (two without a matcher keep a module from loading),
+      # and no tool hook at all (the mod completes ktn-linter's hooks, it never
+      # stands in for them).
+      - name: The engine reads kodflow-ktn as meant
+        run: |
+          set +e
+          claude plugin validate --strict --json plugins/kodflow-ktn > validate-ktn.json
+          set -e
+          cat validate-ktn.json
+          python3 - <<'PY'
+          import json, re, sys
+          r = json.load(open("validate-ktn.json"))
+          parts = [r["manifest"]] + r.get("contents", [])
+          errors = [e for p in parts for e in p.get("errors", [])]
+          warnings = [w for p in parts for w in p.get("warnings", []) if w.get("path") != "version"]
+          notes = [n for p in parts for n in p.get("notes", [])]
+          bad = errors + warnings
+          for item in bad:
+              print("::error::%s" % item)
+          hooked = [n for n in notes if n.startswith("./mod/register.ts hooks:")]
+          if len(hooked) != 1:
+              print("::error::the hooks module was not read"); sys.exit(1)
+          # "a, b{component=Pane, requestId=x}, c": a matcher holds commas of its own
+          events = re.findall(r"([\w.]+)(?:\{[^}]*\})?(?:, |$)", hooked[0].split(":", 1)[1].strip())
+          if events.count("session.start") != 1:
+              print("::error::%d session.start hooks, exactly one expected" % events.count("session.start")); bad.append("start")
+          tools = [e for e in events if e in ("tool.call", "tool.check", "classic.PreToolUse", "classic.PostToolUse", "classic.PostToolUseFailure")]
+          if tools:
+              print("::error::tool hooks registered: %s" % tools); bad.append("tools")
+          print("hooks:", events)
+          sys.exit(1 if bad else 0)
+          PY
+
+      # `claude plugin test` exits 1 when hooks modules are turned off on the
+      # runner (a remote switch, disableAllHooks): that is no verdict on the
+      # mod, so the lane ends neutral with an annotation instead of red.
+      - name: kodflow-ktn's tests, in the engine (claude plugin test)
+        run: |
+          set +e
+          claude plugin test plugins/kodflow-ktn 2>&1 | tee plugin-test-ktn.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ] && grep -qi 'turned off' plugin-test-ktn.log; then
+            echo "::warning::hooks modules are turned off on this runner: the engine lane is neutral, the node lane above still ran"
+            exit 0
+          fi
+          exit "$rc"
