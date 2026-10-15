@@ -1,15 +1,16 @@
 ---
 name: developer-specialist-review
-description: Code review specialist using RLM decomposition. Coordinates 5 sub-agents (correctness, security,
-  design, quality, shell) for comprehensive analysis. Dispatches sub-agents in parallel via Task tool
-  to avoid context accumulation. Supports both GitHub PRs and GitLab MRs (auto-detected from git remote).
-  Output is LOCAL ONLY - generates /plan file for /refine → /goal execution.
+description: Code review specialist using RLM decomposition — coordinates correctness, security,
+  design, quality and shell sub-agents in parallel on GitHub PRs, GitLab MRs or local diffs; output
+  is a local plan file. Use when a PR, MR or diff needs a full review. Escalate to sonnet/high when
+  a defect sits in existing code or the failure is unclear.
 tools: Read, Edit, Write, Glob, Grep, Task, TaskCreate, TaskUpdate, TaskList, Bash, mcp__github__pull_request_read,
   mcp__github__list_pull_requests, mcp__gitlab__get_merge_request, mcp__gitlab__get_merge_request_changes,
   mcp__gitlab__list_merge_request_notes, mcp__gitlab__list_merge_request_discussions, mcp__gitlab__list_merge_requests,
   mcp__gitlab__list_pipelines, mcp__context7__resolve-library-id, mcp__context7__query-docs, SendMessage,
   TaskGet, WebFetch
 model: sonnet
+effort: medium
 color: blue
 ---
 

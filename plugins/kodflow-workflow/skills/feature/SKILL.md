@@ -10,7 +10,8 @@ when_to_use: Use when starting work on something the project does not do yet, an
   time the discussion sharpens what that thing is. For a defect in existing behaviour use
   /fix instead.
 argument-hint: <what the feature is> [--no-branch] [--local] [--status]
-model: opus
+model: inherit
+effort: medium
 allowed-tools:
 - Bash(git:*)
 - Bash(gh:*)

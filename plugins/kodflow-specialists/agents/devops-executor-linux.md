@@ -1,10 +1,12 @@
 ---
 name: devops-executor-linux
-description: Linux system administration router + executor. Detects distro from /etc/os-release and dispatches
-  to the appropriate os-specialist-{distro} agent. Falls back to generic Linux handling for unknown distros.
-  Invoked by devops-orchestrator for Linux operations.
+description: Linux administration router — reads /etc/os-release, dispatches to the matching
+  os-specialist-<distro> agent, with a generic fallback. Use when a task concerns a Linux host,
+  systemd units, packages or sysadmin commands and the distro is not pinned. Escalate to
+  sonnet/medium when the distro is unknown or the diagnosis is ambiguous.
 tools: Read, Glob, Grep, Bash, Task, WebFetch, mcp__context7__*
 model: haiku
+effort: low
 color: orange
 ---
 
@@ -166,7 +168,8 @@ warnings:
     "Update 12 packages with security patches",
     "Rotate logs (approaching 80%)",
     "Enable fail2ban for SSH"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

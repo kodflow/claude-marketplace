@@ -54,17 +54,48 @@ jobs:
           pip install --quiet pyyaml
           python3 scripts/validate-frontmatter.py .
 
+      # The orchestrator's model comes from detect-models.sh: no guess when the
+      # cache is unreadable, never a gated model, a missing list failing closed.
+      - name: The model detector neither guesses nor reports a gated model
+        run: bash scripts/tests/test_detect_models.sh
+
+      # Tested before trusted: an effort typo, an agent on a gated model and a
+      # missing gated list are each planted and must be refused.
+      - name: The frontmatter validator refuses what the model policy forbids
+        run: python3 scripts/tests/test_validate_frontmatter.py
+
+      # The gated models are read by the skills (_shared, the canonical copy)
+      # and by kodflow-hooks, installed alone, which ships its own copy.
+      - name: The gated-model list is the same in the skills and the hooks
+        run: |
+          diff plugins/kodflow-workflow/skills/_shared/gated-models.txt plugins/kodflow-hooks/hooks/gated-models.txt \
+            || { echo "::error::gated-models.txt differs between _shared and kodflow-hooks"; exit 1; }
+
       # Context cost, not correctness: pinned model/effort, description and
       # SKILL.md budgets, copied memory blocks, bare cross-plugin references.
-      # Every finding is a warning until a check is named in COST_CHECKS_STRICT,
-      # so this step stays green while the catalogue is still dirty — a gate
-      # that starts red is a gate people learn to skip. Tested before trusted,
-      # like the secret scanner: a budget nobody measured measures nothing.
+      # Every finding is a warning until a check is named in COST_CHECKS_STRICT
+      # — a gate that starts red is a gate people learn to skip. model_effort
+      # is strict since every agent pins model and effort and every skill pins
+      # effort and inherits the model: that check now keeps the catalogue
+      # clean. Tested before trusted, like the secret scanner: a budget nobody
+      # measured measures nothing.
       - name: The cost guardrails hold
         run: python3 scripts/tests/test_context_cost.py
 
       - name: What the catalogue costs every session
+        env:
+          COST_CHECKS_STRICT: model_effort
         run: python3 scripts/check-context-cost.py .
+
+      # The routing gate of kodflow-hooks reads routing-index.tsv, compiled
+      # from the Keywords column of _shared/specialists.md. A keyword edited
+      # by hand on either side would route on a table nobody reviews.
+      - name: The routing index matches specialists.md
+        run: |
+          python3 scripts/tests/test_routing_index.py
+          python3 scripts/build-routing-index.py
+          git diff --exit-code -- plugins/kodflow-hooks/hooks/routing-index.tsv \
+            || { echo "::error::routing-index.tsv is stale — run scripts/build-routing-index.py"; exit 1; }
 
       - name: Shell scripts parse
         run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
@@ -159,6 +190,8 @@ jobs:
           HOOK_SHELL=/bin/bash /bin/bash scripts/tests/test_hooks.sh
       - name: Delegation gate under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-hooks/tests/test_root_gate.sh
+      - name: Routing gate, gated-model fallback and agent feedback under /bin/bash 3.2
+        run: /bin/bash plugins/kodflow-hooks/tests/test_agents.sh
 
   # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
   # are checked by the engine itself, at the version the README names as

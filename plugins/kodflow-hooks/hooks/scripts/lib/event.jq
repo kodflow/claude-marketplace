@@ -10,7 +10,7 @@
 
 def redact:
   if type == "string" then
-      gsub("(?<k>(token|api[_-]?key|pass" + "word|secret|authorization)\\s*[:=]\\s*(Bearer\\s+)?)[^\\s\"']+"; "\(.k)<redacted>"; "i")
+      gsub("(?<k>[A-Za-z0-9_-]*(token|api[_-]?key|pass" + "word|secret|authorization)[A-Za-z0-9_-]*\\s*[:=]\\s*(Bearer\\s+)?)[^\\s\"']+"; "\(.k)<redacted>"; "i")
     | gsub("(gh[pousr]_|github_pat_|sk-|AK" + "IA)[A-Za-z0-9_-]{8,}"; "<redacted>")
     | gsub("Bearer [A-Za-z0-9._-]+"; "Bearer <redacted>")
   else . end;
@@ -28,12 +28,19 @@ def input_of($t; $i):
        old_len: (($i.old_string // "") | length), new_len: (($i.new_string // "") | length)}
   elif $t == "Read" then {file_path: $i.file_path, offset: $i.offset, limit: $i.limit}
   elif ($t | test("^(Glob|Grep)$")) then {pattern: $i.pattern, path: $i.path}
-  elif ($t | test("^(Task|Agent)$")) then {description: $i.description, subagent_type: $i.subagent_type}
+  elif ($t | test("^(Task|Agent)$")) then
+      {description: ($i.description | clip(200) | redact), subagent_type: $i.subagent_type,
+       model: $i.model, effort: $i.effort, isolation: $i.isolation, run_in_background: $i.run_in_background,
+       marked: (if (($i.description // "") + ($i.prompt // "")) | contains("[general-purpose-ok]") then true else null end)}
+      | with_entries(select(.value != null))
   else ($i | del(.content, .new_string, .old_string, .prompt) | small)
   end;
 
 def response_of($t; $r):
   if ($r | type) != "object" then {summary: ($r | tostring | clip(300) | redact)}
+  elif ($t | test("^(Task|Agent)$")) then
+      {agentId: $r.agentId, resolvedModel: $r.resolvedModel, status: $r.status, totalTokens: $r.totalTokens}
+      | with_entries(select(.value != null))
   elif $t == "Bash" then
       {return_code: $r.return_code,
        stdout: (($r.stdout // $r.output // "") | clip(2000) | redact),
@@ -53,10 +60,12 @@ def response_of($t; $r):
   agent_id: .agent_id,
   tool_use_id: .tool_use_id,
   tool_name: .tool_name,
-  # Set by on-tool.sh on the two events that measure the delegation gate:
-  # "deny" when the main thread was stopped, "dispatch" when it delegated.
-  # Read from the environment so the other scripts need no new argument.
-  root_guard: (($ENV.KODFLOW_ROOT_GUARD // "") | if . == "" then null else . end) }
+  # Set by on-tool.sh: "deny" when the delegation gate stopped the main
+  # thread, "dispatch" when it delegated, "route-deny" / "route-override" /
+  # "route-noindex" for the routing gate's verdict on a general-purpose
+  # dispatch. Read from the environment so the other scripts need no new argument.
+  root_guard: (($ENV.KODFLOW_ROOT_GUARD // "") | if . == "" then null else . end),
+  effort: (.effort.level? // null) }
 + (if .tool_name then
      {tool_input: input_of(.tool_name; (.tool_input // {})),
       tool_response: (if .tool_response then response_of(.tool_name; .tool_response) else null end)}

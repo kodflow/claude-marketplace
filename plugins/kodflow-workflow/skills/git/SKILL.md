@@ -6,7 +6,8 @@ description: 'Workflow Git Automation with RLM decomposition. Handles branch man
 when_to_use: Use to commit, open a PR/MR, watch CI to green, or merge. Handles branch naming,
   conventional commits, and the pre-push quality gate.
 argument-hint: --commit | --watch | --merge | --finish [--branch <name>] [--no-pr]
-model: opus
+model: inherit
+effort: medium
 allowed-tools:
 - Bash(git:*)
 - Bash(gh:*)

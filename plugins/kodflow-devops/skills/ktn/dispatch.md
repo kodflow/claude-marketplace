@@ -7,7 +7,9 @@ Five specialists, one message, one concern each. Read this when Phase 1
 
 **MANDATORY: spawn all 5 agents in ONE assistant message** so they execute
 concurrently. Each agent receives a self-contained prompt + permission to
-write its own file only.
+write its own file only. When route-agent.sh answers with its `general-purpose`
+fallback (exit 10), the prompt carries `[general-purpose-ok]`, the `marker` of
+that JSON: the kodflow-hooks routing gate reads it as a deliberate dispatch.
 
 ### Agent A — `binary`
 

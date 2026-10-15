@@ -73,6 +73,11 @@ Pipeline invariants (locked by `refine-pipeline-rewire.bats`):
 - BARE and FROM-CONTRACT skip pass 1-2 (no lens findings); pass 3 still runs on
   the rendered directive.
 
+A lens the router answers with its `general-purpose` fallback (exit 10) is
+dispatched with `[general-purpose-ok]` in its prompt, the `marker` field of that JSON:
+the kodflow-hooks routing gate refuses an unmarked general-purpose dispatch whose
+description names a specialist's technology.
+
 ### Static fallback (refine-* pipeline)
 
 If `route-agent.sh` cannot resolve a `refine-*` pass, fall back to the static map

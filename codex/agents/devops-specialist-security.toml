@@ -1,8 +1,8 @@
 # generated-from: plugins/*/agents/devops-specialist-security.md
 name = "devops-specialist-security"
-description = """DevSecOps security scanning specialist. Expert in vulnerability detection, compliance checking, and secrets scanning. Invoked by devops-orchestrator. Returns condensed JSON results with findings and remediation."""
+description = """DevSecOps scanning specialist — vulnerability detection, compliance checking and secrets scanning; returns JSON with findings and remediation. Use when a task asks for a vulnerability, CVE, compliance or leaked-secret scan of images, dependencies or infrastructure. Escalate to opus/high when findings span several components or an exploit chain."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 
 developer_instructions = """
 # DevSecOps Scanner - Sub-Agent
@@ -109,7 +109,8 @@ critical_findings:
     "Rotate exposed AWS credentials immediately",
     "Enable encryption for S3 bucket",
     "Update base image to fix CVE-2024-XXXX"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

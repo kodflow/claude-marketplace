@@ -1,6 +1,6 @@
 # generated-from: plugins/*/agents/devops-specialist-kubernetes.md
 name = "devops-specialist-kubernetes"
-description = """Kubernetes orchestration specialist. Expert in K8s, K3s, minikube, Helm, operators, and GitOps. Invoked by devops-orchestrator. Returns condensed JSON results with manifests and recommendations."""
+description = """Kubernetes specialist — K8s, K3s, minikube, Helm, operators and GitOps; returns JSON with manifests and recommendations. Use when a task touches Kubernetes manifests, Helm charts, kustomize, kubectl output or an Argo CD or Flux setup. Escalate to sonnet/high when a defect sits in existing code or the failure is unclear."""
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 
@@ -119,7 +119,8 @@ warnings:
   "commands": [
     "kubectl apply -f manifests/ --dry-run=server",
     "kubectl diff -f manifests/"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

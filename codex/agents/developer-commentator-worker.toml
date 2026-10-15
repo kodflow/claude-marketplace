@@ -1,6 +1,6 @@
 # generated-from: plugins/*/agents/developer-commentator-worker.md
 name = "developer-commentator-worker"
-description = """Audit and fix code comments in a single file. Ensures comments explain WHY not WHAT, functions have proper docstrings with params/types/return, and language conventions are followed. Returns structured JSON."""
+description = """Comment auditor for a single file — comments explain WHY not WHAT, functions carry docstrings with params, types and return; returns JSON. Use when one source file needs its comments or docstrings audited or fixed. Escalate to sonnet/medium when the WHY cannot be inferred from the code and needs judgement."""
 model = "gpt-5.6-luna"
 model_reasoning_effort = "low"
 
@@ -73,7 +73,8 @@ Return **only** valid JSON (no markdown fences, no explanation):
   "functions_skipped": 2,
   "issues_remaining": [
     {"line": 99, "reason": "Business logic requires human context for WHY"}
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

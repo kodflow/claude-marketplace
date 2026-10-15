@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """What this marketplace costs a session before it has done any work.
 
-Five checks, none about correctness: an agent with no `model` pinned runs at
-whatever the user set their session to — `xhigh` included — on every spawn; a
+Five checks, none about correctness: an agent with no `model` or `effort`
+pinned runs at whatever the user set their session to — `xhigh` included — on
+every spawn, and a skill with no `effort` likewise, while a skill that names a
+model switches the whole conversation to it, uncached, unless it forks; a
 description is loaded into every session whether the skill is used or not; a
 memory block copied out of the harness is paid for twice; a bare cross-plugin
 reference silently resolves to a same-named user-local copy.
@@ -164,6 +166,15 @@ def check(root):
                 missing = [k for k in ("model", "effort") if not pinned(fm, k)]
                 add("model_effort", f, f"no {' and no '.join(missing)} pinned — inherits the "
                                        f"session's setting, at the session's price, on every spawn")
+            if kind == "skills":
+                if not pinned(fm, "effort"):
+                    add("model_effort", f, "no effort pinned — the skill runs at the session's "
+                                           "effort, xhigh included")
+                model = (scalar(fm, "model") or "").strip().lower()
+                forked = (scalar(fm, "context") or "").strip().lower() == "fork"
+                if pinned(fm, "model") and model != "inherit" and not forked:
+                    add("model_effort", f, f"model: {model} switches the main conversation and "
+                                           f"re-reads it uncached — pin `model: inherit`, or fork")
             desc = scalar(fm, "description")
             if desc is None:
                 add("description_budget", f, "no description: in the frontmatter")

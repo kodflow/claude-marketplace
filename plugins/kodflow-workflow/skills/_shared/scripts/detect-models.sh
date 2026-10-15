@@ -13,6 +13,23 @@ emit() { printf '%s=%s\n' "$1" "$2"; }
 
 CJ="${HOME}/.claude.json"
 
+# Gated tokens, one a line (gated-models.txt beside this directory), |-joined.
+# An unreadable list must not make every model ungated: it falls back to the
+# one model the policy gates today, as the hooks do.
+GATED=""
+GF="${BASH_SOURCE[0]%/*}/../gated-models.txt"
+if [ ! -r "$GF" ]; then
+  GATED=fable
+else
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%%#*}
+    line=$(printf '%s' "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+    [ -n "$line" ] || continue
+    GATED="${GATED:+$GATED|}$line"
+  done < "$GF"
+fi
+emit CLAUDE_GATED "$GATED"
+
 # ---- Anthropic side ---------------------------------------------------------
 # The CLI caches the models this account may select, with the top one carrying
 # a "Most capable" description. That cache is what /model reads, so it updates
@@ -20,12 +37,25 @@ CJ="${HOME}/.claude.json"
 if [ -r "$CJ" ] && command -v jq >/dev/null 2>&1; then
   emit CLAUDE_TOP "$(jq -r '.additionalModelOptionsCache // [] | map(select(.description|test("Most capable";"i"))) | .[0].value // (.[0].value // "")' "$CJ" 2>/dev/null)"
   emit CLAUDE_TOP_LABEL "$(jq -r '.additionalModelOptionsCache // [] | .[0].description // ""' "$CJ" 2>/dev/null)"
+  # The orchestrator's model: the most capable one that is not gated
+  # (gated-models.txt, model-policy.md §6). The cache lists only the models
+  # beyond the CLI's built-in ones, so when every entry is gated the alias
+  # `opus` stands in: the CLI resolves it to its current Opus, nothing here
+  # names a version.
+  emit CLAUDE_TOP_UNGATED "$(jq -r --arg g "$GATED" '
+      ($g | split("|") | map(select(. != ""))) as $gs
+      | def gated: (.value // "" | ascii_downcase) as $v | any($gs[]; . as $t | $v | contains($t));
+      (.additionalModelOptionsCache // [] | map(select(gated | not))) as $ok
+      | ($ok | map(select(.description // "" | test("Most capable"; "i"))) | .[0].value)
+        // ($ok | .[0].value) // "opus"' "$CJ" 2>/dev/null)"
   emit CLAUDE_PLAN "$(jq -r '.oauthAccount.organizationRateLimitTier // .oauthAccount.userRateLimitTier // "unknown"' "$CJ" 2>/dev/null)"
   emit CLAUDE_OVERAGE_MODELS "$(jq -r '.cachedGrowthBookFeatures.tengu_usage_overage_included_models // [] | join("|")' "$CJ" 2>/dev/null)"
   # Models this account has actually billed against — evidence of real access.
   emit CLAUDE_SEEN "$(jq -r '[.projects // {} | to_entries[] | .value.lastModelUsage // {} | keys[]] | unique | join("|")' "$CJ" 2>/dev/null)"
 else
-  emit CLAUDE_TOP ""; emit CLAUDE_PLAN unknown
+  # Access unknown: no guess. An empty value is the policy's cue to say so and
+  # fall back to the session model.
+  emit CLAUDE_TOP ""; emit CLAUDE_TOP_UNGATED ""; emit CLAUDE_PLAN unknown
 fi
 
 # Billing shape decides what "cost" even means. On a subscription the binding

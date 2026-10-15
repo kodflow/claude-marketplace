@@ -7,7 +7,8 @@ when_to_use: Use the moment a decision is made that a future maintainer would as
   — a technology chosen over an alternative, a boundary drawn, a constraint accepted. Also
   when reviewing a change whose rationale is not in the code.
 argument-hint: '[--new "<title>"] [--list] [--link <id>]'
-model: sonnet
+model: inherit
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

@@ -39,6 +39,12 @@ export const beatFile = (dir: string): string => `${dir}/mod-beat`;
 export const beatText = (nowMs: number): string =>
   String(Math.floor(nowMs / 1000));
 
+/**
+ * When the user last typed at the prompt, in whole seconds: written on every
+ * composer prompt, read by on-stop.sh before it proposes agent feedback.
+ */
+export const composerFile = (dir: string): string => `${dir}/composer-at`;
+
 /** The merge gate's token for one call (L5): the head SHA it was agreed on. */
 export const mergeTokenFile = (dir: string, toolUseId: unknown): string =>
   `${dir}/merge-ok/${safe(toolUseId)}`;

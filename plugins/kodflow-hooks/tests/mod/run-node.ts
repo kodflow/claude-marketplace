@@ -31,6 +31,7 @@ import { decide, replay, type Row } from "./corpus.ts";
 import { forgeMcpJson } from "../../hooks/mod/guards.ts";
 import { loadRules } from "../../hooks/mod/patterns.ts";
 import { invariants } from "./invariants.ts";
+import { judgeSpawn, judgeSwitch, parseGated, type SpawnPort } from "../../hooks/mod/fable.ts";
 
 const run = promisify(execFile);
 const HERE = fileURLToPath(import.meta.url);
@@ -362,6 +363,68 @@ try {
   );
 } finally {
   rmSync(lab, { recursive: true, force: true });
+}
+
+console.log("== the gated-model rule on the recorded payloads (tests/fixtures)");
+{
+  const fx = join(dirname(HERE), "..", "fixtures");
+  const lines = (f: string) =>
+    readFileSync(join(fx, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const gated = readFileSync(join(dirname(HERE), "..", "..", "hooks", "gated-models.txt"), "utf8");
+  // The recorder's own definitions, as they were when the payloads were taken
+  const defs: Record<string, string> = {
+    "t0rec:rec-frontmatter": "---\nname: rec-frontmatter\nmodel: haiku\neffort: low\n---\n",
+    "t0rec:rec-inherit": "---\nname: rec-inherit\nmodel: inherit\n---\n",
+    "t0rec:rec-fable": "---\nname: rec-fable\nmodel: fable\neffort: low\n---\n",
+  };
+  const port = (over: Partial<SpawnPort> = {}): SpawnPort => ({
+    gated: async () => gated,
+    mode: async () => "on",
+    definition: async (t) => defs[t],
+    envModel: async () => undefined,
+    envForce: async () => false,
+    granted: async () => false,
+    grant: async () => undefined,
+    present: () => false,
+    ask: async () => "Refuse",
+    ...over,
+  });
+  // What each recorded spawn must come to, nobody at the prompt, no grant
+  const want: Record<string, string> = {
+    "plugin agent, frontmatter model, no per-call model": "pass",
+    "model: inherit agent, per-call model haiku": "pass",
+    "built-in Explore from the main thread": "pass",
+    "built-in Explore from inside a subagent (parentAgentId)": "pass",
+    "general-purpose, per-call model haiku": "pass",
+    "plugin agent pinned to fable in its frontmatter": "refuse",
+    "per-call model fable": "refuse",
+    "workflow inner agent": "pass",
+  };
+  const spawns = lines("agent-spawn.jsonl").filter((r) => r.input);
+  check(spawns.length === Object.keys(want).length, "every recorded spawn shape is judged", String(spawns.length));
+  for (const r of spawns) {
+    const e = r.input;
+    check(
+      typeof e.subagentType === "string" && typeof e.parentModel === "string" && typeof e.fork === "boolean"
+        && (e.model === undefined || typeof e.model === "string"),
+      `recorded shape holds the keys the rule reads: ${r.case}`,
+      JSON.stringify(Object.keys(e)),
+    );
+    const v = await judgeSpawn(e, port());
+    check(v.kind === want[r.case], `${r.case}: ${want[r.case]}`, `${v.kind} (${v.why})`);
+    if (want[r.case] === "refuse") {
+      const g = await judgeSpawn(e, port({ granted: async () => true }));
+      check(g.kind === "pass" && /session grant/.test(g.why), `${r.case}: passes once the session is granted`, g.why);
+    }
+  }
+  const sw = lines("agent-mod-events.jsonl").find((r) => r.case === "classic.PreModelSwitch input (mod)")!.input;
+  check(sw.source === "command", "a typed /model is recorded as source command", sw.source);
+  check(
+    judgeSwitch({ ...sw, to_model: "claude-fable-5-1", requested_model: "fable" }, parseGated(gated), "on").kind === "grant",
+    "the recorded /model shape, aimed at a gated model, grants the session",
+    "",
+  );
+  check(judgeSwitch(sw, parseGated(gated), "on").kind === "pass", "the recorded /model haiku passes ungated", "");
 }
 
 console.log("== invariants over the hooks module");

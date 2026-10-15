@@ -339,7 +339,13 @@ After Phase 10.0 TEAMS completes, **skip directly to Phase 11.0** (the SUBAGENTS
 
 ### Phase 10.0 SUBAGENTS execution (fallback, legacy)
 
-**Launch 5 sub-agents with strict JSON contract via the Task tool:**
+**Launch 5 sub-agents with strict JSON contract via the Task tool.** Each runs on
+the model and effort its frontmatter pins (correctness and security opus/xhigh,
+design sonnet/medium, quality and shell haiku/low): no per-call `model` or
+`effort` outside the cases of `../_shared/model-policy.md` §3. A finding owner
+with no routed specialist is dispatched as `general-purpose` with
+`[general-purpose-ok]` in its prompt, the marker the kodflow-hooks routing gate
+reads as deliberate.
 
 ```yaml
 parallel_analysis:
@@ -348,7 +354,6 @@ parallel_analysis:
     agents:
       correctness:
         name: "developer-executor-correctness"
-        model: sonnet
         trigger: "always (MANDATORY for code stability)"
         focus:
           - "Algorithmic errors (off-by-one, bounds, indexes)"
@@ -361,7 +366,6 @@ parallel_analysis:
 
       security:
         name: "developer-executor-security"
-        model: opus
         trigger: "always"
         focus:
           - "OWASP Top 10"
@@ -373,7 +377,6 @@ parallel_analysis:
 
       design:
         name: "developer-executor-design"
-        model: sonnet
         trigger: "risk_tags contains architecture OR files in core/, domain/, pkg/"
         focus:
           - "Antipatterns (God object, Feature envy, etc.)"
@@ -384,7 +387,6 @@ parallel_analysis:
 
       quality:
         name: "developer-executor-quality"
-        model: haiku
         trigger: "always"
         focus:
           - "Complexity metrics"
@@ -394,7 +396,6 @@ parallel_analysis:
 
       shell:
         name: "developer-executor-shell"
-        model: haiku
         trigger: "shell_files > 0 OR Dockerfile exists OR ci_config exists"
         focus:
           - "Shell safety (6 axes)"

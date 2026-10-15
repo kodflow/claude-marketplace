@@ -196,4 +196,7 @@ parallel_exploration:
         Return: {patterns[], references[]}
 ```
 
-**IMPORTANT**: Launch ALL agents in a SINGLE message.
+**IMPORTANT**: Launch ALL agents in a SINGLE message. An explorer the router
+sends to `general-purpose` (its fallback) carries `[general-purpose-ok]` in its prompt;
+the kodflow-hooks routing gate refuses an unmarked one whose description names
+a specialist's technology.

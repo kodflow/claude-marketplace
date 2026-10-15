@@ -15,7 +15,8 @@ when_to_use: Use to review a GitHub PR, a GitLab MR, or a local diff with eviden
   — every finding cites real code at file:line plus a counterexample, and the deterministic
   scanners actually run.
 argument-hint: '[<PR#>|<branch>|<path>] [--loop] [--plan <slug>]'
-model: opus
+model: inherit
+effort: high
 allowed-tools:
 - Bash(git:*)
 - Bash(gh:*)

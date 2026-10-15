@@ -13,7 +13,8 @@ when_to_use: >-
   an unfamiliar API, a protocol, a migration, a security mechanism — and any
   time correctness depends on a current version rather than on memory.
 argument-hint: "<query> | --refresh <topic> | --append | --status | --list | --clear [--all]"
-model: opus
+model: inherit
+effort: medium
 allowed-tools:
   - "WebSearch(*)"
   - "WebFetch(*)"

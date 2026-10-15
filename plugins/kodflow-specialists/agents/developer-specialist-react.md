@@ -1,10 +1,12 @@
 ---
 name: developer-specialist-react
-description: React 19 specialist — JSX/TSX, hooks, React Server Components, Suspense boundaries, Concurrent
-  Mode. Routed when a node project declares a `react` dependency.
+description: React 19 specialist — JSX/TSX, hooks, React Server Components, Suspense boundaries,
+  Concurrent Mode. Use when a change touches .jsx or .tsx files, or a node project declares a react
+  dependency. Escalate to opus/high when the change spans several modules, server/client boundaries,
+  or concurrent rendering.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
 model: sonnet
-effort: medium
+effort: high
 color: blue
 ---
 
@@ -44,7 +46,8 @@ patterns (e.g. mutating state in render, missing keys in lists).
      "severity": "high|medium|low", "fix": "<patch hint>"}
   ],
   "context7_consulted": ["react@19"],
-  "tests_recommended": ["Testing Library scenario X"]
+  "tests_recommended": ["Testing Library scenario X"],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

@@ -1,11 +1,13 @@
 ---
 name: developer-executor-security
-description: Security-focused code analysis executor with deep reasoning capabilities. Performs taint
-  analysis (source → sink), detects OWASP Top 10, hardcoded secrets, injection flaws, crypto issues, and
-  supply chain risks. Returns condensed JSON with taint paths and CWE/OWASP references.
+description: Security analyzer — taint analysis (source to sink), OWASP Top 10, hardcoded secrets,
+  injection, crypto misuse and supply-chain risks; returns JSON with taint paths and CWE references.
+  Use when a diff touches input parsing, auth, crypto, secrets or dependencies. Escalate to opus/max
+  when a taint path or exploit one xhigh pass did not settle.
 tools: Read, Glob, Grep, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebFetch,
   SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 model: opus
+effort: xhigh
 color: blue
 ---
 
@@ -213,7 +215,8 @@ line plus the highest-severity ones and leave the rest in the report file.
       "auth": 0,
       "supply_chain": 0
     }
-  }
+  },
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

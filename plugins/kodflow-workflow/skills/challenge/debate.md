@@ -126,9 +126,12 @@ angle rather than assume it passed.
 Each reviewer gets the **plan text inline**, not a path. A reviewer that has to
 go fetch the plan spends its turns fetching instead of judging.
 
-The brief, per reviewer:
+The brief, per reviewer. The three lenses run on `general-purpose` by design,
+so their brief opens with `[general-purpose-ok]`, the marker the kodflow-hooks routing gate
+reads as a deliberate dispatch; a specialist's brief does not need it.
 
 ```
+[general-purpose-ok]
 Here is a plan. Argue against it from the <lens> lens.
 
 <the full plan>

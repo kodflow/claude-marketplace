@@ -27,6 +27,10 @@ def main():
         write(plug / "skills" / n / "SKILL.md", SKILL.format(n=n))
     write(plug / "skills" / "alpha" / "helper.md", "a support file\n")
     write(plug / "agents" / "keeper.md", AGENT.format(n="keeper"))
+    # The agent's own effort, not the tier's: as written, and max as xhigh
+    write(plug / "agents" / "deep.md", "---\nname: deep\ndescription: d.\nmodel: opus\neffort: xhigh\n---\n\nx\n")
+    write(plug / "agents" / "maxed.md", "---\nname: maxed\ndescription: d.\nmodel: opus\neffort: max\n---\n\nx\n")
+    write(plug / "agents" / "cheap.md", "---\nname: cheap\ndescription: d.\nmodel: haiku\neffort: medium\n---\n\nx\n")
 
     # --- output left over from a previous run whose sources are gone ---
     codex = root / "codex"
@@ -66,8 +70,16 @@ def main():
     else:
         print(f"FAIL generated agents carry the marker\n  first line: {marker!r}")
 
-    total = len(cases) + 1
-    print(f"build-codex: {ok}/{total} pruning cases correct")
+    efforts = [("deep", "xhigh"), ("maxed", "xhigh"), ("cheap", "medium"), ("keeper", "medium")]
+    for name, want in efforts:
+        text = (codex / "agents" / f"{name}.toml").read_text()
+        if f'model_reasoning_effort = "{want}"' in text:
+            ok += 1
+        else:
+            print(f"FAIL {name}.toml carries effort {want}\n  {[l for l in text.splitlines() if 'effort' in l]}")
+
+    total = len(cases) + 1 + len(efforts)
+    print(f"build-codex: {ok}/{total} pruning and effort cases correct")
     return 0 if ok == total else 1
 
 if __name__ == "__main__":

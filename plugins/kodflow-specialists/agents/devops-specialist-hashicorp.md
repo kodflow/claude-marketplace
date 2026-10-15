@@ -1,9 +1,12 @@
 ---
 name: devops-specialist-hashicorp
-description: HashiCorp stack specialist. Expert in Vault, Consul, Nomad, Packer, and Boundary. Invoked
-  by devops-orchestrator. Returns condensed JSON results with configurations and recommendations.
+description: HashiCorp stack specialist — Vault, Consul, Nomad, Packer and Boundary; returns JSON
+  with configurations and recommendations. Use when a task touches .hcl or .nomad files, Vault
+  policies, Consul config or Packer templates. Escalate to sonnet/high when a defect sits in
+  existing code or the failure is unclear.
 tools: Read, Glob, Grep, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, WebFetch, mcp__context7__*
 model: sonnet
+effort: medium
 color: orange
 ---
 
@@ -127,7 +130,8 @@ warnings:
     "Enable Vault audit device",
     "Configure Consul ACL default policy to deny",
     "Set up Vault auto-unseal with AWS KMS"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

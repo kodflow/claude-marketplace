@@ -32,12 +32,14 @@ Task({
 
 **IMPORTANT**: Launch ALL agents in A SINGLE message (parallel).
 
-**Multi-agent example:**
+**Multi-agent example** (no `subagent_type`: `general-purpose`, so each prompt
+carries `[general-purpose-ok]`, the marker the kodflow-hooks routing gate reads as a
+deliberate dispatch):
 ```
 // Single message with 3 Task calls
-Task({ prompt: "OAuth2 on rfc-editor.org", ... })
-Task({ prompt: "JWT on tools.ietf.org", ... })
-Task({ prompt: "REST API on developer.mozilla.org", ... })
+Task({ description: "OAuth2 spec lookup", prompt: "[general-purpose-ok] OAuth2 on rfc-editor.org", model: "haiku", ... })
+Task({ description: "JWT spec lookup", prompt: "[general-purpose-ok] JWT on tools.ietf.org", model: "haiku", ... })
+Task({ description: "REST API lookup", prompt: "[general-purpose-ok] REST API on developer.mozilla.org", model: "haiku", ... })
 ```
 
 ---

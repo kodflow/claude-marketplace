@@ -1,9 +1,12 @@
 ---
 name: devops-specialist-docker
-description: Docker container specialist. Expert in Dockerfile optimization, Docker Compose, container
-  security, and image management. Invoked by devops-orchestrator for containerization tasks.
+description: Docker specialist — Dockerfile optimization, Docker Compose, container security and
+  image management. Use when a task touches a Dockerfile, compose.yaml or docker-compose.yml,
+  .dockerignore, or an image build or size question. Escalate to sonnet/high when a defect sits in
+  existing code or the failure is unclear.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
+effort: medium
 color: orange
 ---
 
@@ -117,7 +120,8 @@ warnings:
     "Combine RUN apt-get commands",
     "Add --no-install-recommends",
     "Use .dockerignore for node_modules"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

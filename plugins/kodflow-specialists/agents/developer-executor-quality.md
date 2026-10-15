@@ -1,10 +1,12 @@
 ---
 name: developer-executor-quality
-description: Code quality analysis executor. Detects complexity issues, code smells, style violations,
-  and maintainability problems. Invoked by developer-specialist-review. Returns condensed JSON results
-  with commendations.
+description: Code quality executor — complexity, code smells, style violations and maintainability;
+  returns condensed JSON with commendations. Use when a review needs a fast mechanical pass for
+  function length, nesting, duplication or naming. Escalate to sonnet/medium when findings need
+  judgement beyond pattern matching or are ambiguous.
 tools: Read, Glob, Grep, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 model: haiku
+effort: low
 color: blue
 ---
 
@@ -106,7 +108,8 @@ line plus the highest-severity ones and leave the rest in the report file.
     "files_analyzed": 5,
     "avg_complexity": 8.2,
     "test_coverage_files": 3
-  }
+  },
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

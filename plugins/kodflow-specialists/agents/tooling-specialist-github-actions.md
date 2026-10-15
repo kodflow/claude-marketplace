@@ -1,8 +1,9 @@
 ---
 name: tooling-specialist-github-actions
-description: GitHub Actions specialist — workflows under `.github/workflows/`, composite/reusable actions,
-  matrix builds, supply-chain hardening (pinned SHAs, OIDC, least-privilege tokens). Routed when the project
-  uses GitHub CI.
+description: GitHub Actions specialist — workflows, composite and reusable actions, matrix builds,
+  supply-chain hardening (pinned SHAs, OIDC, least-privilege tokens). Use when a task touches
+  .github/workflows files, action.yml, or a GitHub CI failure. Escalate to sonnet/high when a defect
+  sits in existing code or the failure is unclear.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__github__*, mcp__context7__*, WebFetch
 model: sonnet
 effort: medium
@@ -45,7 +46,8 @@ permission over-grants.
      "fix": "<pin SHA hint>"}
   ],
   "supply_chain_score": 0-100,
-  "context7_consulted": ["github-actions"]
+  "context7_consulted": ["github-actions"],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

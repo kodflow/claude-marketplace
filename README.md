@@ -18,7 +18,7 @@ cd claude-marketplace && ./scripts/install.sh
 | `kodflow-review` | `/review` `/debug` `/adr` `/learn` `/lint` |
 | `kodflow-devops` | `/infra` `/audit` `/update` `/ktn` |
 | `kodflow-shell` | `/shell` — and `super-claude` on your PATH |
-| `kodflow-specialists` | 29 language, platform and concern agents |
+| `kodflow-specialists` | 34 language, platform and concern agents |
 | `kodflow-hud` (optional) | `/hud` — Tasks and Agents panes beside the status line (a mod, Claude Code 2.1.293+) |
 
 ## The three ideas worth the install
@@ -89,7 +89,9 @@ result parses and that no private detail survived.
 ## What a session pays to have this installed
 
 `scripts/check-context-cost.py` reports the standing cost of the catalogue:
-agents that leave `model` or `effort` unpinned, descriptions over 350
+agents that leave `model` or `effort` unpinned, skills that leave `effort`
+unpinned or name a model without forking (a skill's model switches the whole
+conversation and re-reads it uncached), descriptions over 350
 characters (loaded into every session, used or not), a `SKILL.md` over 20 000
 characters, memory blocks copied out of the harness, and cross-plugin
 references written bare — a backticked `debug` in a kodflow-workflow skill or
@@ -103,7 +105,9 @@ inherits the user's session setting, `xhigh` included, on every spawn.
 
 Findings are warnings and CI stays green. A check gates the build only once it
 is named in `COST_CHECKS_STRICT` (comma-separated, or `all`), which is what
-keeps a cleaned-up check clean. An oversized `SKILL.md` can be exempted in
+keeps a cleaned-up check clean: CI runs with `model_effort` strict, since every
+agent and skill now pins what the model policy
+(`plugins/kodflow-workflow/skills/_shared/model-policy.md`) asks of it. An oversized `SKILL.md` can be exempted in
 `SKILL_SIZE_ALLOWLIST` in that script, and only with a dated reason —
 `"YYYY-MM-DD: why, and whether a reduction is planned"`; an entry whose file
 shrank or disappeared becomes a finding of its own.

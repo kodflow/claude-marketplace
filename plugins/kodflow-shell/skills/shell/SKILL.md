@@ -9,7 +9,8 @@ when_to_use: Use right after installing kodflow-shell, on a machine where `super
   found or still resolves to an old alias, after changing shells, or to check what the plugin
   wired before removing it.
 argument-hint: '[check|install|uninstall]'
-model: haiku
+model: inherit
+effort: low
 allowed-tools:
 - Bash(${CLAUDE_PLUGIN_ROOT}/bin/kodflow-shell-setup:*)
 - Bash(command -v:*)

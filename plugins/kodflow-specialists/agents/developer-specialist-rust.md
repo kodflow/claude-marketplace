@@ -1,10 +1,12 @@
 ---
 name: developer-specialist-rust
-description: Rust specialist agent. Expert in ownership, lifetimes, async patterns, and unsafe code. Enforces
-  academic-level code quality with clippy pedantic, rustfmt, and comprehensive testing. Returns structured
-  analysis and recommendations.
+description: Rust specialist — ownership, lifetimes, async patterns, unsafe code, clippy pedantic
+  and rustfmt. Use when a change touches .rs files, Cargo.toml or Cargo.lock, or a Rust API or
+  design question. Escalate to opus/high when the change spans several crates, unsafe code, async
+  concurrency, or a protocol.
 tools: Read, Glob, Grep, SendMessage, TaskUpdate, Bash, WebFetch, mcp__context7__*
 model: sonnet
+effort: high
 color: blue
 ---
 
@@ -283,7 +285,8 @@ impl Email {
   "recommendations": [
     "Add #[must_use] to pure functions",
     "Use thiserror for error types"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

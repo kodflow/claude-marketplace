@@ -1,10 +1,12 @@
 ---
 name: developer-specialist-go
-description: Go specialist agent. Expert in idiomatic Go, concurrency patterns, error handling, and standard
-  library. Enforces academic-level code quality with golangci-lint, race detection, and comprehensive
-  testing. Returns structured analysis.
+description: Go specialist — idiomatic Go, concurrency patterns, error handling, golangci-lint and
+  the race detector. Use when a change touches .go files, go.mod or go.work, or a Go API or design
+  question. Escalate to opus/high when the change spans several packages, shared state across
+  goroutines, or a wire protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
+effort: high
 color: blue
 ---
 
@@ -635,7 +637,8 @@ SECURITY:  pub (public) | priv (IDs) | pii (RGPD) | secret (password)
   "recommendations": [
     "Add functional options to constructor",
     "Use custom error types for domain errors"
-  ]
+  ],
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

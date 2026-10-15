@@ -64,6 +64,13 @@ _agents() {   # $1 = start|stop
     ) >/dev/null 2>&1 </dev/null
 }
 
+# Rule 6, and what it feeds: the feedback an agent leaves on its own
+# instructions is kept per session and proposed to the user at Stop
+# (on-stop.sh), never acted on unasked. KODFLOW_FEEDBACK=off drops both.
+FEEDBACK_RULE=""
+[ "${KODFLOW_FEEDBACK:-}" != off ] && FEEDBACK_RULE="
+6. End your final answer with a section \"## Agent feedback\" (an \"agent_feedback\" key when you answer in JSON): what in your own instructions was wrong, missing or ambiguous for this task, in a line or two. Leave it out when there is nothing."
+
 case "$EV" in
 SubagentStart)
     _agents start
@@ -74,13 +81,14 @@ Branch: $BRANCH · agent: ${AGENT:-unknown}
 2. rtk is not applied automatically: prefix rtk yourself for verbose read-only commands; byte-exact reads stay raw.
 3. Commits: conventional, no AI attribution, never on main, never --no-verify or --force.
 4. Return what you were asked for and say what you verified versus what you assumed.
-5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; if that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS, use ~/Projects/.worktrees/<repo>-<epic-slug>) and deliver through a PR; the main thread reviews and merges." \
+5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; if that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS, use ~/Projects/.worktrees/<repo>-<epic-slug>) and deliver through a PR; the main thread reviews and merges.${FEEDBACK_RULE}" \
         '{hookSpecificOutput:{hookEventName:"SubagentStart",additionalContext:$c}}' 2>/dev/null
     _log ;;
 
 SubagentStop)
     [ "$ACTIVE" = true ] && exit 0      # already continuing because of a stop hook
     _agents stop
+    . "$LIB/feedback.sh" 2>/dev/null && kf_feedback "$INPUT" "$SID" "$AID" "$AGENT" "$PROJECT_DIR"
     _log ;;
 
 TeammateIdle|TaskCreated|TaskCompleted)

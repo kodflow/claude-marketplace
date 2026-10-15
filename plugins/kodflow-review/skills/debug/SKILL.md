@@ -7,7 +7,8 @@ when_to_use: Use for a bug whose cause is not obvious — a flaky test, an inter
   a wrong result with no exception. Not for a compile error or a stack trace that already
   names the line.
 argument-hint: <symptom> [--loop]
-model: opus
+model: inherit
+effort: high
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)
@@ -120,4 +121,7 @@ conclusion is a design decision) before resuming.
 - Pure-prose discipline — no external dependency. Composes with `/plan` (design
   fix), `/adr` (record a design decision), and `/review` (blast-radius of the fix).
 - For large codebases, dispatch read-only `Explore`/`general-purpose` agents to
-  gather the call path in parallel, then reason over the synthesis here.
+  gather the call path in parallel, then reason over the synthesis here. A
+  `general-purpose` one carries `[general-purpose-ok]` in its prompt: the kodflow-hooks
+  routing gate refuses an unmarked one whose description names a specialist's
+  technology (dispatch that specialist instead).

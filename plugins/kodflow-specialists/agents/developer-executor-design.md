@@ -1,11 +1,13 @@
 ---
 name: developer-executor-design
-description: Design pattern and architecture analyzer. Detects antipatterns, DDD violations, layering
-  issues, and SOLID principle violations. Consults ~/.claude/docs/ for patterns and cross-references with
-  official documentation. Returns condensed JSON with pattern references and fix recommendations.
+description: Design and architecture analyzer — antipatterns, DDD violations, layering issues, SOLID
+  breaches; returns JSON with pattern references and fixes. Use when a review needs a structure pass
+  over new modules, interfaces or package boundaries. Escalate to sonnet/high when a defect sits in
+  existing code or the failure is unclear.
 tools: Read, Glob, Grep, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebFetch,
   SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 model: sonnet
+effort: medium
 color: blue
 ---
 
@@ -269,7 +271,8 @@ line plus the highest-severity ones and leave the rest in the report file.
       "ddd": 0,
       "solid": 0
     }
-  }
+  },
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

@@ -13,7 +13,8 @@ when_to_use: Use once a plan exists and before it is executed — after /plan, /
   when the approach is still arguable, or when a previous attempt went wrong and the plan
   is suspect. Not for a task whose steps are already obvious.
 argument-hint: <plan slug|file|description> [--concurrency N] [--no-codex] [--dry-run]
-model: opus
+model: inherit
+effort: high
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

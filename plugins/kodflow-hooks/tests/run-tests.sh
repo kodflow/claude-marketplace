@@ -1,7 +1,8 @@
 #!/bin/bash
 # run-tests.sh — kodflow-hooks' own suite (the hook scripts are covered by
 # scripts/tests/test_hooks.sh at the repository root, the delegation gate by
-# test_root_gate.sh here, the Go-project rule by test_gomod.sh, the mod by tests/mod: run-node.ts under node, the
+# test_root_gate.sh here, the routing gate, the gated-model fallback and the
+# agent feedback by test_agents.sh, the Go-project rule by test_gomod.sh, the mod by tests/mod: run-node.ts under node, the
 # *.test.ts files under `claude plugin test`).
 set -e
 cd "$(dirname "$0")"
@@ -13,6 +14,7 @@ else
     echo "mod: node >= 22.18 not found, tests/mod/run-node.ts skipped"
 fi
 bash test_root_gate.sh
+bash test_agents.sh
 bash test_lock.sh
 bash test_zsh_safe.sh
 bash test_gomod.sh

@@ -1,10 +1,12 @@
 ---
 name: os-specialist-debian
-description: Debian specialist agent. Expert in apt/dpkg, systemd, stable/testing/unstable branches, and
-  Debian policy. Queries official Debian documentation for version-specific accuracy. Returns condensed
-  JSON only.
+description: Debian specialist — apt/dpkg, systemd, stable/testing/unstable branches and Debian
+  policy, checked against official documentation; returns JSON. Use when a task touches Debian
+  packages, .deb files, apt sources or Debian release behaviour. Escalate to sonnet/medium when the
+  answer needs judgement beyond pattern matching or findings are ambiguous.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: haiku
+effort: medium
 color: green
 ---
 
@@ -235,7 +237,8 @@ warnings:
     {"description": "...", "command": "...", "sudo": true}
   ],
   "warnings": [],
-  "confidence": "HIGH"
+  "confidence": "HIGH",
+  "agent_feedback": "<optional: what in these instructions was wrong, missing or ambiguous for this task; omit the key when there is nothing>"
 }
 ```
 

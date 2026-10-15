@@ -7,7 +7,8 @@ when_to_use: Use before implementing anything non-trivial — a feature, a refac
   Produces a step-by-step plan in .claude/plans/, validated against the project's constraint
   ledger.
 argument-hint: <description> [--context[=<slug>]] [--goal [--fast]] [--auto]
-model: opus
+model: inherit
+effort: high
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)
@@ -269,18 +270,21 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models
 Every plan carries the allocation, in one line under its constraints:
 
 ```
-Models: orchestrator <CLAUDE_TOP> @high · code workers Opus @high ·
-        review workers Opus @xhigh · mechanical workers Sonnet @low ·
-        workers never inherit the orchestrator model · worktree isolation
-        wherever workers write concurrently.
+Models: orchestrator <CLAUDE_TOP_UNGATED> @high · code workers Sonnet @medium
+        (@high on a defect or hook code, Opus @high across modules) · review
+        workers Opus @high · mechanical workers Sonnet @low · workers never
+        inherit the orchestrator model · worktree isolation wherever workers
+        write concurrently.
 ```
 
-Three rules the plan may not weaken:
+Four rules the plan may not weaken:
 
 - **Resolve, never hardcode.** A hardcoded top model is wrong the day a better
   one ships.
 - **Never let a worker inherit.** On a top-tier orchestrator that silently runs
   every worker at the top rate — the single most expensive mistake available.
+  Effort too: a worker with none runs at the session's.
+- **No gated model without the user's yes** (`gated-models.txt`, policy §6).
 - **The orchestrator never does the work.** If it is editing, the allocation has
   collapsed.
 

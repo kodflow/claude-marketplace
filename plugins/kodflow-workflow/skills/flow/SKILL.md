@@ -8,7 +8,8 @@ when_to_use: Use to see how the skills fit together — at the start of a sessio
   what you want but not which skill opens it, when handing the setup to someone else, or when
   a README needs the map. Also to check the diagram still matches the installed plugins.
 argument-hint: '[<skill>] [--path|--artifacts|--hooks|--agents|--all] [--ascii] [--check]'
-model: haiku
+model: inherit
+effort: low
 allowed-tools:
 - Read
 - Glob

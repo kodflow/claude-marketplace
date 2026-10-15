@@ -44,6 +44,8 @@ TIER = {
     "fable":  ("gpt-6-astra",   "xhigh"),
 }
 
+CODEX_EFFORTS = {"low", "medium", "high", "xhigh"}
+
 def neutralise(t):
     for pat, rep in NEUTRALISE:
         t = re.sub(pat, rep, t)
@@ -105,6 +107,13 @@ for src in sorted(ROOT.glob("plugins/*/agents/*.md")):
     fm, body = split(src.read_text())
     name = fm.get("name", src.stem)
     model, effort = TIER.get(str(fm.get("model", "sonnet")), TIER["sonnet"])
+    # The agent's own effort wins over the tier's default. Codex agent TOML
+    # takes low/medium/high/xhigh; `max` is model-dependent there, so it is
+    # written as the highest level every Codex model accepts.
+    if str(fm.get("effort", "")) in CODEX_EFFORTS:
+        effort = str(fm["effort"])
+    elif str(fm.get("effort", "")) == "max":
+        effort = "xhigh"
     desc = " ".join(str(fm.get("description", "")).split())
     instr = neutralise(body).strip()
     (agents_out / f"{name}.toml").write_text(
