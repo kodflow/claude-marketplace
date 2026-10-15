@@ -2,7 +2,7 @@
 name = "developer-executor-correctness"
 description = """Algorithmic correctness analyzer — invariant violations, state machine flaws, concurrency bugs, off-by-one and swallowed errors; returns JSON with counterexamples and patches. Use when a diff or module needs a proof-style correctness pass. Escalate to opus/max when a counterexample search one xhigh pass did not settle."""
 model = "gpt-6-astra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 
 developer_instructions = """
 # Correctness Checker - Sub-Agent

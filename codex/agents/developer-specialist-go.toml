@@ -2,7 +2,7 @@
 name = "developer-specialist-go"
 description = """Go specialist — idiomatic Go, concurrency patterns, error handling, golangci-lint and the race detector. Use when a change touches .go files, go.mod or go.work, or a Go API or design question. Escalate to opus/high when the change spans several packages, shared state across goroutines, or a wire protocol."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 
 developer_instructions = """
 # Go Specialist - Academic Rigor

@@ -2,7 +2,7 @@
 name = "developer-executor-security"
 description = """Security analyzer — taint analysis (source to sink), OWASP Top 10, hardcoded secrets, injection, crypto misuse and supply-chain risks; returns JSON with taint paths and CWE references. Use when a diff touches input parsing, auth, crypto, secrets or dependencies. Escalate to opus/max when a taint path or exploit one xhigh pass did not settle."""
 model = "gpt-6-astra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
 
 developer_instructions = """
 # Security Scanner - Sub-Agent

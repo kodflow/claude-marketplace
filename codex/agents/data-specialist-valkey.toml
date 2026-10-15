@@ -2,7 +2,7 @@
 name = "data-specialist-valkey"
 description = """Valkey specialist, including Redis-protocol compatibility, covering data structures, persistence, replication and failover. Use when valkey.conf, sentinel.conf, a Valkey or Redis client or Lua scripts are present. Escalate to opus/high when failover, consistency or several services interact, such as replica lag, split brain or client reconnects."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 
 developer_instructions = """
 # Valkey Specialist

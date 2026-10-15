@@ -2,7 +2,7 @@
 name = "developer-specialist-python"
 description = """Python specialist — modern Python 3.14+, type hints, async patterns, PEP standards, mypy strict, ruff and pytest. Use when a change touches .py files, pyproject.toml or requirements files, or a Python design question. Escalate to opus/high when the change spans several modules, asyncio or thread concurrency, or a protocol."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 
 developer_instructions = """
 # Python Specialist - Academic Rigor

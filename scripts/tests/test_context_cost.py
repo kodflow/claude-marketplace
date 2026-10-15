@@ -88,6 +88,16 @@ def fixture():
           "Path `plugins/kodflow-beta/skills/lint/SKILL.md` is a path, not a call.\n"
           "`kodflow-alpha:beta-worker` claims an agent it does not own.\n")
 
+    # Skills: effort pinned, model inherited, unless the skill forks
+    for name, fm in (("sk-clean", "model: inherit\neffort: high\n"),
+                     ("sk-nomodel", "effort: low\n"),
+                     ("sk-noeffort", "model: inherit\n"),
+                     ("sk-switch", "model: opus\neffort: high\n"),
+                     ("sk-fork", "model: opus\neffort: high\ncontext: fork\n"),
+                     ("sk-nulleffort", "model: inherit\neffort: null\n")):
+        write(alpha / "skills" / name / "SKILL.md",
+              f"---\nname: {name}\ndescription: Short.\n{fm}---\n\nBody.\n")
+
     write(beta / "agents" / "beta-worker.md",
           "---\nname: beta-worker\ndescription: Short.\nmodel: haiku\neffort: low\n---\n\nBody.\n")
     write(beta / "skills" / "beta-skill" / "SKILL.md",
@@ -133,6 +143,13 @@ def main():
          ("model_effort", A + "commented-effort.md") in hits)
     case("a real effort with a trailing comment is pinned",
          ("model_effort", A + "trailing-comment.md") not in hits)
+    SK = "plugins/kodflow-alpha/skills/"
+    case("a skill with effort and model: inherit is clean",  ("model_effort", SK + "sk-clean/SKILL.md") not in hits)
+    case("a skill with effort and no model is clean",        ("model_effort", SK + "sk-nomodel/SKILL.md") not in hits)
+    case("a skill with no effort is flagged",                ("model_effort", SK + "sk-noeffort/SKILL.md") in hits)
+    case("`effort: null` on a skill is not pinned",          ("model_effort", SK + "sk-nulleffort/SKILL.md") in hits)
+    case("a skill naming a model is flagged",                ("model_effort", SK + "sk-switch/SKILL.md") in hits)
+    case("a forked skill may name its model",                ("model_effort", SK + "sk-fork/SKILL.md") not in hits)
     case("a wrapped description is measured whole",  ("description_budget", A + "wordy.md") in hits)
     case("a short description is clean",             ("description_budget", A + "pinned.md") not in hits)
     case("an <example> in a description is flagged", ("description_budget", A + "exampled.md") in hits)

@@ -2,7 +2,7 @@
 name = "developer-specialist-rust"
 description = """Rust specialist — ownership, lifetimes, async patterns, unsafe code, clippy pedantic and rustfmt. Use when a change touches .rs files, Cargo.toml or Cargo.lock, or a Rust API or design question. Escalate to opus/high when the change spans several crates, unsafe code, async concurrency, or a protocol."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 
 developer_instructions = """
 # Rust Specialist - Academic Rigor

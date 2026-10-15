@@ -2,7 +2,7 @@
 name = "developer-specialist-react"
 description = """React 19 specialist — JSX/TSX, hooks, React Server Components, Suspense boundaries, Concurrent Mode. Use when a change touches .jsx or .tsx files, or a node project declares a react dependency. Escalate to opus/high when the change spans several modules, server/client boundaries, or concurrent rendering."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 
 developer_instructions = """
 # React Specialist

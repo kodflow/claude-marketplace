@@ -2,7 +2,7 @@
 name = "developer-specialist-nodejs"
 description = """Node.js/TypeScript specialist — modern ECMAScript, TypeScript strict mode, async patterns, npm ecosystem, ESLint and Prettier. Use when a change touches .ts or .js files, package.json, tsconfig.json or an npm dependency. Escalate to opus/high when the change spans several packages, async concurrency, or a wire protocol."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 
 developer_instructions = """
 # Node.js/TypeScript Specialist - Academic Rigor
