@@ -49,6 +49,7 @@ import {
   beatText,
   composerFile,
   configDir,
+  grantFile,
   mergeTokenFile,
   safe,
   sessionDir,
@@ -444,9 +445,14 @@ async function blast($: any, line: string): Promise<{ deny: string } | undefined
 const gatedText = ($: any): Promise<string | undefined> =>
   $.fs.read(`${$.plugin.root}/hooks/gated-models.txt`).catch(() => undefined);
 
-// Who gave the session its grant, and when; the key is the session's.
+// Who gave the session its grant, and when; the key is the session's. The
+// same grant is written as <session>/fable-granted for the shell, which
+// judges skill frontmatter and the dispatches made while the mod is gone.
 async function grantSession($: any, session: string, by: string): Promise<void> {
-  await $.store.set(grantKey(session), { at: Math.floor(Date.now() / 1000), by });
+  const at = Math.floor(Date.now() / 1000);
+  await $.store.set(grantKey(session), { at, by });
+  const cfg = await config($);
+  if (cfg) await $.fs.write(grantFile(sessionDir(cfg, session)), `${at}\n${by}\n`).catch(() => undefined);
 }
 
 // What agent.spawn's judge reaches; every raw value it reads is kept in `raw`

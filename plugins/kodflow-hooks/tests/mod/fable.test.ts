@@ -125,6 +125,7 @@ test("a fable frontmatter, the user present: asked once, the yes holds for the s
   expect(h.asked.length).toBe(1);
   expect(h.asked[0]).toContain("frontmatter model");
   expect(h.store.get(`fable:${SID}`)).toEqual(expect.objectContaining({ by: "asked at a spawn" }));
+  expect(h.files.get(`${CFG}/kodflow/sessions/${SID}/fable-granted`)).toMatch(/^\d{10}\nasked at a spawn\n$/);
   expect(h.spawned.every((s) => s.model === undefined)).toBe(true);
 });
 

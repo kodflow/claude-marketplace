@@ -52,6 +52,64 @@ _forge_ok() {
     return 1
 }
 
+# GATED MODELS · the shell's fallback (model-policy.md §6). The mod judges
+# every spawn while it beats (hooks/mod/fable.ts) and holds the session's
+# grant; without it nothing here can ask or remember a yes, so a dispatch
+# that names a gated model — the call's `model`, else its definition's
+# frontmatter, else CLAUDE_CODE_SUBAGENT_MODEL — is refused. The parent's
+# model is not in a PreToolUse payload: an `inherit` under a gated main
+# model passes here (a README hole). Pure bash and awk: it runs before the
+# jq check, so a machine without jq still has it.
+_fable_sd() {
+    local sid=""
+    [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
+    FABLE_SD=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/${sid:-default}
+}
+_fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
+    printf '═══════════════════════════════════════════════\n  ❌ %s\n═══════════════════════════════════════════════\n' "GATED MODEL REFUSED — $1 ($2)" >&2
+    printf '  %s\n' "A gated model (kodflow-hooks/hooks/gated-models.txt) runs only after the user's yes, once per session." "$3" \
+        "The user can also set KODFLOW_FABLE=allow." "[motif:fable]" >&2
+    exit 2
+}
+_fable_fast() {
+    case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
+    local L=${BASH_SOURCE[0]%/*}/lib sd m="" t="" why=""
+    _fable_sd; sd=$FABLE_SD
+    [ -f "$sd/fable-granted" ] && return 0
+    if . "$L/beat.sh" 2>/dev/null && kf_beat "$sd"; then return 0; fi
+    . "$L/agents.sh" 2>/dev/null || return 0
+    [[ $INPUT =~ \"model\":\ ?\"([^\"]*)\" ]] && m=${BASH_REMATCH[1]} && why="the call's model"
+    [[ $INPUT =~ \"subagent_type\":\ ?\"([^\"]*)\" ]] && t=${BASH_REMATCH[1]}
+    if [ -z "$m" ] && [ -n "$t" ]; then
+        local cwd=""
+        [[ $INPUT =~ \"cwd\":\ ?\"([^\"]*)\" ]] && cwd=${BASH_REMATCH[1]}
+        if kf_agent_def "$t" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_PROJECT_DIR:-$cwd}" && kf_fm_model "$KF_AGENT_DEF"; then
+            case "$KF_FM_MODEL" in inherit|INHERIT) ;; *) m=$KF_FM_MODEL; why="the frontmatter of $t" ;; esac
+        fi
+    fi
+    [ -z "$m" ] && [ -n "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ] && m=$CLAUDE_CODE_SUBAGENT_MODEL && why=CLAUDE_CODE_SUBAGENT_MODEL
+    kf_is_gated "$m" || return 0
+    _fable_refuse "$m" "$why" "The kodflow mod that asks for that yes is not loaded in this session: dispatch without that model, or load the mod (Claude Code 2.1.293+, /reload-plugins)."
+}
+
+# A skill whose frontmatter names a model switches the main conversation to
+# it. No mod event judges that switch (none was recorded for it), so the
+# shell does, mod or not: a gated model passes only with the session's grant,
+# the file the mod writes beside its store when the user said yes.
+_fable_skill() {
+    case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
+    local L=${BASH_SOURCE[0]%/*}/lib sk="" cwd=""
+    _fable_sd
+    [ -f "$FABLE_SD/fable-granted" ] && return 0
+    [[ $INPUT =~ \"skill\":\ ?\"([^\"]*)\" ]] && sk=${BASH_REMATCH[1]#/}
+    [ -n "$sk" ] || return 0
+    [[ $INPUT =~ \"cwd\":\ ?\"([^\"]*)\" ]] && cwd=${BASH_REMATCH[1]}
+    . "$L/agents.sh" 2>/dev/null || return 0
+    kf_skill_def "$sk" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_PROJECT_DIR:-$cwd}" && kf_fm_model "$KF_SKILL_DEF" || return 0
+    kf_is_gated "$KF_FM_MODEL" || return 0
+    _fable_refuse "$KF_FM_MODEL" "the frontmatter of the skill $sk" "Ask the user: a /model they type grants the session, and the skill can then run."
+}
+
 # FAST PATH, no jq. The PreToolUse matcher is the catch-all so the triage gate
 # sees every call, and one jq start costs ~30 ms on a slow CPU: the tools this
 # script does not handle are decided with bash regexes alone. They leave at
@@ -63,6 +121,17 @@ if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_
     case "$fp_tool" in
         Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__*tasks__task_*|mcp__kodflow-hooks__task_*) ;;
         Read|Glob|Grep|LS|ToolSearch|AskUserQuestion) exit 0 ;;
+        Skill)
+            _fable_skill
+            [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]] && exit 0
+            fp_sid=""
+            [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && fp_sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
+            [ -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/${fp_sid:-default}/triage-pending" ] || exit 0 ;;
+        Agent|Task)
+            # The gated-model fallback, every caller, no jq; then only the
+            # main thread goes on, to the routing gate (pre_agent).
+            _fable_fast
+            if [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]]; then exit 0; fi ;;
         *)
             # A forge tool that carries a message, a title, a body, a branch or
             # a merge goes on to the full path for every caller, subagents
@@ -1316,6 +1385,26 @@ pre_forge() {
 }
 
 # ============================================================================
+# PostToolUse · Agent / Task
+# ============================================================================
+# The other half of the delegation measurement, and what the subagent was
+# started on: the result carries its agentId and resolvedModel, the input
+# the per-call effort (tests/fixtures/agent-hooks.jsonl). on-agent.sh joins
+# them by agent id when the subagent leaves feedback. A foreground agent's
+# result arrives after its SubagentStop: that feedback names the model from
+# the agent's frontmatter instead.
+post_agent() {
+    ROOT_GUARD=dispatch
+    if [ "${KODFLOW_FEEDBACK:-}" != off ]; then
+        local row
+        row=$(printf '%s' "$INPUT" | jq -r '[(.tool_response.agentId // empty), (.tool_response.resolvedModel // ""), (.tool_input.effort // ""), (.tool_input.subagent_type // "general-purpose")] | select(length == 4) | map(tostring | gsub("[\t\n]"; " ")) | join("\t")' 2>/dev/null)
+        [ -n "$row" ] && mkdir -p "$SDIR" 2>/dev/null && printf '%s\n' "$row" >> "$SDIR/agent-models.tsv" 2>/dev/null
+    fi
+    _log
+    exit 0
+}
+
+# ============================================================================
 # PostToolUseFailure · any tool
 # ============================================================================
 post_failure() {
@@ -1333,6 +1422,43 @@ post_failure() {
         '{hookSpecificOutput:{hookEventName:"PostToolUseFailure",additionalContext:$c}}' 2>/dev/null
     _log
     exit 0
+}
+
+# ============================================================================
+# PreToolUse · Agent / Task: the routing gate (main thread)
+# ============================================================================
+# A main-thread dispatch to general-purpose — subagent_type left out or named —
+# whose description names the technology of an installed specialist runs
+# without that specialist's pinned model, effort and checks. It is refused
+# with the agent to use. The match is on the description alone, against
+# this session's routing-installed.tsv (lib/route.sh, written at
+# SessionStart, rebuilt here when missing or older than the shipped index).
+# `[general-purpose-ok]` in the description or the prompt is the deliberate
+# exception. The model writes that marker too: this gate steers, it does
+# not enforce. KODFLOW_ROUTE=off turns it off. No index, no jq: it passes.
+pre_agent() {
+    [ "$EV" = PreToolUse ] && [ -z "$AID" ] || { _log; exit 0; }
+    [ "${KODFLOW_ROUTE:-}" = off ] && { _log; exit 0; }
+    local st desc idx hits line agent kw
+    eval "$(printf '%s' "$INPUT" | jq -r '@sh "st=\(.tool_input.subagent_type // "") desc=\(.tool_input.description // "")"' 2>/dev/null)" || { _log; exit 0; }
+    case "$st" in ""|general-purpose) ;; *) _log; exit 0 ;; esac
+    case "$INPUT" in *'[general-purpose-ok]'*) ROOT_GUARD=route-override; _log; exit 0 ;; esac
+    . "$LIB/route.sh" 2>/dev/null || { _log; exit 0; }
+    idx=$SDIR/routing-installed.tsv
+    kf_route_fresh "$idx" || kf_route_install "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "$idx"
+    if ! [ -s "$idx" ]; then ROOT_GUARD=route-noindex; _log; exit 0; fi
+    hits=$(kf_route_match "$idx" "$desc")
+    [ -n "$hits" ] || { _log; exit 0; }
+    local -a use=()
+    while IFS=$'\t' read -r agent kw; do
+        [ -n "$agent" ] && use+=("subagent_type: $agent  (the description names: ${kw//,/, })")
+    done <<< "$hits"
+    ROOT_GUARD=route-deny
+    _motif_block route "DISPATCH TO THE SPECIALIST — \"${desc:0:80}\" names an installed specialist's technology" \
+        "${use[@]}" \
+        "general-purpose would run it without that agent's pinned model, effort and checks." \
+        "Several lines: dispatch each specialist its part. A deliberate general-purpose dispatch carries [general-purpose-ok] in its description or prompt." \
+        "KODFLOW_ROUTE=off turns this gate off."
 }
 
 # ============================================================================
@@ -1380,7 +1506,7 @@ fi
 # Tools this script has nothing to do with leave at once, unlogged: the
 # matcher is wide only so the triage gate above sees every call.
 case "$EV/$TOOL" in
-    PreToolUse/Bash|PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit|PreToolUse/TaskCreate|PreToolUse/TodoWrite) ;;
+    PreToolUse/Bash|PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit|PreToolUse/TaskCreate|PreToolUse/TodoWrite|PreToolUse/Agent|PreToolUse/Task) ;;
     # A task tool reaches this script only from an old install of the tasks
     # MCP; the mod's own are answered before the shell. Logged, nothing else.
     PreToolUse/mcp__*tasks__task_*|PreToolUse/mcp__kodflow-hooks__task_*) _log; exit 0 ;;
@@ -1395,11 +1521,18 @@ esac
 case "$EV/$TOOL" in
     PreToolUse/Bash)                                        pre_bash ;;
     PreToolUse/TaskCreate|PreToolUse/TodoWrite)             pre_builtin_tasks ;;
+    PreToolUse/Agent|PreToolUse/Task)                       pre_agent ;;
     PreToolUse/Write|PreToolUse/Edit|PreToolUse/MultiEdit|PreToolUse/NotebookEdit)     pre_edit ;;
     PostToolUse/Write|PostToolUse/Edit|PostToolUse/MultiEdit|PostToolUse/NotebookEdit) post_edit ;;
     PostToolUseFailure/*)                                   post_failure ;;
     # OBSERVE: the other half of the measurement — how often the main thread
     # delegated, counted against how often it was stopped.
-    PostToolUse/Task|PostToolUse/Agent)                     ROOT_GUARD=dispatch; _log; exit 0 ;;
+    PostToolUse/Task|PostToolUse/Agent)                     post_agent ;;
+    # A subagent's report through the hand-back tool (auto mode): its
+    # feedback section is kept as at SubagentStop (lib/feedback.sh).
+    PostToolUse/SubagentHandback)
+        AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // ""' 2>/dev/null)
+        . "$LIB/feedback.sh" 2>/dev/null && kf_feedback "$INPUT" "$SID" "$AID" "$AGENT_TYPE" "$PROJECT_DIR"
+        _log; exit 0 ;;
     *)                                                      _log; exit 0 ;;
 esac

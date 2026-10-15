@@ -18,7 +18,7 @@ need **Claude Code 2.1.293 or later**.
 `hooks/mod/register.ts` is wiring only, one `on(...)` per event; the logic
 sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
 `paths.ts`, `lint.ts`, `shell.ts`, `patterns.ts`, `guards.ts`, `merge.ts`,
-`blast.ts`, `filter.ts`, `veil.ts`, `pipeline.ts`, and for the three machine
+`blast.ts`, `filter.ts`, `veil.ts`, `pipeline.ts`, `fable.ts`, and for the three machine
 guards `machine-guards.ts` over a port, with `modwall.ts`, `collision.ts`,
 `zsh.ts`), which never touch `$`: the engine follows `$` and `on` only inside
 register.ts.
@@ -40,6 +40,9 @@ register.ts.
 | `session.start` | **zsh-safe**: `ZDOTDIR` → `hooks/zsh`, the user's own in `KODFLOW_USER_ZDOTDIR` (`""` when unset); `hooks/zsh/.zshenv` gives ZDOTDIR back, sources the user's `.zshenv`, then `setopt nonomatch noequals`: `echo *.none` prints `*.none` instead of failing |
 | `tool.call` on `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | **collision-guard**: when another session of this machine, beating within 30 min, wrote the same file within 30 min (its `edits.tsv`), asks Continue / Move to a worktree (the model is told to call `EnterWorktree`) / Cancel, but only when the user typed a prompt at the terminal (`origin.kind` `composer`, noted by `prompt.submit`) in the last 10 minutes, the presence rule of the merge gate: otherwise it journals the collision to the debug log and lets the edit through, so a night run never waits on a question; once written, notes `<seconds>\t<path>` in `<config>/kodflow/sessions/<session>/edits.tsv` (no prompt, no content); `<config>/projects` is never checked |
 | `session.end` | empties this session's `edits.tsv` |
+| `agent.spawn` | **gated models**: passes or refuses a spawn on the model it would run on, never writes one (below) |
+| `classic.PreModelSwitch` | a `/model` the user typed or picked grants the session a gated model; a switch from the SDK asks, and is refused with nobody at the prompt |
+| `prompt.submit` from the composer | writes `<config>/kodflow/sessions/<session>/composer-at` (seconds), the presence `on-stop.sh` reads before proposing agent feedback |
 
 ### The Bash pipeline
 
@@ -151,19 +154,22 @@ fails by accident blocks every shell call of the session.
 | `PreToolUse` · Write/Edit | `on-tool.sh` | main thread writing inside a git work tree (memory and Claude configuration excepted) · no file path | the main thread producing into a repository (delegation gate) · protected path (defaults or `.claude/protected-paths`) | — | project-linter pre-check when a server listens · log |
 | `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` · from the main thread: a merge without the mod's token or an exemption | — | log; a main-thread merge is tagged `root_guard: merge` (refused), `merge-ok` or `merge-exempt` |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
-| `PostToolUse` · Task/Agent | `on-tool.sh` | — | — | — | log tagged `root_guard: dispatch` |
+| `PreToolUse` · Agent/Task | `on-tool.sh` | gated-model fallback first, every caller, no jq; then the main thread only | a gated model when the mod does not beat · from the main thread, a `general-purpose` dispatch whose description names an installed specialist's technology (routing gate, below) | — | log, `root_guard: route-deny`, `route-override` or `route-noindex` |
+| `PreToolUse` · Skill | `on-tool.sh` | — | a skill whose frontmatter names a gated model, without the session's grant | — | — |
+| `PostToolUse` · Task/Agent | `on-tool.sh` | — | — | — | `agent-models.tsv` (agent id, resolved model, per-call effort) · log tagged `root_guard: dispatch` |
+| `PostToolUse` · SubagentHandback | `on-tool.sh` | — | — | — | the report's agent feedback, as at `SubagentStop` |
 | `PostToolUse` · other | `on-tool.sh` | — | — | — | log |
 | `PostToolUseFailure` | `on-tool.sh` | — | — | — | remediation hint · log (error redacted) |
-| `SessionStart` | `on-session.sh` | — | — | the open tasks to reconcile, while the mod beats · post-compaction rules on `compact` · a warning when rtk is absent · a warning to the user (`systemMessage`) and to Claude when `disableAllHooks` is set, when `CLAUDE_CODE_PLUGIN_DIRS` is set, or when an enabled plugin, a skills directory or a plugin dir outside the kodflow marketplace declares `modules` · the same warning when an installed guard (`on-tool.sh`, `merge-exemptions.txt`, `hooks/patterns/*.txt`) differs from `hooks/fingerprints.sha256`, when that file is missing, or when it differs from the marketplace clone's (D8: nothing is blocked; the file is generated by `scripts/hooks-fingerprints.sh` and checked by CI) | log |
+| `SessionStart` | `on-session.sh` | — | — | `routing-installed.tsv` for the routing gate · a notice when the session starts on a gated model · the open tasks to reconcile, while the mod beats · post-compaction rules on `compact` · a warning when rtk is absent · a warning to the user (`systemMessage`) and to Claude when `disableAllHooks` is set, when `CLAUDE_CODE_PLUGIN_DIRS` is set, or when an enabled plugin, a skills directory or a plugin dir outside the kodflow marketplace declares `modules` · the same warning when an installed guard (`on-tool.sh`, `merge-exemptions.txt`, `hooks/patterns/*.txt`) differs from `hooks/fingerprints.sha256`, when that file is missing, or when it differs from the marketplace clone's (D8: nothing is blocked; the file is generated by `scripts/hooks-fingerprints.sh` and checked by CI) | log |
 | `SessionEnd` | `on-session.sh` | — | — | — | one log line with the session's event count (1.5 s budget) |
 | `PreCompact` | `on-session.sh` | — | — | — | log |
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
 | `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · while the mod beats: the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists, and the triage directive with the epic mandatory on `task_create` · the delegation line (code in a repository: dispatch or message the epic's subagent) unless `KODFLOW_ROOT=off` · no triage directive on a turn the user did not type · a `systemMessage` when the mod is gone | raise the triage gate (mod beating) and reset the Stop loop counter, except on a turn the user did not type · log |
 | `Notification` | `on-user.sh` | — | — | bell (`terminalSequence`) on idle, permission and elicitation prompts | log |
-| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR) | running-agents registry, with the main agent's active epic at start · log |
-| `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · log |
+| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR, and rule 6: end with `## Agent feedback`) | running-agents registry, with the main agent's active epic at start · log |
+| `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · its agent feedback in `agent-feedback.jsonl` · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · more untied tasks `in_progress` than free workers, every turn · a task `in_progress` whose `worker` has stopped, once per set · a main-agent task `in_progress` on an epic no running subagent is attributed to and not tied to a running `worker` (the main thread producing), every turn, unless `KODFLOW_ROOT=off` | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · more untied tasks `in_progress` than free workers, every turn · a task `in_progress` whose `worker` has stopped, once per set · a main-agent task `in_progress` on an epic no running subagent is attributed to and not tied to a running `worker` (the main thread producing), every turn, unless `KODFLOW_ROOT=off` · the subagents' new agent feedback, once, to a user present in the last 10 minutes, with the instruction to ask before any issue | bell · log |
 
 ## Main thread = reviewer, code is delegated
 
@@ -311,6 +317,103 @@ grep -c '"root_guard":"deny"' "$L"; grep -c '"root_guard":"dispatch"' "$L"
 `lib/epics.jq` is the hooks' read side of `tasks.json` (v1 or v2, malformed
 read as empty), shared by `on-user.sh`, `on-agent.sh` and `on-stop.sh`.
 
+## Dispatches: specialists, gated models, agent feedback
+
+Three behaviours around every subagent dispatch, each with its own kill
+switch. They are wired on the payloads the CLI actually sends, recorded once
+with a throwaway recorder plugin (command hooks on every agent event, a mod on
+`agent.spawn`, `classic.PreModelSwitch`, `prompt.submit` and `tool.call`) and
+committed as `tests/fixtures/agent-hooks.jsonl`, `agent-spawn.jsonl` and
+`agent-mod-events.jsonl` (CLI 2.1.300, headless, default and auto permission
+modes, paths rewritten).
+
+### The routing gate (`KODFLOW_ROUTE=off`)
+
+A main-thread Agent call that leaves `subagent_type` out or names
+`general-purpose`, and whose `description` names the technology of an
+installed specialist, is refused with the `subagent_type` to use instead
+(`[motif:route]`): `general-purpose` would run it without that agent's pinned
+model, effort and checks. The match is on the description alone — whole
+lower-case words of three letters or more, and file extensions at the end of
+a word — against `<config>/kodflow/sessions/<session>/routing-installed.tsv`.
+That file is `hooks/routing-index.tsv` filtered to the plugins
+`installed_plugins.json` lists, written at `SessionStart` and rebuilt at the
+first dispatch when it is missing or older than the shipped index; with no
+index at all the call passes (`route-noindex`). `hooks/routing-index.tsv` is
+generated from the Keywords column of `skills/_shared/specialists.md` by
+`scripts/build-routing-index.py`, and CI fails when the two disagree.
+
+`[general-purpose-ok]` in the description or the prompt is the deliberate
+exception, written by every skill that means a general-purpose dispatch (the
+`/challenge` lenses, `/debug`, `/search`, `/plan`'s explorers, `/refine`'s and
+`route-agent.sh`'s fallback, `/review`, `/infra`, `/ktn`). **The model writes
+that marker too: the gate steers, it does not enforce.** Subagents are not
+gated.
+
+### Gated models (`KODFLOW_FABLE=allow|off`)
+
+`hooks/gated-models.txt` (one token a line, a substring of the lower-cased
+model id; CI holds it byte-identical to `skills/_shared/gated-models.txt`)
+lists the models no dispatch reaches without the user's yes, once per
+session — Fable today (model-policy §6).
+
+- **The mod** judges every `agent.spawn` on the model it would run on: the
+  call's `model`, else the definition's frontmatter (`plugin:name` in that
+  plugin's installed copy, as `installed_plugins.json` names it; a bare name
+  in the project, the user's agents, then any plugin), else
+  `CLAUDE_CODE_SUBAGENT_MODEL`, else `parentModel`. A built-in with no file
+  (`Explore`, a workflow's agents) is judged on the last two. It passes or
+  refuses, and never writes `model`. A gated one passes with the session's
+  grant (`$.store` `fable:<session>`, mirrored as `<session>/fable-granted`
+  for the shell); else, to a user who typed in the last 10 minutes,
+  `$.ui.ask` once, a yes granting the session; nobody there, a refusal with
+  the reason (`[motif:fable]`). A throw refuses only when a raw input names a
+  gated model; otherwise the spawn goes on, with a toast and a log line.
+- **A `/model` the user types** (recorded: `source: command`), or picks, is
+  the consent: `classic.PreModelSwitch` grants the session. From the SDK it
+  asks like a spawn.
+- **The shell**, while the mod does not beat, refuses any Agent call whose
+  per-call `model` or definition frontmatter names a gated model, from every
+  caller, without jq (bash regexes, a bounded awk read of the frontmatter,
+  quote- and CRLF-safe). It always refuses a `Skill` whose frontmatter names
+  one without the grant: a skill's model switches the main conversation, and
+  no mod event judges that switch.
+- `SessionStart` says once, to the user and to Claude, when the session itself
+  starts on a gated model (the payload's `model`, absent in a headless run,
+  else the settings', else `ANTHROPIC_MODEL`).
+
+### Agent feedback (`KODFLOW_FEEDBACK=off`)
+
+`SubagentStart` adds rule 6: end the answer with `## Agent feedback` (an
+`agent_feedback` key in JSON) naming what in the agent's own instructions was
+wrong, missing or ambiguous, or nothing. `SubagentStop` (`last_assistant_message`)
+and `PostToolUse` `SubagentHandback` (`tool_input.message`, auto mode) both
+carry the report; its feedback is kept once per agent and text as one line of
+`<session>/agent-feedback.jsonl` (`lib/feedback.jq`): time, session, agent
+type and id, model, effort, `source` and the feedback, redacted with the log's
+rules, under 1 KB, written under `kf_lock`. The model is the one the parent's
+`PostToolUse Agent` recorded for that agent id (`agent-models.tsv`, `source:
+tool_result`), else the definition's frontmatter (`source: frontmatter`); the
+effort is the payload's own, which is the subagent's effective level. At
+`Stop`, a new set of entries is proposed once, to a user present in the last
+10 minutes (`composer-at`): show the diff to each agent's definition, and ask
+before opening any issue on kodflow/claude-marketplace.
+
+### Holes — what was not observed, and is not claimed
+
+| Case | What happens |
+|------|--------------|
+| A session launched on a gated model (`--model`, the settings' `model`, `ANTHROPIC_MODEL`) | no switch event: the `SessionStart` notice only. Its subagents that inherit it are asked by the mod; without the mod the shell cannot see the parent's model and lets them through |
+| `inherit` under an unknown main model, in the shell fallback | passes: a `PreToolUse` payload carries no parent model |
+| Automatic model switches made by the engine (fallback on overload or a limit) | not recorded; if they raise `PreModelSwitch` with `source: sdk` they ask or are refused like one |
+| The model picker, and `set_model` from the SDK | not recorded (only `/model`, `source: command`); handled by the type's documented values |
+| A fork (`subagent_type: fork`) | not recorded: the recorded build had no fork type. Judged on `parentModel`, which the types say a fork always inherits |
+| The resume of an agent granted earlier | not recorded; judged as a spawn, so a resume in another session asks again |
+| `turn.step` or another plugin rewriting a spawn's model after this mod | not judged; modwall refuses user-tier modules from outside kodflow, a managed one is not judged |
+| A `Skill` called from inside a subagent | not recorded; judged as from the main thread |
+| `[general-purpose-ok]` | written by the model as easily as by a skill: the routing gate steers |
+| A foreground subagent's model in its feedback | its `PostToolUse Agent` comes after its `SubagentStop` (recorded): the frontmatter's model is named instead |
+
 ## The task list (mod)
 
 Six tools the mod registers and answers itself (`hooks/mod/tasks.ts`):
@@ -435,7 +538,8 @@ files, proven by a corpus recorded from it (Tests, below).
   atomic rename; one not obtained in 2 s is written through, never blocking.
 
 `tests/run-tests.sh` runs the mod's node suite (when node can run TypeScript),
-then `test_root_gate.sh` and `test_lock.sh`.
+then `test_root_gate.sh`, `test_agents.sh` (routing gate, gated-model fallback,
+agent feedback, on the recorded payloads) and `test_lock.sh`.
 
 ## What the log is
 
@@ -494,12 +598,15 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `ROOT_OK=1` prefix on a command | that line is exempt from the delegation gate |
 | `KODFLOW_ROOT=off` | the delegation gate, its Stop rule and its prompt line are off for the session |
 | `KODFLOW_MOD=off` | the mod hooks nothing: no task tools, no beat, attribution left to Claude Code |
+| `KODFLOW_ROUTE=off` | the routing gate is off for the session |
+| `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
+| `KODFLOW_FEEDBACK=off` | no rule 6, nothing kept, nothing proposed |
 
 ## Tests
 
 ```
 bash scripts/tests/test_hooks.sh
-bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate
+bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh
 claude plugin validate --json plugins/kodflow-hooks
 claude plugin test plugins/kodflow-hooks         # tests/mod/*.test.ts, in the engine
 node plugins/kodflow-hooks/tests/mod/run-node.ts # corpora, real disk, several processes, invariants

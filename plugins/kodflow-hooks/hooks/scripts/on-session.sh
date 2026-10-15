@@ -9,7 +9,7 @@ set +e
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
-eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") SOURCE=\(.source // "") FILE=\(.file_path // "")"' 2>/dev/null)" || exit 0
+eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") SOURCE=\(.source // "") FILE=\(.file_path // "") MODEL=\(.model // "")"' 2>/dev/null)" || exit 0
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
@@ -128,10 +128,34 @@ Context was compacted: verify the task state before continuing.'
         fi
     fi
 
+    cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+
+    # The routing gate's index for this session (on-tool.sh, pre_agent): the
+    # shipped one, filtered to the plugins installed here.
+    if [ "${KODFLOW_ROUTE:-}" != off ] && . "$LIB/route.sh" 2>/dev/null; then
+        kf_route_install "$cfg" "$sdir/routing-installed.tsv"
+    fi
+
+    # A session that starts on a gated model was not asked: --model, the
+    # model of the settings or ANTHROPIC_MODEL chose it. Said once; the
+    # payload carries no model in a headless run (tests/fixtures), so the
+    # settings and the environment are read too, the most specific first.
+    notice=""
+    case "${KODFLOW_FABLE:-}" in allow|off) ;; *)
+        smodel=$MODEL
+        for f in "$PROJECT_DIR/.claude/settings.local.json" "$PROJECT_DIR/.claude/settings.json" "$cfg/settings.json"; do
+            [ -n "$smodel" ] && break
+            [ -f "$f" ] && smodel=$(jq -r '.model // empty | strings' "$f" 2>/dev/null)
+        done
+        smodel=${smodel:-${ANTHROPIC_MODEL:-}}
+        if . "$LIB/agents.sh" 2>/dev/null && kf_is_gated "$smodel"; then
+            notice="kodflow-hooks: this session starts on $smodel, a gated model (gated-models.txt), chosen at launch rather than agreed. Subagents that inherit it are asked for once; /model opus moves the session off it."
+        fi ;;
+    esac
+
     # OBSERVE: what can switch these guards off, or run code beside them. Not
     # blocked (the settings are the user's), said to the user and to Claude.
     warn=""
-    cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
     for f in "$cfg/settings.json" "$cfg/settings.local.json" "$PROJECT_DIR/.claude/settings.json" "$PROJECT_DIR/.claude/settings.local.json"; do
         [ -f "$f" ] && jq -e '.disableAllHooks == true' "$f" >/dev/null 2>&1 \
             && warn="$warn"$'\n'"- disableAllHooks is true in $f: every hook, these guards included, is off."
@@ -154,11 +178,16 @@ Context was compacted: verify the task state before continuing.'
     warn="$warn$(_fingerprints "$cfg")"
 
     # One document per hook: every part above joins a single context.
-    if [ -n "$warn" ]; then
-        ctx="${ctx:+$ctx
+    if [ -n "$warn" ] || [ -n "$notice" ]; then
+        msg=""
+        [ -n "$warn" ] && { ctx="${ctx:+$ctx
 
-}## kodflow-hooks — guards at risk$warn"
-        jq -n -c --arg c "$ctx" --arg m "kodflow-hooks: guards at risk$warn" \
+}## kodflow-hooks — guards at risk$warn"; msg="kodflow-hooks: guards at risk$warn"; }
+        [ -n "$notice" ] && { ctx="${ctx:+$ctx
+
+}$notice"; msg="${msg:+$msg
+}$notice"; }
+        jq -n -c --arg c "$ctx" --arg m "$msg" \
             '{systemMessage:$m, hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$c}}' 2>/dev/null
     elif [ -n "$ctx" ]; then
         _context "$ctx"
