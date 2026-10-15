@@ -25,12 +25,22 @@ export function gateMode(value: string | undefined): Gate {
   return /^allow$/.test(v) ? "pass" : "on";
 }
 
-/** The tokens of gated-models.txt; a missing or empty file gates nothing. */
+/** The tokens of gated-models.txt, a trailing comment dropped; a missing or empty file gates nothing. */
 export function parseGated(text: string | undefined): string[] {
   return (text ?? "")
     .split(/\r?\n/)
-    .map((l) => l.replace(/\s+/g, "").toLowerCase())
-    .filter((l) => l !== "" && !l.startsWith("#"));
+    .map((l) => l.replace(/#.*$/, "").replace(/\s+/g, "").toLowerCase())
+    .filter((l) => l !== "");
+}
+
+/**
+ * What a check that threw still refuses on: the shipped list, or, when even
+ * that could not be read, the one model the policy gates today. A throw must
+ * not turn an unreadable list into "nothing is gated".
+ */
+export function failClosedTokens(text: string | undefined): string[] {
+  const t = parseGated(text);
+  return t.length ? t : ["fable"];
 }
 
 export function isGated(model: unknown, tokens: readonly string[]): boolean {
@@ -46,7 +56,10 @@ export function isGated(model: unknown, tokens: readonly string[]): boolean {
  */
 export function frontmatterModel(text: string | undefined): string | undefined {
   if (!text) return undefined;
-  const lines = text.split("\n", 62).map((l) => l.replace(/\r$/, ""));
+  const lines = text
+    .replace(/^\uFEFF/, "")
+    .split("\n", 62)
+    .map((l) => l.replace(/\s+$/, ""));
   if (lines[0] !== "---") return undefined;
   for (const line of lines.slice(1, 61)) {
     if (line === "---") return undefined;
@@ -115,23 +128,31 @@ export type Candidate = {
 };
 
 /**
- * What a spawn would run on, by the engine's precedence: the call's model
- * (ignored for a fork, which inherits), the definition's model unless it is
- * `inherit`, CLAUDE_CODE_SUBAGENT_MODEL, the parent's.
+ * What a spawn would run on, by the engine's precedence: a fork inherits the
+ * parent's; CLAUDE_CODE_SUBAGENT_MODEL with CLAUDE_CODE_SUBAGENT_MODEL_FORCE
+ * set overrides everything else; then the call's model, the definition's
+ * (`inherit` meaning the parent's), CLAUDE_CODE_SUBAGENT_MODEL, the parent's.
  */
 export function candidate(
   e: { model?: unknown; fork?: unknown; parentModel?: unknown },
   definition: string | undefined,
   envModel: string | undefined,
+  force = false,
 ): Candidate {
-  if (!e.fork && typeof e.model === "string" && e.model) return { model: e.model, source: "call" };
-  if (!e.fork) {
-    const fm = frontmatterModel(definition);
-    if (fm && fm.toLowerCase() !== "inherit") return { model: fm, source: "frontmatter" };
-    if (envModel) return { model: envModel, source: "env" };
-  }
-  return { model: String(e.parentModel ?? ""), source: "parent" };
+  const parent: Candidate = { model: String(e.parentModel ?? ""), source: "parent" };
+  if (e.fork) return parent;
+  if (force && envModel) return { model: envModel, source: "env" };
+  if (typeof e.model === "string" && e.model) return { model: e.model, source: "call" };
+  const fm = frontmatterModel(definition);
+  if (fm && fm.toLowerCase() === "inherit") return parent;
+  if (fm) return { model: fm, source: "frontmatter" };
+  if (envModel) return { model: envModel, source: "env" };
+  return parent;
 }
+
+/** CLAUDE_CODE_SUBAGENT_MODEL_FORCE: set and not a "no". */
+export const forced = (v: string | undefined): boolean =>
+  !!v && !/^(0|false|no|off)$/i.test(v.trim());
 
 /** Whether any raw input names a gated model: a throw then refuses. */
 export function anyGated(raw: unknown[], tokens: readonly string[]): boolean {
@@ -149,6 +170,8 @@ export type SpawnPort = {
   /** the agent's definition text, undefined when there is no file */
   definition: (subagentType: string) => Promise<string | undefined>;
   envModel: () => Promise<string | undefined>;
+  /** CLAUDE_CODE_SUBAGENT_MODEL_FORCE */
+  envForce: () => Promise<boolean>;
   granted: () => Promise<boolean>;
   grant: () => Promise<void>;
   /** the user typed at the prompt in the last 10 minutes */
@@ -184,7 +207,7 @@ export async function judgeSpawn(
   if (!tokens.length) return { kind: "pass", why: "nothing gated" };
   const type = typeof e.subagentType === "string" ? e.subagentType : "";
   const def = type ? await port.definition(type) : undefined;
-  const c = candidate(e, def, await port.envModel());
+  const c = candidate(e, def, await port.envModel(), await port.envForce());
   if (!isGated(c.model, tokens)) return { kind: "pass", why: `ungated (${c.source})`, model: c.model };
   const why = `${c.source} model of ${type || "the agent"}`;
   if (mode === "pass") return { kind: "pass", why: `KODFLOW_FABLE (${why})`, model: c.model };

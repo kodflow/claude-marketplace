@@ -382,6 +382,7 @@ console.log("== the gated-model rule on the recorded payloads (tests/fixtures)")
     mode: async () => "on",
     definition: async (t) => defs[t],
     envModel: async () => undefined,
+    envForce: async () => false,
     granted: async () => false,
     grant: async () => undefined,
     present: () => false,
@@ -411,8 +412,10 @@ console.log("== the gated-model rule on the recorded payloads (tests/fixtures)")
     );
     const v = await judgeSpawn(e, port());
     check(v.kind === want[r.case], `${r.case}: ${want[r.case]}`, `${v.kind} (${v.why})`);
-    const g = await judgeSpawn(e, port({ granted: async () => true }));
-    check(g.kind === "pass", `${r.case}: passes once the session is granted`, g.why);
+    if (want[r.case] === "refuse") {
+      const g = await judgeSpawn(e, port({ granted: async () => true }));
+      check(g.kind === "pass" && /session grant/.test(g.why), `${r.case}: passes once the session is granted`, g.why);
+    }
   }
   const sw = lines("agent-mod-events.jsonl").find((r) => r.case === "classic.PreModelSwitch input (mod)")!.input;
   check(sw.source === "command", "a typed /model is recorded as source command", sw.source);

@@ -30,8 +30,8 @@ def gated_tokens(root):
     path = root / GATED
     if not path.is_file():
         return None
-    return [l.strip().lower() for l in path.read_text().splitlines()
-            if l.strip() and not l.strip().startswith("#")]
+    tokens = ("".join(l.split("#", 1)[0].split()).lower() for l in path.read_text().splitlines())
+    return [t for t in tokens if t]
 
 def model_fault(rel, m):
     if m is not None and m not in MODELS and not str(m).startswith("claude-"):

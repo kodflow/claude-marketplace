@@ -360,8 +360,11 @@ session — Fable today (model-policy §6).
 - **The mod** judges every `agent.spawn` on the model it would run on: the
   call's `model`, else the definition's frontmatter (`plugin:name` in that
   plugin's installed copy, as `installed_plugins.json` names it; a bare name
-  in the project, the user's agents, then any plugin), else
-  `CLAUDE_CODE_SUBAGENT_MODEL`, else `parentModel`. A built-in with no file
+  in the project, the user's agents, then any installed plugin; `inherit`
+  meaning `parentModel`), else `CLAUDE_CODE_SUBAGENT_MODEL`, else
+  `parentModel` — and `CLAUDE_CODE_SUBAGENT_MODEL` before all of them when
+  `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is set. One spawn is judged at a time,
+  so parallel dispatches put one question. A built-in with no file
   (`Explore`, a workflow's agents) is judged on the last two. It passes or
   refuses, and never writes `model`. A gated one passes with the session's
   grant (`$.store` `fable:<session>`, mirrored as `<session>/fable-granted`
@@ -412,6 +415,7 @@ before opening any issue on kodflow/claude-marketplace.
 | `turn.step` or another plugin rewriting a spawn's model after this mod | not judged; modwall refuses user-tier modules from outside kodflow, a managed one is not judged |
 | A `Skill` called from inside a subagent | not recorded; judged as from the main thread |
 | `[general-purpose-ok]` | written by the model as easily as by a skill: the routing gate steers |
+| `<session>/fable-granted` | a plain file the shell reads as the grant: anything that can write under `<config>/kodflow/sessions/` can grant itself. The mod's own grant is in `$.store`; the file only serves the shell |
 | A foreground subagent's model in its feedback | its `PostToolUse Agent` comes after its `SubagentStop` (recorded): the frontmatter's model is named instead |
 
 ## The task list (mod)

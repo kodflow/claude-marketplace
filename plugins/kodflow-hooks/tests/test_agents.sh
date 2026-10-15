@@ -31,21 +31,18 @@ mkdir -p "$IP/agents"
 printf -- '---\nname: developer-specialist-go\nmodel: sonnet\neffort: high\n---\nGo.\n' > "$IP/agents/developer-specialist-go.md"
 printf -- '---\r\nname: deep\r\nmodel: "fable" # pinned\r\n---\r\nbody\r\n' > "$IP/agents/deep.md"
 printf -- '---\nname: plain\nmodel: inherit\n---\n' > "$IP/agents/plain.md"
+printf -- '---\nname: bare\n---\n' > "$IP/agents/bare.md"
+printf -- '\357\273\277--- \nname: bom\nmodel: fable  \n---\n' > "$IP/agents/bom.md"
 printf 'no frontmatter\nmodel: fable\n' > "$IP/agents/broken.md"
-installed() {
-    cat > "$CFG/plugins/installed_plugins.json" <<EOF
-{
-  "version": 2,
-  "plugins": {
-    "$1@kodflow": [
-      {
-        "scope": "user",
-        "installPath": "$IP"
-      }
-    ]
-  }
-}
-EOF
+installed() {   # $1 the plugin at $IP, then other plugin names installed elsewhere
+    local first=$1 o; shift
+    {
+        printf '{\n  "version": 2,\n  "plugins": {\n'
+        for o in "$@"; do
+            printf '    "%s@other": [\n      {\n        "scope": "user",\n        "installPath": "%s"\n      }\n    ],\n' "$o" "$CFG/plugins/cache/other/$o/1"
+        done
+        printf '    "%s@kodflow": [\n      {\n        "scope": "user",\n        "installPath": "%s"\n      }\n    ]\n  }\n}\n' "$first" "$IP"
+    } > "$CFG/plugins/installed_plugins.json"
 }
 installed kodflow-specialists
 
@@ -79,8 +76,11 @@ grep -q 'kodflow-specialists:' "$SD/routing-installed.tsv" \
     || ok "a plugin that is not installed is filtered out"
 run on-tool.sh "$(agent "Fix the golang race")"
 expect_rc "so its keywords route nowhere" 0
-installed kodflow-specialists
+installed kodflow-specialists alpha beta
 run on-session.sh "$(fixture "SessionStart startup, headless (no model key)")"
+grep -q 'kodflow-specialists:developer-specialist-go' "$SD/routing-installed.tsv" \
+    && ok "several plugins installed: the index is still written (no newline in awk -v)" || bad "multi plugins" "$(cat "$SD/routing-installed.tsv" 2>&1 | head -2)"
+ls "$SD"/routing-installed.tsv.*.tmp >/dev/null 2>&1 && bad "tmp left" "" || ok "no temporary file left"
 
 echo "== the routing gate · main thread, general-purpose"
 run on-tool.sh "$(agent "Fix the golang race")"
@@ -88,6 +88,8 @@ run on-tool.sh "$(agent "Fix the golang race")"
     && ok "no subagent_type, a Go keyword: refused, the specialist named" || bad "route deny" "rc=$RC $ERR"
 run on-tool.sh "$(agent "Edit parser.go and main.go" general-purpose)"
 [ "$RC" -eq 2 ] && motif route && ok "general-purpose named, a .go extension: refused" || bad "route ext" "rc=$RC $ERR"
+run on-tool.sh "$(agent "$(printf 'Fix the\ngolang race')")"
+[ "$RC" -eq 2 ] && motif route && ok "a newline in the description does not slip past" || bad "route newline" "rc=$RC $ERR"
 run on-tool.sh "$(agent "Review the Helm chart and Dockerfile")"
 [ "$RC" -eq 2 ] && printf '%s' "$ERR" | grep -q 'devops-specialist-kubernetes' && printf '%s' "$ERR" | grep -q 'devops-specialist-docker' \
     && ok "two technologies: both specialists named" || bad "route two" "$ERR"
@@ -165,8 +167,17 @@ run on-tool.sh "$(agent "probe" Explore)"
 expect_rc "Explore, no file, passes" 0
 run on-tool.sh "$(agent "probe" kodflow-specialists:developer-specialist-go)" CLAUDE_CODE_SUBAGENT_MODEL=claude-fable-5-1
 expect_rc "the frontmatter wins over CLAUDE_CODE_SUBAGENT_MODEL" 0
+run on-tool.sh "$(agent "probe" kodflow-specialists:bare)" CLAUDE_CODE_SUBAGENT_MODEL=claude-fable-5-1
+[ "$RC" -eq 2 ] && motif fable && ok "no model of its own falls to CLAUDE_CODE_SUBAGENT_MODEL, gated: refused" || bad "fable env" "rc=$RC"
 run on-tool.sh "$(agent "probe" kodflow-specialists:plain)" CLAUDE_CODE_SUBAGENT_MODEL=claude-fable-5-1
-[ "$RC" -eq 2 ] && motif fable && ok "inherit falls to CLAUDE_CODE_SUBAGENT_MODEL, gated: refused" || bad "fable env" "rc=$RC"
+expect_rc "model: inherit is the parent's, unknown here: passes (a README hole)" 0
+run on-tool.sh "$(agent "probe" "" "x" haiku)" CLAUDE_CODE_SUBAGENT_MODEL=claude-fable-5-1 CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1
+[ "$RC" -eq 2 ] && motif fable && ok "CLAUDE_CODE_SUBAGENT_MODEL_FORCE wins over the call" || bad "fable force" "rc=$RC"
+run on-tool.sh "$(agent "probe" kodflow-specialists:bom)"
+[ "$RC" -eq 2 ] && motif fable && ok "a BOM and trailing spaces do not hide a gated frontmatter" || bad "fable bom" "rc=$RC"
+# A comment after a token in gated-models.txt
+GC=$T/gcopy; mkdir -p "$GC/scripts/lib"; cp "$S/lib/agents.sh" "$GC/scripts/lib/"; printf 'fable   # the note\n' > "$GC/gated-models.txt"
+( . "$GC/scripts/lib/agents.sh"; kf_is_gated claude-fable-5-1 ) && ok "a trailing comment in gated-models.txt keeps its token" || bad "gated comment" ""
 run on-tool.sh "$(agent "probe" "" "x" fable)" KODFLOW_FABLE=allow
 expect_rc "KODFLOW_FABLE=allow passes" 0
 run on-tool.sh "$(agent "probe" "" "x" fable)" KODFLOW_FABLE=off
@@ -198,7 +209,7 @@ expect_rc "a fresh mod beat leaves the judgement to the mod" 0
 rm -f "$SD/mod-beat"
 # No jq on the machine: the fallback still refuses
 NJ=$T/nojq; mkdir -p "$NJ"
-for b in bash cat tr awk date head sed grep cut cksum mkdir rm mv dirname env stat; do
+for b in bash cat tr awk date head sed grep cut cksum mkdir rm mv dirname env stat sort; do
     p=$(command -v "$b") && ln -sf "$p" "$NJ/$b"
 done
 OUT=$(agent "probe" "" "x" fable | PATH=$NJ "$NJ/bash" "$S/on-tool.sh" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err")

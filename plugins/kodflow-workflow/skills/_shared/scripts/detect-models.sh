@@ -18,8 +18,9 @@ GATED=""
 GF="${BASH_SOURCE[0]%/*}/../gated-models.txt"
 if [ -r "$GF" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%%#*}
     line=$(printf '%s' "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-    case "$line" in ''|'#'*) continue ;; esac
+    [ -n "$line" ] || continue
     GATED="${GATED:+$GATED|}$line"
   done < "$GF"
 fi

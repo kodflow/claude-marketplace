@@ -20,11 +20,15 @@ kf_route_install() {
     plugins=$(jq -r '.plugins // {} | keys[] | split("@")[0]' "$cfg/plugins/installed_plugins.json" 2>/dev/null)
     mkdir -p "${out%/*}" 2>/dev/null || return 1
     tmp=$out.$$.tmp
-    awk -F'\t' -v list="$plugins" '
-        BEGIN { n = split(list, p, "\n"); for (i = 1; i <= n; i++) if (p[i] != "") ok[p[i]] = 1 }
+    # Multi-line values go through the environment: BSD awk refuses a
+    # newline in a -v assignment.
+    KF_PLUGINS=$plugins awk -F'\t' '
+        BEGIN { n = split(ENVIRON["KF_PLUGINS"], p, "\n"); for (i = 1; i <= n; i++) if (p[i] != "") ok[p[i]] = 1 }
         /^#/ { print; next }
         NF == 3 { i = index($3, ":"); if (i == 0 || (substr($3, 1, i - 1) in ok)) print }' \
-        "$KF_ROUTE_INDEX" > "$tmp" 2>/dev/null && mv -f "$tmp" "$out" 2>/dev/null
+        "$KF_ROUTE_INDEX" > "$tmp" 2>/dev/null && mv -f "$tmp" "$out" 2>/dev/null && return 0
+    rm -f -- "$tmp" 2>/dev/null
+    return 1
 }
 
 kf_route_fresh() {
@@ -36,9 +40,9 @@ kf_route_fresh() {
 # exactly; an `ext` keyword the end of one (main.go ends in .go).
 kf_route_match() {
     [ -r "$1" ] || return 1
-    awk -F'\t' -v d="$2" '
+    KF_DESC=$2 awk -F'\t' '
         BEGIN {
-            d = tolower(d); gsub(/[^a-z0-9.+_-]+/, " ", d)
+            d = tolower(ENVIRON["KF_DESC"]); gsub(/[^a-z0-9.+_-]+/, " ", d)
             n = split(d, w, " ")
             for (i = 1; i <= n; i++) { t = w[i]; sub(/[.]+$/, "", t); if (t != "") tok[t] = 1 }
         }

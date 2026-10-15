@@ -31,7 +31,7 @@ def fixture(agent_fm="model: sonnet\neffort: medium\n", skill_fm="model: inherit
     if gated:
         g = root / GATED
         g.parent.mkdir(parents=True, exist_ok=True)
-        g.write_text("# gated\nfable\n")
+        g.write_text("# gated\nfable   # a trailing comment keeps the token\n")
     return root
 
 

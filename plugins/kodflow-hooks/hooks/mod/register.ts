@@ -88,8 +88,11 @@ import {
   anyGated,
   gateMode,
   grantKey,
+  failClosedTokens,
+  forced,
   judgeSpawn,
   judgeSwitch,
+  isGated,
   parseGated,
   refusal as fableRefusal,
   definitionPaths,
@@ -455,6 +458,10 @@ async function grantSession($: any, session: string, by: string): Promise<void> 
   if (cfg) await $.fs.write(grantFile(sessionDir(cfg, session)), `${at}\n${by}\n`).catch(() => undefined);
 }
 
+// One spawn judged at a time: two parallel dispatches on a gated model put
+// one question to the user, and the second reads the grant the first wrote.
+let judging: Promise<unknown> = Promise.resolve();
+
 // What agent.spawn's judge reaches; every raw value it reads is kept in `raw`
 // so that a throw can still refuse a spawn naming a gated model.
 async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort> {
@@ -469,7 +476,7 @@ async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort> {
         .read(`${cfg}/plugins/installed_plugins.json`)
         .catch(() => undefined);
       for (const path of definitionPaths(type, {
-        project: await projectDir($),
+        project: await projectDir($).catch(() => undefined),
         config: cfg,
         installed,
       })) {
@@ -486,6 +493,7 @@ async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort> {
       raw.push(v);
       return v || undefined;
     },
+    envForce: async () => forced(await $.env.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE")),
     granted: async () => !!(await $.store.get(grantKey(session))),
     grant: () => grantSession($, session, "asked at a spawn"),
     present,
@@ -537,17 +545,20 @@ export const register: Register = (on) => {
 
   // The gated-model rule at the spawn: pass or refuse, never a model written
   on("agent.spawn", async ($, e, next) => {
-    if (await off($)) return next(e);
     const raw: unknown[] = [e.model, e.parentModel];
     const at = { tool: "Agent", tool_use_id: e.tool_use_id, agentId: e.parentAgentId };
     let verdict;
     try {
-      verdict = await judgeSpawn(e, await spawnPort($, raw));
+      if (await off($)) return next(e);
+      const run = judging.then(async () => judgeSpawn(e, await spawnPort($, raw)));
+      judging = run.catch(() => undefined);
+      verdict = await run;
     } catch (err) {
-      const tokens = parseGated(await gatedText($));
+      const tokens = failClosedTokens(await gatedText($));
+      const named = raw.find((r) => typeof r === "string" && isGated(r, tokens));
       if (anyGated(raw, tokens)) {
         journal($, at, "fable", "error-refused", err);
-        return { deny: fableRefusal(String(e.model ?? e.parentModel ?? "a gated model"), "the check failed") };
+        return { deny: fableRefusal(String(named), "the check failed") };
       }
       journal($, at, "fable", "error-passed", err);
       await $.ui
@@ -566,26 +577,35 @@ export const register: Register = (on) => {
   // the SDK asks like a spawn, and is refused with nobody at the prompt
   on("classic.PreModelSwitch", async ($, e, next) => {
     const r = await next(e);
-    if (await off($)) return r;
-    const v = judgeSwitch(e, parseGated(await gatedText($)), gateMode(await $.env.get("KODFLOW_FABLE")));
-    const at = { tool: "PreModelSwitch", tool_use_id: e.prompt_id };
-    if (v.kind === "grant") await grantSession($, e.session_id, v.why);
-    let deny: string | undefined;
-    if (v.kind === "ask" && !(await $.store.get(grantKey(e.session_id)))) {
-      let answer = "nobody at the prompt";
-      if (present()) {
-        answer = await $.ui
-          .ask(`Switch this session to ${e.to_model}, a gated model (${v.why})?`, {
-            options: ["Switch", "Stay"],
-            header: "Gated model",
-          })
-          .catch(() => "dismissed");
+    try {
+      if (await off($) || r.permissionDecision === "deny") return r;
+      const session = await $.session.id();
+      const v = judgeSwitch(e, parseGated(await gatedText($)), gateMode(await $.env.get("KODFLOW_FABLE")));
+      const at = { tool: "PreModelSwitch", tool_use_id: e.prompt_id };
+      if (v.kind === "grant") await grantSession($, session, v.why);
+      let deny: string | undefined;
+      if (v.kind === "ask" && !(await $.store.get(grantKey(session)))) {
+        let answer = "nobody at the prompt";
+        if (present()) {
+          answer = await $.ui
+            .ask(`Switch this session to ${e.to_model}, a gated model (${v.why})?`, {
+              options: ["Switch", "Stay"],
+              header: "Gated model",
+            })
+            .catch(() => "dismissed");
+        }
+        if (answer === "Switch") await grantSession($, session, `asked at a ${v.why}`);
+        else deny = fableRefusal(String(e.to_model), `${v.why}; ${answer}`);
       }
-      if (answer === "Switch") await grantSession($, e.session_id, `asked at a ${v.why}`);
-      else deny = fableRefusal(String(e.to_model), `${v.why}; ${answer}`);
+      journal($, at, "fable", deny ? `refuse: ${v.why}` : `${v.kind}: ${v.why}`);
+      return deny ? { ...r, permissionDecision: "deny", permissionDecisionReason: deny } : r;
+    } catch (err) {
+      // After next(e): answer from r, never call next again. A gated target
+      // from anywhere but the user's own /model is refused.
+      const gated = isGated(e.to_model, failClosedTokens(await gatedText($)));
+      if (!gated || e.source === "command" || e.source === "picker") return r;
+      return { ...r, permissionDecision: "deny", permissionDecisionReason: fableRefusal(String(e.to_model), `the check failed: ${String((err as Error)?.message ?? err)}`) };
     }
-    journal($, at, "fable", deny ? `refuse: ${v.why}` : `${v.kind}: ${v.why}`);
-    return deny ? { ...r, permissionDecision: "deny", permissionDecisionReason: deny } : r;
   }).catch(($, e, next) => next(e));
 
   on("tool.call", async ($, e, next) => {

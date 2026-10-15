@@ -23,8 +23,9 @@ kf_gated_load() {
     KF_GATED=""
     [ -r "$f" ] || return 0
     while IFS= read -r line || [ -n "$line" ]; do
+        line=${line%%#*}
         line=$(printf '%s' "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-        case "$line" in ''|'#'*) continue ;; esac
+        [ -n "$line" ] || continue
         KF_GATED="$KF_GATED$line"$'\n'
     done < "$f"
 }
@@ -41,12 +42,23 @@ kf_is_gated() {
     return 1
 }
 
-# installed_plugins.json → the install paths of one plugin, any marketplace,
-# one a line. A JSON reader would be jq; this one only has to find
-# "<plugin>@…": [ … "installPath": "…" … ], which the CLI writes one key a line.
+# installed_plugins.json → the install paths of one plugin (any marketplace),
+# or of every plugin when PLUGIN is empty, one a line. jq when there is one;
+# without it, an awk read of the layout the CLI writes, one key a line.
 _kf_install_paths() {
     local json=$1/plugins/installed_plugins.json plugin=$2
     [ -r "$json" ] || return 0
+    if command -v jq >/dev/null 2>&1; then
+        jq -r --arg p "$plugin" '.plugins // {} | to_entries[] | select($p == "" or (.key | split("@")[0]) == $p)
+            | .value[]? | .installPath? // empty | strings' "$json" 2>/dev/null | awk '!seen[$0]++'
+        return 0
+    fi
+    if [ -z "$plugin" ]; then
+        awk '/"installPath"/ { v = $0; sub(/.*"installPath"[[:space:]]*:[[:space:]]*"/, "", v); sub(/".*/, "", v)
+                               if (v != "" && !(v in seen)) { seen[v] = 1; print v } }
+             NR > 5000 { exit }' "$json" 2>/dev/null
+        return 0
+    fi
     awk -v p="\"$plugin@" '
         index($0, p) == 1 || index($0, " " p) { inside = 1 }
         inside && /"installPath"/ {
@@ -72,9 +84,9 @@ kf_agent_def() {
         for p in "${project:+$project/.claude/agents/$name.md}" "$cfg/agents/$name.md"; do
             [ -n "$p" ] && [ -f "$p" ] && { KF_AGENT_DEF=$p; return 0; }
         done
-        for p in "$cfg"/plugins/cache/*/*/*/agents/"$name.md"; do
-            [ -f "$p" ] && { KF_AGENT_DEF=$p; return 0; }
-        done
+        while IFS= read -r p; do
+            [ -n "$p" ] && [ -f "$p/agents/$name.md" ] && { KF_AGENT_DEF=$p/agents/$name.md; return 0; }
+        done < <(_kf_install_paths "$cfg" "")
         return 1
     fi
     while IFS= read -r p; do
@@ -97,9 +109,9 @@ kf_skill_def() {
         for p in "${project:+$project/.claude/skills/$name/SKILL.md}" "$cfg/skills/$name/SKILL.md"; do
             [ -n "$p" ] && [ -f "$p" ] && { KF_SKILL_DEF=$p; return 0; }
         done
-        for p in "$cfg"/plugins/cache/*/*/*/skills/"$name"/SKILL.md; do
-            [ -f "$p" ] && { KF_SKILL_DEF=$p; return 0; }
-        done
+        while IFS= read -r p; do
+            [ -n "$p" ] && [ -f "$p/skills/$name/SKILL.md" ] && { KF_SKILL_DEF=$p/skills/$name/SKILL.md; return 0; }
+        done < <(_kf_install_paths "$cfg" "")
         return 1
     fi
     while IFS= read -r p; do
@@ -114,8 +126,8 @@ kf_fm_model() {
     KF_FM_MODEL=""
     [ -r "$1" ] || return 1
     KF_FM_MODEL=$(awk '
-        { sub(/\r$/, "") }
-        NR == 1 { if ($0 != "---") exit; next }
+        { sub(/[[:space:]]+$/, "") }
+        NR == 1 { sub(/^\357\273\277/, ""); if ($0 != "---") exit; next }
         NR > 61 || $0 == "---" { exit }
         /^model:/ {
             v = $0; sub(/^model:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)

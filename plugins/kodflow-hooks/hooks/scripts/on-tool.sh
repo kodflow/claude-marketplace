@@ -78,16 +78,21 @@ _fable_fast() {
     [ -f "$sd/fable-granted" ] && return 0
     if . "$L/beat.sh" 2>/dev/null && kf_beat "$sd"; then return 0; fi
     . "$L/agents.sh" 2>/dev/null || return 0
-    [[ $INPUT =~ \"model\":\ ?\"([^\"]*)\" ]] && m=${BASH_REMATCH[1]} && why="the call's model"
+    # The engine's precedence: CLAUDE_CODE_SUBAGENT_MODEL under _FORCE first,
+    # then the call, the frontmatter (inherit: the parent's, unknown here),
+    # then CLAUDE_CODE_SUBAGENT_MODEL.
+    local env=${CLAUDE_CODE_SUBAGENT_MODEL:-} heir=0
+    case "${CLAUDE_CODE_SUBAGENT_MODEL_FORCE:-}" in ''|0|false|no|off) ;; *) [ -n "$env" ] && m=$env && why="CLAUDE_CODE_SUBAGENT_MODEL (forced)" ;; esac
+    [ -z "$m" ] && [[ $INPUT =~ \"model\":\ ?\"([^\"]*)\" ]] && m=${BASH_REMATCH[1]} && why="the call's model"
     [[ $INPUT =~ \"subagent_type\":\ ?\"([^\"]*)\" ]] && t=${BASH_REMATCH[1]}
     if [ -z "$m" ] && [ -n "$t" ]; then
         local cwd=""
         [[ $INPUT =~ \"cwd\":\ ?\"([^\"]*)\" ]] && cwd=${BASH_REMATCH[1]}
         if kf_agent_def "$t" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_PROJECT_DIR:-$cwd}" && kf_fm_model "$KF_AGENT_DEF"; then
-            case "$KF_FM_MODEL" in inherit|INHERIT) ;; *) m=$KF_FM_MODEL; why="the frontmatter of $t" ;; esac
+            case "$KF_FM_MODEL" in inherit|INHERIT) heir=1 ;; *) m=$KF_FM_MODEL; why="the frontmatter of $t" ;; esac
         fi
     fi
-    [ -z "$m" ] && [ -n "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ] && m=$CLAUDE_CODE_SUBAGENT_MODEL && why=CLAUDE_CODE_SUBAGENT_MODEL
+    [ -z "$m" ] && [ $heir = 0 ] && [ -n "$env" ] && m=$env && why=CLAUDE_CODE_SUBAGENT_MODEL
     kf_is_gated "$m" || return 0
     _fable_refuse "$m" "$why" "The kodflow mod that asks for that yes is not loaded in this session: dispatch without that model, or load the mod (Claude Code 2.1.293+, /reload-plugins)."
 }
@@ -1454,7 +1459,8 @@ pre_agent() {
         [ -n "$agent" ] && use+=("subagent_type: $agent  (the description names: ${kw//,/, })")
     done <<< "$hits"
     ROOT_GUARD=route-deny
-    _motif_block route "DISPATCH TO THE SPECIALIST — \"${desc:0:80}\" names an installed specialist's technology" \
+    desc=$(printf '%s' "$desc" | tr -d '[:cntrl:]' | cut -c1-80)
+    _motif_block route "DISPATCH TO THE SPECIALIST — \"$desc\" names an installed specialist's technology" \
         "${use[@]}" \
         "general-purpose would run it without that agent's pinned model, effort and checks." \
         "Several lines: dispatch each specialist its part. A deliberate general-purpose dispatch carries [general-purpose-ok] in its description or prompt." \

@@ -35,11 +35,18 @@ type Host = {
   toasts: string[];
 };
 
-function host(on: any, env: Record<string, string>): Host {
+type Opts = { throwOn?: string; switchResult?: Record<string, unknown> };
+
+function host(on: any, env: Record<string, string>, opts: Opts = {}): Host {
   const h: Host = { files: new Map(), store: new Map(), asked: [], answer: undefined, spawned: [], toasts: [] };
   h.files.set("*/hooks/gated-models.txt", GATED);
   h.files.set(`${CFG}/plugins/installed_plugins.json`, INSTALLED);
-  mock.env(on, env);
+  if (opts.throwOn)
+    on("env.get", async (_$: any, e: any) => {
+      if (e.name === opts.throwOn) throw new Error("env unreadable");
+      return { value: env[e.name] };
+    });
+  else mock.env(on, env);
   on("session.id", async () => ({ value: SID }));
   on("session.cwd", async () => ({ value: "/repo" }));
   on("session.root", async () => ({ value: "/repo" }));
@@ -72,7 +79,7 @@ function host(on: any, env: Record<string, string>): Host {
     if (h.answer === undefined) throw new Error("dismissed");
     return { result: { questions: e.questions, answers: { [q]: h.answer } } } as any;
   });
-  on("classic.PreModelSwitch", async () => ({}));
+  on("classic.PreModelSwitch", async () => opts.switchResult ?? {});
   on("agent.spawn", async (_$: any, e: any) => {
     h.spawned.push(e);
     return { model: e.model ?? "claude-sonnet-5-5", agentId: `a${h.spawned.length}` };
@@ -103,6 +110,9 @@ test("an ungated spawn goes on untouched, its model never written", async ($, on
   expect(r.deny).toBeUndefined();
   expect(h.spawned.length).toBe(1);
   expect(h.spawned[0].model).toBeUndefined();
+  // A per-call model goes through as the call gave it
+  await $.agent.spawn(spawn({ model: "haiku" }) as any);
+  expect(h.spawned[1].model).toBe("haiku");
 });
 
 test("a per-call fable with nobody at the prompt is refused with the reason", async ($, on) => {
@@ -154,9 +164,29 @@ test("Explore and a workflow agent are judged on the parent and the environment 
 
 test("CLAUDE_CODE_SUBAGENT_MODEL decides an agent with no model of its own", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG, CLAUDE_CODE_SUBAGENT_MODEL: "claude-fable-5-1" });
-  h.files.set(`${AGENTS}/plain.md`, "---\nname: plain\nmodel: inherit\n---\n");
+  h.files.set(`${AGENTS}/plain.md`, "---\nname: plain\n---\n");
   const r: any = await $.agent.spawn(spawn({ subagentType: "kodflow-specialists:plain" }) as any);
   expect(r.deny).toContain("env model");
+});
+
+test("model: inherit is the parent's model, not CLAUDE_CODE_SUBAGENT_MODEL", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, CLAUDE_CODE_SUBAGENT_MODEL: "claude-fable-5-1" });
+  h.files.set(`${AGENTS}/heir.md`, "---\nname: heir\nmodel: inherit\n---\n");
+  const ok: any = await $.agent.spawn(spawn({ subagentType: "kodflow-specialists:heir", parentModel: "claude-sonnet-5-5" }) as any);
+  expect(ok.deny).toBeUndefined();
+  const no: any = await $.agent.spawn(spawn({ subagentType: "kodflow-specialists:heir", parentModel: "claude-fable-5-1" }) as any);
+  expect(no.deny).toContain("parent model");
+});
+
+test("CLAUDE_CODE_SUBAGENT_MODEL_FORCE makes the environment win over the call", async ($, on) => {
+  const h = host(on, {
+    CLAUDE_CONFIG_DIR: CFG,
+    CLAUDE_CODE_SUBAGENT_MODEL: "claude-fable-5-1",
+    CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1",
+  });
+  const r: any = await $.agent.spawn(spawn({ model: "haiku" }) as any);
+  expect(r.deny).toContain("env model");
+  expect(h.spawned.length).toBe(0);
 });
 
 test("malformed frontmatter on a non-gated dispatch still spawns", async ($, on) => {
@@ -222,6 +252,7 @@ test("a composer prompt writes composer-at in seconds; another origin does not",
 
 test("pure: the gated list, the match, the mode", () => {
   expect(parseGated(GATED)).toEqual(["fable"]);
+  expect(parseGated("fable   # the note\n")).toEqual(["fable"]);
   expect(parseGated(undefined)).toEqual([]);
   expect(isGated("claude-fable-5-1[1m]", ["fable"])).toBe(true);
   expect(isGated("claude-opus-5-5", ["fable"])).toBe(false);
@@ -234,6 +265,7 @@ test("pure: frontmatter is bounded, quote- and CRLF-safe", () => {
   expect(frontmatterModel("---\r\nmodel: fable # x\r\n---\r\n")).toBe("fable");
   expect(frontmatterModel("---\nname: a\n---\nmodel: fable\n")).toBeUndefined();
   expect(frontmatterModel("model: fable\n")).toBeUndefined();
+  expect(frontmatterModel("\uFEFF--- \nmodel: fable  \n---\n")).toBe("fable");
   expect(frontmatterModel("---\n" + "x: y\n".repeat(70) + "model: fable\n---\n")).toBeUndefined();
 });
 
@@ -241,7 +273,9 @@ test("pure: precedence call > frontmatter > env > parent, a fork inherits", () =
   const fm = "---\nmodel: haiku\n---\n";
   expect(candidate({ model: "opus", parentModel: "p" }, fm, "e")).toEqual({ model: "opus", source: "call" });
   expect(candidate({ parentModel: "p" }, fm, "e")).toEqual({ model: "haiku", source: "frontmatter" });
-  expect(candidate({ parentModel: "p" }, "---\nmodel: inherit\n---\n", "e")).toEqual({ model: "e", source: "env" });
+  expect(candidate({ parentModel: "p" }, "---\nmodel: inherit\n---\n", "e")).toEqual({ model: "p", source: "parent" });
+  expect(candidate({ parentModel: "p" }, "---\nname: x\n---\n", "e")).toEqual({ model: "e", source: "env" });
+  expect(candidate({ model: "haiku", parentModel: "p" }, fm, "e", true)).toEqual({ model: "e", source: "env" });
   expect(candidate({ parentModel: "p" }, undefined, undefined)).toEqual({ model: "p", source: "parent" });
   expect(candidate({ model: "fable", fork: true, parentModel: "p" }, fm, "e")).toEqual({ model: "p", source: "parent" });
 });
@@ -264,4 +298,68 @@ test("pure: a switch the user typed grants, the picker too, the SDK asks", () =>
   expect(judgeSwitch({ to_model: "claude-fable-5-1", source: "sdk" }, t, "on").kind).toBe("ask");
   expect(judgeSwitch({ to_model: "claude-haiku-5-5", source: "sdk" }, t, "on").kind).toBe("pass");
   expect(judgeSwitch({ to_model: "claude-fable-5-1", source: "sdk" }, t, "off").kind).toBe("pass");
+});
+
+// The throw rule: a check that fails refuses a spawn naming a gated model,
+// and lets any other go on with a toast
+const throwing = (on: any, env: Record<string, string>): Host => host(on, env, { throwOn: "KODFLOW_FABLE" });
+
+test("a failing check refuses a spawn whose call names a gated model", async ($, on) => {
+  const h = throwing(on, { CLAUDE_CONFIG_DIR: CFG });
+  const r: any = await $.agent.spawn(spawn({ model: "fable" }) as any);
+  expect(r.deny).toContain("the check failed");
+  expect(r.deny).toContain("fable");
+  expect(h.spawned.length).toBe(0);
+});
+
+test("a failing check lets a spawn naming no gated model go on, with a toast", async ($, on) => {
+  const h = throwing(on, { CLAUDE_CONFIG_DIR: CFG });
+  const r: any = await $.agent.spawn(spawn({ model: "haiku" }) as any);
+  expect(r.deny).toBeUndefined();
+  expect(h.spawned.length).toBe(1);
+  expect(h.toasts.join(" ")).toContain("gated-model check failed");
+});
+
+const sdkSwitch = {
+  session_id: SID,
+  from_model: "claude-opus-5-5",
+  to_model: "claude-fable-5-1",
+  requested_model: "claude-fable-5-1",
+  source: "sdk",
+  context_tokens: 0,
+  prompt_cache_warm: false,
+  cache_ttl: "1h",
+} as any;
+
+test("an SDK switch with the user present: Switch grants, Stay refuses", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await typed($);
+  h.answer = "Stay";
+  const stay: any = await $.classic.PreModelSwitch(sdkSwitch);
+  expect(stay.permissionDecision).toBe("deny");
+  expect(h.store.get(`fable:${SID}`)).toBeUndefined();
+  h.answer = "Switch";
+  const go: any = await $.classic.PreModelSwitch(sdkSwitch);
+  expect(go.permissionDecision).toBeUndefined();
+  expect(h.asked.length).toBe(2);
+  expect(h.store.get(`fable:${SID}`)).toBeTruthy();
+});
+
+test("a switch another hook refused is not granted", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG }, { switchResult: { permissionDecision: "deny", permissionDecisionReason: "policy" } });
+  const r: any = await $.classic.PreModelSwitch({ ...sdkSwitch, source: "command" });
+  expect(r.permissionDecision).toBe("deny");
+  expect(h.store.get(`fable:${SID}`)).toBeUndefined();
+});
+
+test("two parallel gated spawns put one question to the user", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.answer = "Allow it for this session";
+  await typed($);
+  const [a, b]: any[] = await Promise.all([
+    $.agent.spawn(spawn({ model: "fable" }) as any),
+    $.agent.spawn(spawn({ model: "fable" }) as any),
+  ]);
+  expect([a.deny, b.deny]).toEqual([undefined, undefined]);
+  expect(h.asked.length).toBe(1);
 });
