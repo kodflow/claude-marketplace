@@ -8,13 +8,16 @@
 //               the silent ones and the ones waiting on the person;
 //   « Agents »  per loop (the main one and each subagent), the folder it
 //               works in, its last files by operation, its last call.
+// And a few words of each reply in colour (colors.ts): the transcript draws
+// `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
 //
 // Everything is read, nothing is decided: tasks.json is kodflow-hooks' file,
 // re-read whenever its modification time moves; the agents come from
 // `$.agent.list()`; the activity from `tool.call`, observed after `next`
 // and handed back untouched. No tool, no context line, no refusal: this mod
-// adds nothing to what the model reads and can stop nothing. Every hook
-// fails open.
+// can stop nothing, and adds one thing only to what the model reads, the
+// colour convention's system prompt section (off with KODFLOW_COLORS=off,
+// which also turns off the drawing). Every hook fails open.
 //
 // The logic lives in the pure modules beside this file (board.ts, tree.ts,
 // layout.tsx, models.ts, activity.ts, alerts.ts, ci.ts, view.tsx); the
@@ -40,6 +43,14 @@ import { configDir, dirname, sessionDir, tasksFile } from "./paths.ts";
 import { agentsView } from "./view.tsx";
 import { buildTree } from "./tree.ts";
 import { draw, initialUi, screenOf } from "./layout.tsx";
+import {
+  PROMPT_SECTION,
+  SECTION_ID,
+  blocks,
+  colorsOff,
+  drawn,
+  marked,
+} from "./colors.ts";
 import {
   fromAgentCall,
   keepSession,
@@ -478,4 +489,47 @@ export const register: Register = (on, options) => {
       );
     },
   );
+
+  // The colour convention, on the session's side of the cache boundary: a
+  // section composed afresh for every prompt, so a compaction keeps it. Only
+  // where a transcript will draw the reply (no -p run, no --bare)
+  on("prompt.compose", async ($, e, next) => {
+    const r = await next(e);
+    if (colorsOff(await $.env.get("KODFLOW_COLORS")) || !drawn(e)) return r;
+    const sections = r.sections.filter((s) => s.id !== SECTION_ID);
+    return {
+      ...r,
+      sections: [
+        ...sections,
+        { id: SECTION_ID, text: PROMPT_SECTION, scope: "session" as const },
+      ],
+    };
+  }).catch(($, e, next) => next(e));
+
+  // A reply with a mark is redrawn paragraph by paragraph: a marked one as
+  // coloured runs, any other as the engine's markdown. No mark: the engine's
+  // own drawing. Any failure draws the engine's
+  on("ui.render", { component: "AssistantMessage" }, async ($, e, next) => {
+    if (colorsOff(await $.env.get("KODFLOW_COLORS"))) return next(e);
+    const parts = blocks(e.props.text);
+    if (!marked(parts)) return next(e);
+    const { Box, Text, Markdown }: any = $.ui.resolve(e);
+    return (
+      <Box flexDirection="column" gap={1}>
+        {parts.map((p, i) =>
+          "runs" in p ? (
+            <Text key={`t${i}`}>
+              {p.runs.map((r, j) => (
+                <Text key={`r${i}-${j}`} color={r.color} bold={r.bold}>
+                  {r.text}
+                </Text>
+              ))}
+            </Text>
+          ) : (
+            <Markdown key={`m${i}`} text={p.markdown} />
+          ),
+        )}
+      </Box>
+    );
+  }).catch(($, e, next) => next(e));
 };

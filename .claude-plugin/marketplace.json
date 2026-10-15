@@ -87,7 +87,7 @@
     },
     {
       "name": "kodflow-hud",
-      "description": "Optional heads-up display beside the status line, as a mod: a Tasks pane (open epics, the worker on each task and how it stands, time since it moved, silent tasks, the person's tasks apart), an Agents pane (the folder each agent works in, the files it last read, wrote or committed) and toasts for a task done, blocked or gone silent. Reads and observes only; needs Claude Code 2.1.293 or later, and kodflow-hooks for the task list.",
+      "description": "Optional heads-up display beside the status line, as a mod: a Tasks pane (open epics, the worker on each task and how it stands, time since it moved, silent tasks, the person's tasks apart), an Agents pane (the folder each agent works in, the files it last read, wrote or committed) toasts for a task done, blocked or gone silent, and a few words of a reply drawn in colour (red blocking, orange attention, green waiting on you, pink a decision you made). Refuses nothing; its one prompt section is the colour convention (KODFLOW_COLORS=off removes it). Needs Claude Code 2.1.293 or later, and kodflow-hooks for the task list.",
       "author": {
         "name": "kodflow"
       },

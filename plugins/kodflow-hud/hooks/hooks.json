@@ -1,4 +1,4 @@
 {
-  "description": "One hooks module (mod/register.tsx): two panes, a /hud command and toasts, fed by tasks.json, $.agent.list() and tool calls observed after they ran. Nothing here refuses or rewrites anything.",
+  "description": "One hooks module (mod/register.tsx): two panes, a /hud command and toasts, fed by tasks.json, $.agent.list() and tool calls observed after they ran; and coloured words in replies (ui.render on AssistantMessage, one prompt.compose section). Nothing here refuses or rewrites a call.",
   "modules": ["./mod/register.tsx"]
 }
