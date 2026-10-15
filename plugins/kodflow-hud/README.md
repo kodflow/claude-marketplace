@@ -139,6 +139,37 @@ bench) shows what was collected.
 - A terminal narrower than 144 columns: the panes opened at start wait until
   `/hud` or a wider window.
 
+## Grey panel on a transparent terminal
+
+The panes sit on an opaque grey block even when the terminal background is
+transparent. The mod is not the cause and cannot remove it: it draws no
+background of its own (`grep backgroundColor hooks/mod` finds nothing).
+
+In Claude Code 2.1.300 the engine wraps the docked pane column in a box
+painted with the theme token `composerSidebarBackground` (`rgb(38, 38, 38)`
+in the `dark` preset, `ansi256(235)` once the terminal maps it). `$.ui.open`
+(`PaneOpenArgs`: `id`, `title`, `focus`, `closeOnEscape`, `holdToasts`, `rows`,
+`columns`) has no option for it, the `Pane` render props carry none, and a
+`backgroundColor` inside the tree is read only as `rgb()`, `#hex`,
+`ansi256()`, `ansi:<name>` or a theme key: nothing means "terminal default".
+The token is not in the documented list of
+[custom theme overrides](https://code.claude.com/docs/en/terminal-config#create-a-custom-theme).
+
+Workarounds, none of them in this plugin:
+
+- **Ghostty**: set `background-opacity-cells = true` (available since 1.2.0).
+  Per the [Ghostty reference](https://ghostty.org/docs/config/reference), the
+  opacity then also applies to cells that carry an explicit background
+  colour, which is the case of the grey block.
+- **Any terminal**: a custom theme in `~/.claude/themes/` can override
+  `composerSidebarBackground` with the colour of your terminal background.
+  The token is undocumented and read from the 2.1.300 bundle, not from the
+  documentation, and the override is an opaque colour: it hides the grey
+  without making the pane see-through.
+
+Until the engine offers a transparent or default-background pane surface,
+this stays one of its limits.
+
 ## Known limits
 
 - A commit is recognised from the command, not from git: `git commit` written
