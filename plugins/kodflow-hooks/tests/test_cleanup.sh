@@ -139,6 +139,18 @@ clean "$J"
 check "worktree and local branch removed" '[ ! -e "$J" ] && ! local_branch feat/j'
 check "said as removed, no failure" 'notices | grep "repo-j" | grep -q "removed" && ! notices | grep "repo-j" | grep -q "not deleted"'
 
+echo "== a refusal first, then a removal: the removal is still said"
+K=$(wt k feat/k); pr feat/k OPEN "$(sha "$K")"
+: > "$SD/cleanup-notices"
+clean "$K"
+check "first pass refused as not merged" 'notices | grep "repo-k" | grep -q "not merged"'
+clean "$K"
+check "the same refusal is not repeated" '[ "$(notices | grep -c "repo-k.*not merged")" = 1 ]'
+pr feat/k MERGED "$(sha "$K")"
+clean "$K"
+check "second attempt removes it" '[ ! -e "$K" ] && ! local_branch feat/k'
+check "and the removal is said after the refusal" 'notices | grep "repo-k" | grep -q "removed"'
+
 echo "== UserPromptSubmit hands the notices to the model once"
 : > "$SD/cleanup-notices"; printf 'kodflow cleanup: left X in place: test\n' >> "$SD/cleanup-notices"
 mkdir -p "$T/proj"
@@ -146,6 +158,19 @@ OUT=$(jq -n -c --arg cwd "$T/proj" --arg sp "$T/tmp/sp" '{session_id:"sess-clean
     | CLAUDE_PROJECT_DIR=$T/proj bash "$S/on-user.sh" 2>/dev/null)
 check "notice in additionalContext" 'printf "%s" "$OUT" | jq -r .hookSpecificOutput.additionalContext | grep -q "left X in place"'
 check "notices consumed" '[ ! -s "$SD/cleanup-notices" ]'
+
+echo "== notices past the budget wait for the next prompt, none lost"
+: > "$SD/cleanup-notices"
+n=0; while [ $n -lt 100 ]; do printf 'kodflow cleanup: notice %03d %s\n' "$n" "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" >> "$SD/cleanup-notices"; n=$((n+1)); done
+prompt() {
+    jq -n -c --arg cwd "$T/proj" --arg sp "$T/tmp/sp" '{session_id:"sess-clean",hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"hello"}' \
+        | CLAUDE_PROJECT_DIR=$T/proj bash "$S/on-user.sh" 2>/dev/null | jq -r .hookSpecificOutput.additionalContext
+}
+got=$T/got; : > "$got"
+i=0; while [ $i -lt 5 ]; do prompt >> "$got"; i=$((i+1)); done
+check "every notice delivered once over the prompts" '[ "$(grep -o "notice [0-9][0-9][0-9]" "$got" | sort -u | wc -l | tr -d " ")" = 100 ] && [ "$(grep -c "notice [0-9][0-9][0-9]" "$got")" = 100 ]'
+check "the held notices are announced" 'grep -q "more cleanup notice(s) held for the next prompt" "$got"'
+check "nothing left once delivered" '[ ! -s "$SD/cleanup-notices" ] && [ ! -s "$SD/cleanup-notices.rest" ]'
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

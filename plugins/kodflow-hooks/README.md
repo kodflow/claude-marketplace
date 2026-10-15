@@ -602,9 +602,12 @@ mod does it when the main agent completes the task linked to that subagent
   `git branch -D`, `git push <remote> --delete`.
 - **Otherwise nothing is touched**, and one line names what is missing
   (uncommitted changes, PR open or absent, heads that differ, gh failing or
-  silent, default branch, main worktree), once per worktree. A removal is
-  said too. The lines go to `cleanup-notices`; `on-user.sh` hands them to the
-  model with the next prompt and consumes them. A path that is no longer a
+  silent, default branch, main worktree), once per worktree and motif: a
+  refusal is not repeated, a new motif is said, and a removal is always said,
+  even after an earlier refusal. The lines go to `cleanup-notices`;
+  `on-user.sh` hands them to the model with the next prompt, whole lines up
+  to 4000 bytes, and carries the others in `cleanup-notices.rest` for the
+  prompt after, counted in a line of their own: none is lost or cut. A path that is no longer a
   worktree is skipped in silence.
 - **Never in the way.** The script is started without being awaited, so the
   task call answers at once; `gh pr list` and the push are each bounded by

@@ -15,7 +15,7 @@
 #     squash merge leaves no ancestry to test, so the heads are compared: a
 #     local commit past the merged head is work nobody published.
 # Otherwise nothing is touched, and one line says what is missing, once per
-# worktree, in SESSION_DIR/cleanup-notices; on-user.sh hands the lines to the
+# worktree and motif, in SESSION_DIR/cleanup-notices; on-user.sh hands the lines to the
 # model with the next prompt. A removal is said there too, so nobody goes
 # looking for the directory.
 #
@@ -53,11 +53,16 @@ bounded() {
     return "$rc"
 }
 
-# say PATH TEXT → one line, unless this worktree was already spoken of
+# say PATH MOTIF TEXT → one line. The same motif for the same worktree is
+# said once: a refusal repeated at every completion would be noise. Another
+# motif is news (the PR got merged, the tree got dirty), and a removal is
+# always said.
 say() {
-    grep -qxF -- "$1" "$NOTIFIED" 2>/dev/null && return 0
-    printf '%s\n' "$1" >> "$NOTIFIED"
-    printf 'kodflow cleanup: %s\n' "$2" >> "$NOTICES"
+    if [ "$2" != removed ]; then
+        grep -qxF -- "$1	$2" "$NOTIFIED" 2>/dev/null && return 0
+        printf '%s\t%s\n' "$1" "$2" >> "$NOTIFIED"
+    fi
+    printf 'kodflow cleanup: %s\n' "$3" >> "$NOTICES"
 }
 
 one() {   # $1 = the worktree as the mod noted it
@@ -70,27 +75,27 @@ one() {   # $1 = the worktree as the mod noted it
     main=$(git -C "$wt" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
     [ -n "$main" ] && main=$(cd "$main" 2>/dev/null && pwd -P)
     if [ -z "$main" ] || [ "$main" = "$wt" ]; then
-        say "$p" "left $p in place: it is the repository's main worktree, never removed."
+        say "$p" main-worktree "left $p in place: it is the repository's main worktree, never removed."
         return 0
     fi
     br=$(git -C "$wt" symbolic-ref --short -q HEAD 2>/dev/null)
     if [ -z "$br" ]; then
-        say "$p" "left $p in place: its HEAD is detached, no branch to match to a PR."
+        say "$p" detached "left $p in place: its HEAD is detached, no branch to match to a PR."
         return 0
     fi
     remote=$(git -C "$wt" config "branch.$br.remote" 2>/dev/null); remote=${remote:-origin}
     def=$(git -C "$wt" symbolic-ref --short -q "refs/remotes/$remote/HEAD" 2>/dev/null); def=${def#"$remote"/}
     case "$br" in main|master|"$def")
-        say "$p" "left $p in place: $br is the default branch."
+        say "$p" default-branch "left $p in place: $br is the default branch."
         return 0 ;;
     esac
     if [ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]; then
-        say "$p" "left $p in place (branch $br): it has uncommitted changes."
+        say "$p" dirty "left $p in place (branch $br): it has uncommitted changes."
         return 0
     fi
     sha=$(git -C "$wt" rev-parse HEAD 2>/dev/null)
     if ! command -v gh >/dev/null 2>&1; then
-        say "$p" "left $p in place (branch $br): gh is not installed, the PR state is unknown."
+        say "$p" no-gh "left $p in place (branch $br): gh is not installed, the PR state is unknown."
         return 0
     fi
     tmp=$DIR/.cleanup.$$.gh
@@ -98,10 +103,10 @@ one() {   # $1 = the worktree as the mod noted it
     case $? in
         0) prs=$(cat "$tmp" 2>/dev/null) ;;
         124) rm -f "$tmp" "$tmp.err"
-             say "$p" "left $p in place (branch $br): gh did not answer within ${LIMIT}s, the PR state is unknown."
+             say "$p" gh-timeout "left $p in place (branch $br): gh did not answer within ${LIMIT}s, the PR state is unknown."
              return 0 ;;
         *) rm -f "$tmp" "$tmp.err"
-           say "$p" "left $p in place (branch $br): gh pr list failed, the PR state is unknown."
+           say "$p" gh-failed "left $p in place (branch $br): gh pr list failed, the PR state is unknown."
            return 0 ;;
     esac
     rm -f "$tmp" "$tmp.err"
@@ -118,17 +123,17 @@ one() {   # $1 = the worktree as the mod noted it
         merged\ *) num=${verdict#merged } ;;
         differs\ *)
             set -- ${verdict#differs }
-            say "$p" "left $p in place (branch $br): its head ${sha:0:12} differs from the head ${2:0:12} merged by PR #$1, unpublished work."
+            say "$p" differs "left $p in place (branch $br): its head ${sha:0:12} differs from the head ${2:0:12} merged by PR #$1, unpublished work."
             return 0 ;;
-        open\ *) say "$p" "left $p in place (branch $br): PR #${verdict#open } is not merged."; return 0 ;;
-        closed\ *) say "$p" "left $p in place (branch $br): PR #${verdict#closed } was closed, not merged."; return 0 ;;
-        none) say "$p" "left $p in place (branch $br): no pull request for this branch."; return 0 ;;
-        *) say "$p" "left $p in place (branch $br): gh answered something unreadable."; return 0 ;;
+        open\ *) say "$p" open "left $p in place (branch $br): PR #${verdict#open } is not merged."; return 0 ;;
+        closed\ *) say "$p" closed "left $p in place (branch $br): PR #${verdict#closed } was closed, not merged."; return 0 ;;
+        none) say "$p" no-pr "left $p in place (branch $br): no pull request for this branch."; return 0 ;;
+        *) say "$p" unreadable "left $p in place (branch $br): gh answered something unreadable."; return 0 ;;
     esac
 
     # Everything holds. Removed from the main worktree, never from inside.
     if ! git -C "$main" worktree remove "$wt" >/dev/null 2>"$DIR/.cleanup.$$.err"; then
-        say "$p" "left $p in place (branch $br, PR #$num merged): git worktree remove failed: $(head -c 200 "$DIR/.cleanup.$$.err" | tr '\n' ' ')"
+        say "$p" remove-failed "left $p in place (branch $br, PR #$num merged): git worktree remove failed: $(head -c 200 "$DIR/.cleanup.$$.err" | tr '\n' ' ')"
         rm -f "$DIR/.cleanup.$$.err"
         return 0
     fi
@@ -138,11 +143,11 @@ one() {   # $1 = the worktree as the mod noted it
     tmp=$DIR/.cleanup.$$.push
     bounded "$tmp" git -C "$main" push "$remote" --delete "$rb"
     case $? in
-        0) say "$p" "removed $p, branch $br locally and on $remote (PR #$num merged)." ;;
+        0) say "$p" removed "removed $p, branch $br locally and on $remote (PR #$num merged)." ;;
         *) if grep -q "remote ref does not exist" "$tmp.err" 2>/dev/null; then
-               say "$p" "removed $p and branch $br locally (PR #$num merged); $remote had already deleted it."
+               say "$p" removed "removed $p and branch $br locally (PR #$num merged); $remote had already deleted it."
            else
-               say "$p" "removed $p and branch $br locally (PR #$num merged); the branch on $remote was not deleted: git push $remote --delete $rb failed or timed out."
+               say "$p" removed "removed $p and branch $br locally (PR #$num merged); the branch on $remote was not deleted: git push $remote --delete $rb failed or timed out."
            fi ;;
     esac
     rm -f "$tmp" "$tmp.err" "$DIR/.cleanup.$$.err"
