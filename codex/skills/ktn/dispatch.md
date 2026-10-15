@@ -18,7 +18,7 @@ that JSON: the kodflow-hooks routing gate reads it as a deliberate dispatch.
 # devops-executor-linux instead of general-purpose. The route-agent
 # call returns {subagent_type, resolved_model, effort}; pass them
 # through to the Task primitive.
-subagent_type: devops-executor-linux
+subagent_type: kodflow-specialists:devops-executor-linux
 description: "project-linter binary health + upgrade"
 prompt: |
   You manage the project-linter binary lifecycle. Goal: make sure the local
@@ -77,7 +77,7 @@ prompt: |
 # devops-executor-linux instead of general-purpose. The route-agent
 # call returns {subagent_type, resolved_model, effort}; pass them
 # through to the Task primitive.
-subagent_type: devops-executor-linux
+subagent_type: kodflow-specialists:devops-executor-linux
 description: "mcp.json project-linter registration"
 prompt: |
   You own the project-linter entry inside /workspace/mcp.json.
@@ -147,7 +147,7 @@ prompt: |
 # devops-executor-linux instead of general-purpose. The route-agent
 # call returns {subagent_type, resolved_model, effort}; pass them
 # through to the Task primitive.
-subagent_type: devops-executor-linux
+subagent_type: kodflow-specialists:devops-executor-linux
 description: ".claude/settings.json hook wiring"
 prompt: |
   You own the project-linter HTTP hook entries inside /workspace/.claude/settings.json.
@@ -216,7 +216,7 @@ prompt: |
 # devops-executor-linux instead of general-purpose. The route-agent
 # call returns {subagent_type, resolved_model, effort}; pass them
 # through to the Task primitive.
-subagent_type: devops-executor-linux
+subagent_type: kodflow-specialists:devops-executor-linux
 description: "project-linter daemon health + freshness on :7717"
 prompt: |
   You verify and (if needed) respawn the project-linter MCP daemon on
@@ -408,7 +408,7 @@ prompt: |
 # devops-executor-linux instead of general-purpose. The route-agent
 # call returns {subagent_type, resolved_model, effort}; pass them
 # through to the Task primitive.
-subagent_type: devops-executor-linux
+subagent_type: kodflow-specialists:devops-executor-linux
 description: ".project-linter.yaml phase configuration"
 prompt: |
   You manage /workspace/.project-linter.yaml. Upstream default active set is

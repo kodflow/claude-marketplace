@@ -4,18 +4,22 @@
 
 ## Lenses (10)
 
-| Phase | Critical? | Default agent | Effort |
-|---|---|---|---|
-| `lens-1-correctness`  | yes | developer-executor-correctness   | xhigh  |
-| `lens-2-security`     |     | developer-executor-security      | high   |
-| `lens-3-edge-cases`   |     | developer-executor-correctness   | high   |
-| `lens-4-rollback`     |     | devops-executor-linux            | medium |
-| `lens-5-testability`  | yes | developer-executor-quality       | high   |
-| `lens-6-dependency`   |     | devops-specialist-security       | medium |
-| `lens-7-performance`  |     | developer-executor-design        | high   |
-| `lens-8-observability`|     | developer-executor-shell         | medium |
-| `lens-9-scope`        | yes | developer-orchestrator           | medium |
-| `lens-10-goal-detect` | yes | developer-specialist-review      | high   |
+| Phase | Critical? | Default agent |
+|---|---|---|
+| `lens-1-correctness`  | yes | developer-executor-correctness   |
+| `lens-2-security`     |     | developer-executor-security      |
+| `lens-3-edge-cases`   |     | developer-executor-correctness   |
+| `lens-4-rollback`     |     | devops-executor-linux            |
+| `lens-5-testability`  | yes | developer-executor-quality       |
+| `lens-6-dependency`   |     | devops-specialist-security       |
+| `lens-7-performance`  |     | developer-executor-design        |
+| `lens-8-observability`|     | developer-executor-shell         |
+| `lens-9-scope`        | yes | developer-orchestrator           |
+| `lens-10-goal-detect` | yes | developer-specialist-review      |
+
+The effort is the agent's own frontmatter (`model-policy.md` §3): neither the table
+nor the router passes one per lens. The router answers with the name the engine
+resolves, `kodflow-specialists:<agent>` for the plugin's copy.
 
 Light depth runs only critical lenses (1, 5, 9, 10). Full depth runs all 10.
 Char-cap stays 4000 in both cases.
@@ -76,7 +80,8 @@ Pipeline invariants (locked by `refine-pipeline-rewire.bats`):
 A lens the router answers with its `general-purpose` fallback (exit 10) is
 dispatched with `[general-purpose-ok]` in its prompt, the `marker` field of that JSON:
 the kodflow-hooks routing gate refuses an unmarked general-purpose dispatch whose
-description names a specialist's technology.
+description names a specialist's technology. That JSON holds no model and no
+effort (`null`): the caller sets both on the call, per `model-policy.md` §2.
 
 ### Static fallback (refine-* pipeline)
 
