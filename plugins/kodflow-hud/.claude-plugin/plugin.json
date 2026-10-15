@@ -1,6 +1,6 @@
 {
   "name": "kodflow-hud",
-  "description": "Optional heads-up display beside the status line, as a mod (function hooks, Claude Code 2.1.293 or later): a Tasks pane with the open epics of kodflow-hooks' task list as a tree (subtasks, blockers, the critical path, the worker, model and effort on each task, the time since it last moved, a silent flag, the tasks waiting on the person) or as a graph by state, driven by keys and clicks; an Agents pane with the folder each agent works in and the files it last read, wrote or committed; toasts for a task done, blocked or gone silent. It reads and observes only: no tool, no refusal, nothing added to what the model reads.",
+  "description": "Optional heads-up display beside the status line, as a mod (function hooks, Claude Code 2.1.293 or later): a Tasks pane with the open epics of kodflow-hooks' task list as a tree (subtasks, blockers, the critical path, the worker, model and effort on each task, the time since it last moved, a silent flag, the tasks waiting on the person) or as a graph by state, driven by keys and clicks; an Agents pane with the folder each agent works in and the files it last read, wrote or committed; toasts for a task done, blocked or gone silent; a few words of each reply drawn in colour where the model marks them ({{r:…}} red, {{o:…}} orange, {{v:…}} green, {{p:…}} pink), the convention given in one system prompt section. No tool, no refusal; KODFLOW_COLORS=off turns off the colours and the section.",
   "author": {
     "name": "kodflow",
     "url": "https://github.com/kodflow"

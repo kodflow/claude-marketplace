@@ -15,6 +15,9 @@ not.
   last call.
 - **Toasts** — a task done, a task blocked (`waiting`), a task gone silent:
   at most one per task and per state.
+- **Coloured words** — a few words of a reply drawn in colour in the
+  transcript, never a whole paragraph and never an emoji (see
+  [Coloured words](#coloured-words)).
 
 It is a mod: a hooks module (`hooks/mod/register.tsx`) the engine loads from
 `hooks/hooks.json` → `modules`. It needs **Claude Code 2.1.293 or later**
@@ -212,11 +215,56 @@ calls; a reload of the module reads them again.
 - Change or refuse a call. `tool.call` is observed after `next`: the result
   goes back as it came, even when the observation fails (`.catch` replays
   `next`). A refused call is not recorded.
-- Add anything to what the model reads: no tool, no `context`, no prompt
-  section. `/hud` answers one short line, as any command does.
+- Add anything else to what the model reads: no tool, no `context`; one
+  system prompt section, the colour convention, and none with
+  `KODFLOW_COLORS=off`. `/hud` answers one short line, as any command does.
 - Scan the disk. No `find`, no `fs.list`; finding a work tree's root costs one
   `exists` per parent folder the first time a folder is seen, none after. The
   only process it runs is `gh pr checks`, and only for cited pull requests.
+
+## Coloured words
+
+The model may wrap a few words of a reply in a mark; the transcript draws
+them in colour, bold, and the mark is not shown:
+
+| Mark | Colour | Meaning |
+|------|--------|---------|
+| `{{r:words}}` | red | what blocks |
+| `{{o:words}}` | orange | what needs attention |
+| `{{v:words}}` | green | what waits on the person, their answer or their action |
+| `{{p:words}}` | pink | a decision the person already made, cited with its date |
+
+The convention reaches the model as one system prompt section,
+`kodflow-hud:colors`, added last by a `prompt.compose` hook on the
+`session` side of the cache boundary. It is composed afresh for every
+prompt, so it holds after a compaction. It says when to mark and how: a few
+words, a few marks a message at most, never in code, a command, a path or a
+table meant to be copied, and `p` only for a decision of the person's whose
+date is cited. It is left out where nothing draws the reply: a `-p` run
+(the `print` trait), `--bare`, a render with no surface.
+
+A `ui.render` hook on `AssistantMessage` redraws a reply that holds a mark,
+paragraph by paragraph (paragraphs split on blank lines): a marked
+paragraph becomes coloured runs, every other one, and every fenced code
+block, goes back to the engine's `Markdown`. A mark inside a code block,
+an unclosed fence or inline code is shown as typed. A reply with no mark is
+the engine's own drawing, untouched. A failure while drawing falls back to
+the engine's (`.catch` replays `next(e)`).
+
+`KODFLOW_COLORS=off` (or `0`, `false`, `no`) turns off both the drawing and
+the prompt section.
+
+Limits:
+
+- A marked paragraph keeps its bold and loses the rest of its markdown:
+  links, italics, a heading's or a list's markers are drawn as typed. The
+  convention tells the model to keep them out of a marked paragraph.
+- The marks only reach a transcript that draws. A reply read elsewhere (a
+  subagent's answer read by its parent, a log, the stored transcript)
+  carries them as typed; ctrl+o shows the stored text too.
+- Where an organization manages Claude Code, an installed plugin's
+  `prompt.compose` hook does not run (`claude plugin validate` says so): the
+  drawing works, but the model is not told the convention.
 
 ## Options
 
@@ -290,7 +338,12 @@ claude plugin validate --strict --json plugins/kodflow-hud   # only the "version
 claude plugin test plugins/kodflow-hud                        # pure modules and wiring
 ```
 
-`tests/pure.test.ts` holds the pure modules (board, silence, toasts,
+`tests/colors.test.tsx` holds the coloured words: the split into marked
+paragraphs and runs (code blocks, inline code, bold, unknown marks), the
+`kodflow-hud:colors` section last and `session`, absent with
+`KODFLOW_COLORS=off`, under `-p` and `--bare`, and a marked reply drawn on
+the terminal through the engine, the markup gone, the code block left to
+the engine's markdown. `tests/pure.test.ts` holds the pure modules (board, silence, toasts,
 activity, paths, CI). `tests/tree.test.tsx` draws the « Tâches » pane through
 the engine and reads it back as text (`tests/capture.ts`, which cuts every
 Box to its width as the terminal lays it out): both views at 90 by 20, line
