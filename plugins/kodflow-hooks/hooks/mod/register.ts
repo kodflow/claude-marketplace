@@ -194,9 +194,7 @@ async function lintPort($: any): Promise<LintPort> {
     ask: (question, options) =>
       $.ui.ask(question, options).catch(() => undefined),
     vars: {
-      KTN_LINTER_PORT: await $.env.get("KTN_LINTER_PORT"),
-      KTN_PRE_PHASES: await $.env.get("KTN_PRE_PHASES"),
-      KTN_STOP_PHASES: await $.env.get("KTN_STOP_PHASES"),
+      KTN_USER_DAEMON: await $.env.get("KTN_USER_DAEMON"),
     },
     sleep: (ms) => $.clock.sleep(ms),
     root: await $.session.root(),

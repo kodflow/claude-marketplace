@@ -1,8 +1,8 @@
 #!/bin/bash
 # on-stop.sh — Stop: the end of a turn.
 #
-# Sequence: GATE (loop guards) → BLOCK (a linter verdict that must be acted
-# on) → TRANSFORM (feedback Claude reads before it may finish) → OBSERVE.
+# Sequence: GATE (loop guards) → TRANSFORM (feedback Claude reads before it
+# may finish) → OBSERVE.
 # The hook emits at most ONE JSON document: Claude Code keeps one response per
 # hook, so two documents would lose whichever came first.
 set +e
@@ -52,37 +52,30 @@ ctx=""
 
 # This session's edits, from the tracker on-tool.sh fills, and the Go
 # projects they fall in (lib/gomod.sh: the go.mod nearest each file, never
-# above the project root). Neither the daemon nor the CLI is reached for an
-# edit outside a Go project: making.codes has no go.mod at its root, only
+# above the project root). The linter is not run for an edit outside a Go
+# project: making.codes has no go.mod at its root, only
 # projects/making.codes/go.mod.
 edited=""
 [ -f "$STATE/edited" ] && edited=$(sort -u "$STATE/edited" 2>/dev/null)
 KF_GOMODS=""
 [ -n "$edited" ] && . "$LIB/gomod.sh" 2>/dev/null && kf_gomods "$PROJECT_DIR" <<<"$edited"
 
-# --- BLOCK: project-linter over HTTP, when a server is listening ------------
-# Its verdict is passed through verbatim when it is a decision; a plain
-# report joins the feedback below. Phases 1..8: tests included, the agent has
-# finished writing; health excluded, too noisy for a turn boundary.
-port=${KTN_LINTER_PORT:-7717}
-if [ -n "$KF_GOMODS" ] && command -v curl >/dev/null 2>&1 && (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
-    body=$(printf '%s' "$INPUT" | jq -c --arg p "${KTN_STOP_PHASES:-structural,signatures,logic,performance,modern,style,comment,tests}" '. + {phases: ($p | split(","))}' 2>/dev/null)
-    resp=$(curl -sf --max-time 28 -H 'Content-Type: application/json' -d "${body:-$INPUT}" "http://127.0.0.1:$port/hooks/stop" 2>/dev/null)
-    if [ -n "$resp" ] && [ "$resp" != "{}" ] && [ "$resp" != null ]; then
-        if printf '%s' "$resp" | jq -e '.decision == "block"' >/dev/null 2>&1; then
-            printf '%s' "$resp"; _log; exit 0
-        fi
-        text=$(printf '%s' "$resp" | jq -r '.hookSpecificOutput.additionalContext // .reason // empty' 2>/dev/null)
-        [ -z "$text" ] && text=$(printf '%s' "$resp" | head -c 1000)
-        [ -n "$text" ] && ctx="project-linter: $text"
-    fi
-fi
-
-# --- TRANSFORM: project-linter on the Go packages this session touched -------
+# --- TRANSFORM: ktn-linter run on the Go packages this session touched -------
+# The daemon is never called from here: ktn-linter delivers its verdict through
+# the command hooks `ktn-linter hook install` writes (kodflow/ktn-linter#771).
+# This is the CLI, on this session's packages only.
 # Per module, from its own directory, packages relative to it: a git diff
 # would pull in every other session's work on the branch, and a package path
 # from the project root means nothing to a module that does not sit there.
-if [ -n "$KF_GOMODS" ] && command -v project-linter >/dev/null 2>&1; then
+# `ktn-linter run`; `project-linter lint` only when ktn-linter is not on PATH
+# (the old name, kept as a fallback). stdout only: whatever the CLI says on
+# stderr — package status, the notice that a daemon already serves the
+# directory — would land in the model's context at every turn end.
+linter=()
+if command -v ktn-linter >/dev/null 2>&1; then linter=(ktn-linter run)
+elif command -v project-linter >/dev/null 2>&1; then linter=(project-linter lint)
+fi
+if [ -n "$KF_GOMODS" ] && [ ${#linter[@]} -gt 0 ]; then
     # macOS ships no timeout(1): the run is then unbounded but still runs
     limit=(); command -v timeout >/dev/null 2>&1 && limit=(timeout 20)
     while IFS= read -r mod; do
@@ -95,11 +88,23 @@ if [ -n "$KF_GOMODS" ] && command -v project-linter >/dev/null 2>&1; then
             seen="$seen$d"$'\n'; pkgs+=("$d")
         done <<<"$edited"
         [ ${#pkgs[@]} -gt 0 ] || continue
-        out=$(cd "$mod" && "${limit[@]}" project-linter lint "${pkgs[@]}" 2>&1 | tail -50)
+        out=$(cd "$mod" && "${limit[@]}" "${linter[@]}" "${pkgs[@]}" 2>/dev/null); rc=$?
+        out=$(printf '%s\n' "$out" | tail -50)
         [ ${#out} -gt 2000 ] && out="${out:0:2000}…(truncated)"
         rel=${mod#"$PROJECT_DIR"}; rel=${rel#/}
+        # 0 clean, 1 findings (on stdout), 42 a daemon already serves the
+        # module and reports through its own hooks: nothing to add. Anything
+        # else is a run that did not complete, said in one line rather than
+        # by the CLI's stderr, so silence never reads as a clean module.
+        case "$rc" in
+            0|1|42) ;;
+            124) out="${out:+$out
+}(${linter[0]} did not finish within 20 s: not linted)" ;;
+            *) out="${out:+$out
+}(${linter[0]} did not complete, exit $rc: run it in ${rel:-.} to see why)" ;;
+        esac
         [ -n "$out" ] && ctx="${ctx:+$ctx
-}project-linter (session scope, ${rel:-.}):
+}${linter[0]} (session scope, ${rel:-.}):
 $out"
     done <<<"$KF_GOMODS"
 fi

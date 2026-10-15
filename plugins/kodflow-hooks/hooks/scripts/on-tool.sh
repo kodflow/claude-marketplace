@@ -1261,23 +1261,9 @@ pre_edit() {
         done ;;
     esac
 
-    # --- OBSERVE: project-linter pre-check, only when a server is listening --
-    # Only for a file of a Go project (lib/gomod.sh: the go.mod nearest it,
-    # never above the project root); anywhere else not even the port is
-    # probed. A bash TCP probe costs nothing; curl to a closed port costs
-    # 12 ms per edit. Structural/signature phases only — logic and style wait
-    # for Stop.
-    case "$FILE" in *.md|*.json|*.yaml|*.yml|*.toml|/tmp/*|*/.claude/*) ;; *)
-        local port=${KTN_LINTER_PORT:-7717} body resp
-        if . "$LIB/gomod.sh" 2>/dev/null && kf_gomod "$FILE" "$PROJECT_DIR" \
-            && command -v curl >/dev/null 2>&1 && (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
-            body=$(printf '%s' "$INPUT" | jq -c --arg p "${KTN_PRE_PHASES:-structural,signatures}" '. + {phases: ($p | split(","))}' 2>/dev/null)
-            resp=$(curl -sf --max-time 4 -H 'Content-Type: application/json' -d "${body:-$INPUT}" "http://127.0.0.1:$port/hooks/pre-tool-use" 2>/dev/null)
-            if [ -n "$resp" ] && printf '%s' "$resp" | jq -e '.hookSpecificOutput' >/dev/null 2>&1; then
-                printf '%s' "$resp"; _log; exit 0
-            fi
-        fi ;;
-    esac
+    # No linter call here: ktn-linter delivers its own verdict through the
+    # command hooks `ktn-linter hook install` writes (kodflow/ktn-linter#771).
+    # A call from this script would report the same finding twice.
     _log
     exit 0
 }
