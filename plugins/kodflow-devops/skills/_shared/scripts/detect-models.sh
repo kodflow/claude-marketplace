@@ -14,9 +14,13 @@ emit() { printf '%s=%s\n' "$1" "$2"; }
 CJ="${HOME}/.claude.json"
 
 # Gated tokens, one a line (gated-models.txt beside this directory), |-joined.
+# An unreadable list must not make every model ungated: it falls back to the
+# one model the policy gates today, as the hooks do.
 GATED=""
 GF="${BASH_SOURCE[0]%/*}/../gated-models.txt"
-if [ -r "$GF" ]; then
+if [ ! -r "$GF" ]; then
+  GATED=fable
+else
   while IFS= read -r line || [ -n "$line" ]; do
     line=${line%%#*}
     line=$(printf '%s' "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
@@ -49,7 +53,9 @@ if [ -r "$CJ" ] && command -v jq >/dev/null 2>&1; then
   # Models this account has actually billed against — evidence of real access.
   emit CLAUDE_SEEN "$(jq -r '[.projects // {} | to_entries[] | .value.lastModelUsage // {} | keys[]] | unique | join("|")' "$CJ" 2>/dev/null)"
 else
-  emit CLAUDE_TOP ""; emit CLAUDE_TOP_UNGATED opus; emit CLAUDE_PLAN unknown
+  # Access unknown: no guess. An empty value is the policy's cue to say so and
+  # fall back to the session model.
+  emit CLAUDE_TOP ""; emit CLAUDE_TOP_UNGATED ""; emit CLAUDE_PLAN unknown
 fi
 
 # Billing shape decides what "cost" even means. On a subscription the binding

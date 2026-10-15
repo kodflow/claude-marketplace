@@ -54,6 +54,11 @@ jobs:
           pip install --quiet pyyaml
           python3 scripts/validate-frontmatter.py .
 
+      # The orchestrator's model comes from detect-models.sh: no guess when the
+      # cache is unreadable, never a gated model, a missing list failing closed.
+      - name: The model detector neither guesses nor reports a gated model
+        run: bash scripts/tests/test_detect_models.sh
+
       # Tested before trusted: an effort typo, an agent on a gated model and a
       # missing gated list are each planted and must be refused.
       - name: The frontmatter validator refuses what the model policy forbids

@@ -24,8 +24,8 @@ release cadence that is weeks. The detector reads what this machine actually has
 | Key | Means |
 |-----|-------|
 | `CLAUDE_TOP` | the highest model this account may select, from the CLI's own cache — the same list `/model` shows, so it updates itself when access changes. It may be a gated model (§6) |
-| `CLAUDE_TOP_UNGATED` | the highest model that is **not** listed in `_shared/gated-models.txt`: the orchestrator's model. When the cache offers none, the alias `opus`, which the CLI resolves to its current Opus |
-| `CLAUDE_GATED` | the gated tokens, `|`-joined, as `gated-models.txt` lists them |
+| `CLAUDE_TOP_UNGATED` | the highest model that is **not** listed in `_shared/gated-models.txt`: the orchestrator's model. When the cache is read and offers none, the alias `opus`, which the CLI resolves to its current Opus; empty when the cache cannot be read |
+| `CLAUDE_GATED` | the gated tokens as `gated-models.txt` lists them, joined by a vertical bar (`fable` alone today); the policy's model when the list cannot be read |
 | `CLAUDE_PLAN` | the rate-limit tier |
 | `CLAUDE_BILLING` | `subscription` or `api-key` — decides what "cost" means, see §5 |
 | `CODEX_CLI`, `CODEX_AUTH` | whether the second provider is reachable at all |
