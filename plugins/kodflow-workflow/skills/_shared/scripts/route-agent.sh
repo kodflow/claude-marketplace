@@ -220,7 +220,9 @@ resolve_agent() {
       if kf_agent_def "$AGENT_PLUGIN:$name" "$CFG" "$PROJECT" && [[ "$KF_AGENT_DEF" = "$def" ]]; then
         R_TYPE="$AGENT_PLUGIN:$name"
       else
-        R_TYPE="$name"
+        # Another plugin's agent: its namespace is not ours to guess
+        echo "agent $name: found in a plugin other than $AGENT_PLUGIN ($def); the engine cannot resolve it bare" >&2
+        return 30
       fi ;;
   esac
   if ! kf_fm_model "$def"; then

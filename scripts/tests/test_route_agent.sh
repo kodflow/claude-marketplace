@@ -151,6 +151,17 @@ table '{"id":"t","skill":"/x","phase":"p","agent":"developer-executor-security"}
 cp "$SRC/gated-models.txt" "$T/_shared/gated-models.txt"
 unset CLAUDE_ROUTING_TABLE
 
+# A definition that only another plugin ships has no name the router can emit
+OP=$CLAUDE_CONFIG_DIR/plugins/cache/other/thirdparty/1
+agent "$OP/agents" developer-specialist-java sonnet high
+cp "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json" "$T/ip.bak"
+jq --arg p "$OP" '.plugins["thirdparty@other"] = [{"scope":"user","installPath":$p}]' "$T/ip.bak" > "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"
+profile '{"languages":["java"]}'
+table '{"id":"t","skill":"/x","phase":"p","agent_template":"developer-specialist-{language}","expand_from":".languages[]"}'
+run /x p; rc 30 "an agent found only in another plugin is refused, not emitted bare"
+cp "$T/ip.bak" "$CLAUDE_CONFIG_DIR/plugins/installed_plugins.json"
+unset CLAUDE_ROUTING_TABLE
+
 echo "the shipped table"
 TBL=$SRC/routing-table.jsonl
 AG=$ROOT/plugins/kodflow-specialists/agents
