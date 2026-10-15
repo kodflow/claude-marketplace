@@ -735,13 +735,16 @@ printf '%s' "$OUT" | jq -e '.terminalSequence' >/dev/null 2>&1 && ok "permission
 run Notification "" '{"notification_type":"auth_success","message":"x"}' on-user.sh
 [ -z "$OUT" ] && ok "other notifications stay silent" || bad "notification silent" "$OUT"
 
-echo "== project-linter · Go projects only (the nearest go.mod, never above the root)"
-# A fake project-linter and curl record what reaches them; a listener makes
-# the port probe succeed, so only the go.mod rule decides.
+echo "== ktn-linter · Go projects only (the nearest go.mod, never above the root)"
+# A fake ktn-linter, project-linter and curl record what reaches them; a
+# listener on the old daemon port proves the hooks no longer dial it
+# (kodflow/ktn-linter#771): ktn-linter delivers its verdict through its own
+# command hooks, so only the go.mod rule decides whether the CLI runs.
 FB=$T/fakebin; mkdir -p "$FB"; LL=$T/linter.log; : > "$LL"
-printf '#!/bin/sh\necho "project-linter $(pwd) $*" >> "%s"\necho "lint report"\n' "$LL" > "$FB/project-linter"
+printf '#!/bin/sh\necho "ktn-linter $(pwd) $*" >> "%s"\necho "lint report"\necho "stderr noise" >&2\n' "$LL" > "$FB/ktn-linter"
+printf '#!/bin/sh\necho "project-linter $(pwd) $*" >> "%s"\necho "old report"\n' "$LL" > "$FB/project-linter"
 printf '#!/bin/sh\necho "curl $*" >> "%s"\necho "{}"\n' "$LL" > "$FB/curl"
-chmod +x "$FB/project-linter" "$FB/curl"
+chmod +x "$FB/ktn-linter" "$FB/project-linter" "$FB/curl"
 LP=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])' 2>/dev/null)
 python3 -c 'import socket,sys,time
 s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1", int(sys.argv[1]))); s.listen(64); time.sleep(60)' "$LP" &
@@ -750,31 +753,54 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do (exec 3<>"/dev/tcp/127.0.0.1/$LP") 2>/dev/null
 lrun() { local ev=$1 tool=$2 frag=$3 script=$4
     OUT=$(jq -n -c --arg ev "$ev" --arg tool "$tool" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" --argjson frag "$frag" \
         '{session_id:"sess-1",hook_event_name:$ev,tool_name:$tool,cwd:$cwd,scratchpad_dir:$sp,tool_use_id:"t1"} + $frag' \
-        | PATH="$FB:$PATH" KTN_LINTER_PORT=$LP bash "$S/$script" 2>/dev/null); RC=$?; }
+        | PATH="${LPATH:-$FB:$PATH}" KTN_LINTER_PORT=$LP bash "$S/$script" 2>/dev/null); RC=$?; }
 # A triage gate left raised by an earlier case would refuse the edit first
 rm -f "$T/home/.claude/kodflow/sessions/sess-1/triage-pending"
 # on-tool.sh skips files under /tmp, where mktemp puts $T on Linux: the
 # pre-edit cases get a project of their own inside the checkout.
 PP=$(mktemp -d "$ROOT/.kf-gomod.XXXXXX")
 mkdir -p "$PP/projects/app/cmd/x" "$PP/tools"; printf 'module app\n' > "$PP/projects/app/go.mod"
-: > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PreToolUse Edit "$(jq -n -c --arg f "$PP/tools/gen.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
-[ ! -s "$LL" ] && [ "$RC" -eq 0 ] && ok "pre-edit: a .go file outside any module probes nothing" || bad "pre-edit outside" "rc=$RC log=$(cat "$LL")"
 : > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PreToolUse Edit "$(jq -n -c --arg f "$PP/projects/app/cmd/x/main.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
-grep -q "^curl .*:$LP/hooks/pre-tool-use" "$LL" && [ "$RC" -eq 0 ] && ok "pre-edit: a file of a module below the root reaches the daemon" || bad "pre-edit module" "rc=$RC log=$(cat "$LL")"
+[ ! -s "$LL" ] && [ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "pre-edit: a file of a Go module reaches no daemon (ktn-linter's own hooks report)" || bad "pre-edit module" "rc=$RC out=$OUT log=$(cat "$LL")"
 rm -rf "$PP"
 GM=$T/repo/projects/app; mkdir -p "$GM/cmd/x" "$T/repo/tools"
 printf 'module app\n' > "$GM/go.mod"; printf 'package main\n' > "$GM/cmd/x/main.go"; printf 'x\n' > "$T/repo/tools/gen.go"
 rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/claudemd-nudged"
 printf '%s\n' "$T/repo/tools/gen.go" "$T/repo/a.txt" > "$T/tmp/sp/edited"
 : > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
-[ ! -s "$LL" ] && ok "stop: edits outside any Go project reach neither the daemon nor the CLI" || bad "stop outside" "$(cat "$LL")"
+[ ! -s "$LL" ] && ok "stop: edits outside any Go project reach neither a daemon nor the CLI" || bad "stop outside" "$(cat "$LL")"
 rm -f "$T/tmp/sp/stop-count"
 printf '%s\n' "$T/repo/tools/gen.go" "$GM/cmd/x/main.go" "$GM/go.mod" > "$T/tmp/sp/edited"
 : > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
-grep -q "^curl .*:$LP/hooks/stop" "$LL" && ok "stop: an edit in a module reaches the daemon" || bad "stop daemon" "$(cat "$LL")"
-grep -qx "project-linter $GM lint ./cmd/x" "$LL" && ok "stop: project-linter runs from the module, on its own package paths" || bad "stop cli" "$(cat "$LL")"
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("project-linter \\(session scope, projects/app\\):\nlint report")' >/dev/null 2>&1 \
+! grep -q '^curl ' "$LL" && ok "stop: an edit in a module reaches no daemon" || bad "stop daemon" "$(cat "$LL")"
+grep -qx "ktn-linter $GM run ./cmd/x" "$LL" && ! grep -q '^project-linter ' "$LL" \
+    && ok "stop: ktn-linter run from the module, on its own package paths" || bad "stop cli" "$(cat "$LL")"
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("ktn-linter \\(session scope, projects/app\\):\nlint report")' >/dev/null 2>&1 \
     && ok "stop: the report names its module" || bad "stop report" "$OUT"
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("stderr noise") | not' >/dev/null 2>&1 \
+    && ok "stop: the CLI's stderr never reaches the context" || bad "stop stderr" "$OUT"
+# A run that does not complete says so in one line; a refusal beside a live
+# daemon (42) stays silent, its stderr included
+for case_rc in 3:"did not complete, exit 3" 42:""; do
+    code=${case_rc%%:*} want=${case_rc#*:}
+    printf '#!/bin/sh\necho "boom on stderr" >&2\nexit %s\n' "$code" > "$FB/ktn-linter"; chmod +x "$FB/ktn-linter"
+    rm -f "$T/tmp/sp/stop-count"; : > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
+    ctxv=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null)
+    if [ -n "$want" ]; then
+        case "$ctxv" in *"$want"*) case "$ctxv" in *boom*) bad "stop exit $code" "$OUT" ;; *) ok "stop: exit $code is reported in one line, without the stderr" ;; esac ;; *) bad "stop exit $code" "$OUT" ;; esac
+    else
+        case "$ctxv" in *ktn-linter*|*boom*) bad "stop exit $code" "$OUT" ;; *) ok "stop: exit 42 (a daemon serves the module) stays silent" ;; esac
+    fi
+done
+# ktn-linter absent: project-linter, the old name, is the fallback
+rm -f "$T/tmp/sp/stop-count" "$FB/ktn-linter"; mkdir -p "$T/nokt"
+for t in bash jq cat sort grep head tail cut awk date cksum mkdir touch rm wc tr sed flock timeout dirname env; do
+    p=$(command -v "$t" 2>/dev/null) && ln -sf "$p" "$T/nokt/$t"
+done
+ln -sf "$FB/project-linter" "$T/nokt/project-linter"
+: > "$LL"; LPATH=$T/nokt lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
+grep -qx "project-linter $GM lint ./cmd/x" "$LL" && ok "stop: project-linter lint only when ktn-linter is not on PATH" || bad "stop fallback" "$(cat "$LL") out=$OUT"
+rm -rf "$T/nokt"
 kill "$LPID" 2>/dev/null; wait "$LPID" 2>/dev/null
 rm -rf "$GM" "$T/repo/projects" "$T/repo/tools" "$FB"; : > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/claudemd-nudged"
 

@@ -456,12 +456,11 @@ they are the only part of the system that can say no to you.
   SubagentStart ────▶ every subagent inherits the four standing rules  on-agent
 
   Stop ─────────────▶ the turn-end quality gate:                       on-stop
-                      · relays the project-linter verdict verbatim
-                      · lints this session's packages
+                      · lints this session's packages (ktn-linter run)
                       · nudges the CLAUDE.md of each changed directory,
                         once per directory per session
-                      ◆ a deny comes from the linter daemon on :7717,
-                        never from the hook's own judgement
+                      ◆ no linter daemon is called: ktn-linter reports
+                        through the command hooks it installs itself
 
   SessionEnd · PreCompact · ConfigChange · Notification · TaskCreated
   TaskCompleted · TeammateIdle · SubagentStop ──▶ observe only
@@ -510,12 +509,11 @@ they are the only part of the system that can say no to you.
   SubagentStart ----> every subagent inherits the four standing rules on-agent
 
   Stop -------------> the turn-end quality gate:                      on-stop
-                      . relays the project-linter verdict verbatim
-                      . lints this session's packages
+                      . lints this session's packages (ktn-linter run)
                       . nudges the CLAUDE.md of each changed directory,
                         once per directory per session
-                      <> a deny comes from the linter daemon on :7717,
-                         never from the hook's own judgement
+                      <> no linter daemon is called: ktn-linter reports
+                         through the command hooks it installs itself
 
   SessionEnd . PreCompact . ConfigChange . Notification . TaskCreated
   TaskCompleted . TeammateIdle . SubagentStop --> observe only

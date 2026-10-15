@@ -5,7 +5,6 @@ import { test, expect } from "claude-code/testing";
 import {
   goModuleOf,
   lintSetup,
-  unknownPhases,
   yamlProblems,
   type LintPort,
   type RunResult,
@@ -20,15 +19,36 @@ type Fake = LintPort & {
   asked: string[];
 };
 
+const SOUND = JSON.stringify({ ok: true, hosts: [], defects: [] });
+const UNSOUND = JSON.stringify({
+  ok: false,
+  hosts: [],
+  defects: [
+    {
+      code: "legacy_http",
+      host: "claude",
+      message: "an HTTP hook to a daemon route",
+    },
+  ],
+});
+
 function fake(o: {
   answers?: (string | undefined)[];
-  bin?: boolean;
-  healthy?: boolean[];
+  /** Which binary answers `version`: ktn-linter, the old name, or none. */
+  bin?: "ktn-linter" | "project-linter" | false;
+  /** Successive `hook doctor --json` answers; the last one repeats. */
+  doctor?: RunResult[];
+  /** Successive `daemon status` exit codes; the last one repeats. */
+  status?: number[];
   install?: RunResult;
   vars?: LintPort["vars"];
 }): Fake {
   const answers = [...(o.answers ?? [])];
-  const healthy = [...(o.healthy ?? [false])];
+  const doctor = [...(o.doctor ?? [{ exitCode: 0, stdout: SOUND, stderr: "" }])];
+  const status = [...(o.status ?? [0])];
+  const next = <T,>(xs: T[]): T => (xs.length > 1 ? xs.shift()! : xs[0]!);
+  const bin = o.bin ?? "ktn-linter";
+  const installed = "/h/.local/bin/ktn-linter";
   const f: Fake = {
     files: new Map([[`${MOD}/go.mod`, "module x\n"]]),
     dirs: new Set(["/repo", "/repo/projects", MOD, `${MOD}/cmd`]),
@@ -48,27 +68,18 @@ function fake(o: {
         stdout,
         stderr: "",
       });
-      if (
-        argv[0] === "project-linter" ||
-        argv[0] === "/h/.local/bin/project-linter"
-      )
-        return o.bin || argv[0] !== "project-linter"
-          ? ok("project-linter version 1.2.3\n")
-          : undefined;
-      if (argv[0] === "curl")
-        return ok(
-          healthy.length > 1
-            ? healthy.shift()
-              ? "200"
-              : "000"
-            : healthy[0]
-              ? "200"
-              : "000",
-        );
       if (argv[0] === "bash" && argv[2]?.includes("api.github.com"))
-        return o.install ?? ok("v1.2.3 /h/.local/bin/project-linter\n");
+        return o.install ?? ok(`v1.46.0 ${installed}\n`);
       if (argv[0] === "bash") return ok();
-      return undefined;
+      const known = argv[0] === bin || argv[0] === installed;
+      if (!known) return undefined;
+      if (argv[1] === "version") return ok(`${argv[0]} version 1.46.0\n`);
+      if (argv[1] === "hook" && argv[2] === "doctor") return next(doctor);
+      if (argv[1] === "hook" && argv[2] === "install") return ok("installed\n");
+      if (argv[1] === "daemon" && argv[2] === "status")
+        return { exitCode: next(status), stdout: "", stderr: "" };
+      if (argv[1] === "daemon") return ok();
+      return { exitCode: 40, stdout: "", stderr: "unknown command" };
     },
   };
   return f;
@@ -85,9 +96,7 @@ test("the Go project is the nearest go.mod, never above the root", async () => {
   expect(await goModuleOf("/a/b.go", "/", exists)).toBe("/");
 });
 
-test("phases: names and numbers project-linter accepts, yaml mistakes", () => {
-  expect(unknownPhases("structural, signature,LOGIC,4,perf,9")).toEqual([]);
-  expect(unknownPhases("styles,0,10,,tests")).toEqual(["styles", "0", "10"]);
+test("configuration: yaml mistakes", () => {
   expect(yamlProblems("version: 1\nphases:\n  enabled: [1,2]\n")).toEqual([]);
   expect(
     yamlProblems(
@@ -105,83 +114,118 @@ test("phases: names and numbers project-linter accepts, yaml mistakes", () => {
 });
 
 test("/lint-setup outside a Go project: nothing checked, nothing asked", async () => {
-  const f = fake({ bin: true, healthy: [true] });
+  const f = fake({});
   const text = await lintSetup(f, "");
   expect(text).toContain("No go.mod at or above /repo inside /repo");
   expect(f.runs).toEqual([]);
   expect(f.asked).toEqual([]);
 });
 
-test("/lint-setup on a healthy module: three ok lines, nothing asked", async () => {
-  const f = fake({
-    bin: true,
-    healthy: [true],
-    vars: { KTN_STOP_PHASES: "logic,style" },
-  });
+test("/lint-setup on a healthy module: ok lines, nothing asked, no port", async () => {
+  const f = fake({});
   const text = await lintSetup(f, "projects/making.codes/cmd");
   expect(text).toContain(`Go module: ${MOD}`);
-  expect(text).toContain("binary   ok, project-linter version 1.2.3");
-  expect(text).toContain("daemon   ok, :7717 answers /health");
-  expect(text).toContain("phases   ok (project-linter's defaults");
+  expect(text).toContain("binary   ok, ktn-linter version 1.46.0");
+  expect(text).toContain("hooks    ok, ktn-linter hook doctor");
+  expect(text).toContain("daemon   per project, started by the MCP server");
+  expect(text).toContain("config   ok (ktn-linter's defaults)");
   expect(f.asked).toEqual([]);
-  expect(f.runs.some((a) => a[0] === "bash")).toBe(false);
+  expect(f.runs.some((a) => a[0] === "bash" || a[0] === "curl")).toBe(false);
+  expect(f.runs).toContainEqual(["ktn-linter", "hook", "doctor", "--json"]);
+  // the daemon is not probed without KTN_USER_DAEMON=1
+  expect(f.runs.some((a) => a[1] === "daemon")).toBe(false);
+  expect(text).not.toContain("7717");
+});
+
+test("/lint-setup falls back on project-linter only when ktn-linter is absent", async () => {
+  const f = fake({ bin: "project-linter" });
+  const text = await lintSetup(f, MOD);
+  expect(f.runs[0]).toEqual(["ktn-linter", "version"]);
+  expect(text).toContain("found as project-linter, the old name");
+  expect(f.runs).toContainEqual(["project-linter", "hook", "doctor", "--json"]);
+  // an old binary without `hook`: said, never asked
+  const g = fake({
+    bin: "project-linter",
+    doctor: [{ exitCode: 40, stdout: "", stderr: "unknown command" }],
+  });
+  const t = await lintSetup(g, MOD);
+  expect(t).toContain("hooks    unavailable: project-linter predates `hook install`");
+  expect(g.asked).toEqual([]);
 });
 
 test("/lint-setup installs and starts nothing it was not allowed to", async () => {
   // Declined, then nobody to ask (a -p run): no bash at all
   for (const answers of [["Not now"], [undefined]]) {
-    const f = fake({ bin: false, answers });
+    const f = fake({ bin: false, answers, vars: { KTN_USER_DAEMON: "1" } });
     const text = await lintSetup(f, MOD);
     expect(f.asked.length).toBe(1);
     expect(f.asked[0]).toContain("Install its latest release");
     expect(f.runs.some((a) => a[0] === "bash")).toBe(false);
     expect(text).toContain("binary   missing");
-    expect(text).toContain("needs the binary first");
+    expect(text).toContain("hooks    needs the binary first");
+    expect(text).toContain("daemon   needs the binary first");
   }
-  const g = fake({ bin: true, healthy: [false], answers: ["Not now"] });
+  const g = fake({
+    doctor: [{ exitCode: 1, stdout: UNSOUND, stderr: "" }],
+    status: [1],
+    answers: ["Not now", "Not now"],
+    vars: { KTN_USER_DAEMON: "1" },
+  });
   const t = await lintSetup(g, MOD);
-  expect(g.asked[0]).toContain("Start it on :7717?");
-  expect(g.runs.some((a) => a[0] === "bash")).toBe(false);
-  expect(t).toContain("not started: project-linter serve --port=7717");
+  expect(g.asked[0]).toContain("Run `ktn-linter hook install`?");
+  expect(g.asked[1]).toContain("`ktn-linter daemon ensure`?");
+  expect(g.runs.some((a) => a[1] === "hook" && a[2] === "install")).toBe(false);
+  expect(g.runs.some((a) => a[1] === "daemon" && a[2] === "ensure")).toBe(false);
+  expect(t).toContain("legacy_http (claude): an HTTP hook to a daemon route");
+  expect(t).toContain("not installed: ktn-linter hook install, then ktn-linter hook doctor");
+  expect(t).toContain("not started: ktn-linter daemon ensure");
 });
 
-test("/lint-setup, both fixes accepted: install, then serve on the configured port", async () => {
+test("/lint-setup, every fix accepted: install, hook install, daemon ensure", async () => {
   const f = fake({
     bin: false,
-    healthy: [false, false, true],
-    answers: ["Install", "Start it"],
-    vars: { KTN_LINTER_PORT: "7799" },
+    doctor: [
+      { exitCode: 1, stdout: UNSOUND, stderr: "" },
+      { exitCode: 0, stdout: SOUND, stderr: "" },
+    ],
+    status: [1, 0],
+    answers: ["Install", "Install the hooks", "Start it"],
+    vars: { KTN_USER_DAEMON: "1" },
   });
   const text = await lintSetup(f, MOD);
   const bash = f.runs.filter((a) => a[0] === "bash");
-  expect(bash.length).toBe(2);
-  expect(bash[0]![2]).toContain("releases/latest");
+  expect(bash.length).toBe(1);
+  expect(bash[0]![2]).toContain("repos/kodflow/ktn/releases/latest");
+  expect(bash[0]![2]).toContain("checksums.txt");
+  expect(bash[0]![2]).toContain("ktn-hook");
   expect(bash[0]![2]).toContain("mv -f");
-  expect(bash[1]!.slice(3)).toEqual(["/h/.local/bin/project-linter", "7799"]);
-  expect(text).toContain("installed v1.2.3 at /h/.local/bin/project-linter");
-  expect(text).toContain("started on :7799");
-  expect(
-    f.runs
-      .filter((a) => a[0] === "curl")
-      .every((a) => a.at(-1) === "http://127.0.0.1:7799/health"),
-  ).toBe(true);
+  expect(text).toContain("installed v1.46.0 at /h/.local/bin/ktn-linter");
+  const bin = "/h/.local/bin/ktn-linter";
+  expect(f.runs).toContainEqual([bin, "hook", "install"]);
+  expect(f.runs).toContainEqual([bin, "daemon", "ensure"]);
+  expect(text).toContain("installed; hook doctor now reports ok");
+  expect(text).toContain("started (ktn-linter daemon ensure)");
+  expect(f.runs.some((a) => a[0] === "curl")).toBe(false);
 });
 
-test("/lint-setup reports phase problems and never writes them", async () => {
-  const f = fake({
-    bin: true,
-    healthy: [true],
-    vars: { KTN_PRE_PHASES: "structural,bogus" },
-  });
+test("/lint-setup reports configuration problems and never writes them", async () => {
+  const f = fake({});
   f.files.set(
-    `${MOD}/.project-linter.yaml`,
+    `${MOD}/.ktn-linter.yaml`,
     "phases:\n  enabled: [1]\n  disabled: [2]\n",
   );
   const text = await lintSetup(f, MOD);
-  expect(text).toContain("phases   2 problem(s), to fix by hand");
-  expect(text).toContain("KTN_PRE_PHASES names unknown phases: bogus");
+  expect(text).toContain("config   1 problem(s), to fix by hand");
   expect(text).toContain(
-    ".project-linter.yaml: phases.enabled and phases.disabled are both set",
+    ".ktn-linter.yaml: phases.enabled and phases.disabled are both set",
   );
   expect(f.asked).toEqual([]);
+  // the old name is read only when the new one is absent
+  const g = fake({});
+  g.files.set(`${MOD}/.project-linter.yaml`, "max_phase: 3\n");
+  expect(await lintSetup(g, MOD)).toContain(
+    ".project-linter.yaml: max_phase is no longer read",
+  );
+  g.files.set(`${MOD}/.ktn-linter.yaml`, "version: 1\n");
+  expect(await lintSetup(g, MOD)).toContain("config   ok (.ktn-linter.yaml)");
 });

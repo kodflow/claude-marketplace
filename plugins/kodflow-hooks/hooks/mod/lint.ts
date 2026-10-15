@@ -1,4 +1,4 @@
-// lint.ts — project-linter, for Go projects only, and the /lint-setup command.
+// lint.ts — ktn-linter, for Go projects only, and the /lint-setup command.
 // No `$`: register.ts hands the flow a LintPort built on `$`, the tests one
 // in memory.
 //
@@ -9,10 +9,16 @@
 // (tests/fixtures/gomod.json): here with `$.fs.exists`, in
 // hooks/scripts/lib/gomod.sh with `[ -f ]`.
 //
-// /lint-setup checks what the hooks need (the binary, the daemon on
-// KTN_LINTER_PORT or 7717, the phase configuration) and proposes each
-// correction through `$.ui.ask`. Nothing is installed or started unasked; the
-// phase configuration belongs to the user and is never written.
+// /lint-setup checks what ktn-linter needs in a session (the binary, its own
+// command hooks, the per-user daemon when KTN_USER_DAEMON=1, the module's
+// configuration) and proposes each correction through `$.ui.ask`. The hooks
+// and the daemon are ktn-linter's to manage — `hook install`, `hook doctor`,
+// `daemon ensure` — never this plugin's: nothing here speaks to a port
+// (kodflow/ktn-linter#771). Nothing is installed or started unasked; the
+// configuration belongs to the user and is never written.
+//
+// The binary is `ktn-linter`. `project-linter`, its old name, is only a
+// fallback when ktn-linter is not on PATH.
 
 export type RunResult = { exitCode: number; stdout: string; stderr: string };
 
@@ -34,9 +40,7 @@ export type LintPort = {
   ): Promise<string | undefined>;
   /** The variables the check reads, as the session has them. */
   vars: {
-    KTN_LINTER_PORT?: string;
-    KTN_PRE_PHASES?: string;
-    KTN_STOP_PHASES?: string;
+    KTN_USER_DAEMON?: string;
   };
   sleep(ms: number): Promise<void>;
   /** The session's root directory, absolute. */
@@ -75,35 +79,9 @@ export async function goModuleOf(
   }
 }
 
-// --- phases --------------------------------------------------------------------
+// --- configuration ---------------------------------------------------------------
 
-/** project-linter's phases, by number, and the names it accepts for each. */
-const PHASES: readonly (readonly string[])[] = [
-  ["structural"],
-  ["signatures", "signature"],
-  ["logic"],
-  ["performance", "perf"],
-  ["modern"],
-  ["style"],
-  ["comment", "comments"],
-  ["tests", "test"],
-  ["health"],
-];
-
-/** The tokens of a phase list (KTN_PRE_PHASES, KTN_STOP_PHASES) it would refuse. */
-export function unknownPhases(spec: string): string[] {
-  return spec
-    .split(",")
-    .map((t) => t.trim())
-    .filter((t) => t !== "")
-    .filter((t) => {
-      const n = Number(t);
-      if (/^[0-9]+$/.test(t)) return !(n >= 1 && n <= PHASES.length);
-      return !PHASES.some((names) => names.includes(t.toLowerCase()));
-    });
-}
-
-/** What is wrong with a .project-linter.yaml, read line by line: empty when nothing. */
+/** What is wrong with a .ktn-linter.yaml, read line by line: empty when nothing. */
 export function yamlProblems(text: string): string[] {
   const problems: string[] = [];
   const lines = text.split("\n");
@@ -130,57 +108,82 @@ export function yamlProblems(text: string): string[] {
 export const LINT_SETUP = {
   name: "lint-setup",
   description:
-    "Check project-linter for this Go project: binary, daemon, phases. Proposes each fix.",
+    "Check ktn-linter for this Go project: binary, hooks, daemon, configuration. Proposes each fix.",
   argumentHint: "[path in a Go module]",
 } as const;
 
-const RELEASES = "https://github.com/kodflow/project-linter/releases";
+// The public mirror: kodflow/ktn-linter, the source, is private.
+const RELEASES = "https://github.com/kodflow/ktn/releases";
 
-// The latest release's binary for this machine, into ~/.local/bin, through a
-// temporary file renamed over the old one. Asked for before it runs.
+/** The binary's name, then the old one, looked up only when the first is absent. */
+const BINARIES = ["ktn-linter", "project-linter"] as const;
+
+/** A subcommand the binary does not know: an older release than `hook install`. */
+const UNKNOWN_COMMAND = 40;
+
+// The latest release's archive for this machine, checked against the
+// release's checksums.txt, then ktn-linter and ktn-hook (the client its
+// command hooks run) into ~/.local/bin, each through a temporary file renamed
+// over the old one. Asked for before it runs.
 const INSTALL = [
   "set -eu",
-  `tag=$(curl -fsSL --max-time 20 https://api.github.com/repos/kodflow/project-linter/releases/latest | sed -n 's/.*"tag_name": *"\\([^"]*\\)".*/\\1/p' | head -n 1)`,
+  `tag=$(curl -fsSL --max-time 20 https://api.github.com/repos/kodflow/ktn/releases/latest | sed -n 's/.*"tag_name": *"\\([^"]*\\)".*/\\1/p' | head -n 1)`,
   '[ -n "$tag" ]',
   "os=$(uname -s | tr '[:upper:]' '[:lower:]')",
   'case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) arch=$(uname -m) ;; esac',
+  'asset="ktn-linter_${os}_${arch}.tar.gz"',
+  'work=$(mktemp -d); trap \'rm -rf "$work"\' EXIT',
+  `curl -fsSL --max-time 120 "${RELEASES}/download/$tag/$asset" -o "$work/$asset"`,
+  `curl -fsSL --max-time 20 "${RELEASES}/download/$tag/checksums.txt" -o "$work/checksums.txt"`,
+  'want=$(awk -v a="$asset" \'$2 == a { print $1 }\' "$work/checksums.txt")',
+  'if command -v sha256sum >/dev/null 2>&1; then got=$(sha256sum "$work/$asset"); else got=$(shasum -a 256 "$work/$asset"); fi',
+  '[ -n "$want" ] && [ "${got%% *}" = "$want" ] || { echo "checksum mismatch for $asset" >&2; exit 1; }',
+  'tar -xzf "$work/$asset" -C "$work" ktn-linter ktn-hook',
   'dir=$HOME/.local/bin; mkdir -p "$dir"',
-  'tmp=$(mktemp "$dir/.project-linter.XXXXXX")',
-  `curl -fsSL --max-time 120 "${RELEASES}/download/$tag/project-linter-$os-$arch" -o "$tmp" || { rm -f "$tmp"; exit 1; }`,
-  'chmod +x "$tmp"; mv -f "$tmp" "$dir/project-linter"',
-  'printf "%s %s\\n" "$tag" "$dir/project-linter"',
+  'for b in ktn-linter ktn-hook; do tmp=$(mktemp "$dir/.$b.XXXXXX"); cp "$work/$b" "$tmp"; chmod 755 "$tmp"; mv -f "$tmp" "$dir/$b"; done',
+  'printf "%s %s\\n" "$tag" "$dir/ktn-linter"',
 ].join("\n");
 
-// Detached, its output in a log, so the command returns at once
-const SERVE =
-  'nohup "$0" serve --port="$1" >"${TMPDIR:-/tmp}/project-linter-mcp.log" 2>&1 </dev/null & disown';
-
 const YES_INSTALL = "Install";
-const YES_START = "Start it";
+const YES_HOOKS = "Install the hooks";
+const YES_DAEMON = "Start it";
 const NOT_NOW = "Not now";
-
-async function health(io: LintPort, port: string): Promise<boolean> {
-  const r = await io.run(
-    [
-      "curl",
-      "-sS",
-      "--max-time",
-      "2",
-      "-o",
-      "/dev/null",
-      "-w",
-      "%{http_code}",
-      `http://127.0.0.1:${port}/health`,
-    ],
-    5000,
-  );
-  return r !== undefined && r.stdout.trim() === "200";
-}
 
 async function binary(io: LintPort, bin: string): Promise<string | undefined> {
   const r = await io.run([bin, "version"], 5000);
   if (!r || r.exitCode !== 0) return undefined;
   return r.stdout.trim().split("\n")[0] || "unknown version";
+}
+
+type Doctor =
+  | { kind: "ok" }
+  | { kind: "defects"; defects: string[] }
+  | { kind: "unsupported" }
+  | { kind: "failed"; detail: string };
+
+/** `hook doctor --json`, read: the installation of ktn-linter's own hooks. */
+async function doctor(io: LintPort, bin: string): Promise<Doctor> {
+  const r = await io.run([bin, "hook", "doctor", "--json"], 30_000);
+  if (!r) return { kind: "failed", detail: `${bin} hook doctor could not run` };
+  if (r.exitCode === UNKNOWN_COMMAND) return { kind: "unsupported" };
+  let report: { ok?: unknown; defects?: unknown } | undefined;
+  try {
+    report = JSON.parse(r.stdout);
+  } catch {
+    report = undefined;
+  }
+  if (!report || typeof report !== "object")
+    return {
+      kind: "failed",
+      detail: (r.stderr.trim() || r.stdout.trim() || `exit ${r.exitCode}`).slice(0, 300),
+    };
+  if (report.ok === true && r.exitCode === 0) return { kind: "ok" };
+  const defects = Array.isArray(report.defects)
+    ? report.defects.map((d: any) =>
+        `${d?.code ?? "defect"}${d?.host ? ` (${d.host})` : ""}: ${d?.message ?? ""}`.trim(),
+      )
+    : [];
+  return { kind: "defects", defects: defects.length ? defects : [`exit ${r.exitCode}`] };
 }
 
 /** The whole check, as the text the command prints. */
@@ -196,24 +199,33 @@ export async function lintSetup(io: LintPort, args: string): Promise<string> {
   const module = await goModuleOf(target, root, (p) => io.exists(p), dir);
   if (!module) {
     return [
-      `No go.mod at or above ${target} inside ${root}: not a Go project, so the hooks neither probe the`,
-      "linter daemon nor run project-linter here, and there is nothing to set up.",
+      `No go.mod at or above ${target} inside ${root}: not a Go project, so the hooks do not run`,
+      "ktn-linter here, and there is nothing to set up.",
       "Name a file or a directory of a Go module to check it: /lint-setup <path>.",
     ].join("\n");
   }
   const lines = [`Go module: ${module}`];
-  const port = io.vars.KTN_LINTER_PORT || "7717";
 
-  let bin = "project-linter";
-  let version = await binary(io, bin);
+  // --- binary
+  let bin: string = BINARIES[0];
+  let version: string | undefined;
+  for (const name of BINARIES) {
+    version = await binary(io, name);
+    if (version) {
+      bin = name;
+      break;
+    }
+  }
   lines.push(
-    version
-      ? `binary   ok, ${version}`
-      : "binary   missing: project-linter is not on PATH",
+    !version
+      ? "binary   missing: ktn-linter is not on PATH"
+      : bin === BINARIES[0]
+        ? `binary   ok, ${version}`
+        : `binary   ok, ${version} (found as ${bin}, the old name: ktn-linter is the one to install)`,
   );
   if (!version) {
     const yes = await io.ask(
-      `project-linter is not installed. Install its latest release from ${RELEASES} into ~/.local/bin?`,
+      `ktn-linter is not installed. Install its latest release from ${RELEASES} (ktn-linter and ktn-hook, checksum verified) into ~/.local/bin?`,
       [YES_INSTALL, NOT_NOW],
     );
     if (yes === YES_INSTALL) {
@@ -231,58 +243,96 @@ export async function lintSetup(io: LintPort, args: string): Promise<string> {
         );
       }
     } else {
-      lines.push(
-        `         not installed. /ktn installs it, or download it from ${RELEASES}`,
-      );
+      lines.push(`         not installed: download it from ${RELEASES}`);
     }
   }
 
-  let alive = await health(io, port);
-  lines.push(
-    alive
-      ? `daemon   ok, :${port} answers /health`
-      : `daemon   down: nothing answers http://127.0.0.1:${port}/health`,
-  );
-  if (!alive && version) {
-    const yes = await io.ask(
-      `The project-linter daemon is not running. Start it on :${port}?`,
-      [YES_START, NOT_NOW],
-    );
-    if (yes === YES_START) {
-      await io.run(["bash", "-c", SERVE, bin, port], 5000);
-      for (let i = 0; i < 5 && !alive; i++) {
-        await io.sleep(1000);
-        alive = await health(io, port);
-      }
+  // --- hooks: ktn-linter's own command hooks, installed and judged by it
+  if (!version) {
+    lines.push("hooks    needs the binary first");
+  } else {
+    let d = await doctor(io, bin);
+    if (d.kind === "ok") {
+      lines.push("hooks    ok, ktn-linter hook doctor reports a sound installation");
+    } else if (d.kind === "unsupported") {
       lines.push(
-        alive
-          ? `         started on :${port}`
-          : "         did not answer within 5 s: see ${TMPDIR:-/tmp}/project-linter-mcp.log",
+        `hooks    unavailable: ${bin} predates \`hook install\` (ktn-linter v1.46.0); install the latest release from ${RELEASES}`,
       );
+    } else if (d.kind === "failed") {
+      lines.push(`hooks    unknown: ${d.detail}`);
     } else {
-      lines.push(`         not started: project-linter serve --port=${port}`);
+      lines.push(`hooks    ${d.defects.length} defect(s) reported by hook doctor:`);
+      for (const x of d.defects) lines.push(`         - ${x}`);
+      const yes = await io.ask(
+        "ktn-linter's command hooks are not sound. Run `ktn-linter hook install`? It rewrites its own entries in your user settings, and nothing else.",
+        [YES_HOOKS, NOT_NOW],
+      );
+      if (yes === YES_HOOKS) {
+        const r = await io.run([bin, "hook", "install"], 120_000);
+        d = await doctor(io, bin);
+        lines.push(
+          d.kind === "ok"
+            ? "         installed; hook doctor now reports ok (restart the session to load them)"
+            : `         hook install did not leave a sound installation: ${(r?.stderr.trim() || (d.kind === "defects" ? d.defects.join("; ") : "see ktn-linter hook doctor")).slice(0, 300)}`,
+        );
+      } else {
+        lines.push(
+          "         not installed: ktn-linter hook install, then ktn-linter hook doctor",
+        );
+      }
     }
-  } else if (!alive) {
-    lines.push("         needs the binary first");
   }
 
-  const problems: string[] = [];
-  for (const name of ["KTN_PRE_PHASES", "KTN_STOP_PHASES"] as const) {
-    const spec = io.vars[name];
-    if (spec === undefined || spec === "") continue;
-    const bad = unknownPhases(spec);
-    if (bad.length)
-      problems.push(`${name} names unknown phases: ${bad.join(", ")}`);
-  }
-  const yaml = await io.read(`${module}/.project-linter.yaml`);
-  if (yaml !== undefined)
-    problems.push(
-      ...yamlProblems(yaml).map((p) => `.project-linter.yaml: ${p}`),
+  // --- daemon: the per-user one when opted in, else the MCP server's own
+  if (io.vars.KTN_USER_DAEMON !== "1") {
+    lines.push(
+      "daemon   per project, started by the MCP server (ktn-linter mcp install; make hooks-install in ktn-linter's own repository)",
     );
+  } else if (!version) {
+    lines.push("daemon   needs the binary first");
+  } else {
+    const ok = async () => (await io.run([bin, "daemon", "status"], 10_000))?.exitCode === 0;
+    let alive = await ok();
+    lines.push(
+      alive
+        ? "daemon   ok, ktn-linter daemon status reports the per-user daemon healthy"
+        : "daemon   down: ktn-linter daemon status does not report a healthy per-user daemon",
+    );
+    if (!alive) {
+      const yes = await io.ask(
+        "The per-user ktn-linter daemon is not running. Start it with `ktn-linter daemon ensure`?",
+        [YES_DAEMON, NOT_NOW],
+      );
+      if (yes === YES_DAEMON) {
+        await io.run([bin, "daemon", "ensure"], 30_000);
+        alive = await ok();
+        lines.push(
+          alive
+            ? "         started (ktn-linter daemon ensure)"
+            : "         did not come up: see ktn-linter daemon status",
+        );
+      } else {
+        lines.push("         not started: ktn-linter daemon ensure");
+      }
+    }
+  }
+
+  // --- configuration: .ktn-linter.yaml, .project-linter.yaml as a fallback
+  let name = ".ktn-linter.yaml";
+  let yaml = await io.read(`${module}/${name}`);
+  if (yaml === undefined) {
+    const old = await io.read(`${module}/.project-linter.yaml`);
+    if (old !== undefined) {
+      name = ".project-linter.yaml";
+      yaml = old;
+    }
+  }
+  const problems =
+    yaml === undefined ? [] : yamlProblems(yaml).map((p) => `${name}: ${p}`);
   lines.push(
     problems.length
-      ? `phases   ${problems.length} problem(s), to fix by hand (this command never writes them):`
-      : `phases   ok (${yaml === undefined ? "project-linter's defaults" : ".project-linter.yaml"}, hook phase lists valid)`,
+      ? `config   ${problems.length} problem(s), to fix by hand (this command never writes them):`
+      : `config   ok (${yaml === undefined ? "ktn-linter's defaults" : name})`,
   );
   for (const p of problems) lines.push(`         - ${p}`);
   return lines.join("\n");
