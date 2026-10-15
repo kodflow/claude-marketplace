@@ -69,16 +69,23 @@ UserPromptSubmit)
            fi ;;
     esac
 
+    # Whose turn this is, for on-stop.sh: a system turn brought no message,
+    # so an unsettled triage is not reminded at its end.
+    mkdir -p "$STATE" 2>/dev/null
+    if [ -n "$SYSTURN" ]; then : > "$STATE/turn-system" 2>/dev/null; else rm -f -- "$STATE/turn-system" 2>/dev/null; fi
+
     if [ -z "$SYSTURN" ]; then
         # A new prompt means the user is back in control: the Stop hook's loop
         # counter starts over. A system turn is not the user back in control —
         # resetting there would let a notification/feedback loop run forever.
         rm -f -- "$STATE/stop-count" 2>/dev/null
         # Every message is triaged into the task list before anything is done
-        # about it: on-tool.sh refuses acting tools until a task tool clears
-        # this. Only while the task tools answer: a gate nothing can lift
-        # would stop the session.
-        [ "$BEAT" = 0 ] && mkdir -p "$SDIR" 2>/dev/null && : > "$SDIR/triage-pending" 2>/dev/null
+        # about it: on-tool.sh refuses acting tools until the mod settles this
+        # cause (a task of its own, or context on the task in progress). Added
+        # beside a `resume` cause, never over it. Only while the task tools
+        # answer: a gate nothing can lift would stop the session.
+        [ "$BEAT" = 0 ] && mkdir -p "$SDIR" 2>/dev/null \
+            && { grep -qx prompt "$SDIR/triage-pending" 2>/dev/null || printf 'prompt\n' >> "$SDIR/triage-pending"; } 2>/dev/null
         # The user's presence, for on-stop.sh's agent-feedback proposal. The
         # mod writes it on composer prompts only; without the mod this is the
         # nearest reading: a prompt that is not a system turn.
@@ -124,16 +131,17 @@ UserPromptSubmit)
 
     # Every message is sorted before any work, so a remark about the task in
     # progress does not become a new task and a new subject does not become
-    # the tail of an unrelated epic. Given whenever the task tools answer.
+    # the tail of an unrelated epic; a question gets a task of its own, closed
+    # once answered. Given whenever the task tools answer.
     # Kept short: it rides on every prompt.
     # A system turn brought no message to sort: the state above is what it
     # needs, the directive would only send it triaging a notification.
-    [ -z "$SYSTURN" ] && [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools); task_create always names its epic (epic=id, 0 for none, no default):
+    [ -z "$SYSTURN" ] && [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools), one task per message; task_create always names its epic (epic=id, 0 for none, no default):
 - new work for an open epic: task_create(epic=id)
-- context on the in_progress task: apply it, no new task
+- context on the in_progress task: task_update(id, description)
 - change to a completed task: task_create \"Rework #N: ...\" in its epic
 - new subject: task_epic(title, 20 chars max), then task_create(epic=its id)
-- question or discussion: no task"
+- question: task_create(epic=0), completed once answered"
     # Code in a repository is delegated to subagents (the PreToolUse gate of
     # on-tool.sh and the Stop rule enforce it); off with KODFLOW_ROOT=off.
     [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it."

@@ -39,9 +39,11 @@ import {
   argsOf,
   attributionText,
   isOff,
+  liftsTriage,
   logPayload,
-  lowersTriage,
+  mainLoop,
   taskTool,
+  triageCauses,
 } from "./calls.ts";
 import {
   agentsFile,
@@ -219,7 +221,6 @@ async function serve(
   const session = await $.session.id();
   const dir = sessionDir(cfg, session);
   const io = port($);
-  if (lowersTriage(e.agentId)) await io.run(["rm", "-f", triageFile(dir)]);
   const agent = e.agentId ? safe(e.agentId) : MAIN;
   const nowSec = () => Math.floor(Date.now() / 1000);
   let answer: { result: string } | { deny: string };
@@ -241,9 +242,21 @@ async function serve(
       : step.run(await load(io, dir, nowSec()), { now: nowSec(), workers });
     answer = { result: text };
   } catch (err) {
-    if (!isTaskError(err)) throw err;
+    if (!isTaskError(err)) {
+      // Fail open: the store or the host failed, and a gate the task tools
+      // cannot settle would stop the session
+      if (mainLoop(e.agentId))
+        await io.run(["rm", "-f", triageFile(dir)]).catch(() => undefined);
+      throw err;
+    }
     answer = { deny: err.message };
   }
+  // A refusal leaves the gate as it was; a call that succeeded settles the
+  // causes it answers. Never at the cost of the answer of an applied change.
+  if ("result" in answer)
+    await settleTriage(io, triageFile(dir), tool, argsOf(e), e.agentId).catch(
+      () => undefined,
+    );
   // One line in .claude/logs/<branch>/session.jsonl, through lib/event.jq
   const payload = logPayload(session, await $.session.root(), e, answer);
   await $.process
@@ -253,6 +266,24 @@ async function serve(
     })
     .catch(() => undefined);
   return answer;
+}
+
+// Drop from triage-pending the causes this call settled: the file goes with
+// the last one, the others stay for their own gesture.
+async function settleTriage(
+  io: Port,
+  file: string,
+  tool: ToolName,
+  args: Record<string, unknown>,
+  agentId: unknown,
+): Promise<void> {
+  const text = await io.read(file);
+  if (text === undefined) return;
+  const causes = triageCauses(text);
+  const left = causes.filter((c) => !liftsTriage(tool, args, agentId, c));
+  if (left.length === causes.length) return;
+  if (left.length === 0) await io.run(["rm", "-f", file]);
+  else await io.write(file, `${left.join("\n")}\n`);
 }
 
 // modwall, collision-guard and zsh-safe (machine-guards.ts) reach `$` through this

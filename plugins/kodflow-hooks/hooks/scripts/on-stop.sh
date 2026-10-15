@@ -131,6 +131,25 @@ if [ -n "$edited" ]; then
 }Before finishing, update the CLAUDE.md of each directory you changed this session (warmup --update convention: what changed and why, no history, at most 1000 lines; leave it as is only if nothing a future session needs has changed, and say so):$due"
 fi
 
+# A message the turn never filed. triage-pending still there at the end of
+# the turn means no task call settled it (on-tool.sh; the mod lifts it cause
+# by cause): typically a question answered with no task, or a session resumed
+# and never reconciled. Not blocking, every turn until settled; the loop
+# guards above still cap it. Not on a system turn (on-user.sh's turn-system):
+# it brought no message to file. The beat is not asked to be fresh: the mod
+# beats on prompts and tool calls only, so a turn spent answering leaves it
+# minutes old; a beat that never came means the gate was never raised, and
+# with the mod gone the next prompt lifts the gate (on-user.sh).
+tp=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID/triage-pending
+if [ -f "$tp" ] && [ ! -f "$STATE/turn-system" ] && [ -f "${tp%/*}/mod-beat" ]; then
+    if [ ! -s "$tp" ] || grep -qvx resume "$tp" 2>/dev/null; then
+        ctx="${ctx:+$ctx
+}This message has no task: one task per message of the user, a question included. File it now with task_create(epic=0) (task_update(id, description) if it was context on the task in progress), then set it completed once answered or done."
+    fi
+    grep -qx resume "$tp" 2>/dev/null && ctx="${ctx:+$ctx
+}The tasks left open at the session start were never settled: task_update(id, status=…) each one (in_progress for the one you resume, completed, deleted or waiting for the others)."
+fi
+
 # Open tasks of the main agent. A task left pending or in progress after the
 # work is done stays on the status line for good, so the turn is asked to
 # settle it. Two sources: the task tools of this plugin (the mod)
@@ -143,9 +162,13 @@ cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 open=""
 mcp_tasks=$cfg/kodflow/sessions/$SID/tasks.json
 # Only the main agent's active epic (its tasks with no epic when none is
-# active): the other open epics are not this turn's subject. lib/epics.jq
-# reads v1 and v2 files alike and turns a malformed one into an empty list.
-mcp_epic='include "epics"; v2 | active_tasks("main")'
+# active): the other open epics are not this turn's subject. Its tasks with
+# no epic come along whatever epic is active: they are the questions and
+# loose requests of one message each, closed once answered (on-user.sh).
+# lib/epics.jq reads v1 and v2 files alike and turns a malformed one into an
+# empty list.
+mcp_epic='include "epics"; v2 | active("main") as $a
+    | active_tasks("main"), (if $a != 0 then .tasks[] | select((.agent // "main") == "main" and (.epic // 0) == 0) else empty end)'
 [ -s "$mcp_tasks" ] && open=$(jq -r -L "$LIB" "$mcp_epic"' | select(.status == "pending" or .status == "in_progress") | "\(.id)\t\(.status)\t\(.subject)\ttask_update"' \
     "$mcp_tasks" 2>/dev/null)
 case "${CLAUDE_CODE_ENABLE_TODO_TOOLS:-}" in 0|false|no|off) ;; *)
@@ -226,7 +249,11 @@ $dead"
     # carried by a subagent in its own worktree, so a main-agent task in
     # progress on an epic no running subagent is attributed to (agents.json
     # `epic`, recorded at SubagentStart from the active epic) means main is
-    # doing the work itself. Every turn until corrected, like the rules above.
+    # doing the work itself — or work that is no code in a repository, which
+    # main does itself. So once per set of such tasks and of covered epics,
+    # like the open-tasks reminder: a subagent that starts or stops changes
+    # the set and asks once more, and an empty set clears the record, so the
+    # same tasks flagged again later are asked again.
     # KODFLOW_ROOT=off turns it off with the PreToolUse gate.
     if [ "${KODFLOW_ROOT:-}" != off ]; then
         covered="[]"
@@ -244,10 +271,18 @@ $dead"
             | select(runs(.) | not)
             | (.epic // 0) as $e | select(any($cov[]; . == $e) | not)
             | "  - #\(.id) \(.subject): " + (if $e == 0 then "dispatch a subagent in a worktree for it" else "dispatch a subagent in a worktree for epic #\($e)" end)
-              + ", or set #\(.id) back to pending/waiting"' "$mcp_tasks" 2>/dev/null)
-        [ -n "$producing" ] && ctx="${ctx:+$ctx
+              + ", or carry on yourself if the work is not code in a repository, or set #\(.id) back to pending/waiting"' "$mcp_tasks" 2>/dev/null | sort)
+        if [ -z "$producing" ]; then
+            rm -f -- "$STATE/producing-nudged" 2>/dev/null
+        else
+            sig=$(printf '%s\n%s' "$producing" "$covered" | cksum | cut -d' ' -f1)
+            if ! grep -qxF "$sig" "$STATE/producing-nudged" 2>/dev/null; then
+                printf '%s\n' "$sig" >> "$STATE/producing-nudged"
+                ctx="${ctx:+$ctx
 }The main thread delegates the work of an epic to a subagent, and these tasks are in progress with no running subagent on their epic (task_focus the epic before dispatching, so the subagent is attributed to it; SendMessage its subagent if one is already on it):
 $producing"
+            fi
+        fi
     fi
 fi
 

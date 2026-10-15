@@ -41,12 +41,54 @@ export function attributionText(kind: unknown): string | undefined {
 /** KODFLOW_MOD=off: the mod hooks nothing and leaves no marker. */
 export const isOff = (value: string | undefined): boolean => value === "off";
 
-/**
- * Only the main loop's own task calls acknowledge a user message: a
- * subagent works for a task the main agent already filed.
- */
-export const lowersTriage = (agentId: unknown): boolean =>
+/** The main loop's call: no agent id. A subagent's carries its own. */
+export const mainLoop = (agentId: unknown): boolean =>
   agentId === undefined || agentId === null || agentId === "";
+
+/**
+ * The causes a triage-pending file holds, one per line: `prompt` (a user
+ * message, on-user.sh) and `resume` (a session that came back with open
+ * tasks, on-session.sh). An empty file is the format before causes: a prompt.
+ */
+export function triageCauses(text: string): string[] {
+  const causes = [
+    ...new Set(
+      text
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean),
+    ),
+  ];
+  return causes.length ? causes : ["prompt"];
+}
+
+const given = (v: unknown): boolean =>
+  typeof v === "string" ? v.trim() !== "" : v !== undefined && v !== null;
+
+/**
+ * Whether a task call that succeeded settles one cause of the triage gate.
+ * A user message is settled by a task of its own (task_create,
+ * task_assign_human) or by context added to the task in progress
+ * (task_update with a description); a resumed session by a status set
+ * (task_update with a status). Reading or steering the list (task_list,
+ * task_epic, task_focus) settles nothing. Only the main loop: a subagent
+ * works for a task the main agent already filed. A cause this version does
+ * not know is read as a prompt.
+ */
+export function liftsTriage(
+  tool: ToolName,
+  args: Record<string, unknown>,
+  agentId: unknown,
+  cause: string,
+): boolean {
+  if (!mainLoop(agentId)) return false;
+  if (cause === "resume") return tool === "task_update" && given(args.status);
+  return (
+    tool === "task_create" ||
+    tool === "task_assign_human" ||
+    (tool === "task_update" && given(args.description))
+  );
+}
 
 /** The payload on-mod.sh logs for a task call, shaped like a PostToolUse. */
 export function logPayload(

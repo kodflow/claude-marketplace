@@ -89,15 +89,16 @@ SessionStart)
     # longer says what is true: nothing is in progress at startup, whatever
     # the file claims. The list is shown and must be reconciled before any
     # other action — the triage gate of on-tool.sh holds acting tools until a
-    # task tool is called. Only while the task tools answer (lib/beat.sh: the
-    # mod beats in its own SessionStart hook, which runs this one inside it).
+    # task_update sets a status (the `resume` cause, added beside a pending
+    # `prompt`, never over it). Only while the task tools answer (lib/beat.sh:
+    # the mod beats in its own SessionStart hook, which runs this one inside it).
     sdir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
     tasks_file=$sdir/tasks.json
     beat=2; . "$LIB/beat.sh" 2>/dev/null && { kf_beat "$sdir"; beat=$?; }
     if [ "$beat" = 0 ] && [ -s "$tasks_file" ]; then
         open=$(jq -r -L "$LIB" -f "$LIB/review.jq" "$tasks_file" 2>/dev/null)
         if [ -n "$open" ]; then
-            : > "$sdir/triage-pending" 2>/dev/null
+            { grep -qx resume "$sdir/triage-pending" 2>/dev/null || printf 'resume\n' >> "$sdir/triage-pending"; } 2>/dev/null
             ctx="## SESSION START — review the task list before anything else
 These tasks were left open by earlier work. Nothing is in progress right now: an in_progress status is a leftover of the previous run. With the kodflow task tools, reconcile each one with reality first — completed if its work is done (check before deciding), deleted if it no longer applies, waiting if it is blocked on the user, in_progress only for the one you resume now (task_focus its epic). Then tell the user what you resumed and what you changed.
 $open"
