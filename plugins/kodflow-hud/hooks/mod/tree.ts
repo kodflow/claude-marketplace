@@ -17,7 +17,7 @@
 import type { HudBoard, HudCi, HudModel, HudSeen, HudTask } from "../../types";
 import { MAIN, judge, loopLabel, type Ctx } from "./board.ts";
 import { cells, fit } from "./width.ts";
-import { seenKey } from "./models.ts";
+import { modelKey, seenKey } from "./models.ts";
 
 export type NodeState =
   | "done"
@@ -251,7 +251,7 @@ export function buildTree(data: TreeData): TreeModel {
           worker || (loop === MAIN ? "main" : loopLabel(loop, ctx.agents));
       const model =
         state === "run" || state === "done" || state === "wait"
-          ? modelCell(data.models[loop])
+          ? modelCell(data.models[modelKey(data.session, loop)])
           : "";
       let age = "";
       if (state === "run") age = span(ctx.now - v.last);

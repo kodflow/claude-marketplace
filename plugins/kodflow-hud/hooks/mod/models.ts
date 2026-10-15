@@ -14,6 +14,23 @@
 
 import type { HudModel, HudSeen, HudTask } from "../../types";
 
+/**
+ * The models kept are keyed `<session>:<loop>`: "main" is every session's
+ * main loop, and only the current session's entries are kept.
+ */
+export const modelKey = (session: string, loop: string) => `${session}:${loop}`;
+
+/** A record keyed `<session>:…` with only that session's entries left. */
+export function keepSession<T>(
+  record: Readonly<Record<string, T>>,
+  session: string,
+): Record<string, T> {
+  const prefix = `${session}:`;
+  return Object.fromEntries(
+    Object.entries(record).filter(([k]) => k.startsWith(prefix)),
+  );
+}
+
 /** Fields of `b` that are set win over `a`'s. */
 export function merge(a: HudModel | undefined, b: HudModel): HudModel {
   const out: HudModel = { ...a };
@@ -75,9 +92,7 @@ export function seenFrom(
   const prefix = `${session}:`;
   const stale = Object.keys(before).some((k) => !k.startsWith(prefix));
   let out: Record<string, HudSeen> | undefined = stale
-    ? Object.fromEntries(
-        Object.entries(before).filter(([k]) => k.startsWith(prefix)),
-      )
+    ? keepSession(before, session)
     : undefined;
   for (const t of tasks) {
     if (t.status !== "in_progress" || !(t.worker || t.workerId)) continue;

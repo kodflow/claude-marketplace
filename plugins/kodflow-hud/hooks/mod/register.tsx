@@ -40,7 +40,14 @@ import { configDir, dirname, sessionDir, tasksFile } from "./paths.ts";
 import { agentsView } from "./view.tsx";
 import { buildTree } from "./tree.ts";
 import { draw, initialUi, screenOf } from "./layout.tsx";
-import { fromAgentCall, merge, parseModels, seenFrom } from "./models.ts";
+import {
+  fromAgentCall,
+  keepSession,
+  merge,
+  modelKey,
+  parseModels,
+  seenFrom,
+} from "./models.ts";
 
 const boardAtom = atom(
   { plugin: "kodflow-hud", key: "board" } as const,
@@ -132,10 +139,17 @@ async function tasksPath($: any, session: string): Promise<string | undefined> {
 }
 
 /** Fold what a source says of some loops into the models kept. */
-async function noteModels($: any, said: Record<string, HudModel>): Promise<void> {
+async function noteModels(
+  $: any,
+  said: Record<string, HudModel>,
+): Promise<void> {
+  const session = await $.session.id();
   const before = await read($, modelsAtom);
-  const after = { ...before };
-  for (const [id, m] of Object.entries(said)) after[id] = merge(after[id], m);
+  const after = keepSession(before, session);
+  for (const [id, m] of Object.entries(said)) {
+    const key = modelKey(session, id);
+    after[key] = merge(after[key], m);
+  }
   if (!same(before, after)) await update($, modelsAtom, () => after);
 }
 
@@ -151,7 +165,10 @@ async function pollModels($: any, tasks: string): Promise<void> {
   );
   const said: Record<string, HudModel> = {};
   if (mtime !== undefined && mtime !== modelsMtime)
-    Object.assign(said, parseModels(await $.fs.read(path).catch(() => undefined)));
+    Object.assign(
+      said,
+      parseModels(await $.fs.read(path).catch(() => undefined)),
+    );
   modelsMtime = mtime;
   const main = await $.session.model().catch(() => undefined);
   if (typeof main === "string" && main) said[MAIN] = { model: main };
@@ -369,7 +386,8 @@ export const register: Register = (on, options) => {
       if (TASK_TOOL.test(String(e.tool))) kick($);
       if (e.tool === "Agent" && !r?.isError) {
         const said = fromAgentCall(e as { effort?: unknown }, r?.result);
-        if (said) await noteModels($, { [said.id]: said.model }).catch(() => undefined);
+        if (said)
+          await noteModels($, { [said.id]: said.model }).catch(() => undefined);
       }
     }
     return r;

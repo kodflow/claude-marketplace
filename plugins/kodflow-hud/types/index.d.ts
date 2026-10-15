@@ -94,7 +94,7 @@ declare module "claude-code" {
       agents: HudAgent[];
       activity: Record<string, HudActivity>;
       ci: Record<string, HudCi>;
-      /** By loop ("main", or the subagent's id): what it runs on. */
+      /** By `<session>:<loop>` (loop "main" or a subagent's id): what it runs on. */
       models: Record<string, HudModel>;
       /** By `<agent>:<task id>`: the worker last seen on the task. */
       seen: Record<string, HudSeen>;

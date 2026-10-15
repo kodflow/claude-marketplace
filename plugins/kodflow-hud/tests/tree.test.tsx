@@ -12,7 +12,7 @@ import {
   treeScreen,
   type Cell,
 } from "../hooks/mod/layout.tsx";
-import { seenFrom } from "../hooks/mod/models.ts";
+import { keepSession, seenFrom } from "../hooks/mod/models.ts";
 
 const cellText = (line: Cell[]): string =>
   line.map((c) => (c.spans ?? []).map((s) => s.text).join("")).join("");
@@ -532,4 +532,25 @@ test("the worker seen on a task is the session's: ids start over, the old ones g
     session: "B",
   });
   expect(tree.epics[0]!.nodes[0]!.agent).toBe("main");
+});
+
+test("the models are the session's: another session's entry for the loop is not shown, nor kept", () => {
+  const tasks = [
+    task("1", "Work", "in_progress", { worker: "w", worker_id: "a1" }),
+  ];
+  const at = (session: string) =>
+    buildTree({
+      board: parseBoard(tasksJson(tasks, EPIC)),
+      ctx,
+      ci: {},
+      models: { "A:a1": { model: "claude-opus-5-5", effort: "high" } },
+      seen: {},
+      session,
+    }).epics[0]!.nodes[0]!.model;
+  expect(at("A")).toBe("opus·high");
+  expect(at("B")).toBe("");
+  expect(keepSession({ "A:a1": 1, "B:a1": 2, "B:main": 3 }, "B")).toEqual({
+    "B:a1": 2,
+    "B:main": 3,
+  });
 });
