@@ -26,7 +26,7 @@ The whole thing. Default view.
 
 ```text
 ╔════════════════════════════════════════════════════════════════════════════════╗
-║  kodflow — the work loop        20 skills · 4 plugins · 29 agents · 5 hooks     ║
+║  kodflow — the work loop        22 skills · 4 plugins · 29 agents · 5 hooks     ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 
   THE SPINE                         LEAVES BEHIND                    THEN TYPE
@@ -109,6 +109,12 @@ The whole thing. Default view.
   ◆ nothing is written without your yes
 
 
+  WHILE IT RUNS
+  ──────────────────────────────────────────────────────────────────────────────
+  /recap [--loop N]  — reads only —   one table: who acts, each task, PR, CI
+  ( --loop reprints it every N minutes, one line when nothing moved · --stop
+
+
   THE MACHINE ITSELF
   ──────────────────────────────────────────────────────────────────────────────
   /audit    seven dimensions scored, every file at fault named  ──▶ /search --refresh
@@ -122,7 +128,7 @@ The whole thing. Default view.
 
 ```text
 +==============================================================================+
-|  kodflow -- the work loop   20 skills . 4 plugins . 29 agents . 5 hooks     |
+|  kodflow -- the work loop   22 skills . 4 plugins . 29 agents . 5 hooks     |
 +==============================================================================+
 
   THE SPINE                        LEAVES BEHIND                   THEN TYPE
@@ -203,6 +209,12 @@ The whole thing. Default view.
                     a leaf: three arrows in, none out
   /learn            ~/.claude/docs/learned/
   <> nothing is written without your yes
+
+
+  WHILE IT RUNS
+  ------------------------------------------------------------------------------
+  /recap [--loop N]  -- reads only --  one table: who acts, each task, PR, CI
+  ( --loop reprints it every N minutes, one line when nothing moved . --stop
 
 
   THE MACHINE ITSELF

@@ -172,6 +172,11 @@ jobs:
       - name: The flow inventory reads every shipped layout
         run: bash scripts/tests/test_flow_inventory.sh
 
+      # /recap prints what recap.sh reads: who acts, what is blocked, which
+      # subagents run on which branch, and whether a loop iteration changed.
+      - name: The recap reads the session as the table needs it
+        run: bash scripts/tests/test_recap.sh
+
       # /project creates every new checkout under the CODE_HOME this prints.
       # A wrong pick scatters code into a folder macOS may lock the shell out
       # of, so the ranking is asserted against fake homes on both platforms.
@@ -210,6 +215,8 @@ jobs:
         run: /bin/bash scripts/tests/test_route_agent.sh
       - name: Cleanup of a subagent's worktree under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-hooks/tests/test_cleanup.sh
+      - name: Recap reader under /bin/bash 3.2
+        run: /bin/bash scripts/tests/test_recap.sh
 
   # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
   # are checked by the engine itself, at the version the README names as
