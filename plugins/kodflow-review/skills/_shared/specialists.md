@@ -24,26 +24,42 @@ and commit to it.
 ls ~/.claude/agents/*.md | xargs -n1 basename | sed 's/\.md$//'
 ```
 
-| Evidence | Specialist |
-|---|---|
-| `.go`, `go.mod`, `go.work` | `developer-specialist-go` |
-| `.rs`, `Cargo.toml` | `developer-specialist-rust` |
-| `.py`, `pyproject.toml`, `requirements.txt` | `developer-specialist-python` |
-| `.ts` `.js` `.mjs`, `package.json` | `developer-specialist-nodejs` |
-| a `react` dependency, `.tsx` `.jsx` | `developer-specialist-react` |
-| `.c` `.h` | `developer-specialist-c` |
-| `.cc` `.cpp` `.hpp` `.cxx` | `developer-specialist-cpp` |
-| `.zig`, `build.zig`, `build.zig.zon` | `developer-specialist-zig` |
-| PostgreSQL specifically — `postgres`/`psql` present, a Postgres DSN, PG-dialect SQL | `data-specialist-postgres` |
-| `Dockerfile`, `docker-compose.y*ml` | `devops-specialist-docker` |
-| k8s manifests, `Chart.yaml`, Helm values | `devops-specialist-kubernetes` |
-| `.tf`, `.hcl`, Terragrunt | `devops-specialist-infrastructure` |
-| Vault, Consul, Nomad, Packer | `devops-specialist-hashicorp` |
-| `.github/workflows/` | `tooling-specialist-github-actions` |
-| `.sh`, a CI shell step, `Makefile` recipes | `developer-executor-shell` |
-| auth, crypto, input handling, a trust boundary **in code** | `developer-executor-security` |
-| secrets in config, image/dependency CVEs, compliance **in infrastructure** | `devops-specialist-security` |
-| systemd units, packaging, host configuration | `devops-executor-linux` |
+| Evidence | Specialist | Keywords |
+|---|---|---|
+| `.go`, `go.mod`, `go.work` | `developer-specialist-go` | golang goroutine goroutines gofmt golangci-lint go.mod go.work .go |
+| `.rs`, `Cargo.toml` | `developer-specialist-rust` | rust cargo clippy rustc tokio .rs |
+| `.py`, `pyproject.toml`, `requirements.txt` | `developer-specialist-python` | python pytest mypy ruff pyproject asyncio django fastapi .py |
+| `.ts` `.js` `.mjs`, `package.json` | `developer-specialist-nodejs` | node nodejs typescript javascript npm pnpm eslint tsconfig .ts .js .mjs .cjs |
+| a `react` dependency, `.tsx` `.jsx` | `developer-specialist-react` | react jsx tsx nextjs .tsx .jsx |
+| `.c` `.h` | `developer-specialist-c` | c99 c11 c23 valgrind clang-tidy .c .h |
+| `.cc` `.cpp` `.hpp` `.cxx` | `developer-specialist-cpp` | c++ cpp cmake .cc .cpp .hpp .cxx |
+| `.zig`, `build.zig`, `build.zig.zon` | `developer-specialist-zig` | zig build.zig .zig |
+| PostgreSQL specifically — `postgres`/`psql` present, a Postgres DSN, PG-dialect SQL | `data-specialist-postgres` | postgres postgresql psql plpgsql pgbouncer |
+| Valkey or a Redis-protocol store — `valkey.conf`, `sentinel.conf`, a Valkey/Redis client | `data-specialist-valkey` | valkey redis |
+| `Dockerfile`, `docker-compose.y*ml` | `devops-specialist-docker` | docker dockerfile docker-compose podman |
+| k8s manifests, `Chart.yaml`, Helm values | `devops-specialist-kubernetes` | kubernetes k8s k3s helm kubectl kustomize minikube argocd |
+| `.tf`, `.hcl`, Terragrunt | `devops-specialist-infrastructure` | terraform opentofu terragrunt .tf .tfvars .hcl |
+| Vault, Consul, Nomad, Packer | `devops-specialist-hashicorp` | vault consul nomad packer .nomad |
+| `ansible.cfg`, playbooks, `roles/`, inventories | `tooling-specialist-ansible` | ansible playbook playbooks ansible-lint molecule |
+| `.github/workflows/` | `tooling-specialist-github-actions` | github-actions actionlint |
+| `.gitlab-ci.yml`, an included CI template | `tooling-specialist-gitlab-ci` | gitlab-ci gitlab-runner .gitlab-ci.yml |
+| `.proto`, `buf.yaml`, a gRPC service | `developer-specialist-protobuf` | protobuf proto grpc buf.yaml .proto |
+| 3GPP/ETSI mobile core — EPC or 5GC functions, Diameter, GTP, PFCP, NAS, LI handover | `domain-specialist-telecom` | 3gpp etsi diameter gtp gtpu pfcp amf smf upf udm nrf mme hss imsi supi |
+| `.sh`, a CI shell step, `Makefile` recipes | `developer-executor-shell` | bash shellcheck .sh .bash |
+| auth, crypto, input handling, a trust boundary **in code** | `developer-executor-security` | owasp taint injection xss csrf sqli |
+| secrets in config, image/dependency CVEs, compliance **in infrastructure** | `devops-specialist-security` | cve trivy grype sbom |
+| systemd units, packaging, host configuration | `devops-executor-linux` | systemd systemctl journald |
+| reading a codebase to locate code, no change (built-in) | `Explore` | explore locate |
+
+**Keywords** are what the routing gate of kodflow-hooks matches, on the
+`description` of a main-thread Agent call alone: whole lower-case words of three
+characters or more, and file extensions (a word ending in `.go` matches `.go`).
+A call that leaves `subagent_type` out or names `general-purpose`, and whose
+description carries a keyword of an installed agent, is refused with the
+specialist to use. `[general-purpose-ok]` in its description or prompt is the
+deliberate exception, and every skill that means a general-purpose dispatch
+writes it. The keywords are compiled into `kodflow-hooks/hooks/routing-index.tsv`
+by `scripts/build-routing-index.py`; CI fails when the two disagree.
 
 **Scope the evidence before matching.** Route on what the *change* touches, not
 on what the repository contains: a one-file Go change in a repo that also holds

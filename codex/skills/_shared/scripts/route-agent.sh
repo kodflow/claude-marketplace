@@ -10,7 +10,9 @@
 #
 # Exit codes (contract):
 #   0  dispatch success
-#   10 no match — fallback general-purpose was used
+#   10 no match — fallback general-purpose was used; its JSON carries
+#      marker "[general-purpose-ok]", which the caller puts in the prompt so
+#      the kodflow-hooks routing gate reads the dispatch as deliberate
 #   20 invalid profile JSON
 #   21 invalid routing rule (malformed JSONL)
 #   22 jq guard evaluation error
@@ -83,7 +85,8 @@ emit_fallback() {
     owned_paths_hint: [],
     matched_rule_id: null,
     fallback_used: true,
-    expanded_from_template: false
+    expanded_from_template: false,
+    marker: "[general-purpose-ok]"
   } | [.]'
 }
 

@@ -47,6 +47,11 @@ agent_dispatch:
     format: "condensed JSON per agent → unified summary"
 ```
 
+A cloud provider with no installed specialist is analysed inline, never by a
+bare `general-purpose` dispatch; if one is wanted, its prompt carries
+`[general-purpose-ok]` (the kodflow-hooks routing gate otherwise sends a description naming
+Terraform or Vault to the specialist).
+
 **Example dispatch (AWS + security + cost):**
 
 ```
