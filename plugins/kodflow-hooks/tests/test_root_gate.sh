@@ -202,6 +202,9 @@ MS=$CFG/kodflow/sessions/sess-root; mkdir -p "$MS"
 stop() { OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-root",hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}' \
     | env "$@" bash "$S/on-stop.sh" 2>/dev/null); rm -f "$T/tmp/sp/stop-count"; }
 producing() { printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("dispatch a subagent")' >/dev/null 2>&1; }
+# The rule speaks once per set of tasks and covered epics: a case that judges
+# a new situation on its own starts from a clean record
+fresh() { rm -f "$T/tmp/sp/producing-nudged"; }
 printf '%s' '{"version":2,"active":{"main":3},"epics":[{"id":3,"agent":"main","title":"Rules"},{"id":4,"agent":"main","title":"Other"}],"tasks":[
   {"id":"1","agent":"main","epic":3,"subject":"Port the gate","status":"in_progress"},
   {"id":"2","agent":"main","epic":4,"subject":"Later","status":"pending"},
@@ -209,21 +212,24 @@ printf '%s' '{"version":2,"active":{"main":3},"epics":[{"id":3,"agent":"main","t
 rm -f "$MS/agents.json"; stop
 producing && printf '%s' "$OUT" | grep -q 'epic #3' && printf '%s' "$OUT" | grep -q '#1' \
     && ok "a main task in progress with no subagent on its epic is flagged" || bad "stop: no subagent" "$OUT"
-stop; producing && ok "flagged again on the next turn" || bad "stop: repeat" "$OUT"
+printf '%s' "$OUT" | grep -q 'carry on yourself if the work is not code in a repository' \
+    && ok "the reminder admits work outside a repository" || bad "stop: outside repo" "$OUT"
+stop; producing && bad "stop: repeat" "$OUT" || ok "the same set is not flagged again on the next turn"
 printf '{"agents":{"a1":{"type":"general-purpose","started":%s,"stopped":null,"epic":3}}}' "$(date +%s)" > "$MS/agents.json"
 stop; producing && bad "stop: covered" "$OUT" || ok "a running subagent on the epic covers it"
-printf '{"agents":{"a1":{"type":"general-purpose","started":%s,"stopped":null,"epic":4}}}' "$(date +%s)" > "$MS/agents.json"
-stop; producing && ok "a subagent on another epic does not cover it" || bad "stop: other epic" "$OUT"
 printf '{"agents":{"a1":{"type":"general-purpose","started":%s,"stopped":%s,"epic":3}}}' "$(date +%s)" "$(date +%s)" > "$MS/agents.json"
-stop; producing && ok "a stopped subagent does not cover it" || bad "stop: stopped" "$OUT"
-printf '{"agents":{"a1":{"type":"general-purpose","started":%s,"stopped":null,"epic":3}}}' "$(( $(date +%s) - 50000 ))" > "$MS/agents.json"
+stop; producing && ok "once its subagent stops, the same task is flagged again, once" || bad "stop: stopped again" "$OUT"
+stop; producing && bad "stop: stopped repeat" "$OUT" || ok "and not on the turn after"
+printf '{"agents":{"a1":{"type":"general-purpose","started":%s,"stopped":null,"epic":4}}}' "$(date +%s)" > "$MS/agents.json"
+stop; producing && ok "a subagent on another epic does not cover it (a new set: flagged once)" || bad "stop: other epic" "$OUT"
+fresh; printf '{"agents":{"a1":{"type":"general-purpose","started":%s,"stopped":null,"epic":3}}}' "$(( $(date +%s) - 50000 ))" > "$MS/agents.json"
 stop; producing && ok "a subagent started over 12 h ago does not cover it" || bad "stop: stale" "$OUT"
 printf '{"agents":{"a1":{"type":"forgejo-cluster","started":%s,"stopped":null,"epic":4}}}' "$(date +%s)" > "$MS/agents.json"
 jq '.tasks[0] += {worker:"forgejo-cluster",worker_id:"a1"}' "$MS/tasks.json" > "$MS/t" && mv "$MS/t" "$MS/tasks.json"
 stop; producing && bad "stop: tied" "$OUT" || ok "a task tied to its running subagent (worker=) is covered, whatever its epic"
 printf '{"agents":{"a1":{"type":"forgejo-cluster","started":%s,"stopped":%s,"epic":4}}}' "$(date +%s)" "$(date +%s)" > "$MS/agents.json"
 stop; producing && ok "a task tied to a stopped subagent is flagged" || bad "stop: tied stopped" "$OUT"
-rm -f "$MS/agents.json"
+rm -f "$MS/agents.json"; fresh
 stop KODFLOW_ROOT=off; producing && bad "stop: off" "$OUT" || ok "KODFLOW_ROOT=off skips the rule"
 printf '%s' '{"version":2,"active":{"main":3},"epics":[{"id":3,"agent":"main","title":"Rules"}],"tasks":[
   {"id":"1","agent":"main","epic":3,"subject":"Await the OK","status":"waiting"}]}' > "$MS/tasks.json"

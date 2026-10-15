@@ -827,8 +827,8 @@ export const TOOLS: readonly {
   {
     name: "task_create",
     description:
-      "Add a task. Use tasks for work with three or more distinct steps, or when the user lists several " +
-      "things to do; skip them for a single trivial change. epic is REQUIRED, there is no default: the id " +
+      "Add a task. Every message of the user gets one, a question included: file it before acting, and " +
+      "set it completed as soon as it is answered or done. epic is REQUIRED, there is no default: the id " +
       "of the epic the task belongs to (task_list, or the Epics line given with each prompt, lists them), " +
       "or 0 for a task outside any epic; open a new subject with task_epic first. task_focus the epic when " +
       'you start its work. A change to an already completed task is a new task "Rework #N: ..." in that ' +

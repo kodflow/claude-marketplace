@@ -38,7 +38,7 @@ export const LOCK_WAIT_MS = 2_000;
 const LOCK_POLL_MS = 50;
 
 let counter = 0;
-const unique = (): string =>
+export const unique = (): string =>
   `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}.${++counter}`;
 
 const queues = new Map<string, Promise<unknown>>();

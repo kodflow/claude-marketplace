@@ -275,12 +275,111 @@ test("the in-progress cap counts running, waiting and idle agents of $.agent.lis
   );
 });
 
-test("the main loop's task call lowers the triage gate", async ($, on) => {
+// The triage gate the shell raises: one cause per line (on-user.sh writes
+// prompt, on-session.sh resume)
+const TP = `${DIR}/triage-pending`;
+
+test("task_list, task_epic, task_focus and a bare task_update leave the triage gate up", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
   await start($);
-  h.files.set(`${DIR}/triage-pending`, "");
+  await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+  h.files.set(TP, "prompt\nresume\n");
   await $.tool.call({ tool: T("task_list") } as any);
-  expect(h.files.has(`${DIR}/triage-pending`)).toBe(false);
+  expect(h.files.get(TP)).toBe("prompt\nresume\n");
+  await $.tool.call({ tool: T("task_epic"), title: "E" } as any);
+  expect(h.files.get(TP)).toBe("prompt\nresume\n");
+  await $.tool.call({ tool: T("task_focus"), epic: "1" } as any);
+  expect(h.files.get(TP)).toBe("prompt\nresume\n");
+  await $.tool.call({ tool: T("task_update"), id: "1" } as any);
+  expect(h.files.get(TP)).toBe("prompt\nresume\n");
+});
+
+test("a message is filed by task_create, task_assign_human or task_update(description)", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await start($);
+  h.files.set(TP, "prompt\n");
+  const r: any = await $.tool.call({ tool: T("task_create"), subject: "q", epic: 0 } as any);
+  expect(r.result).toBe("Task #1 created: q");
+  expect(h.files.has(TP)).toBe(false);
+  await $.tool.call({ tool: T("task_epic"), title: "E" } as any);
+  // The file before causes existed: empty, read as a prompt
+  h.files.set(TP, "");
+  const human: any = await $.tool.call({
+    tool: T("task_assign_human"),
+    subject: "Say go",
+    epic: 1,
+  } as any);
+  expect(human.result).toContain("assigned to the user");
+  expect(h.files.has(TP)).toBe(false);
+  h.files.set(TP, "prompt\n");
+  await $.tool.call({ tool: T("task_update"), id: "1", status: "in_progress" } as any);
+  expect(h.files.get(TP)).toBe("prompt\n");
+  await $.tool.call({ tool: T("task_update"), id: "1", description: "more context" } as any);
+  expect(h.files.has(TP)).toBe(false);
+});
+
+test("a resumed session is settled by task_update(status), each cause on its own", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await start($);
+  await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+  h.files.set(TP, "resume\n");
+  await $.tool.call({ tool: T("task_update"), id: "1", description: "d" } as any);
+  expect(h.files.get(TP)).toBe("resume\n");
+  await $.tool.call({ tool: T("task_update"), id: "1", status: "completed" } as any);
+  expect(h.files.has(TP)).toBe(false);
+  h.files.set(TP, "prompt\nresume\n");
+  await $.tool.call({ tool: T("task_update"), id: "1", status: "deleted" } as any);
+  expect(h.files.get(TP)).toBe("prompt\n");
+  await $.tool.call({ tool: T("task_create"), subject: "y", epic: 0 } as any);
+  expect(h.files.has(TP)).toBe(false);
+});
+
+test("a refused task call leaves the gate; a failing store lifts it (fail open)", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await start($);
+  h.files.set(TP, "prompt\n");
+  const noEpic: any = await $.tool.call({ tool: T("task_create"), subject: "x" } as any);
+  expect(refusal(noEpic)).toBeDefined();
+  expect(h.files.get(TP)).toBe("prompt\n");
+  const unknown: any = await $.tool.call({
+    tool: T("task_update"),
+    id: "99",
+    description: "d",
+  } as any);
+  expect(refusal(unknown)).toBeDefined();
+  expect(h.files.get(TP)).toBe("prompt\n");
+  h.failMv = true;
+  const failed: any = await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+  expect(refusal(failed)).toContain("kodflow task tools failed");
+  expect(h.files.has(TP)).toBe(false);
+});
+
+test("one gesture per message: two prompts need two filing calls", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await start($);
+  h.files.set(TP, "prompt 1792000000-1\nprompt 1792000005-2\n");
+  await $.tool.call({ tool: T("task_list") } as any);
+  expect(h.files.get(TP)).toBe("prompt 1792000000-1\nprompt 1792000005-2\n");
+  await $.tool.call({ tool: T("task_create"), subject: "first", epic: 0 } as any);
+  expect(h.files.get(TP)).toBe("prompt 1792000005-2\n");
+  await $.tool.call({ tool: T("task_list") } as any);
+  expect(h.files.get(TP)).toBe("prompt 1792000005-2\n");
+  await $.tool.call({ tool: T("task_update"), id: "1", description: "second" } as any);
+  expect(h.files.has(TP)).toBe(false);
+  // Under its own lock, released, nothing left beside it
+  expect(h.dirs.has(`${DIR}/.triage.lock.d`)).toBe(false);
+  expect([...h.files.keys()].filter((k) => k.endsWith(".tmp"))).toEqual([]);
+});
+
+test("a subagent's task call never touches the gate", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  await start($);
+  h.files.set(TP, "prompt\n");
+  await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0, agentId: "a1" } as any);
+  expect(h.files.get(TP)).toBe("prompt\n");
+  h.failMv = true;
+  await $.tool.call({ tool: T("task_create"), subject: "y", epic: 0, agentId: "a1" } as any);
+  expect(h.files.get(TP)).toBe("prompt\n");
 });
 
 test("the beat is written before the call goes on, in seconds", async ($, on) => {

@@ -41,12 +41,76 @@ export function attributionText(kind: unknown): string | undefined {
 /** KODFLOW_MOD=off: the mod hooks nothing and leaves no marker. */
 export const isOff = (value: string | undefined): boolean => value === "off";
 
-/**
- * Only the main loop's own task calls acknowledge a user message: a
- * subagent works for a task the main agent already filed.
- */
-export const lowersTriage = (agentId: unknown): boolean =>
+/** The main loop's call: no agent id. A subagent's carries its own. */
+export const mainLoop = (agentId: unknown): boolean =>
   agentId === undefined || agentId === null || agentId === "";
+
+/**
+ * The causes a triage-pending file holds, one per line, in order: `prompt
+ * <id>` for each user message not filed yet (on-user.sh, one line per
+ * message) and `resume` (a session that came back with open tasks,
+ * on-session.sh). An empty file is the format before causes: one prompt.
+ */
+export function triageCauses(text: string): string[] {
+  const causes = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return causes.length ? causes : ["prompt"];
+}
+
+// A line's kind: its first word. Anything but resume is a message to file.
+const kindOf = (cause: string): "prompt" | "resume" =>
+  cause.split(/\s+/)[0] === "resume" ? "resume" : "prompt";
+
+const given = (v: unknown): boolean =>
+  typeof v === "string" ? v.trim() !== "" : v !== undefined && v !== null;
+
+/**
+ * Whether a task call that succeeded settles one cause of the triage gate.
+ * A user message is settled by a task of its own (task_create,
+ * task_assign_human) or by context added to the task in progress
+ * (task_update with a description); a resumed session by a status set
+ * (task_update with a status). Reading or steering the list (task_list,
+ * task_epic, task_focus) settles nothing. Only the main loop: a subagent
+ * works for a task the main agent already filed. A cause this version does
+ * not know is read as a prompt.
+ */
+export function liftsTriage(
+  tool: ToolName,
+  args: Record<string, unknown>,
+  agentId: unknown,
+  cause: string,
+): boolean {
+  if (!mainLoop(agentId)) return false;
+  if (kindOf(cause) === "resume")
+    return tool === "task_update" && given(args.status);
+  return (
+    tool === "task_create" ||
+    tool === "task_assign_human" ||
+    (tool === "task_update" && given(args.description))
+  );
+}
+
+/**
+ * The causes left once a call that succeeded is counted: one gesture files
+ * one message, so it drops the oldest line of each kind it answers, never
+ * two of the same kind. The other messages wait for their own gesture.
+ */
+export function settleCauses(
+  causes: readonly string[],
+  tool: ToolName,
+  args: Record<string, unknown>,
+  agentId: unknown,
+): string[] {
+  const left = [...causes];
+  for (const kind of ["prompt", "resume"] as const) {
+    if (!liftsTriage(tool, args, agentId, kind)) continue;
+    const at = left.findIndex((c) => kindOf(c) === kind);
+    if (at >= 0) left.splice(at, 1);
+  }
+  return left;
+}
 
 /** The payload on-mod.sh logs for a task call, shaped like a PostToolUse. */
 export function logPayload(

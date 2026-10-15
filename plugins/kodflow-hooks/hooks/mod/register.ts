@@ -33,15 +33,17 @@ import {
   resolveWorkers,
   type ToolName,
 } from "./tasks.ts";
-import { load, mutate, type Port } from "./store.ts";
+import { load, lock, mutate, unique, type Port } from "./store.ts";
 import { LINT_SETUP, lintSetup, type LintPort } from "./lint.ts";
 import {
   argsOf,
   attributionText,
   isOff,
   logPayload,
-  lowersTriage,
+  mainLoop,
+  settleCauses,
   taskTool,
+  triageCauses,
 } from "./calls.ts";
 import {
   agentsFile,
@@ -219,7 +221,6 @@ async function serve(
   const session = await $.session.id();
   const dir = sessionDir(cfg, session);
   const io = port($);
-  if (lowersTriage(e.agentId)) await io.run(["rm", "-f", triageFile(dir)]);
   const agent = e.agentId ? safe(e.agentId) : MAIN;
   const nowSec = () => Math.floor(Date.now() / 1000);
   let answer: { result: string } | { deny: string };
@@ -241,9 +242,21 @@ async function serve(
       : step.run(await load(io, dir, nowSec()), { now: nowSec(), workers });
     answer = { result: text };
   } catch (err) {
-    if (!isTaskError(err)) throw err;
+    if (!isTaskError(err)) {
+      // Fail open: the store or the host failed, and a gate the task tools
+      // cannot settle would stop the session
+      if (mainLoop(e.agentId))
+        await io.run(["rm", "-f", triageFile(dir)]).catch(() => undefined);
+      throw err;
+    }
     answer = { deny: err.message };
   }
+  // A refusal leaves the gate as it was; a call that succeeded settles the
+  // causes it answers. Never at the cost of the answer of an applied change.
+  if ("result" in answer)
+    await settleTriage(io, dir, tool, argsOf(e), e.agentId).catch(
+      () => undefined,
+    );
   // One line in .claude/logs/<branch>/session.jsonl, through lib/event.jq
   const payload = logPayload(session, await $.session.root(), e, answer);
   await $.process
@@ -253,6 +266,47 @@ async function serve(
     })
     .catch(() => undefined);
   return answer;
+}
+
+// Drop from triage-pending the causes this call settled: the file goes with
+// the last one, the others stay for their own gesture. Under the lock the
+// shell takes to append a cause (on-user.sh, on-session.sh), so a message
+// that arrives meanwhile is never lost; replaced through a temporary file
+// and `mv`, so the gate never reads half a list. A lock not obtained in time
+// is written through, as lib/lock.sh's callers do.
+async function settleTriage(
+  io: Port,
+  dir: string,
+  tool: ToolName,
+  args: Record<string, unknown>,
+  agentId: unknown,
+): Promise<void> {
+  if (!mainLoop(agentId)) return;
+  const file = triageFile(dir);
+  // Most calls find no gate, or answer none of its causes: no lock for them
+  const seen = await io.read(file);
+  if (seen === undefined) return;
+  const before = triageCauses(seen);
+  if (settleCauses(before, tool, args, agentId).length === before.length) return;
+  const lockDir = `${dir}/.triage.lock.d`;
+  const held = await lock(io, lockDir);
+  try {
+    const text = await io.read(file);
+    if (text === undefined) return;
+    const causes = triageCauses(text);
+    const left = settleCauses(causes, tool, args, agentId);
+    if (left.length === causes.length) return;
+    if (left.length === 0) {
+      await io.run(["rm", "-f", file]);
+      return;
+    }
+    const tmp = `${dir}/.triage.${unique()}.tmp`;
+    await io.write(tmp, `${left.join("\n")}\n`);
+    if ((await io.run(["mv", "-f", tmp, file])).exitCode !== 0)
+      await io.run(["rm", "-f", tmp]);
+  } finally {
+    if (held) await io.run(["rmdir", lockDir]);
+  }
 }
 
 // modwall, collision-guard and zsh-safe (machine-guards.ts) reach `$` through this

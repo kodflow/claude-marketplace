@@ -21,8 +21,10 @@ import {
   argsOf,
   attributionText,
   isOff,
-  lowersTriage,
+  liftsTriage,
   taskTool,
+  settleCauses,
+  triageCauses,
 } from "../../hooks/mod/calls.ts";
 
 test("the port answers every call of the corpus as tasks.py did", () => {
@@ -154,8 +156,36 @@ test("calls: tool names, envelope, attribution, switch, triage", () => {
   expect(isOff("off")).toBe(true);
   expect(isOff("OFF")).toBe(false);
   expect(isOff(undefined)).toBe(false);
-  expect(lowersTriage(undefined)).toBe(true);
-  expect(lowersTriage("a1")).toBe(false);
+  expect(triageCauses("")).toEqual(["prompt"]);
+  expect(triageCauses("prompt 1\nresume\n\nprompt 2\n")).toEqual([
+    "prompt 1",
+    "resume",
+    "prompt 2",
+  ]);
+  // One prompt line per message: one filing gesture settles one of them
+  const two = ["prompt 1", "resume", "prompt 2"];
+  expect(settleCauses(two, "task_create", {}, undefined)).toEqual(["resume", "prompt 2"]);
+  expect(settleCauses(two, "task_list", {}, undefined)).toEqual(two);
+  expect(
+    settleCauses(two, "task_update", { id: "1", status: "completed", description: "d" }, undefined),
+  ).toEqual(["prompt 2"]);
+  expect(settleCauses(two, "task_create", {}, "a1")).toEqual(two);
+  const lifts = (tool: string, args: object, agent: unknown, cause: string) =>
+    liftsTriage(tool as any, args as any, agent, cause);
+  expect(lifts("task_create", {}, undefined, "prompt")).toBe(true);
+  expect(lifts("task_assign_human", {}, "", "prompt")).toBe(true);
+  expect(lifts("task_update", { id: "1", description: "d" }, null, "prompt")).toBe(true);
+  expect(lifts("task_update", { id: "1", status: "completed" }, undefined, "prompt")).toBe(false);
+  expect(lifts("task_update", { id: "1" }, undefined, "prompt")).toBe(false);
+  expect(lifts("task_list", {}, undefined, "prompt")).toBe(false);
+  expect(lifts("task_epic", { title: "E" }, undefined, "prompt")).toBe(false);
+  expect(lifts("task_focus", { epic: "1" }, undefined, "prompt")).toBe(false);
+  expect(lifts("task_update", { id: "1", status: "waiting" }, undefined, "resume")).toBe(true);
+  expect(lifts("task_create", {}, undefined, "resume")).toBe(false);
+  expect(lifts("task_create", {}, undefined, "prompt 1792000000-42")).toBe(true);
+  expect(lifts("task_create", {}, "a1", "prompt")).toBe(false);
+  // A cause this version does not know is read as a prompt
+  expect(lifts("task_create", {}, undefined, "other")).toBe(true);
 });
 
 test("the user's tasks: open ones, and the context a compaction gets back", () => {

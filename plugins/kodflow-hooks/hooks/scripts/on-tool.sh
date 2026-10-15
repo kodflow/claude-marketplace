@@ -1489,20 +1489,23 @@ pre_agent() {
 # PreToolUse · triage gate
 # ============================================================================
 # The user wants every message filed in the task list BEFORE anything is done
-# about it. on-user.sh raises triage-pending on each prompt; the main agent's
-# first call to a task tool lowers it (the mod does, the call never reaching
-# this script). Until then the main agent may only read and load tools —
-# enough to understand the request, not to act on it. Subagents are not
-# gated: they work for a task the main agent already filed. The gate holds
-# only while the mod beats: with the mod gone nothing could lift it, so a
-# stale beat lifts it and says why, once.
+# about it, a question included. triage-pending holds one cause per line:
+# `prompt` (on-user.sh, each message) and `resume` (on-session.sh, a session
+# back with open tasks); an empty file is a prompt. Only the mod lifts it,
+# cause by cause, on a task call that succeeded and answers that cause
+# (calls.ts liftsTriage): task_create, task_assign_human or
+# task_update(description) for a prompt, task_update(status) for a resume.
+# task_list, task_epic and task_focus pass here without lifting anything.
+# Until then the main agent may only read and load tools — enough to
+# understand the request, not to act on it. Subagents are not gated: they
+# work for a task the main agent already filed. The gate holds only while
+# the mod beats: with the mod gone nothing could lift it, so a stale beat
+# lifts it and says why, once.
 SDIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
 BEAT=2; . "$LIB/beat.sh" 2>/dev/null && { kf_beat "$SDIR"; BEAT=$?; }
 if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$SDIR/triage-pending" ]; then
     case "$TOOL" in
-        mcp__*tasks__task_*|mcp__kodflow-hooks__task_*)
-            rm -f -- "$SDIR/triage-pending" 2>/dev/null ;;
-        Read|Glob|Grep|LS|ToolSearch|AskUserQuestion)
+        mcp__*tasks__task_*|mcp__kodflow-hooks__task_*|Read|Glob|Grep|LS|ToolSearch|AskUserQuestion)
             ;;
         *)
             if [ "$BEAT" != 0 ]; then
@@ -1516,12 +1519,28 @@ if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$SDIR/triage-pending" ]; the
                        exit 0 ;;
                 esac
             else
-                _block "TRIAGE FIRST — file this message in the task list" \
-                    "Before acting, classify the user's message with the kodflow task tools:" \
-                    "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)" \
-                    "task_create always names its epic (epic=0 for none): there is no default." \
-                    "context on the task in progress → task_update it · rework of a completed task → task_create \"Rework #N: …\"" \
-                    "a question that needs no task → task_list (acknowledges the triage)." \
+                # The gesture each cause still pending waits for: one per
+                # message line (`prompt <id>`; an empty file is one message)
+                tg=() title="TRIAGE FIRST — settle the task list left open"
+                n=$(grep -cvxE '(resume)?' "$SDIR/triage-pending" 2>/dev/null); [ -s "$SDIR/triage-pending" ] || n=1
+                if [ "${n:-0}" -gt 1 ] 2>/dev/null; then
+                    title="TRIAGE FIRST — file these $n messages in the task list"
+                    tg+=("$n messages of the user have no task yet, and each needs its own gesture: context on a task → task_update(id, description=…), anything else → a new task (task_create). One task per message, a question included. The task calls alone, before acting:")
+                elif [ "${n:-0}" -eq 1 ] 2>/dev/null; then
+                    title="TRIAGE FIRST — file this message in the task list"
+                    tg+=("This message has no task yet: one task per message of the user, a question included. The task call alone, before acting:")
+                fi
+                if [ "${n:-0}" -ge 1 ] 2>/dev/null; then
+                    tg+=(
+                         "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)"
+                         "a question → task_create(epic=0), left pending, set completed once answered"
+                         "context on the task in progress → task_update(id, description=…) · rework of a completed task → task_create \"Rework #N: …\""
+                         "task_create always names its epic (epic=0 for none): there is no default.")
+                fi
+                grep -qx resume "$SDIR/triage-pending" 2>/dev/null \
+                    && tg+=("The session came back with open tasks: task_update(id, status=…) settles them — in_progress for the one you resume, completed, deleted or waiting for the others.")
+                _block "$title" "${tg[@]}" \
+                    "task_list, task_epic and task_focus do not lift this gate." \
                     "Reading (Read, Grep, Glob) and ToolSearch stay allowed meanwhile."
             fi ;;
     esac

@@ -170,7 +170,7 @@ fails by accident blocks every shell call of the session.
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR, and rule 6: end with `## Agent feedback`) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · its agent feedback in `agent-feedback.jsonl` · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · more untied tasks `in_progress` than free workers, every turn · a task `in_progress` whose `worker` has stopped, once per set · a main-agent task `in_progress` on an epic no running subagent is attributed to and not tied to a running `worker` (the main thread producing), every turn, unless `KODFLOW_ROOT=off` · the subagents' new agent feedback, once, to a user present in the last 10 minutes, with the instruction to ask before any issue | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | project-linter verdict over HTTP, passed through verbatim | feedback in one document: linter report on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active, and the open ones with no epic whatever is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · more untied tasks `in_progress` than free workers, every turn · a task `in_progress` whose `worker` has stopped, once per set · a main-agent task `in_progress` on an epic no running subagent is attributed to and not tied to a running `worker` (the main thread producing), once per set, unless `KODFLOW_ROOT=off` · a triage cause left unsettled (`triage-pending`), every turn, not on a system turn · the subagents' new agent feedback, once, to a user present in the last 10 minutes, with the instruction to ask before any issue | bell · log |
 
 ## Main thread = reviewer, code is delegated
 
@@ -299,8 +299,11 @@ or `SendMessage` it if it is running; `ROOT_OK=1` for a genuine exception.
 The Stop rule closes the other side: a main-agent task `in_progress` on an
 epic with no running subagent attributed to it (`agents.json` `epic`, not
 stopped, started less than 12 h ago) means the main thread is doing the
-epic's work itself; it is flagged every turn — dispatch a subagent for the
-epic, or set the task back to `pending`/`waiting`.
+epic's work itself, or work that is no code in a repository; it is flagged
+once per set of such tasks and of covered epics (`producing-nudged` in the
+scratchpad, cleared when the set is empty, so a subagent that stops asks
+once more) — dispatch a subagent for the epic, carry on when the work is not
+code in a repository, or set the task back to `pending`/`waiting`.
 
 Ways out: `ROOT_OK=1` leading a Bash line, `KODFLOW_ROOT=off` in the
 environment for the session (gate, Stop rule and prompt line all off), and
@@ -481,11 +484,15 @@ files, proven by a corpus recorded from it (Tests, below).
   active epic's tasks, one `#id title done/total` line per other open epic,
   then the tasks with no epic. Each create, update and focus stamps the
   epic's `touched`, which orders the pills.
-- **Triage.** `UserPromptSubmit` injects the epic state and a directive to
-  sort every message before acting, every `task_create` naming its epic:
-  new work for an open epic (create it there, focus when starting), context on the task in progress (apply, no new
-  task), a change to a completed task (`Rework #N: …` in its epic), a new
-  subject (`task_epic`), or plain discussion (nothing).
+- **Triage.** One task per user message, a question included, closed as
+  soon as it is answered or done. `UserPromptSubmit` injects the epic state
+  and a directive to sort every message before acting, every `task_create`
+  naming its epic: new work for an open epic (create it there, focus when
+  starting), context on the task in progress (`task_update(id,
+  description)`), a change to a completed task (`Rework #N: …` in its epic),
+  a new subject (`task_epic`), or a question (`task_create(epic=0)`,
+  completed once answered). At Stop, the main agent's open tasks with no
+  epic are reminded whatever epic is active.
 - **One task in progress per worker.** The main agent may have one task
   `in_progress` plus one per subagent that is `running`, `waiting` or `idle`
   in `$.agent.list()` (`agents.json` when the list cannot be read); a
@@ -524,14 +531,25 @@ files, proven by a corpus recorded from it (Tests, below).
   plan, goal and epic state are still injected: a finishing task is exactly
   when where-things-stand is wanted. A `Stop hook feedback:` turn is *not*
   in that list: it quotes the user's own pending message, so it keeps the gate.
-- **Triage gate.** Every user message raises
-  `<config>/kodflow/sessions/<session>/triage-pending`, while the mod beats;
-  until the main agent calls a task tool (the mod removes the flag; a
-  subagent's call does not), `PreToolUse` refuses the main agent every tool
-  but Read, Glob, Grep, LS, ToolSearch and AskUserQuestion — the message is
-  filed in the task list before anything is done about it. Subagents are not
-  gated. A stale beat lifts the gate (nothing could lower it any more) and
-  says `/reload-plugins`. The
+- **Triage gate.** `<config>/kodflow/sessions/<session>/triage-pending`
+  holds one cause per line, raised while the mod beats: one `prompt <id>`
+  line per user message (`on-user.sh`), so two messages sent before the
+  first is filed need two gestures, and `resume` for a session start with
+  open tasks (`on-session.sh`); an empty file is read as one message. The
+  shell appends and the mod drops lines under the same lock
+  (`.triage.lock.d`, `lib/lock.sh`), the mod replacing the file through a
+  temporary file and `mv`. Until each cause is settled, `PreToolUse` refuses the main agent every tool but the task tools,
+  Read, Glob, Grep, LS, ToolSearch and AskUserQuestion, and names the gesture
+  of each cause left, with the number of messages still to file. Only the
+  mod settles a cause, one line per call, on a main-agent task call that
+  succeeded (`liftsTriage`, `settleCauses`, `calls.ts`): a `prompt` by `task_create`,
+  `task_assign_human` or `task_update(id, description)`, `resume` by
+  `task_update(id, status)`. `task_list`, `task_epic` and `task_focus` settle
+  nothing; a refused call leaves the gate; a store that fails lifts it (fail
+  open). A turn that ends with a cause left is reminded at Stop, not on a
+  turn the user did not type (`turn-system` in the scratchpad). Subagents are
+  not gated. A stale beat lifts the gate (nothing could lower it any more)
+  and says `/reload-plugins`. The
   `PreToolUse` matcher is the catch-all for this; tools the script does not
   handle are decided without jq (~6 ms per call, measured, the delegation gate
   included).
