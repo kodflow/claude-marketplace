@@ -554,3 +554,44 @@ test("the models are the session's: another session's entry for the loop is not 
     "B:main": 3,
   });
 });
+
+test("two Agent results landing together each keep their model", async ($, on) => {
+  on("tool.call", { tool: "Agent" }, async (_$: any, e: any) => ({
+    result: {
+      agentId: e.description,
+      resolvedModel:
+        e.description === "a1" ? "claude-opus-5-5" : "claude-haiku-5-5",
+      content: [],
+      totalTokens: 1,
+    },
+  }));
+  const { h, clock } = host(on);
+  h.agents = [
+    { id: "a1", type: "general-purpose", name: "one", status: "running" },
+    { id: "a2", type: "general-purpose", name: "two", status: "running" },
+  ];
+  h.files.set(TASKS, {
+    text: tasksJson(
+      [
+        task("1", "First", "in_progress", { worker: "one", worker_id: "a1" }),
+        task("2", "Second", "in_progress", { worker: "two", worker_id: "a2" }),
+      ],
+      EPIC,
+    ),
+    mtimeMs: 1,
+  });
+  await start($, clock);
+  const call = (id: string, effort: string) =>
+    $.tool.call({
+      tool: "Agent",
+      subagent_type: "general-purpose",
+      effort,
+      prompt: "p",
+      description: id,
+    } as any);
+  await Promise.all([call("a1", "xhigh"), call("a2", "low")]);
+  const ui = await mount($, 88, 20);
+  const text = capture(await drawnIn(ui));
+  expect(text).toMatch(/First +one +opus·xhigh/);
+  expect(text).toMatch(/Second +two +haiku·low/);
+});

@@ -144,13 +144,18 @@ async function noteModels(
   said: Record<string, HudModel>,
 ): Promise<void> {
   const session = await $.session.id();
-  const before = await read($, modelsAtom);
-  const after = keepSession(before, session);
-  for (const [id, m] of Object.entries(said)) {
-    const key = modelKey(session, id);
-    after[key] = merge(after[key], m);
-  }
-  if (!same(before, after)) await update($, modelsAtom, () => after);
+  const fold = (before: Record<string, HudModel>) => {
+    const after = keepSession(before, session);
+    for (const [id, m] of Object.entries(said)) {
+      const key = modelKey(session, id);
+      after[key] = merge(after[key], m);
+    }
+    return after;
+  };
+  // Folded inside the update, on the latest record: two Agent results
+  // arriving together each keep the other's entry
+  const now = await read($, modelsAtom);
+  if (!same(now, fold(now))) await update($, modelsAtom, fold);
 }
 
 /**
