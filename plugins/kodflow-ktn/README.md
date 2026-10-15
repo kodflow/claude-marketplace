@@ -57,7 +57,52 @@ empty.
 
 `/ktn-view` — `/ktn` belongs to `kodflow-devops`. It answers from what the
 mod already holds and never waits on the daemon (a command that waits holds
-the prompt for up to 30 s).
+the prompt for up to 30 s); it sends a refresh in the background.
+
+## The daemon
+
+The mod reads the per-user daemon of ktn-linter (`KTN_USER_DAEMON=1`, kodflow/ktn-linter#757)
+and nothing else. It finds it through **`endpoint.json` alone**, the pointer
+ktn-linter writes under HOME (`~/.local/state/ktn-linter/`, macOS
+`~/Library/Application Support/ktn-linter/`): the socket path is never
+computed on this side, and `state.json` is not a source (a clean stop removes
+it, which is exactly when the launch button is needed). It then asks `GET
+/status` once per pointer (the protocol it speaks, the workspaces waiting for
+approval) and `GET /api/view` for the workspace, over the socket.
+
+Every known failure ends in a drawn state, never in silence:
+
+| State | When | Offered |
+|---|---|---|
+| out of a Go project | the probe said so | nothing at all |
+| loading | no answer yet | — |
+| unreachable | no `endpoint.json`, nothing on the socket, a daemon silent past the request's wait + 5 s, an answer too big or unreadable | the **launch button**, or the command to run |
+| incompatible | another protocol than `v1` | nothing: no further call until `endpoint.json` changes |
+| pending approval | the daemon waits for the person | the daemon's exact `ktn-linter admin workspace approve …` |
+| refused / not served | the daemon's reason | — |
+| clean / findings | served | the counts on the status line |
+
+A request refused before it left (an organization's web-fetch policy, a hook)
+is a state of its own, never "unreachable", and offers no launch.
+
+One request at a time, tied to the underlying fetch: `$.http.fetch` has a
+fixed 30 s deadline and no signal, so the mod races its own (the request's
+wait + 5 s), draws "unreachable" when it fires, sends nothing more until the
+first request has settled, and drops its late answer. Five failures in a row
+hold the turn's refresh back (3 s doubling to 60 s); the person's own act — the
+command, a press — passes it. No timer exists while no pane is placed: the
+status line is refreshed at the end of each turn, with `wait=0`.
+
+**The launch button** is a convenience, not the guarantee — the hooks and the
+MCP shim start the daemon. It runs `<exe> daemon ensure` with the absolute
+binary `endpoint.json` names (never a name looked up in PATH), from `/`, with
+`KTN_USER_DAEMON=1`, then watches the socket every 500 ms for 10 s: a zero exit
+proves a request, not a daemon. Two presses run one command. On failure it
+shows the exit code and the first 300 characters of stderr. Where the session
+has no host commands, the command is shown to copy instead.
+
+Every string from the daemon is cleaned of control characters before it is
+drawn, by a plain loop: no regular expression runs on external data.
 
 ## One predicate, one table
 

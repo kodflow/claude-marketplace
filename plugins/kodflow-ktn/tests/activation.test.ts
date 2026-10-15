@@ -11,12 +11,9 @@ test("a Go project: the command is registered, the probe walks once", async ($, 
   expect(h.commands).toEqual(["ktn-view"]);
   expect(h.listed).toEqual(["/w/repo"]);
   const { text } = await $.command.run({ command: "ktn-view", args: "" } as any);
-  expect(text).toBe("ktn: projet Go, workspace /w/repo");
-  expect(h.state.snap).toEqual({
-    activation: "active",
-    root: "/w/repo",
-    workspace: "/w/repo",
-  });
+  expect(text).toContain("(workspace /w/repo)");
+  expect((h.state.snap as any).activation).toBe("active");
+  expect((h.state.snap as any).workspace).toBe("/w/repo");
 });
 
 test("outside a Go project: no pane, no status line, no daemon call; the command says so", async ($, on) => {
@@ -122,5 +119,6 @@ test("after a /clear that emptied $.state, the snapshot is written back from the
   await $.classic.SessionStart({ source: "clear" } as any);
   await clock.settle();
   expect(h.writes.length).toBe(before + 1);
-  expect(h.writes.at(-1)).toEqual({ activation: "active", root: "/w/repo", workspace: "/w/repo" });
+  expect(h.writes.at(-1)).toEqual(h.state.snap);
+  expect((h.writes.at(-1) as any).workspace).toBe("/w/repo");
 });
