@@ -1,21 +1,26 @@
-# RLM Execution Workflow (Go / project-linter)
+# RLM Execution Workflow (Go / ktn-linter)
 
 > This module is Go-specific. It is invoked from lint/go.md.
 > For other languages, see lint/generic.md.
 
 ## IMMEDIATE EXECUTION
 
-### Step 1: Run project-linter
+### Step 1: Run ktn-linter
+
+`$KTN` and `$RUN` come from `go.md` step 2: `ktn-linter run`, or
+`project-linter lint` only when no ktn-linter exists.
 
 ```bash
-./builds/project-linter lint ./... 2>&1
+"$KTN" "$RUN" ./... 2>&1
 ```
 
-If the binary does not exist:
-
-```bash
-go build -o ./builds/project-linter ./cmd/project-linter && ./builds/project-linter lint ./...
-```
+Exit 42 means a ktn-linter MCP daemon already serves this directory and the
+CLI refuses to rescan beside it: take the findings from the daemon's MCP
+`scan` tool instead, **with `scope: "full"`**. The CLI always scans the whole
+project, while the daemon defaults to `review_scope: diff`; diff-scoped
+findings cannot prove the full-project convergence this workflow ends on, so
+a result that is not full-scope is never accepted as the final verification.
+`--force` (or `KTN_FORCE_LOCAL=1`) is the exception, never the routine.
 
 ### Step 2: Parse the output
 
@@ -46,7 +51,7 @@ LEAD (Phase 1-3: SEQUENTIAL - inter-file dependencies)
     ↓
   Phase 3: LOGIC (17 rules)
     ↓
-  Re-run project-linter → validate Phase 1-3 convergence
+  Re-run ktn-linter → validate Phase 1-3 convergence
     ↓
   === SPAWN 4 TEAMMATES ===
     ├── "perf"   → Phase 4 PERFORMANCE (11 rules)
@@ -56,7 +61,7 @@ LEAD (Phase 1-3: SEQUENTIAL - inter-file dependencies)
     ↓
   LEAD: wait for all teammates to complete
     ↓
-  Final re-run project-linter → validate global convergence
+  Final re-run ktn-linter → validate global convergence
 ```
 
 ### Teammate Roles
@@ -91,7 +96,7 @@ FOR each phase from 1 to 8:
     END FOR
 END FOR
 
-Re-run project-linter to verify convergence
+Re-run ktn-linter to verify convergence
 IF still issues: restart
 ELSE: finish with report
 ```
@@ -145,7 +150,7 @@ ELSE: finish with report
 
 ## START NOW
 
-1. Run `./builds/project-linter lint ./...`
+1. Run `"$KTN" "$RUN" ./...` (`ktn-linter run ./...`)
 2. Parse the output
 3. Classify by phase
 4. Detect Agent Teams availability (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`)

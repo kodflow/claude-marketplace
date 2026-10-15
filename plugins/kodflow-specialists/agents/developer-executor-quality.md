@@ -24,6 +24,7 @@ Restrict shell usage to these command families; anything outside is out of scope
 - `Bash(shellcheck:*)`
 - `Bash(hadolint:*)`
 - `Bash(prettier --check:*)`
+- `Bash(ktn-linter:*)`
 - `Bash(project-linter:*)`
 
 ## Role
