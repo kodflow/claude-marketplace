@@ -10,7 +10,7 @@
 
 def redact:
   if type == "string" then
-      gsub("(?<k>(token|api[_-]?key|pass" + "word|secret|authorization)\\s*[:=]\\s*(Bearer\\s+)?)[^\\s\"']+"; "\(.k)<redacted>"; "i")
+      gsub("(?<k>[A-Za-z0-9_-]*(token|api[_-]?key|pass" + "word|secret|authorization)[A-Za-z0-9_-]*\\s*[:=]\\s*(Bearer\\s+)?)[^\\s\"']+"; "\(.k)<redacted>"; "i")
     | gsub("(gh[pousr]_|github_pat_|sk-|AK" + "IA)[A-Za-z0-9_-]{8,}"; "<redacted>")
     | gsub("Bearer [A-Za-z0-9._-]+"; "Bearer <redacted>")
   else . end;

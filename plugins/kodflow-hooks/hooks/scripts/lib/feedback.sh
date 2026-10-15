@@ -22,18 +22,23 @@ kf_feedback() {
         model=$(awk -F'\t' -v id="$aid" '$1 == id { m = $2 } END { print m }' "$dir/agent-models.tsv" 2>/dev/null)
         [ -n "$model" ] && source=tool_result
     fi
-    if [ -z "$model" ] && . "$lib/agents.sh" 2>/dev/null \
-        && kf_agent_def "$type" "$cfg" "$project" && kf_fm_model "$KF_AGENT_DEF"; then
-        model=$KF_FM_MODEL; source=frontmatter
+    # Where the agent is defined: the change to propose is to that file, and
+    # only an agent of a kodflow plugin is the marketplace's to fix.
+    local def="" owner=local
+    if . "$lib/agents.sh" 2>/dev/null && kf_agent_def "$type" "$cfg" "$project"; then
+        def=$KF_AGENT_DEF
+        case "$def" in "$cfg"/plugins/cache/kodflow/*) owner=kodflow ;; "$cfg"/plugins/*) owner=plugin ;; esac
+        if [ -z "$model" ] && kf_fm_model "$def"; then model=$KF_FM_MODEL; source=frontmatter; fi
     fi
-    line=$(printf '%s' "$input" | jq -c -L "$lib" --arg model "$model" --arg source "$source" 'include "feedback"; record' 2>/dev/null)
+    line=$(printf '%s' "$input" | jq -c -L "$lib" --arg model "$model" --arg source "$source" --arg def "$def" --arg owner "$owner" 'include "feedback"; record' 2>/dev/null)
     [ -n "$line" ] || return 0
     key=$aid$'\t'$(printf '%s' "$input" | jq -r -L "$lib" 'include "feedback"; first(feedback) // ""' 2>/dev/null | cksum | cut -d' ' -f1)
     (
         mkdir -p "$dir" 2>/dev/null || exit 0
         . "$lib/lock.sh" 2>/dev/null && kf_lock "$dir/.feedback.lock.d" 2
         grep -qxF "$key" "$dir/agent-feedback.ids" 2>/dev/null && exit 0
+        # The record first: a key without its line would drop the report
+        printf '%s\n' "$line" >> "$dir/agent-feedback.jsonl" || exit 0
         printf '%s\n' "$key" >> "$dir/agent-feedback.ids"
-        printf '%s\n' "$line" >> "$dir/agent-feedback.jsonl"
     ) >/dev/null 2>&1 </dev/null
 }

@@ -563,6 +563,9 @@ export const register: Register = (on) => {
     let verdict;
     try {
       if (await off($)) return next(e);
+      // Read before anything that can fail: a throw later still knows a
+      // gated CLAUDE_CODE_SUBAGENT_MODEL was there
+      raw.push(await $.env.get("CLAUDE_CODE_SUBAGENT_MODEL"));
       const run = judging.then(async () => judgeSpawn(e, await spawnPort($, raw)));
       judging = run.catch(() => undefined);
       verdict = await run;

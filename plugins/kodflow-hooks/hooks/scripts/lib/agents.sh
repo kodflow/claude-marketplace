@@ -20,8 +20,10 @@ KF_AGENTS_LIB=${BASH_SOURCE[0]%/*}
 # holds it byte-identical to skills/_shared/gated-models.txt.
 kf_gated_load() {
     local f=$KF_AGENTS_LIB/../../gated-models.txt line
+    # Unreadable, the list falls back to the policy's model: an unreadable
+    # file must not make every model ungated
     KF_GATED=""
-    [ -r "$f" ] || return 0
+    [ -r "$f" ] || { KF_GATED=fable$'\n'; return 0; }
     while IFS= read -r line || [ -n "$line" ]; do
         line=${line%%#*}
         line=$(printf '%s' "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')

@@ -79,6 +79,10 @@ UserPromptSubmit)
         # this. Only while the task tools answer: a gate nothing can lift
         # would stop the session.
         [ "$BEAT" = 0 ] && mkdir -p "$SDIR" 2>/dev/null && : > "$SDIR/triage-pending" 2>/dev/null
+        # The user's presence, for on-stop.sh's agent-feedback proposal. The
+        # mod writes it on composer prompts only; without the mod this is the
+        # nearest reading: a prompt that is not a system turn.
+        [ "$BEAT" != 0 ] && mkdir -p "$SDIR" 2>/dev/null && date +%s > "$SDIR/composer-at" 2>/dev/null
     fi
 
     # TRANSFORM: where we are. Branch, and the newest plan and goal so a

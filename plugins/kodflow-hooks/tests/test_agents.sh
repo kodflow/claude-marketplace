@@ -108,6 +108,11 @@ expect_rc "a subagent's dispatch is not routed" 0
 rm -f "$SD/routing-installed.tsv"
 run on-tool.sh "$(agent "Fix the golang race")"
 [ "$RC" -eq 2 ] && [ -s "$SD/routing-installed.tsv" ] && ok "a missing index is rebuilt at the first dispatch" || bad "reindex" "rc=$RC"
+installed some-other-plugin; run on-tool.sh "$(agent "Fix the golang race")"
+expect_rc "a plugin removed mid-session: the index follows installed_plugins.json" 0
+installed kodflow-specialists; touch "$CFG/plugins/installed_plugins.json"
+run on-tool.sh "$(agent "Fix the golang race")"
+[ "$RC" -eq 2 ] && ok "and an install brings its specialists back" || bad "reinstall" "rc=$RC"
 touch -t 200001010000 "$SD/routing-installed.tsv"; printf 'stale\n' > "$SD/routing-installed.tsv"; touch -t 200001010000 "$SD/routing-installed.tsv"
 run on-tool.sh "$(agent "Fix the golang race")"
 [ "$RC" -eq 2 ] && grep -q golang "$SD/routing-installed.tsv" && ok "an index older than the shipped one is rebuilt" || bad "stale index" "rc=$RC"
@@ -218,6 +223,16 @@ OUT=$(agent "probe" "" "x" fable | PATH=$NJ "$NJ/bash" "$S/on-tool.sh" 2>"$T/err
 [ "$RC" -eq 2 ] && motif fable && ok "without jq, a per-call fable is still refused" || bad "no jq" "rc=$RC $ERR"
 OUT=$(agent "probe" kodflow-specialists:deep | PATH=$NJ "$NJ/bash" "$S/on-tool.sh" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err")
 [ "$RC" -eq 2 ] && motif fable && ok "without jq, a fable frontmatter is still refused" || bad "no jq fm" "rc=$RC $ERR"
+# Another JSON layout: indented, several spaces and a tab around the colons
+wide() { jq . | sed -e 's/": /":  	 /g'; }
+run on-tool.sh "$(agent "probe" "" "x" fable | wide)"
+[ "$RC" -eq 2 ] && motif fable && ok "an indented payload with wide spacing: still refused (jq decodes it)" || bad "wide jq" "rc=$RC $ERR"
+OUT=$(agent "probe" "" "x" fable | wide | PATH=$NJ "$NJ/bash" "$S/on-tool.sh" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err")
+[ "$RC" -eq 2 ] && motif fable && ok "the same without jq: still refused" || bad "wide nojq" "rc=$RC $ERR"
+run on-tool.sh "$(skill kodflow-specialists:deep-skill | wide)"
+[ "$RC" -eq 2 ] && motif fable && ok "a gated skill in that layout: refused" || bad "wide skill" "rc=$RC $ERR"
+# An unreadable gated list falls back to the policy's model
+( . "$S/lib/agents.sh"; KF_AGENTS_LIB=$T/nowhere; unset KF_GATED; kf_is_gated claude-fable-5-1 ) && ok "an unreadable gated list still gates fable" || bad "gated unreadable" ""
 
 echo "== SessionStart · a session that starts on a gated model is told"
 run on-session.sh "$(fixture "SessionStart startup, headless (no model key)" '.model = "claude-fable-5-1"')"
@@ -246,12 +261,16 @@ AIDF=$(fixture "PostToolUse Agent, async launch: agentId and resolvedModel" | jq
 run on-tool.sh "$(fixture "PostToolUse Agent, async launch: agentId and resolvedModel")"
 grep -q "^$AIDF"$'\t''claude-haiku-5-5'$'\t''low' "$SD/agent-models.tsv" 2>/dev/null \
     && ok "PostToolUse Agent records agent id, resolved model, per-call effort" || bad "agent-models" "$(cat "$SD/agent-models.tsv" 2>&1)"
-FB='ok\n\n## Agent feedback\nThe brief named token=abc123def456 but the file was gone.'
+# Credential-shaped assignments, assembled at run time with throwaway values:
+# the file carries neither a key name joined to a value nor a value a
+# scanner would read as a real one.
+TOKV=t$$x$RANDOM; AKN="AWS_SECRET""_ACCESS_KEY"; AKV=v$RANDOM$$q$RANDOM
+FB="ok\\n\\n## Agent feedback\\nThe brief named token=$TOKV and $AKN=$AKV but the file was gone."
 STOPF=$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" \
     ".agent_id = \"$AIDF\" | .last_assistant_message = \"$FB\"")
 run on-agent.sh "$STOPF"
 L1=$(tail -n 1 "$SD/agent-feedback.jsonl" 2>/dev/null)
-printf '%s' "$L1" | jq -e --arg id "$AIDF" '.agent_id == $id and .model == "claude-haiku-5-5" and .source == "tool_result" and .effort == "low" and (.feedback | test("token=<redacted>")) and (.feedback | test("abc123") | not)' >/dev/null 2>&1 \
+printf '%s' "$L1" | jq -e --arg id "$AIDF" --arg tv "$TOKV" --arg an "$AKN" --arg av "$AKV" '.agent_id == $id and .model == "claude-haiku-5-5" and .source == "tool_result" and .effort == "low" and (.feedback | test("token=<redacted>")) and (.feedback | contains($tv) | not) and (.feedback | contains($an + "=<redacted>")) and (.feedback | contains($av) | not)' >/dev/null 2>&1 \
     && ok "SubagentStop keeps the feedback, joined to its model, redacted" || bad "feedback line" "$L1"
 [ ${#L1} -le 1024 ] && ok "the line is under 1 KB" || bad "size" "${#L1}"
 HB=$(fixture "auto mode: PostToolUse SubagentHandback, report in tool_input.message" \
@@ -260,7 +279,7 @@ run on-tool.sh "$HB"
 [ "$(wc -l < "$SD/agent-feedback.jsonl" | tr -d ' ')" = 1 ] && ok "the same report through SubagentHandback is kept once" || bad "dedupe" "$(cat "$SD/agent-feedback.jsonl")"
 run on-tool.sh "$(fixture "auto mode: PostToolUse SubagentHandback, report in tool_input.message" \
     '.agent_id = "a-other" | .agent_type = "kodflow-specialists:developer-specialist-go" | .tool_input.message = "done\n\n## Agent feedback\nThe tools list lacks WebFetch."')"
-tail -n 1 "$SD/agent-feedback.jsonl" | jq -e '.agent_id == "a-other" and .model == "sonnet" and .source == "frontmatter"' >/dev/null 2>&1 \
+tail -n 1 "$SD/agent-feedback.jsonl" | jq -e --arg d "$IP/agents/developer-specialist-go.md" '.agent_id == "a-other" and .model == "sonnet" and .source == "frontmatter" and .definition == $d and .owner == "kodflow"' >/dev/null 2>&1 \
     && ok "a hand-back with no recorded model names the frontmatter's" || bad "handback fm" "$(tail -n 1 "$SD/agent-feedback.jsonl")"
 n=$(wc -l < "$SD/agent-feedback.jsonl" | tr -d ' ')
 run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-none"')"
@@ -282,6 +301,13 @@ stop; proposes && printf '%s' "$OUT" | grep -q 'A new point' && ! printf '%s' "$
     && ok "a new entry is proposed alone" || bad "new entry" "$OUT"
 run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-late" | .last_assistant_message = "x\n## Agent feedback\nLater."')"
 stop KODFLOW_FEEDBACK=off; proposes && bad "stop off" "$OUT" || ok "KODFLOW_FEEDBACK=off: no proposal"
+printf '%s\n' "$(( $(date +%s) - 3600 ))" > "$SD/composer-at"; rm -f "$SD/mod-beat"
+run on-user.sh "$(jq -n -c --arg sid "$SID" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:$sid,hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"go on"}')" KODFLOW_MOD=off
+[ $(( $(date +%s) - $(cat "$SD/composer-at") )) -le 5 ] && ok "without the mod, a user prompt marks the user present" || bad "presence shell" "$(cat "$SD/composer-at")"
+stop KODFLOW_MOD=off; proposes && printf '%s' "$OUT" | grep -q 'Later' && ok "so the feedback is proposed with KODFLOW_MOD=off" || bad "proposal mod off" "$OUT"
+printf '%s\n' "$(( $(date +%s) - 3600 ))" > "$SD/composer-at"
+run on-user.sh "$(jq -n -c --arg sid "$SID" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:$sid,hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"<task-notification>x</task-notification>"}')" KODFLOW_MOD=off
+[ $(( $(date +%s) - $(cat "$SD/composer-at") )) -ge 3000 ] && ok "a system turn does not" || bad "presence systurn" ""
 
 echo "== every script fed the recorded payloads exits 0 or blocks on purpose"
 while IFS= read -r c; do

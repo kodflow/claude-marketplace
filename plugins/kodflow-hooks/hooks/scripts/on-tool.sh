@@ -60,10 +60,27 @@ _forge_ok() {
 # model is not in a PreToolUse payload: an `inherit` under a gated main
 # model passes here (a README hole). Pure bash and awk: it runs before the
 # jq check, so a machine without jq still has it.
+# The fields the fallback reads. With jq, decoded from the JSON (any layout,
+# any escape); without it, bash regexes over the raw text, any whitespace
+# around the colon — a value holding an escaped quote or a \u escape is then
+# read up to it, a limit the README states.
+_fable_fields() {
+    [ -n "${FF_DONE:-}" ] && return 0
+    FF_DONE=1 FF_SID="" FF_MODEL="" FF_TYPE="" FF_SKILL="" FF_CWD=""
+    if command -v jq >/dev/null 2>&1 && eval "$(printf '%s' "$INPUT" | jq -r '.tool_input // {} as $i | @sh "FF_SID=\(.session_id // "" | tostring) FF_MODEL=\($i.model // "" | tostring) FF_TYPE=\($i.subagent_type // "" | tostring) FF_SKILL=\($i.skill // "" | tostring) FF_CWD=\(.cwd // "" | tostring)"' 2>/dev/null)"; then
+        return 0
+    fi
+    local w='[[:space:]]*'
+    [[ $INPUT =~ \"session_id\"$w:$w\"([^\"]*)\" ]] && FF_SID=${BASH_REMATCH[1]}
+    [[ $INPUT =~ \"model\"$w:$w\"([^\"]*)\" ]] && FF_MODEL=${BASH_REMATCH[1]}
+    [[ $INPUT =~ \"subagent_type\"$w:$w\"([^\"]*)\" ]] && FF_TYPE=${BASH_REMATCH[1]}
+    [[ $INPUT =~ \"skill\"$w:$w\"([^\"]*)\" ]] && FF_SKILL=${BASH_REMATCH[1]}
+    [[ $INPUT =~ \"cwd\"$w:$w\"([^\"]*)\" ]] && FF_CWD=${BASH_REMATCH[1]}
+    return 0
+}
 _fable_sd() {
-    local sid=""
-    [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
-    FABLE_SD=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/${sid:-default}
+    _fable_fields
+    FABLE_SD=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$(printf '%s' "${FF_SID:-default}" | tr -cd 'A-Za-z0-9_-')
 }
 _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
     printf '═══════════════════════════════════════════════\n  ❌ %s\n═══════════════════════════════════════════════\n' "GATED MODEL REFUSED — $1 ($2)" >&2
@@ -72,6 +89,7 @@ _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
     exit 2
 }
 _fable_fast() {
+    [ -n "${FABLE_DONE:-}" ] && return 0; FABLE_DONE=1
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
     local L=${BASH_SOURCE[0]%/*}/lib sd m="" t="" why=""
     _fable_sd; sd=$FABLE_SD
@@ -82,12 +100,10 @@ _fable_fast() {
     # then CLAUDE_CODE_SUBAGENT_MODEL.
     local env=${CLAUDE_CODE_SUBAGENT_MODEL:-} heir=0
     case "${CLAUDE_CODE_SUBAGENT_MODEL_FORCE:-}" in ''|0|false|no|off) ;; *) [ -n "$env" ] && m=$env && why="CLAUDE_CODE_SUBAGENT_MODEL (forced)" ;; esac
-    [ -z "$m" ] && [[ $INPUT =~ \"model\":\ ?\"([^\"]*)\" ]] && m=${BASH_REMATCH[1]} && why="the call's model"
-    [[ $INPUT =~ \"subagent_type\":\ ?\"([^\"]*)\" ]] && t=${BASH_REMATCH[1]}
+    [ -z "$m" ] && [ -n "$FF_MODEL" ] && m=$FF_MODEL && why="the call's model"
+    t=$FF_TYPE
     if [ -z "$m" ] && [ -n "$t" ]; then
-        local cwd=""
-        [[ $INPUT =~ \"cwd\":\ ?\"([^\"]*)\" ]] && cwd=${BASH_REMATCH[1]}
-        if kf_agent_def "$t" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_PROJECT_DIR:-$cwd}" && kf_fm_model "$KF_AGENT_DEF"; then
+        if kf_agent_def "$t" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_PROJECT_DIR:-$FF_CWD}" && kf_fm_model "$KF_AGENT_DEF"; then
             case "$KF_FM_MODEL" in inherit|INHERIT) heir=1 ;; *) m=$KF_FM_MODEL; why="the frontmatter of $t" ;; esac
         fi
     fi
@@ -101,15 +117,15 @@ _fable_fast() {
 # grant; without it the shell refuses a gated one outright. No file grants
 # anything here: whatever can run a tool could write it.
 _fable_skill() {
+    [ -n "${FABLE_DONE:-}" ] && return 0; FABLE_DONE=1
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
-    local L=${BASH_SOURCE[0]%/*}/lib sk="" cwd=""
+    local L=${BASH_SOURCE[0]%/*}/lib sk
     _fable_sd
     if . "$L/beat.sh" 2>/dev/null && kf_beat "$FABLE_SD"; then return 0; fi
-    [[ $INPUT =~ \"skill\":\ ?\"([^\"]*)\" ]] && sk=${BASH_REMATCH[1]#/}
+    sk=${FF_SKILL#/}
     [ -n "$sk" ] || return 0
-    [[ $INPUT =~ \"cwd\":\ ?\"([^\"]*)\" ]] && cwd=${BASH_REMATCH[1]}
     . "$L/agents.sh" 2>/dev/null || return 0
-    kf_skill_def "$sk" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_PROJECT_DIR:-$cwd}" && kf_fm_model "$KF_SKILL_DEF" || return 0
+    kf_skill_def "$sk" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "${CLAUDE_PROJECT_DIR:-$FF_CWD}" && kf_fm_model "$KF_SKILL_DEF" || return 0
     kf_is_gated "$KF_FM_MODEL" || return 0
     _fable_refuse "$KF_FM_MODEL" "the frontmatter of the skill $sk" "The kodflow mod that asks for that yes is not loaded in this session: load it (Claude Code 2.1.293+, /reload-plugins), or run without the skill."
 }
@@ -120,7 +136,7 @@ _fable_skill() {
 # once unless the triage gate applies, in which case the full path below
 # refuses them. A forge write from the main thread (delegation gate, above) is
 # the one other case that goes on to the full path.
-if [[ $INPUT =~ \"hook_event_name\":\ ?\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_name\":\ ?\"([^\"]+)\" ]]; then
+if [[ $INPUT =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
     fp_tool=${BASH_REMATCH[1]}
     case "$fp_tool" in
         Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__*tasks__task_*|mcp__kodflow-hooks__task_*) ;;
@@ -1441,6 +1457,9 @@ post_failure() {
 # exception. The model writes that marker too: this gate steers, it does
 # not enforce. KODFLOW_ROUTE=off turns it off. No index, no jq: it passes.
 pre_agent() {
+    # A payload the fast path did not recognise (another JSON layout) still
+    # meets the gated-model fallback, decoded by jq here
+    [ "$EV" = PreToolUse ] && _fable_fast
     [ "$EV" = PreToolUse ] && [ -z "$AID" ] || { _log; exit 0; }
     [ "${KODFLOW_ROUTE:-}" = off ] && { _log; exit 0; }
     local st desc idx hits line agent kw
@@ -1449,7 +1468,7 @@ pre_agent() {
     case "$INPUT" in *'[general-purpose-ok]'*) ROOT_GUARD=route-override; _log; exit 0 ;; esac
     . "$LIB/route.sh" 2>/dev/null || { _log; exit 0; }
     idx=$SDIR/routing-installed.tsv
-    kf_route_fresh "$idx" || kf_route_install "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "$idx"
+    kf_route_fresh "$idx" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" || kf_route_install "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "$idx"
     if ! [ -s "$idx" ]; then ROOT_GUARD=route-noindex; _log; exit 0; fi
     hits=$(kf_route_match "$idx" "$desc")
     [ -n "$hits" ] || { _log; exit 0; }
@@ -1517,6 +1536,7 @@ case "$EV/$TOOL" in
     PreToolUse/mcp__*tasks__task_*|PreToolUse/mcp__kodflow-hooks__task_*) _log; exit 0 ;;
     PreToolUse/mcp__github__*|PreToolUse/mcp__gitlab__*|PreToolUse/mcp__GitKraken__*)
         pre_forge ;;
+    PreToolUse/Skill) _fable_skill; exit 0 ;;
     PreToolUse/*) exit 0 ;;
 esac
 

@@ -9,7 +9,7 @@
 #
 #   . "$LIB/route.sh"
 #   kf_route_install CFG OUT      write OUT from the shipped index (jq)
-#   kf_route_fresh OUT            0 when OUT exists and is newer than the index
+#   kf_route_fresh OUT [CFG]      0 when OUT is newer than the index and installed_plugins.json
 #   kf_route_match OUT DESC       one `agent<TAB>keyword,…` line per agent named
 
 KF_ROUTE_INDEX=${BASH_SOURCE[0]%/*}/../../routing-index.tsv
@@ -31,8 +31,11 @@ kf_route_install() {
     return 1
 }
 
+# Fresh: newer than the shipped index and than installed_plugins.json, whose
+# list of plugins it was filtered by (an install or a removal mid-session).
 kf_route_fresh() {
-    [ -s "$1" ] && ! [ "$KF_ROUTE_INDEX" -nt "$1" ]
+    local plugins=${2:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}/plugins/installed_plugins.json
+    [ -s "$1" ] && ! [ "$KF_ROUTE_INDEX" -nt "$1" ] && ! [ "$plugins" -nt "$1" ]
 }
 
 # Words: the description lower-cased, cut on anything but letters, digits

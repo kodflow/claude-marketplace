@@ -384,6 +384,9 @@ session — Fable today (model-policy §6).
   `Skill` whose frontmatter does, from every caller, without jq (bash
   regexes, a bounded awk read of the frontmatter, quote- and CRLF-safe). It
   trusts no grant: without the mod, only `KODFLOW_FABLE=allow` lets one through.
+  With jq the fields are decoded from the JSON, whatever its layout; without
+  jq they are read by regexes tolerant of any whitespace around the colon, so
+  a value holding an escaped quote or a `\u` escape is read only up to it.
 - `SessionStart` says once, to the user and to Claude, when the session itself
   starts on a gated model (the payload's `model`, absent in a headless run,
   else the settings', else `ANTHROPIC_MODEL`).
@@ -418,6 +421,7 @@ before opening any issue on kodflow/claude-marketplace.
 | `turn.step` or another plugin rewriting a spawn's model after this mod | not judged; modwall refuses user-tier modules from outside kodflow, a managed one is not judged |
 | A `Skill` called from inside a subagent | not recorded; judged as from the main thread |
 | `[general-purpose-ok]` | written by the model as easily as by a skill: the routing gate steers |
+| The shell fallback without jq | a `model` or `skill` value written with an escaped quote or a `\u` escape is not decoded; with jq it is |
 | A foreground subagent's model in its feedback | its `PostToolUse Agent` comes after its `SubagentStop` (recorded): the frontmatter's model is named instead |
 
 ## The task list (mod)

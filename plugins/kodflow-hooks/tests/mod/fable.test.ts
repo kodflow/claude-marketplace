@@ -383,3 +383,14 @@ test("a skill pinned to a gated model: refused with nobody there, granted once a
   expect(ran).toBe(2);
   expect(h.asked[0]).toContain("This skill would run on claude-fable-5-1");
 });
+
+test("a forced gated CLAUDE_CODE_SUBAGENT_MODEL is refused even when the definition lookup throws", async ($, on) => {
+  const h = host(
+    on,
+    { CLAUDE_CONFIG_DIR: CFG, CLAUDE_CODE_SUBAGENT_MODEL: "claude-fable-5-1", CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" },
+    { throwOn: "CLAUDE_CONFIG_DIR" },
+  );
+  const r: any = await $.agent.spawn(spawn({ model: "haiku" }) as any);
+  expect(r.deny).toContain("claude-fable-5-1");
+  expect(h.spawned.length).toBe(0);
+});
