@@ -1,0 +1,71 @@
+{
+  "provenance": {
+    "repo": "kodflow/ktn-linter",
+    "sha": "bb5c349d2009ef79df8df1b9a5e2ba7758cb1827",
+    "file": "pkg/daemonaddr/project_roots_external_test.go",
+    "tables": ["TestResolveProject", "TestProjectRootsValue_WorkspaceRoot"],
+    "note": "Transcribed row for row, names and values unchanged. Each tree is laid under a directory of its own with nothing above it holding a .git or a go.mod; a name ending in / is a directory, any other a file. Paths in the expectations are relative to that directory, \".\" for itself, \"\" for none. Checked against the Go resolver at that commit before it was committed: every tree laid on disk and daemonaddr.ResolveProject run on it gave these values."
+  },
+  "resolveProject": [
+    {
+      "name": "git and go.mod at the root, from a package",
+      "tree": [".git/", "go.mod", "pkg/foo/"],
+      "start": "pkg/foo", "wantGit": ".", "wantRoots": ["."], "wantModule": ".", "wantIsGo": true, "wantTop": "."
+    },
+    {
+      "name": "go.mod in a subfolder, from inside it",
+      "tree": [".git/", "svc/go.mod", "svc/internal/"],
+      "start": "svc/internal", "wantGit": ".", "wantRoots": ["svc"], "wantModule": "svc", "wantIsGo": true, "wantTop": "."
+    },
+    {
+      "name": "go.mod in a subfolder, from the repository root",
+      "tree": [".git/", "svc/go.mod"],
+      "start": ".", "wantGit": ".", "wantRoots": [], "wantModule": "", "wantIsGo": false, "wantTop": "."
+    },
+    {
+      "name": "go.work wins over the nearer go.mod",
+      "tree": [".git/", "go.work", "a/go.mod", "a/x/"],
+      "start": "a/x", "wantGit": ".", "wantRoots": ["a", "."], "wantModule": ".", "wantIsGo": true, "wantTop": "."
+    },
+    {
+      "name": "a linked worktree: .git is a file",
+      "tree": [".git", "go.mod", "cmd/"],
+      "start": "cmd", "wantGit": ".", "wantRoots": ["."], "wantModule": ".", "wantIsGo": true, "wantTop": "."
+    },
+    {
+      "name": "no repository: bounded by the highest module",
+      "tree": ["go.mod", "inner/go.mod", "inner/p/"],
+      "start": "inner/p", "wantGit": "", "wantRoots": ["inner", "."], "wantModule": "inner", "wantIsGo": true, "wantTop": "."
+    },
+    {
+      "name": "no repository and no module",
+      "tree": ["docs/"],
+      "start": "docs", "wantGit": "", "wantRoots": [], "wantModule": "", "wantIsGo": false, "wantTop": "docs"
+    },
+    {
+      "name": "a repository that is not Go",
+      "tree": [".git/", "package.json", "src/"],
+      "start": "src", "wantGit": ".", "wantRoots": [], "wantModule": "", "wantIsGo": false, "wantTop": "."
+    },
+    {
+      "name": "a go.mod above the repository does not count",
+      "tree": ["go.mod", "repo/.git/", "repo/src/"],
+      "start": "repo/src", "wantGit": "repo", "wantRoots": [], "wantModule": "", "wantIsGo": false, "wantTop": "repo"
+    },
+    {
+      "name": "a vendored go.mod is ignored",
+      "tree": [".git/", "go.mod", "vendor/example.com/dep/go.mod", "vendor/example.com/dep/sub/"],
+      "start": "vendor/example.com/dep/sub", "wantGit": ".", "wantRoots": ["."], "wantModule": ".", "wantIsGo": true, "wantTop": "."
+    },
+    {
+      "name": "a go.mod that is a directory is no marker",
+      "tree": [".git/", "go.mod/"],
+      "start": ".", "wantGit": ".", "wantRoots": [], "wantModule": "", "wantIsGo": false, "wantTop": "."
+    }
+  ],
+  "workspaceRoot": [
+    { "name": "the module root", "dir": "/r/a/b", "gitRoot": "/r", "moduleRoots": ["/r/a"], "moduleRoot": "/r/a", "want": "/r/a" },
+    { "name": "a repository without a module", "dir": "/r/a", "gitRoot": "/r", "moduleRoots": [], "moduleRoot": "", "want": "/r" },
+    { "name": "neither: the start", "dir": "/x", "gitRoot": "", "moduleRoots": [], "moduleRoot": "", "want": "/x" }
+  ]
+}

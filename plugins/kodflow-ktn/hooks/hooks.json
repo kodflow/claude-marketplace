@@ -1,0 +1,4 @@
+{
+  "description": "One hooks module (mod/register.ts). It registers no tool hook: ktn-linter's command hooks keep delivering the findings, this mod only draws them.",
+  "modules": ["./mod/register.ts"]
+}
