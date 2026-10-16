@@ -701,3 +701,37 @@ test("a failed read of agent-models.tsv is tried again on the next poll", async 
   await clock.advance(3_000);
   expect(await row()).toContain("sonnet·med");
 });
+
+// --- a title of 30 characters ---------------------------------------------------------
+
+const LONG = "Réécrire la gestion des échecs"; // 30
+const LONGER = [
+  task("1", "Corriger texte IWFS", "completed", { ref: "T0" }),
+  task("2", LONG, "in_progress", {
+    ref: "C1",
+    worker: "mkt-routing-pr",
+    worker_id: "a1",
+  }),
+  task("3", "A".repeat(18), "pending", { ref: "C2" }),
+];
+
+test("a title of 30 characters is cut at 18 cells in the tree and in the graph, whole on the selected line (R12, 90x20)", async ($, on) => {
+  expect([...LONG]).toHaveLength(30);
+  await seeded($, on, LONGER);
+  const ui = await mount($, 88, 20);
+  const text = capture(await drawnIn(ui));
+  const rows = text.split("\n");
+  // Cut with « … » in the 18 cells of the column, the neighbours aligned
+  expect(rows.find((l) => l.includes("C1"))).toContain("● C1     Réécrire la gesti…  ↳");
+  // 18 characters fit as they are; 19 do not
+  expect(rows.find((l) => l.includes("C2"))).toContain("▶ C2     AAAAAAAAAAAAAAAAAA ");
+  expect(rows.find((l) => l.includes("T0"))).toContain("Corriger texte IWFS".slice(0, 17) + "…");
+  // The detail line of the selection carries the whole title
+  expect(rows[16]).toContain(`● C1  ${LONG}`);
+  expect(widths(await drawnIn(ui))).toEqual(Array(20).fill(88));
+  // The graph cuts it too, in its own 18
+  await ui.key({ key: "tab" });
+  const graph = capture(await drawnIn(ui));
+  expect(graph).toContain("● C1    Réécrire la gesti…");
+  expect(graph).not.toContain(LONG);
+});
