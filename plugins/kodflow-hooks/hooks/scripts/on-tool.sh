@@ -1228,7 +1228,7 @@ pre_builtin_tasks() {
     [ "$BEAT" = 0 ] || { _log; exit 0; }
     _block "USE THE KODFLOW TASK TOOLS" \
         "$TOOL draws a second task list in the chat. Use the kodflow task tools instead:" \
-        "task_create (subject: 40 characters at most), task_update (id, status), task_list," \
+        "task_create (subject: 30 characters at most), task_update (id, status), task_list," \
         "task_epic / task_focus (one epic per subject). Statuses: pending, in_progress, waiting, completed, deleted."
 }
 
