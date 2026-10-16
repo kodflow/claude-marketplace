@@ -173,7 +173,7 @@ fails by accident blocks every shell call of the session.
 | `PreToolUse` · Write/Edit | `on-tool.sh` | main thread writing inside a git work tree (memory and Claude configuration excepted) · no file path | the main thread producing into a repository (delegation gate) · protected path (defaults or `.claude/protected-paths`) | — | log (no linter call: ktn-linter reports through its own command hooks) |
 | `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` · from the main thread: a merge without the mod's token or an exemption | — | log; a main-thread merge is tagged `root_guard: merge` (refused), `merge-ok` or `merge-exempt` |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed | edited-file tracker · risky construct warning once per session · log |
-| `PreToolUse` · Agent/Task | `on-tool.sh` | gated-model fallback first, every caller, no jq; then the main thread only | a gated model when the mod does not beat · from the main thread, a `general-purpose` dispatch whose description names an installed specialist's technology (routing gate, below) | — | log, `root_guard: route-deny`, `route-override` or `route-noindex` |
+| `PreToolUse` · Agent/Task | `on-tool.sh` | gated-model fallback first, every caller, no jq; then the main thread only | a gated model when the mod does not beat · from the main thread, a `general-purpose` dispatch whose description names an installed specialist's technology (routing gate, below) · from the main thread, `isolation: "worktree"` on work in another repository (isolation gate, below) | — | log, `root_guard: route-deny`, `route-override`, `route-noindex`, `isolation-deny` or `isolation-override` |
 | `PreToolUse` · Skill | `on-tool.sh` | the mod does not beat | a skill whose frontmatter names a gated model | — | — |
 | `PostToolUse` · Task/Agent | `on-tool.sh` | — | — | — | `agent-models.tsv` (agent id, resolved model, per-call effort) · log tagged `root_guard: dispatch` |
 | `PostToolUse` · SubagentHandback | `on-tool.sh` | — | — | — | the report's agent feedback, as at `SubagentStop` |
@@ -372,6 +372,24 @@ exception, written by every skill that means a general-purpose dispatch (the
 that marker too: the gate steers, it does not enforce.** Subagents are not
 gated.
 
+### The isolation gate (`KODFLOW_ISOLATION=off`)
+
+`isolation: "worktree"` is Claude Code's: it puts the subagent in a fresh
+worktree of the session's repository (`<project>/.claude/worktrees/agent-…`)
+and then refuses every shell command it cannot prove keeps git inside that
+worktree (an interpreter fed a heredoc, a variable where a command or an
+option stands, `screen`). That guard is in the CLI and no hook lifts it, so a
+subagent sent that way to work in another repository fails on its first
+non-trivial command. A main-thread Agent call with `isolation: "worktree"`
+whose description or prompt names an absolute path (or `~/…`) inside a git
+repository other than the session's is refused before it starts
+(`[motif:isolation]`, `root_guard: isolation-deny`), naming that repository:
+dispatched without isolation, the subagent makes its own worktree beside it
+and delivers through a PR (start-up rule 5). Paths in the session's own
+repository, worktrees of it included, and paths in no repository pass.
+`[isolation-ok]` in the description or the prompt is the exception for a path
+only quoted for reading (`isolation-override`). Subagents are not gated.
+
 ### Gated models (`KODFLOW_FABLE=allow|off`)
 
 `hooks/gated-models.txt` (one token a line, a substring of the lower-cased
@@ -442,6 +460,7 @@ before opening any issue on kodflow/claude-marketplace.
 | `turn.step` or another plugin rewriting a spawn's model after this mod | not judged; modwall refuses user-tier modules from outside kodflow, a managed one is not judged |
 | A `Skill` called from inside a subagent | not recorded; judged as from the main thread |
 | `[general-purpose-ok]` | written by the model as easily as by a skill: the routing gate steers |
+| The isolation gate | reads paths written out in the prompt only: a repository named by a relative path, a variable or a remote URL is not seen; `[isolation-ok]` is written by the model as easily |
 | The shell fallback without jq | a `model` or `skill` value written with an escaped quote or a `\u` escape is not decoded; with jq it is |
 | A foreground subagent's model in its feedback | its `PostToolUse Agent` comes after its `SubagentStop` (recorded): the frontmatter's model is named instead |
 
@@ -708,6 +727,7 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KODFLOW_ROOT=off` | the delegation gate, its Stop rule and its prompt line are off for the session |
 | `KODFLOW_MOD=off` | the mod hooks nothing: no task tools, no beat, attribution left to Claude Code |
 | `KODFLOW_ROUTE=off` | the routing gate is off for the session |
+| `KODFLOW_ISOLATION=off` | the isolation gate is off for the session |
 | `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
 | `KODFLOW_FEEDBACK=off` | no rule 6, nothing kept, nothing proposed |
 | `KODFLOW_CLEANUP=off` | no worktree, branch or remote branch is removed on close, no notice; `KODFLOW_CLEANUP_TIMEOUT` (seconds, default 15) bounds each `gh` and push call |
