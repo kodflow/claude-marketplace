@@ -326,5 +326,58 @@ while IFS= read -r c; do
     [ "$RC" -eq 0 ] && ok "$c" || bad "$c" "rc=$RC ${ERR:0:200}"
 done < <(jq -r '.case' "$FX")
 
+echo "== isolation: worktree pins a subagent to the session's repository"
+# The case reported on 16/10/2026: a session in making.codes spawned a subagent
+# with isolation: "worktree" and asked it to work in claude-marketplace, in a
+# worktree of that repository. Claude Code isolated it in a worktree of
+# making.codes and refused every shell command it could not prove kept git
+# inside that worktree (a heredoc fed to python3, screen with variables). The
+# dispatch itself is what is wrong: it is refused here, before the subagent
+# starts, and the subagent works in its own worktree beside the other
+# repository instead. A worktree of the session's own repository, a path in no
+# repository and a dispatch without isolation pass as before.
+gi() { git -c init.defaultBranch=main init -q "$1" && git -C "$1" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init; }
+ISO=$T/iso; mkdir -p "$ISO"
+gi "$ISO/sess"; gi "$ISO/other"
+git -C "$ISO/other" worktree add -q -b feat/x "$ISO/.worktrees/other-x" 2>/dev/null
+git -C "$ISO/sess" worktree add -q -b feat/y "$ISO/sess/.claude/worktrees/agent-1" 2>/dev/null
+mkdir -p "$ISO/plain"
+# iso PROMPT [ISOLATION] → a main-thread Agent call from $ISO/sess
+iso() {
+    agent "hud agents pane" "" "$1" \
+        | jq -c --arg i "${2-worktree}" --arg cwd "$ISO/sess" '.cwd = $cwd | if $i == "" then . else .tool_input.isolation = $i end'
+}
+P="Repo: $ISO/other, in its own worktree $ISO/.worktrees/other-x. Fix the pane."
+run on-tool.sh "$(iso "$P")" CLAUDE_PROJECT_DIR="$ISO/sess"
+[ "$RC" -eq 2 ] && motif isolation && printf '%s' "$ERR" | grep -qF "$ISO/other" \
+    && ok "the reported case: isolation worktree, another repository named: refused, that repository named" \
+    || bad "cross-repo isolation" "rc=$RC ${ERR:0:300}"
+printf '%s' "$ERR" | grep -q 'without isolation' && ok "the refusal says to dispatch without isolation" || bad "iso advice" "$ERR"
+run on-tool.sh "$(iso "Work in $ISO/.worktrees/other-x/src/main.ts, line 3.")" CLAUDE_PROJECT_DIR="$ISO/sess"
+[ "$RC" -eq 2 ] && motif isolation && ok "a file not yet on disk inside another repository's worktree counts too" || bad "iso file" "rc=$RC"
+run on-tool.sh "$(iso "Work in \"$ISO/other\".")" CLAUDE_PROJECT_DIR="$ISO/sess"
+[ "$RC" -eq 2 ] && motif isolation && ok "a quoted path, a trailing dot: still read" || bad "iso quoted" "rc=$RC"
+gi "$ISO/third"
+run on-tool.sh "$(iso "$P and $ISO/third/x, $ISO/other/y")" CLAUDE_PROJECT_DIR="$ISO/sess"
+ISOC=$(cd "$ISO" && pwd -P)   # macOS: /var is /private/var
+printf '%s' "$ERR" | grep -qF "($ISOC/other, $ISOC/third)" && ok "two other repositories: both named, once each" || bad "iso two" "${ERR:0:300}"
+run on-tool.sh "$(iso "$P" "")" CLAUDE_PROJECT_DIR="$ISO/sess"
+expect_rc "the same prompt without isolation passes" 0
+run on-tool.sh "$(iso "Edit $ISO/sess/README.md and $ISO/sess/.claude/worktrees/agent-1/a.txt")" CLAUDE_PROJECT_DIR="$ISO/sess"
+expect_rc "isolation on the session's own repository (a worktree of it included) passes" 0
+run on-tool.sh "$(iso "Write the report to $ISO/plain/out.txt and read /etc/hosts")" CLAUDE_PROJECT_DIR="$ISO/sess"
+expect_rc "paths in no repository pass" 0
+run on-tool.sh "$(iso "Compare with $ISO/other [isolation-ok]")" CLAUDE_PROJECT_DIR="$ISO/sess"
+expect_rc "[isolation-ok] in the prompt passes (a path quoted for reading)" 0
+run on-tool.sh "$(iso "$P")" CLAUDE_PROJECT_DIR="$ISO/plain"
+expect_rc "a session outside any repository: nothing to compare, passes" 0
+run on-tool.sh "$(iso "$P")" CLAUDE_PROJECT_DIR="$ISO/sess" KODFLOW_ROUTE=off
+[ "$RC" -eq 2 ] && motif isolation && ok "KODFLOW_ROUTE=off does not lift it" || bad "iso route off" "rc=$RC"
+run on-tool.sh "$(iso "$P")" CLAUDE_PROJECT_DIR="$ISO/sess" KODFLOW_ISOLATION=off
+expect_rc "KODFLOW_ISOLATION=off passes" 0
+run on-tool.sh "$(fixture "PreToolUse Agent, from inside a subagent (agent_id set)" \
+    | jq -c --arg p "$P" '.tool_input.prompt = $p | .tool_input.isolation = "worktree"')" CLAUDE_PROJECT_DIR="$ISO/sess"
+expect_rc "a subagent's own dispatch is not judged" 0
+
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

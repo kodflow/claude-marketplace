@@ -1431,6 +1431,71 @@ post_failure() {
 }
 
 # ============================================================================
+# PreToolUse · Agent / Task: the isolation gate (main thread)
+# ============================================================================
+# isolation: "worktree" is Claude Code's own: it puts the subagent in a fresh
+# worktree of the SESSION's repository (<project>/.claude/worktrees/agent-…)
+# and from then on refuses every shell command it cannot prove keeps git
+# inside that worktree — an interpreter fed a heredoc, a variable where a
+# command or an option stands, screen. That guard lives in the CLI, not here,
+# and no hook lifts it. A subagent sent that way to work in ANOTHER repository
+# (in a worktree of that one, as the start-up rule 5 says) hits it on its
+# first non-trivial command. So the dispatch is refused before it starts: an
+# absolute path (or ~/…) in the prompt or the description that lies in a git
+# repository other than the session's names the mistake. Without isolation
+# the subagent makes its own worktree beside that repository and delivers
+# through a PR; the CLI's isolation keeps guarding work on the session's own
+# repository, which passes as before, as do paths in no repository.
+# `[isolation-ok]` is the exception for a path only quoted for reading;
+# KODFLOW_ISOLATION=off turns the gate off.
+
+# $1 a path → the canonical git common dir of the repository holding its
+# nearest existing directory, on stdout; 1 when it is in none.
+_git_common() {
+    local d=$1 c
+    while [ -n "$d" ] && [ ! -d "$d" ]; do d=${d%/*}; done
+    [ -n "$d" ] || d=/
+    c=$(unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE; git -C "$d" rev-parse --git-common-dir 2>/dev/null) || return 1
+    [ -n "$c" ] || return 1
+    case "$c" in /*) ;; *) c=$d/$c ;; esac
+    (cd "$c" 2>/dev/null && pwd -P)
+}
+
+_isolation_gate() {
+    [ "${KODFLOW_ISOLATION:-}" = off ] && return 0
+    local iso text p own c seen="" others="" n=0
+    eval "$(printf '%s' "$INPUT" | jq -r '@sh "iso=\(.tool_input.isolation // "") text=\((.tool_input.description // "") + "\n" + (.tool_input.prompt // ""))"' 2>/dev/null)" || return 0
+    [ "$iso" = worktree ] || return 0
+    case "$text" in *'[isolation-ok]'*) ROOT_GUARD=isolation-override; return 0 ;; esac
+    case "$text" in */*) ;; *) return 0 ;; esac
+    own=$(_git_common "$PROJECT_DIR") || return 0
+    while IFS= read -r p; do
+        case "$p" in '~/'*) p=$HOME/${p#'~/'} ;; '~') p=$HOME ;; esac
+        while :; do case "$p" in */|*.|*:|*'!'|*'?'|*…) p=${p%?} ;; *) break ;; esac; done
+        [ -n "$p" ] || continue
+        case "$seen" in *$'\n'"$p"$'\n'*) continue ;; esac
+        seen="$seen"$'\n'"$p"$'\n'
+        n=$((n+1)); [ $n -gt 16 ] && break
+        c=$(_git_common "$p") || continue
+        [ "$c" = "$own" ] && continue
+        c=${c%/.git}
+        case "$others" in *"[$c]"*) ;; *) others="$others[$c]" ;; esac
+    done <<EOF
+$(printf '%s' "$text" | tr -s ' \t\r"'"'"'`()<>,;=|&*[]{}' '\n' | grep -E '^(/|~/|~$)')
+EOF
+    [ -n "$others" ] || return 0
+    others=${others#[}; others=${others%]}
+    local mine=${own%/.git}
+    ROOT_GUARD=isolation-deny
+    _motif_block isolation "DISPATCH WITHOUT ISOLATION — the work is in another repository (${others//][/, })" \
+        "isolation: \"worktree\" puts the subagent in a worktree of $mine, this session's repository." \
+        "Claude Code then refuses its shell commands that it cannot prove keep git inside that worktree" \
+        "(an interpreter fed a heredoc, a variable where a command or an option stands, screen): work elsewhere breaks on them." \
+        "Dispatch it without isolation: it makes its own worktree beside that repository (<repo parent>/.worktrees/<repo>-<epic-slug>) and delivers through a PR." \
+        "A path only quoted for reading: [isolation-ok] in the description or the prompt. KODFLOW_ISOLATION=off turns this gate off."
+}
+
+# ============================================================================
 # PreToolUse · Agent / Task: the routing gate (main thread)
 # ============================================================================
 # A main-thread dispatch to general-purpose — subagent_type left out or named —
@@ -1447,6 +1512,7 @@ pre_agent() {
     # meets the gated-model fallback, decoded by jq here
     [ "$EV" = PreToolUse ] && _fable_fast
     [ "$EV" = PreToolUse ] && [ -z "$AID" ] || { _log; exit 0; }
+    _isolation_gate
     [ "${KODFLOW_ROUTE:-}" = off ] && { _log; exit 0; }
     local st desc idx hits line agent kw
     eval "$(printf '%s' "$INPUT" | jq -r '@sh "st=\(.tool_input.subagent_type // "") desc=\(.tool_input.description // "")"' 2>/dev/null)" || { _log; exit 0; }
