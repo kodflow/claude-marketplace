@@ -250,8 +250,10 @@ printf '%s' '{"version":2,"active":{"main":2},
 user
 printf '%s' "$C" | grep -q 'dispatch a subagent' && printf '%s' "$C" | grep -q 'do not write it' \
     && ok "the directive sends the work to a subagent" || bad "directive" "$C"
-printf '%s' "$C" | grep -q 'Epics: active #2' && [ "${#C}" -lt 900 ] \
-    && ok "with the epic state it stays under 900 characters (${#C})" || bad "directive size" "${#C}: $C"
+printf '%s' "$C" | grep -q 'subject (create, update): 30 characters max' \
+    && ok "the directive announces the 30-character subject limit" || bad "subject limit" "$C"
+printf '%s' "$C" | grep -q 'Epics: active #2' && [ "${#C}" -lt 1000 ] \
+    && ok "with the epic state it stays under 1000 characters (${#C})" || bad "directive size" "${#C}: $C"
 user KODFLOW_ROOT=off
 printf '%s' "$C" | grep -q 'do not write it' && bad "directive off" "$C" || ok "KODFLOW_ROOT=off drops the reviewer line"
 printf '%s' "$C" | grep -q 'TRIAGE' && ok "the triage directive stays when the gate is off" || bad "triage off" "$C"

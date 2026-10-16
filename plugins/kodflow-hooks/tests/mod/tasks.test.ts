@@ -248,17 +248,17 @@ function session() {
   return { run, task, file: () => JSON.parse(file!) };
 }
 
-test("subject: 18 characters at most, the limit and where the detail goes in the refusal", () => {
+test("subject: 30 characters at most, the limit and where the detail goes in the refusal", () => {
   const s = session();
-  expect(MAX_SUBJECT).toBe(18);
-  expect(s.run("task_create", { subject: "x".repeat(18), epic: 1 }).error).toBe(false);
-  const long = s.run("task_create", { subject: "x".repeat(19), epic: 1 });
+  expect(MAX_SUBJECT).toBe(30);
+  expect(s.run("task_create", { subject: "x".repeat(30), epic: 1 }).error).toBe(false);
+  const long = s.run("task_create", { subject: "x".repeat(31), epic: 1 });
   expect(long.error).toBe(true);
-  expect(long.text).toContain("subject is 19 characters, the limit is 18");
+  expect(long.text).toContain("subject is 31 characters, the limit is 30");
   expect(long.text).toContain("move the detail to description");
-  const update = s.run("task_update", { id: "1", subject: "y".repeat(19) });
+  const update = s.run("task_update", { id: "1", subject: "y".repeat(31) });
   expect(update.error).toBe(true);
-  expect(update.text).toContain("the limit is 18");
+  expect(update.text).toContain("the limit is 30");
 });
 
 test("a longer subject already in the file is kept as written, never rewritten", () => {
@@ -366,14 +366,14 @@ test("the file stays version 2, the new fields only on the tasks that set them",
   expect(data.tasks[1]).toMatchObject({ parent: "1", blockedBy: ["1"], ref: "T0" });
 });
 
-test("tools: subject at 18, parent, blocked_by and ref offered on create and update", () => {
+test("tools: subject at 30, parent, blocked_by and ref offered on create and update", () => {
   for (const tool of [TOOLS[0]!, TOOLS[1]!]) {
     const props = tool.inputSchema.properties;
-    expect(props.subject.maxLength).toBe(18);
+    expect(props.subject.maxLength).toBe(30);
     expect(props.parent.type).toBe("string");
     expect(props.blocked_by).toMatchObject({ type: "array", items: { type: "string" } });
     expect(props.ref.maxLength).toBe(MAX_REF);
-    expect(tool.description).toContain("18 characters");
+    expect(tool.description).toContain("30 characters");
   }
-  expect(TOOLS[5]!.inputSchema.properties.subject.maxLength).toBe(18);
+  expect(TOOLS[5]!.inputSchema.properties.subject.maxLength).toBe(30);
 });

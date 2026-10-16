@@ -11,7 +11,7 @@
 // alone, so a transparent terminal shows through everywhere.
 //
 // R12, the tree, at its full width (88 cells of body, 90 with the frame):
-//   margin 2 · tree 30 (3 a level, glyph 2, ref 7, title 17) · agent 22 ·
+//   margin 2 · tree 30 (3 a level, glyph 2, ref 7, title 18) · agent 22 ·
 //   model·effort 10 · age 6 (right) · links 10, a gap of 2 between them.
 // The agent column names who works the task: « ◉ principal » in the theme's
 // colour, « ↳ name · role » in the subagent's own (who.ts), « toi », « prête ».
@@ -91,7 +91,7 @@ export const W = {
   level: 3,
   glyph: 2,
   ref: 7,
-  title: 17,
+  title: 18,
 } as const;
 
 export const GLYPH: Record<

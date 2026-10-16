@@ -584,8 +584,8 @@ files, proven by a corpus recorded from it (Tests, below).
   call changes nothing. `parent=""`, `blocked_by=[]` and `ref=""` clear one.
   A deleted task's subtasks move up a level and the tasks waiting on it stop
   waiting. kodflow-hud draws the tree; nothing else reads these fields.
-- **Limits:** task subjects 18 characters (the title column of kodflow-hud's
-  tree; tasks.py allowed 40), refs 5, epic titles 20, refused beyond with the
+- **Limits:** task subjects 30 characters (the tree of kodflow-hud cuts the title at 18
+  cells and shows it whole on the selected task's line; tasks.py allowed 40), refs 5, epic titles 20, refused beyond with the
   limit and where the detail goes (`description`). A subject written longer
   before the limit stays as written: it is never rewritten, the tree cuts it.
 - **Format version.** The tree's fields keep the file at version 2: the
@@ -728,7 +728,7 @@ tests of its suite, the worker cases, the order of validation, code points,
 `task_list` writing nothing, the agent id made path-safe, a worker judged by its id alone): each step keeps the
 file before, the call, the answer and the file after, and the port must match
 every one (`conformance.ts`, run by `claude plugin test` and by node). One
-change since is deliberate, the 18-character subject: the corpus is replayed
+change since is deliberate, the 30-character subject: the corpus is replayed
 amended for it (its long subjects shortened, its limits and refusal text
 moved, every other byte as recorded), and `task_create` and `task_update`,
 whose text changed, must still take every argument tasks.py gave them, as
