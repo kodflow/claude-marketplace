@@ -323,3 +323,66 @@ test("CI: cited pull requests of open tasks only, and gh's exit codes read", () 
   expect(ciState(1, "", "HTTP 401")).toBe("error");
   expect(ciState(1, "", "no checks reported on the 'x' branch")).toBe("none");
 });
+
+// --- tasks done stay on the board for 30 minutes ------------------------------------
+
+const MINS = 60;
+const done = (id: string, epic: number, ago: number, over: object = {}) => ({
+  id,
+  agent: "main",
+  epic,
+  subject: `Done ${id}`,
+  status: "completed",
+  created: SEC - 7200,
+  updated: SEC - ago * MINS,
+  ...over,
+});
+const doneFile = (tasks: object[]) =>
+  JSON.stringify({
+    version: 2,
+    next_id: 9,
+    next_epic: 4,
+    epics: [
+      { id: 1, agent: "main", title: "Open", created: SEC, touched: SEC - 100 },
+      { id: 2, agent: "main", title: "Just done", created: SEC, touched: SEC - 5 },
+      { id: 3, agent: "main", title: "Long done", created: SEC, touched: SEC - 1 },
+    ],
+    active: {},
+    tasks,
+  });
+
+test("an epic with nothing left stays 30 minutes after its last task was done, after the epics with work", () => {
+  const f = doneFile([
+    { ...done("1", 1, 0), status: "pending" },
+    done("2", 2, 20),
+    done("3", 2, 40),
+    done("4", 3, 31),
+  ]);
+  // 20 minutes: kept, behind the open epic though it was touched later
+  expect(parseBoard(f, NOW).epics.map((e) => e.id)).toEqual([1, 2]);
+  // The last task of the epic decides, not the first
+  expect(parseBoard(f, NOW).epics[1]!.tasks).toHaveLength(2);
+  // Without a clock, or 30 minutes on, today's board
+  expect(parseBoard(f).epics.map((e) => e.id)).toEqual([1]);
+  expect(parseBoard(f, NOW + 10 * MINS * 1000).epics.map((e) => e.id)).toEqual([1]);
+  expect(parseBoard(f, NOW + 9 * MINS * 1000).epics.map((e) => e.id)).toEqual([1, 2]);
+});
+
+test("the group under no epic is kept the same 30 minutes, last, work left or not", () => {
+  const f = doneFile([
+    done("1", 2, 5),
+    done("2", 0, 2, { subject: "Quelle heure ?" }),
+  ]);
+  const kept = parseBoard(f, NOW);
+  expect(kept.epics.map((e) => e.id)).toEqual([2, 0]);
+  expect(kept.epics[1]!.title).toBe("Hors épopée");
+  expect(parseBoard(f).epics).toEqual([]);
+  expect(parseBoard(f, NOW + 29 * MINS * 1000).epics.map((e) => e.id)).toEqual([]);
+  // With work left it is where it was: after the open epics, before the kept ones
+  const g = doneFile([
+    done("1", 2, 5),
+    { ...done("2", 0, 1), status: "pending" },
+    { ...done("3", 1, 0), status: "pending" },
+  ]);
+  expect(parseBoard(g, NOW).epics.map((e) => e.id)).toEqual([1, 0, 2]);
+});
