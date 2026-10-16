@@ -5,7 +5,8 @@
 // the status line and lib/epics.jq; this module only reads it. An epic is
 // open as the status line counts it: a task left to do, or the agent's active
 // epic while it has no task yet. Tasks filed under no epic (epic 0) form one
-// more group, "Tâches", as the status line names its pill for them.
+// more group, « Hors épopée », with no number (its id is 0): the pane's tab
+// already says « Tâches », so the group does not say it again.
 //
 // A task may also carry the tree's fields (kodflow-hooks writes them only
 // once set): `parent`, `blockedBy`, `ref`. A file without them is a flat
@@ -21,7 +22,7 @@ import type {
 import { safe } from "./paths.ts";
 
 export const MAIN = "main";
-export const NO_EPIC_TITLE = "Tâches";
+export const NO_EPIC_TITLE = "Hors épopée";
 /** What `$.agent.list()` reports for an agent whose loop still stands. */
 export const LIVE = new Set(["running", "waiting", "idle"]);
 

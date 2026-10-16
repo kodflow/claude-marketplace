@@ -3,7 +3,15 @@
 import { test, expect } from "claude-code/testing";
 import { CFG, SEC, host, start, tasksJson, PANE, TASKS } from "./host.ts";
 import { capture, widths } from "./capture.ts";
-import { buildTree, linkCell, modelCell, span } from "../hooks/mod/tree.ts";
+import {
+  agentParts,
+  buildTree,
+  linkCell,
+  modelCell,
+  roleCell,
+  span,
+} from "../hooks/mod/tree.ts";
+import { AGENT_PALETTE, colorOf, roleOf } from "../hooks/mod/who.ts";
 import { parseBoard, type Ctx } from "../hooks/mod/board.ts";
 import { cells, fit } from "../hooks/mod/width.ts";
 import {
@@ -147,37 +155,37 @@ async function seeded($: any, on: any, tasks = MAQUETTE) {
 // What the pane draws at its minimum, 90 columns with the frame (88 of body)
 // by 20 rows: every column a Box of its width, so each line is 88 cells
 const R12 = [
-  "─ Tâches · #1 Routage model/effort ─────────────────────────────────────────────────────",
-  "  TÂCHE                            AGENT              MODÈLE         ÂGE  LIENS",
-  "  ◆ #1     Routage model/effort    7 / 15             ━━━━━─────  1 h 52",
-  "  ├▸ ✓ T0     Événements réels     main               opus           2 h  ⇢ C6 C7",
-  "  ├▸ ✓ C1–C5  Policy et routage    main               opus        1 h 20  ⇢ C9",
-  "┃ ├▾ ● C6     Porte Fable          mkt-routing-pr     opus·xhigh  12 min  ⇢ C9",
-  "  │  ├─ ✓ agent.spawn              main               opus        20 min",
-  "┃ │  ├▾ ● Grant de session         mkt-routing-pr     opus·xhigh   3 min  ⇢ #10",
-  "  │  │  ├─ ✓ Test resume           main               opus         8 min",
-  "┃ │  │  └─ ⊘ Test parallèle                                               ⇠ #8",
+  "─ #1 Routage model/effort ──────────────────────────────────────────────────────────────",
+  "  TÂCHE                           AGENT                   MODÈLE         ÂGE  LIENS",
+  "  ◆ #1     Routage model/effort  7/15                                 1 h 52",
+  "  ├▸ ✓ T0     Événements réels    ◉ principal             opus           2 h  ⇢ C6 C7",
+  "  ├▸ ✓ C1–C5  Policy et routage   ◉ principal             opus        1 h 20  ⇢ C9",
+  "┃ ├▾ ● C6     Porte Fable         ↳ mkt-routi… · general  opus·xhigh  12 min  ⇢ C9",
+  "  │  ├─ ✓ agent.spawn             ◉ principal             opus        20 min",
+  "┃ │  ├▾ ● Grant de session        ↳ mkt-routi… · general  opus·xhigh   3 min  ⇢ #10",
+  "  │  │  ├─ ✓ Test resume          ◉ principal             opus         8 min",
+  "┃ │  │  └─ ⊘ Test parallèle                                                   ⇠ #8",
   "  │  └─ ○ Repli shell",
-  "┃ ├─ ◇ C7     Feedback agents      toi                             6 min  ⇢ C9",
-  "┃ ├▸ ▶ C8     Spécialistes ×5      prête                                  ⇢ C9",
-  "┃ └─ ⊘ C9     CI et PR                                                    ⇠ C6 C7 C8",
+  "┃ ├─ ◇ C7     Feedback agents     toi                                  6 min  ⇢ C9",
+  "┃ ├▸ ▶ C8     Spécialistes ×5     prête                                       ⇢ C9",
+  "┃ └─ ⊘ C9     CI et PR                                                        ⇠ C6 C7 C8",
   "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
   "┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10      bloqué par toi (C7)",
-  "● C6  Porte Fable   mkt-routing-pr · opus·xhigh · 12 min · ⇢ C9 · silencieux",
+  "● C6  Porte Fable   mkt-routing-pr · general-purpose · opus·xhigh · 12 min · ⇢ C9 · figé",
   "  Le mod juge, il ne réécrit jamais e.model",
   "────────────────────────────────────────────────────────────────────────────────────────",
   "Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue",
 ].join("\n");
 
 const R4 = [
-  "─ Tâches · #1 Routage model/effort ─────────────────────────────────────────────────────",
+  "─ #1 Routage model/effort ──────────────────────────────────────────────────────────────",
   "FAIT · PRÊT                    EN COURS · ATTENTE             BLOQUÉ",
   "✓ T0    Événements réels ──┬─▶ ● C6    Porte Fable ───────┐",
-  "  main · opus · 2 h        │     mkt-routing-pr · 12 min  │",
+  "  principal · opus · 2 h   │     mkt-routing-pr · 12 min  │",
   "                           └─▶ ◇ C7    Feedback agents ───┤",
   "                                 attend toi · 6 min       │",
   "✓ C1–C5 Policy et routage ────────────────────────────────┼─▶ ⊘ C9    CI et PR",
-  "  main · opus · 1 h 20                                    │     attend C6 C7 C8",
+  "  principal · 1 h 20                                      │     attend C6 C7 C8",
   "▶ C8    Spécialistes ×5 ──────────────────────────────────┘",
   "  prête · personne dessus",
   "",
@@ -224,7 +232,7 @@ test("R4 at 90 by 20: the graph by state, junctions and no crossing", async ($, 
 
 const header = (text: string) => text.split("\n")[1];
 
-test("narrower: the links go first, then the model, then the agent; at 60 the tree and the age", async ($, on) => {
+test("narrower: the links go first, then the model, then the agent; under 64 the tree and the age", async ($, on) => {
   await seeded($, on);
   const at = async (columns: number) => {
     const ui = await mount($, columns, 20);
@@ -234,16 +242,14 @@ test("narrower: the links go first, then the model, then the agent; at 60 the tr
     return capture(tree);
   };
   expect(header(await at(86))).toBe(
-    "  TÂCHE                            AGENT              MODÈLE         ÂGE",
+    "  TÂCHE                           AGENT                   MODÈLE         ÂGE",
   );
   expect(header(await at(70))).toBe(
-    "  TÂCHE                            AGENT                 ÂGE",
+    "  TÂCHE                           AGENT                      ÂGE",
   );
   const sixty = await at(58);
-  expect(header(sixty)).toBe("  TÂCHE                               ÂGE");
-  expect(sixty.split("\n")[5]).toBe(
-    "┃ ├▾ ● C6     Porte Fable          12 min",
-  );
+  expect(header(sixty)).toBe("  TÂCHE                              ÂGE");
+  expect(sixty.split("\n")[5]).toBe("┃ ├▾ ● C6     Porte Fable         12 min");
 });
 
 test("shorter than 20 rows: the finished branches fold, then the detail drops to one line, then none", async ($, on) => {
@@ -278,7 +284,7 @@ test("keys: ↑↓ choose, ⏎ folds, one top-level branch open at a time; a cli
   // C6 starts selected and open: ⏎ folds it
   await ui.key({ key: "return" });
   expect(await line(5)).toBe(
-    "┃ ├▸ ● C6     Porte Fable          mkt-routing-pr     opus·xhigh  12 min  ⇢ C9",
+    "┃ ├▸ ● C6     Porte Fable         ↳ mkt-routi… · general  opus·xhigh  12 min  ⇢ C9",
   );
   expect(capture(await drawnIn(ui))).not.toContain("agent.spawn");
   // ↓ twice: C7, then C8; ⏎ opens C8
@@ -382,7 +388,40 @@ test("critical path: the longest chain of unfinished tasks, every task on one of
   ).toEqual([]);
 });
 
-test("cells: model·effort in ten, agent in seventeen, links three then +n, ages in six", () => {
+test("cells: model·effort in ten, name and role in the agent's twenty, links in ten, ages in six", () => {
+  // A name and its role share the column, the role keeping up to seven
+  expect(agentParts("hud-agents", "general", 20)).toEqual({
+    name: "hud-agents",
+    role: "general",
+  });
+  expect(agentParts("mkt-routing-pr", "general", 20)).toEqual({
+    name: "mkt-routi…",
+    role: "general",
+  });
+  expect(agentParts("w", "", 20)).toEqual({ name: "w", role: "" });
+  expect(agentParts("a-very-long-agent-name", "general", 8)).toEqual({
+    name: "a-very-…",
+    role: "",
+  });
+  // A role: a specialist's area and topic, the plugin prefix dropped
+  expect(roleOf("kodflow-specialists:devops-specialist-hashicorp")).toBe(
+    "devops · hashicorp",
+  );
+  expect(roleOf("kodflow-specialists:developer-executor-shell")).toBe(
+    "developer · shell",
+  );
+  expect(roleOf("general-purpose")).toBe("general-purpose");
+  expect(roleOf("Explore")).toBe("Explore");
+  expect(roleOf(undefined)).toBe("");
+  expect(roleCell("devops · hashicorp")).toBe("hashicorp");
+  expect(roleCell("general-purpose")).toBe("general");
+  // One colour per subagent, stable, the main loop the theme's own
+  expect(colorOf("main")).toBe("claude");
+  expect(colorOf("a1")).toBe(colorOf("a1"));
+  expect(AGENT_PALETTE).toContain(colorOf("a1") as any);
+  expect(
+    new Set(["a1", "a2", "a3", "a4", "a5"].map(colorOf)).size,
+  ).toBeGreaterThan(1);
   expect(modelCell({ model: "claude-opus-5-5", effort: "xhigh" })).toBe(
     "opus·xhigh",
   );
@@ -395,7 +434,8 @@ test("cells: model·effort in ten, agent in seventeen, links three then +n, ages
   expect(modelCell({ model: "claude-haiku-5-5" })).toBe("haiku");
   expect(modelCell({ effort: "high" })).toBe("");
   expect(modelCell(undefined)).toBe("");
-  expect(linkCell("⇠", ["C6", "C7", "C8", "C9"])).toBe("⇠ C6 C7 C8 +1");
+  expect(linkCell("⇠", ["C6", "C7", "C8"])).toBe("⇠ C6 C7 C8");
+  expect(linkCell("⇠", ["C6", "C7", "C8", "C9"])).toBe("⇠ C6 C7 +2");
   expect(linkCell("⇢", [])).toBe("");
   for (const ms of [
     0,
@@ -432,7 +472,7 @@ test("the model column comes from what the session said, never a guess", async (
   await start($, clock);
   const ui = await mount($, 88, 20);
   const row = capture(await drawnIn(ui)).split("\n")[3]!;
-  expect(row).toContain("w  ");
+  expect(row).toContain("↳ w · general  ");
   expect(row).not.toMatch(/opus|sonnet|haiku|fable/);
   // kodflow-hooks' agent-models.tsv names it: the cell fills
   h.files.set(TASKS.replace("tasks.json", "agent-models.tsv"), {
@@ -459,11 +499,11 @@ test("R4: links that share no lane get their own stretch; one crossing a column 
   expect(lines.slice(1, 10)).toEqual([
     "FAIT · PRÊT                    EN COURS · ATTENTE             BLOQUÉ",
     "                           ┌─▶ ● C6    Work ──────────────┐",
-    "                           │     main · 0 s               │",
+    "                           │     principal · 0 s          │",
     "                           │   ◇ C7    Other              │",
-    "                           │     main · 0 s               │",
+    "                           │     principal · 0 s          │",
     "✓ T0    Base ──────────────┴──────────────────────────────┴─▶ ⊘ C9    Ship",
-    "  main · opus · 0 s                                             attend C6",
+    "  principal · opus · 0 s                                        attend C6",
     "▶ P1    Prep ───────────────────────────────────────────────▶ ⊘ C10   Late",
     "  prête · personne dessus                                       attend P1",
   ]);
@@ -531,7 +571,8 @@ test("the worker seen on a task is the session's: ids start over, the old ones g
     seen: a,
     session: "B",
   });
-  expect(tree.epics[0]!.nodes[0]!.agent).toBe("main");
+  expect(tree.epics[0]!.nodes[0]!.agent).toBe("principal");
+  expect(tree.epics[0]!.nodes[0]!.agentKind).toBe("main");
 });
 
 test("the models are the session's: another session's entry for the loop is not shown, nor kept", () => {
@@ -592,8 +633,8 @@ test("two Agent results landing together each keep their model", async ($, on) =
   await Promise.all([call("a1", "xhigh"), call("a2", "low")]);
   const ui = await mount($, 88, 20);
   const text = capture(await drawnIn(ui));
-  expect(text).toMatch(/First +one +opus·xhigh/);
-  expect(text).toMatch(/Second +two +haiku·low/);
+  expect(text).toMatch(/First +↳ one · general +opus·xhigh/);
+  expect(text).toMatch(/Second +↳ two · general +haiku·low/);
 });
 
 test("a new session's agent-models.tsv is read even when its time matches the last one's", async ($, on) => {

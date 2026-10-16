@@ -16,17 +16,12 @@
 
 import type { HudBoard, HudCi, HudModel, HudSeen, HudTask } from "../../types";
 import { MAIN, judge, loopLabel, type Ctx } from "./board.ts";
+import { MAIN_NAME, colorOf, roleOf } from "./who.ts";
 import { cells, fit } from "./width.ts";
 import { modelKey, seenKey } from "./models.ts";
 
 export type NodeState =
-  | "done"
-  | "run"
-  | "you"
-  | "wait"
-  | "ready"
-  | "blocked"
-  | "todo";
+  "done" | "run" | "you" | "wait" | "ready" | "blocked" | "todo";
 
 /** One task as a row of the tree: every cell already worded. */
 export type TreeNode = {
@@ -35,8 +30,14 @@ export type TreeNode = {
   label: string;
   title: string;
   state: NodeState;
-  /** Who works it: a worker, "main", "toi", "prête"; "" for nobody. */
+  /** Who works it: a subagent's name, "principal", "toi", "prête"; "" for nobody. */
   agent: string;
+  /** What `agent` names: the main loop, a subagent, the person, nobody yet. */
+  agentKind: "main" | "sub" | "you" | "ready" | "";
+  /** The subagent's role, its type short (who.ts); "" when unknown. */
+  role: string;
+  /** The loop's colour (who.ts), for the main loop and the subagents. */
+  agentColor?: string;
   /** model·effort of that loop, "" when the session never said. */
   model: string;
   /** Since it last moved; "" for a task nobody has taken. */
@@ -116,14 +117,41 @@ export function modelCell(m: HudModel | undefined): string {
   return fit(`${family}·${short}`, MODEL_CELLS);
 }
 
-const AGENT_PREFIX = /^kodflow-specialists:(developer-)?/;
-export const AGENT_CELLS = 17;
+const AGENT_PREFIX = /^[\w.-]+:(developer-)?/;
+export const AGENT_CELLS = 22;
+/** What the role keeps at least beside a long name, in the agent column. */
+const ROLE_MIN = 7;
 
-/** An agent's name in its column, the specialists' common prefix dropped. */
-export const agentCell = (name: string): string =>
-  fit(name.replace(AGENT_PREFIX, ""), AGENT_CELLS);
+/** An agent's name, the plugin prefix of a type used as a name dropped. */
+export const agentName = (name: string): string =>
+  name.replace(AGENT_PREFIX, "");
 
-export const LINK_CELLS = 14;
+/** A role in the narrow agent column: a specialist's topic, a type's head. */
+export function roleCell(role: string): string {
+  if (!role) return "";
+  const topic = role.split(" · ").pop()!;
+  return topic === "general-purpose" ? "general" : topic;
+}
+
+/**
+ * The agent column's two parts, the name and the role, cut to share `room`
+ * cells around a « · » of three: the role keeps up to seven, the name the
+ * rest; a role with no room for four cells is left out.
+ */
+export function agentParts(
+  name: string,
+  role: string,
+  room: number,
+): { name: string; role: string } {
+  if (!role || cells(name) + 3 + cells(role) <= room)
+    return { name: fit(name, room), role: role && fit(role, room) };
+  const roleW = Math.min(cells(role), ROLE_MIN, room - 3 - 4);
+  if (roleW < 4) return { name: fit(name, room), role: "" };
+  const nameW = Math.min(cells(name), room - 3 - roleW);
+  return { name: fit(name, nameW), role: fit(role, room - 3 - nameW) };
+}
+
+export const LINK_CELLS = 10;
 
 /** "⇠ C6 C7 C8", three labels then "+n", in fourteen cells. */
 export function linkCell(arrow: string, labels: string[]): string {
@@ -244,11 +272,32 @@ export function buildTree(data: TreeData): TreeModel {
       const worker = t.worker || seen?.worker;
       const loop = workerId || t.agent;
       let agent = "";
-      if (state === "you") agent = "toi";
-      else if (state === "ready") agent = "prête";
-      else if (state === "run" || state === "done" || state === "wait")
-        agent =
-          worker || (loop === MAIN ? "main" : loopLabel(loop, ctx.agents));
+      let agentKind: TreeNode["agentKind"] = "";
+      let role = "";
+      if (state === "you") {
+        agent = "toi";
+        agentKind = "you";
+      } else if (state === "ready") {
+        agent = "prête";
+        agentKind = "ready";
+      } else if (state === "run" || state === "done" || state === "wait") {
+        // A worker named with no id is still a subagent, known by its name
+        if (loop === MAIN && (!worker || worker === MAIN)) {
+          agent = MAIN_NAME;
+          agentKind = "main";
+        } else {
+          const listed =
+            ctx.agents.find((a) => a.id === loop) ??
+            (loop === MAIN
+              ? ctx.agents.find((a) => a.name === worker)
+              : undefined);
+          agent = agentName(
+            listed?.name || worker || loopLabel(loop, ctx.agents),
+          );
+          role = roleOf(listed?.type);
+          agentKind = "sub";
+        }
+      }
       const model =
         state === "run" || state === "done" || state === "wait"
           ? modelCell(data.models[modelKey(data.session, loop)])
@@ -282,7 +331,17 @@ export function buildTree(data: TreeData): TreeModel {
         label: labelOf(t),
         title: t.subject,
         state,
-        agent: agent && agentCell(agent),
+        agent,
+        agentKind,
+        role,
+        ...((agentKind === "main" || agentKind === "sub") && {
+          agentColor: colorOf(
+            agentKind === "sub" && loop === MAIN
+              ? (ctx.agents.find((a) => a.name === worker)?.id ??
+                  `name:${worker}`)
+              : loop,
+          ),
+        }),
         model,
         age,
         silent: v.silent,

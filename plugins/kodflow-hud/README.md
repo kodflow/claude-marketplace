@@ -5,14 +5,18 @@ toasts, nothing else: the status line keeps the context gauge, the epics'
 pills and everything it already draws, and this mod shows only what it does
 not.
 
-- **Tâches** — the open epics of the session's task list as a tree (R12):
-  subtasks under their task, for each one the worker it was handed to, the
-  model and effort that worker runs on, how long since it moved, what it
-  waits on or unblocks, the critical path in the margin, and the tasks
-  waiting on the person. Tab turns it into a graph by state (R4).
-- **Agents** — for each loop (the main one and every subagent), the folder it
-  works in, the files it last read, wrote or committed, and the time of its
-  last call.
+- **Tâches** — the open epics (« épopées ») of the session's task list as a
+  tree (R12): subtasks under their task, for each one who works it (« ◉
+  principal » or « ↳ name · role » in that subagent's own colour), the
+  model and effort it runs on, how long since it moved, what it waits on or
+  unblocks, the critical path in the margin, and the tasks waiting on the
+  person. Tab turns it into a graph by state (R4). The tab counts the tasks
+  left to do: « Tâches (2) ». It is the view a session starts on.
+- **Agents** — only while a subagent runs, its tab counting them (« Agents
+  (1) »): the main loop on one line, then each subagent with its name, its
+  role (its type, short), its model, its state (a frozen one in red), the
+  task it holds, the folder it works in and the files it last read, wrote or
+  committed.
 - **Toasts** — a task done, a task blocked (`waiting`), a task gone silent:
   at most one per task and per state.
 - **Coloured words** — a few words of a reply drawn in colour in the
@@ -37,44 +41,54 @@ rest.
 
 | Command | Effect |
 |---------|--------|
-| `/hud` | opens both panes |
+| `/hud` | opens the Tasks pane, and the Agents pane while a subagent runs |
 | `/hud tasks` (`tâches`) | opens the Tasks pane |
-| `/hud agents` | opens the Agents pane |
-| `/hud off` (`close`) | closes both |
+| `/hud agents` | opens the Agents pane while a subagent runs; with none, says so and opens it with the first |
+| `/hud off` (`close`) | closes both; the Agents tab no longer opens by itself until `/hud` |
 
-With `autoOpen` on (the default) both panes open when a session starts. The
-engine seats a pane nobody asked for only where it has room — from 144
-columns, docked beside the transcript in the fullscreen layout — and keeps it
-waiting below that; `/hud` seats it at any width.
+With `autoOpen` on (the default) the Tasks pane opens when a session starts,
+alone, so it is the one shown. The Agents tab opens with the first subagent
+and closes with the last: the main loop alone never gets a tab. Every poll
+(3 s) the two tabs are retitled when their count moved. An open or a retitle
+may raise the pane it names; the pane shown before is opened again after, so
+the view does not jump to Agents. The engine seats a pane nobody asked for
+only where it has room — from 144 columns, docked beside the transcript in
+the fullscreen layout — and keeps it waiting below that; `/hud` seats it at
+any width.
 
 ## What it looks like
 
 Captures in text of the drawn tree, read back by the tests at the pane's
 minimum: 90 columns with its frame (88 of body) by 20 rows. Colour is the
-text's alone — mauve the epic and the critical path, amber the task under
-way, green done, teal ready, red blocked or silent, blue the model — and no
-cell paints a background, so a transparent terminal shows through.
+text's alone, and always one of the theme's own colours, which the engine
+shades for a light or a dark theme: `merged` (purple) the epic and the
+critical path, `warning` (amber) the task under way, `success` (green) done,
+`planMode` (teal) ready, `permission` the tasks waiting on the person,
+`error` (red) blocked or frozen, `ide` (blue) the model, `claude` the main
+loop. Each subagent has one mid-tone colour of its own for the session
+(eight, picked from its id, none a state's), the same in both panes. No cell
+paints a background, so a transparent terminal shows through.
 
 **R12, the tree** (the view a pane opens on):
 
 ```
-─ Tâches · #1 Routage model/effort ─────────────────────────────────────────────────────
-  TÂCHE                            AGENT              MODÈLE         ÂGE  LIENS
-  ◆ #1     Routage model/effort    7 / 15             ━━━━━─────  1 h 52
-  ├▸ ✓ T0     Événements réels     main               opus           2 h  ⇢ C6 C7
-  ├▸ ✓ C1–C5  Policy et routage    main               opus        1 h 20  ⇢ C9
-┃ ├▾ ● C6     Porte Fable          mkt-routing-pr     opus·xhigh  12 min  ⇢ C9
-  │  ├─ ✓ agent.spawn              main               opus        20 min
-┃ │  ├▾ ● Grant de session         mkt-routing-pr     opus·xhigh   3 min  ⇢ #10
-  │  │  ├─ ✓ Test resume           main               opus         8 min
-┃ │  │  └─ ⊘ Test parallèle                                               ⇠ #8
+─ #1 Routage model/effort ──────────────────────────────────────────────────────────────
+  TÂCHE                           AGENT                   MODÈLE         ÂGE  LIENS
+  ◆ #1     Routage model/effort  7/15                                 1 h 52
+  ├▸ ✓ T0     Événements réels    ◉ principal             opus           2 h  ⇢ C6 C7
+  ├▸ ✓ C1–C5  Policy et routage   ◉ principal             opus        1 h 20  ⇢ C9
+┃ ├▾ ● C6     Porte Fable         ↳ mkt-routi… · general  opus·xhigh  12 min  ⇢ C9
+  │  ├─ ✓ agent.spawn             ◉ principal             opus        20 min
+┃ │  ├▾ ● Grant de session        ↳ mkt-routi… · general  opus·xhigh   3 min  ⇢ #10
+  │  │  ├─ ✓ Test resume          ◉ principal             opus         8 min
+┃ │  │  └─ ⊘ Test parallèle                                                   ⇠ #8
   │  └─ ○ Repli shell
-┃ ├─ ◇ C7     Feedback agents      toi                             6 min  ⇢ C9
-┃ ├▸ ▶ C8     Spécialistes ×5      prête                                  ⇢ C9
-┃ └─ ⊘ C9     CI et PR                                                    ⇠ C6 C7 C8
+┃ ├─ ◇ C7     Feedback agents     toi                                  6 min  ⇢ C9
+┃ ├▸ ▶ C8     Spécialistes ×5     prête                                       ⇢ C9
+┃ └─ ⊘ C9     CI et PR                                                        ⇠ C6 C7 C8
 ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
 ┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10      bloqué par toi (C7)
-● C6  Porte Fable   mkt-routing-pr · opus·xhigh · 12 min · ⇢ C9 · silencieux
+● C6  Porte Fable   mkt-routing-pr · general-purpose · opus·xhigh · 12 min · ⇢ C9 · figé
   Le mod juge, il ne réécrit jamais e.model
 ────────────────────────────────────────────────────────────────────────────────────────
 Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue
@@ -83,14 +97,14 @@ Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · t
 **R4, the graph** (tab, or a click on « Graphe »):
 
 ```
-─ Tâches · #1 Routage model/effort ─────────────────────────────────────────────────────
+─ #1 Routage model/effort ──────────────────────────────────────────────────────────────
 FAIT · PRÊT                    EN COURS · ATTENTE             BLOQUÉ
 ✓ T0    Événements réels ──┬─▶ ● C6    Porte Fable ───────┐
-  main · opus · 2 h        │     mkt-routing-pr · 12 min  │
+  principal · opus · 2 h   │     mkt-routing-pr · 12 min  │
                            └─▶ ◇ C7    Feedback agents ───┤
                                  attend toi · 6 min       │
 ✓ C1–C5 Policy et routage ────────────────────────────────┼─▶ ⊘ C9    CI et PR
-  main · opus · 1 h 20                                    │     attend C6 C7 C8
+  principal · 1 h 20                                      │     attend C6 C7 C8
 ▶ C8    Spécialistes ×5 ──────────────────────────────────┘
   prête · personne dessus
 
@@ -115,13 +129,21 @@ nothing is lined up with spaces and a long title never shifts a column.
 | Column | Cells | What |
 |--------|-------|------|
 | margin | 2 | `┃` for a task on the critical path |
-| tree | 31 | 3 a level, the glyph 2, the ref 7 (top level), the title 18, cut with `…` |
-| agent | 17 | the worker (the `kodflow-specialists:developer-` prefix dropped), `main`, `toi` for the person's, `prête` for a ready task |
+| tree | 30 | 3 a level, the glyph 2, the ref 7 (top level), the title 17, cut with `…` |
+| agent | 22 | `◉ principal` (the main loop, theme colour `claude`), `↳ name · role` (a subagent in its own colour, the role its type short: `general`, a specialist's topic; the name cut first, the role keeping up to seven cells; no role when the type is unknown), `toi` for the person's, `prête` for a ready task |
 | model | 10 | `opus·xhigh`, `sonnet·med`: the family and the effort, shortened to fit |
 | age | 6 | right-aligned: `45 s`, `12 min`, `1 h 20`, `2 h`, `3 j`; red when silent |
-| links | 14 | `⇠ C6 C7 C8` what it waits on, else `⇢ C9` what it unblocks, three then `+n` |
+| links | 10 | `⇠ C6 C7 C8` what it waits on, else `⇢ C9` what it unblocks, then `+n` |
 
-Glyphs: `✓` done, `●` under way, `◇` waiting (mauve: on the person), `▶`
+An epic's line carries no agent and no model: its title runs over those
+columns, followed by its progress, `7/15` (green once every task is done).
+The tasks filed under no epic sit under a quiet `◌ Hors épopée`, with no
+number, no progress and no age. The section's title never repeats the tab's
+name: the epic when one is open (`#1 Routage model/effort`), else how many
+(`2 épopées ouvertes`), then the tasks under no epic (`1 tâche hors
+épopée`).
+
+Glyphs: `✓` done, `●` under way, `◇` waiting on the person, `▶`
 ready — pending, every blocker done, nobody on it —, `⊘` blocked — pending
 with a blocker left —, `○` a subtask left to do under a task not done
 (whoever takes the task takes it). `▸`/`▾` a task with subtasks, folded or
@@ -130,13 +152,14 @@ down to the epic's final tasks; every task on a chain of that length gets the
 margin, the footer names the chains and the task that waits on the person
 (« bloqué par toi » when it is on the path).
 
-Rows, at 20: the title, the headers, the epic (done/total, a progress bar,
-its age), 11 tasks, a rule, the critical path, two lines on the selection
-(its glyph, ref, title, agent, model, age, links, CI, then its description)
-and the views' bar. One top-level task is open at a time.
+Rows, at 20: the title, the headers, the epic (done/total, its age), 11
+tasks, a rule, the critical path, two lines on the selection (its glyph,
+ref, title, agent and role, model, age, links, CI, « figé » when silent,
+then its description) and the views' bar. One top-level task is open at a
+time.
 
-Narrower than 88 cells of body the links go, then the model under 72, then
-the agent under 60: at 60 columns with the frame, the tree and the age. Fewer
+Narrower than 88 cells of body the links go, then the model under 76, then
+the agent under 64: below that, the tree and the age. Fewer
 than 20 rows, the finished top-level branches fold into « ✓ fait (n) »
 first, then the detail drops to one line, then to none, then the list
 scrolls with the selection.
@@ -175,20 +198,33 @@ in that instance's state, across redraws. The terminal and the desktop draw
 a `Client`; VS Code and the mobile app do not, and get the same tree drawn
 still, at its first state.
 
-**Agents**, 80 columns:
+**Agents**, 88 columns by 10 rows (`tests/agents.test.tsx`), its tab
+« Agents (3) »:
 
 ```
-● principal ~/Projects/kodflow/claude-marketplace                    14:03:41
-  W plugins/kodflow-hud/README.md [orange]
-  C plugins/kodflow-hud/hooks/mod/view.tsx [green]
-  R plugins/kodflow-hooks/hooks/mod/tasks.ts [violet]
-● hud ~/Projects/kodflow/status-line                                 14:03:12
-  R internal/presentation/renderer/powerline.go
+─ 3 sous-agents en cours ───────────────────────────────────────────────────────────────
+  AGENT               RÔLE                    MODÈLE      ÉTAT
+◉ principal           fil principal           opus        ● actif · 15 s
+    /w/repo
+↳ hud-agents          general-purpose                     ● actif · 15 s
+    ● #2 Rendu des agents  ·  /w/repo
+↳ vault-audit         devops · hashicorp                  ⏸ figé · 11 min
+    /w/repo
+↳ sans-type           type inconnu                        ◇ attend
 ```
 
-A worker's dot is green while it runs, amber while it waits or idles, grey
-once stopped. A file is violet when read (`R`), orange when written (`W`),
-green once committed (`C`), as filetree colours them.
+The main loop heads the list in the theme's `claude` colour; each subagent
+follows in its own colour (the same as in the Tâches pane), the ones at work
+first, then for half an hour, dimmed, the ones that stopped. The role is the
+agent's type (`subagent_type`) short: the plugin prefix dropped, a
+specialist's `<area>-specialist-<topic>` read `area · topic`; a type nobody
+gave reads « type inconnu », never a guess. The state: `● actif` (green, a
+call in the last minute), `● en cours` (amber), `◇ attend` (waiting),
+`⏸ figé` (red, bold: no call for `silentMinutes`), `◌ au repos`, `✓ terminé`,
+`✗ échec`. Under each, the task it holds and its folder, then, as rows
+allow, the files it last read (`R`, violet), wrote (`W`, orange) or
+committed (`C`, green), as filetree colours them. Under 76 columns the role
+moves under the name; under 56 the model goes.
 
 ## Where each thing comes from
 
@@ -273,7 +309,7 @@ Set them in `/config` or under `pluginConfigs["kodflow-hud"].options`.
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `silentMinutes` | `10` | quiet time after which a task in progress is flagged silent |
-| `autoOpen` | `true` | open both panes when a session starts |
+| `autoOpen` | `true` | open the Tasks pane when a session starts, and the Agents tab while a subagent runs |
 | `ci` | `true` | ask `gh pr checks` about cited pull requests |
 
 `KODFLOW_HUD_TRACE=/absolute/path.json` writes what the panes would draw to
@@ -330,6 +366,11 @@ this stays one of its limits.
   reads `absent`, which counts as stopped.
 - A toast is raised once per task and state for the session: a task that goes
   silent, moves, then goes silent again is toasted once.
+- Whether opening or retitling a pane raises it is the engine's to decide,
+  and its typings do not say. The mod assumes the worst (every open raises)
+  and opens the pane shown before again after its own opens; the tests prove
+  that against a host that raises, not against the terminal itself. With a
+  focused pane the person holds, re-raising it does not take the keyboard.
 
 ## Tests
 
@@ -354,10 +395,18 @@ listeners; the same tree on the surfaces with no `Client`; the derived
 states, the critical path, the cells (model·effort, links, ages, wide
 glyphs) and a model column filled only from what the session said.
 `tests/wiring.test.tsx` loads the module in the engine
-with the host in memory and a mocked clock: panes mounted at several widths
-on the terminal and desktop surfaces, results returned untouched, refused
-calls not recorded, toasts once per task and state, CI at most every five
-minutes, no process and no folder listing on a tool call.
+with the host in memory and a mocked clock: « Tâches » alone at start and
+shown, the Agents tab opened and counted with the subagents and closed with
+the last while « Tâches » stays in front (the host raising every pane it
+opens), `/hud off` keeping it shut, panes mounted at several widths on the
+terminal and desktop surfaces, each loop in its colour, results returned
+untouched, refused calls not recorded, toasts once per task and state, CI
+at most every five minutes, no process and no folder listing on a tool call.
+`tests/agents.test.tsx` draws the reported case: one epic and one loose
+task, the main loop alone (no Agents tab, the word « Tâches » only on the
+tab), then three subagents (a general-purpose one, a specialist, one of
+unknown type, one frozen), both panes line for line, the colours, and the
+Agents pane at 60 columns.
 
 A real run, for the attribution by agent (the kit's `$.tool.call` carries no
 `agentId`):

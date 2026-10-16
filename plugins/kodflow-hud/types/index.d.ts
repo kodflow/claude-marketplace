@@ -54,8 +54,13 @@ export type HudBoard = {
 /** An agent of the session as `$.agent.list()` reports it. */
 export type HudAgent = {
   id: string;
+  /** Its name, else its type, its description or the head of its id. */
   label: string;
   status: string;
+  /** What SendMessage addresses it by, when it has one. */
+  name?: string;
+  /** The agent type it was spawned as (`subagent_type`), when said. */
+  type?: string;
 };
 
 export type HudOp = "read" | "write" | "commit";

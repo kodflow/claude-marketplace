@@ -11,10 +11,12 @@
 // alone, so a transparent terminal shows through everywhere.
 //
 // R12, the tree, at its full width (88 cells of body, 90 with the frame):
-//   margin 2 · tree 31 (3 a level, glyph 2, ref 7, title 18) · agent 17 ·
-//   model·effort 10 · age 6 (right) · links 14, a gap of 2 between them.
-// Narrower, the links go first (under 88), then the model (under 72), then
-// the agent (under 60); the tree and the age stay. On 20 rows: title,
+//   margin 2 · tree 30 (3 a level, glyph 2, ref 7, title 17) · agent 22 ·
+//   model·effort 10 · age 6 (right) · links 10, a gap of 2 between them.
+// The agent column names who works the task: « ◉ principal » in the theme's
+// colour, « ↳ name · role » in the subagent's own (who.ts), « toi », « prête ».
+// Narrower, the links go first (under 88), then the model (under 76), then
+// the agent (under 64); the tree and the age stay. On 20 rows: title,
 // headers, the epic, 11 tasks, a rule, the critical path, two lines of
 // detail on the selection and the two lines of the views' bar. Shorter, the
 // finished branches fold into « ✓ fait (n) », then the detail drops to one
@@ -28,16 +30,25 @@
 // solid line, so no two lines ever cross.
 
 import type { NodeState, TreeEpic, TreeModel, TreeNode } from "./tree.ts";
-import { AGENT_CELLS, LINK_CELLS, MODEL_CELLS } from "./tree.ts";
+import {
+  AGENT_CELLS,
+  LINK_CELLS,
+  MODEL_CELLS,
+  agentParts,
+  roleCell,
+} from "./tree.ts";
 import { cells, fit } from "./width.ts";
 
 /** The elements a screen is drawn with: any surface's table has them. */
 export type Els = { Box: any; Text: any };
 
-export const MAUVE = "#d7afd7"; // the status line's epic ground, 256-colour 182
-export const AMBER = "#d78700"; // the cell under way
-export const TEAL = "#5fd7d7";
-export const BLUE = "#87afff";
+// Theme colours, never fixed shades: the engine gives each its tone for the
+// light and the dark themes alike, so the tree reads on either ground.
+export const MAUVE = "merged"; // the epics, the critical path, the views' bar
+export const AMBER = "warning"; // the task under way
+export const TEAL = "planMode"; // ready, nobody on it yet
+export const BLUE = "ide"; // the model
+export const YOU = "permission"; // waiting on the person, as a permission is
 export const GREEN = "success";
 export const RED = "error";
 
@@ -68,10 +79,10 @@ export type View = "tree" | "graph";
 /** What the person moved: kept by the surface module, across redraws. */
 export type Ui = { view: View; sel?: string; open: string[] };
 
-export const FULL = { links: 88, model: 72, agent: 60 } as const;
+export const FULL = { links: 88, model: 76, agent: 64 } as const;
 export const W = {
   margin: 2,
-  tree: 31,
+  tree: 30,
   agent: AGENT_CELLS,
   model: MODEL_CELLS,
   age: 6,
@@ -80,7 +91,7 @@ export const W = {
   level: 3,
   glyph: 2,
   ref: 7,
-  title: 18,
+  title: 17,
 } as const;
 
 export const GLYPH: Record<
@@ -89,8 +100,8 @@ export const GLYPH: Record<
 > = {
   done: { glyph: "✓", color: GREEN },
   run: { glyph: "●", color: AMBER },
-  you: { glyph: "◇", color: MAUVE },
-  wait: { glyph: "◇", color: "warning" },
+  you: { glyph: "◇", color: YOU },
+  wait: { glyph: "◇", color: YOU },
   ready: { glyph: "▶", color: TEAL },
   blocked: { glyph: "⊘", color: RED },
   todo: { glyph: "○", dim: true },
@@ -195,7 +206,7 @@ export function initialUi(model: TreeModel): Ui {
     for (const top of epic.nodes) {
       if (top.state !== "run") continue;
       const open: string[] = [];
-      for (let n: TreeNode | undefined = top; n?.kids.length; ) {
+      for (let n: TreeNode | undefined = top; n?.kids.length;) {
         open.push(n.id);
         n = n.kids.find((k) => k.state === "run" && k.kids.length);
       }
@@ -280,6 +291,41 @@ function treeCell(
 
 type Cols = ReturnType<typeof columnsFor>;
 
+/**
+ * Who works a task, in `w` cells: « ◉ principal » in the theme's colour,
+ * « ↳ name · role » in the subagent's own, the person « toi », « prête »
+ * when nobody took it yet. A finished task's is dimmed.
+ */
+export function agentSpans(n: TreeNode, w: number): Span[] {
+  if (!n.agent) return [];
+  const faint = n.state === "done";
+  const tone = (color: string | undefined): Omit<Span, "text"> => ({
+    ...(color && { color }),
+    ...(faint && { dim: true }),
+  });
+  switch (n.agentKind) {
+    case "you":
+      return [span(n.agent, tone(YOU))];
+    case "ready":
+      return [span(n.agent, tone(TEAL))];
+    case "main":
+      return [
+        span("◉ ", tone(n.agentColor)),
+        span(n.agent, tone(n.agentColor)),
+      ];
+    case "sub": {
+      const p = agentParts(n.agent, roleCell(n.role), Math.max(0, w - 2));
+      return [
+        span("↳ ", tone(n.agentColor)),
+        span(p.name, tone(n.agentColor)),
+        ...(p.role ? [dim(" · "), dim(p.role)] : []),
+      ];
+    }
+    default:
+      return [span(n.agent, faint ? { dim: true } : {})];
+  }
+}
+
 function taskLine(
   v: Visible,
   cols: Cols,
@@ -291,17 +337,7 @@ function taskLine(
     cell(W.margin, n.crit ? [span("┃", { color: MAUVE })] : []),
     treeCell(v, cols.tree, selected, open),
   ];
-  if (cols.agent) {
-    const tone =
-      n.state === "you"
-        ? { color: MAUVE }
-        : n.state === "ready"
-          ? { color: TEAL }
-          : n.state === "done"
-            ? { dim: true }
-            : { color: TEAL };
-    out.push(gap(), cell(W.agent, n.agent ? [span(n.agent, tone)] : []));
-  }
+  if (cols.agent) out.push(gap(), cell(W.agent, agentSpans(n, W.agent)));
   if (cols.model)
     out.push(
       gap(),
@@ -321,8 +357,8 @@ function taskLine(
     ? { color: RED, bold: true }
     : n.state === "run"
       ? { color: AMBER }
-      : n.state === "you"
-        ? { color: MAUVE }
+      : n.state === "you" || n.state === "wait"
+        ? { color: YOU }
         : { dim: true };
   out.push(gap(), cell(W.age, n.age ? [span(n.age, ageTone)] : [], true));
   if (cols.links)
@@ -353,33 +389,52 @@ function headerLine(cols: Cols): Cell[] {
   return out;
 }
 
+/** « 3/5 », done over total, in green once every task is done. */
+const progress = (epic: TreeEpic): Span =>
+  epic.total && epic.done === epic.total
+    ? span(`${epic.done}/${epic.total}`, { color: GREEN })
+    : dim(`${epic.done}/${epic.total}`);
+
+/**
+ * An epic's line: ◆, its number and title, its progress right after the
+ * title, its age. The agent and model columns stay empty: they speak of the
+ * tasks. The tasks filed under no epic sit under a quiet « Hors épopée »,
+ * with no number, no progress and no age.
+ */
 function epicLine(epic: TreeEpic, cols: Cols): Cell[] {
-  const ref = epic.id ? `#${epic.id}` : "";
+  // The title runs over the agent and model columns, empty on this line
+  const span2 =
+    cols.tree +
+    (cols.agent ? W.gap + W.agent : 0) +
+    (cols.model ? W.gap + W.model : 0);
+  const titleW = Math.max(0, span2 - W.glyph - W.ref);
+  const loose = epic.id === 0;
+  const count = loose ? undefined : progress(epic);
+  const countW = count ? cells(count.text) + 2 : 0;
+  const nameW = Math.max(
+    0,
+    Math.min(cells(epic.title), titleW - (titleW > countW + 4 ? countW : 0)),
+  );
   const out: Cell[] = [
     cell(W.margin),
-    row(cols.tree, [
-      cell(W.glyph, [span("◆", { color: MAUVE })]),
-      cell(W.ref, [span(ref, { color: MAUVE, bold: true })]),
-      cell(Math.max(0, cols.tree - W.glyph - W.ref), [
-        span(epic.title, { color: MAUVE, bold: true }),
+    row(span2, [
+      cell(W.glyph, [loose ? dim("◌") : span("◆", { color: MAUVE })]),
+      cell(
+        W.ref,
+        loose ? [] : [span(`#${epic.id}`, { color: MAUVE, bold: true })],
+      ),
+      cell(nameW, [
+        loose
+          ? dim(epic.title)
+          : span(epic.title, { color: MAUVE, bold: true }),
       ]),
+      cell(
+        Math.max(0, titleW - nameW),
+        count && titleW - nameW >= countW ? [dim("  "), count] : [],
+      ),
     ]),
   ];
-  if (cols.agent)
-    out.push(gap(), cell(W.agent, [dim(`${epic.done} / ${epic.total}`)]));
-  if (cols.model) {
-    const full = epic.total
-      ? Math.round((epic.done / epic.total) * W.model)
-      : 0;
-    out.push(
-      gap(),
-      row(W.model, [
-        cell(full, [span("━".repeat(full), { color: GREEN })]),
-        cell(W.model - full, [dim("─".repeat(W.model - full))]),
-      ]),
-    );
-  }
-  out.push(gap(), cell(W.age, [dim(epic.age)], true));
+  out.push(gap(), cell(W.age, loose ? [] : [dim(epic.age)], true));
   if (cols.links) out.push(gap(), cell(W.links));
   return out;
 }
@@ -395,21 +450,39 @@ function foldLine(count: number, cols: Cols): Cell[] {
   ];
 }
 
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n > 1 ? many : one}`;
+
+/**
+ * What the section is about, never the tab's own name again: the one epic
+ * open (« #1 Recette kodflow »), else how many (« 2 épopées ouvertes »),
+ * then the tasks under no epic (« 1 tâche hors épopée »).
+ */
+export function sectionTitle(
+  model: TreeModel,
+  epic: TreeEpic | undefined,
+): string {
+  const real = model.epics.filter((e) => e.id !== 0);
+  const loose = model.epics.find((e) => e.id === 0);
+  const left = loose ? loose.total - loose.done : 0;
+  const parts: string[] = [];
+  if (real.length === 1 && !left) {
+    const one = epic && epic.id !== 0 ? epic : real[0]!;
+    parts.push(`#${one.id} ${one.title}`);
+  } else if (real.length)
+    parts.push(plural(real.length, "épopée ouverte", "épopées ouvertes"));
+  if (left) parts.push(plural(left, "tâche hors épopée", "tâches hors épopée"));
+  return parts.join(" · ");
+}
+
 function titleLine(
   model: TreeModel,
   epic: TreeEpic | undefined,
   width: number,
 ): Cell[] {
-  const what =
-    model.epics.length === 1 && epic
-      ? `${epic.id ? `#${epic.id} ` : ""}${epic.title}`
-      : `${model.epics.length} epics ouverts`;
-  const head: Cell[] = [
-    cell(2, [dim("─ ")]),
-    cell(6, [span("Tâches", { bold: true })]),
-    cell(3, [dim(" · ")]),
-  ];
-  const used = 11;
+  const what = sectionTitle(model, epic);
+  const head: Cell[] = [cell(2, [dim("─ ")])];
+  const used = 2;
   const wWhat = Math.min(cells(what), Math.max(0, width - used - 2));
   head.push(cell(wWhat, [span(what, { color: MAUVE })]));
   const rest = Math.max(0, width - used - wWhat);
@@ -444,10 +517,10 @@ function critLine(epic: TreeEpic | undefined, width: number): Cell[] {
   const you = epic?.you;
   const tail: Span[] = you
     ? you.crit
-      ? [dim("bloqué par "), span(`toi (${you.label})`, { color: MAUVE })]
+      ? [dim("bloqué par "), span(`toi (${you.label})`, { color: YOU })]
       : [
           dim("t'attend "),
-          span(`◇ ${you.label}`, { color: MAUVE }),
+          span(`◇ ${you.label}`, { color: YOU }),
           dim(you.age ? ` · ${you.age}` : ""),
         ]
     : [];
@@ -479,12 +552,12 @@ function detailLines(
   const g = GLYPH[n.state];
   const name = hit.parent ? n.title : `${n.label}  ${n.title}`;
   const meta = [
-    n.agent,
+    n.role ? `${n.agent} · ${n.role}` : n.agent,
     n.model,
     n.age,
     n.links,
     n.ci,
-    n.silent ? "silencieux" : "",
+    n.silent ? "figé" : "",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -820,8 +893,8 @@ function graphNode(n: TreeNode, w: number, fills: boolean): Cell[][] {
       ? [span("prête", { color: TEAL }), dim(" · personne dessus")]
       : n.state === "you"
         ? [
-            span("attend toi", { color: MAUVE }),
-            ...(n.age ? [dim(" · "), span(n.age, { color: MAUVE })] : []),
+            span("attend toi", { color: YOU }),
+            ...(n.age ? [dim(" · "), span(n.age, { color: YOU })] : []),
           ]
         : n.state === "blocked"
           ? [
@@ -835,13 +908,18 @@ function graphNode(n: TreeNode, w: number, fills: boolean): Cell[][] {
           : [
               ...(n.agent
                 ? [
-                    span(
-                      n.agent,
-                      n.state === "done" ? { dim: true } : { color: TEAL },
-                    ),
+                    span(n.agent, {
+                      ...(n.agentColor && { color: n.agentColor }),
+                      ...(n.state === "done" && { dim: true }),
+                    }),
                   ]
                 : []),
-              ...(n.model && n.state === "done" ? [dim(` · ${n.model}`)] : []),
+              // The model only where the age still fits after it
+              ...(n.model &&
+              n.state === "done" &&
+              cells(`${n.agent} · ${n.model} · ${n.age}`) <= w - W.gap
+                ? [dim(` · ${n.model}`)]
+                : []),
               ...(n.age
                 ? [
                     dim(n.agent ? " · " : ""),
@@ -952,7 +1030,7 @@ export function graphScreen(
   const you: Span[] = epic?.you
     ? [
         dim("t'attend  "),
-        span(`◇ ${epic.you.label}`, { color: MAUVE }),
+        span(`◇ ${epic.you.label}`, { color: YOU }),
         dim(epic.you.age ? ` · ${epic.you.age}` : ""),
       ]
     : [];
@@ -999,7 +1077,7 @@ export function screenOf(
 ): Screen | string {
   if (!model.found)
     return "Aucune liste de tâches pour cette session (kodflow-hooks la tient).";
-  if (!model.epics.length) return "Aucun epic ouvert.";
+  if (!model.epics.length) return "Aucune épopée ouverte.";
   return ui.view === "graph"
     ? graphScreen(model, ui, width, rows)
     : treeScreen(model, ui, width, rows);

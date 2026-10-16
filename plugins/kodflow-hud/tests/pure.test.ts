@@ -98,7 +98,7 @@ test("the board keeps the open epics, the active empty one, and the loose tasks"
   expect(b.epics.map((e) => [e.id, e.title, e.tasks.length])).toEqual([
     [3, "Empty", 0],
     [2, "SDK", 3],
-    [0, "Tâches", 1],
+    [0, "Hors épopée", 1],
   ]);
   expect(b.epics[1]!.tasks[1]!.prs).toEqual([
     "https://github.com/kodflow/claude-marketplace/pull/42",
