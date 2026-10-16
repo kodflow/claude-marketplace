@@ -182,7 +182,8 @@ UserPromptSubmit)
 - context on the in_progress task: task_update(id, description)
 - change to a completed task: task_create \"Rework #N: ...\" in its epic
 - new subject: task_epic(title, 20 chars max), then task_create(epic=its id)
-- question: task_create(epic=0), completed once answered"
+- question: task_create(epic=0), completed once answered
+- subject (create, update): 30 characters max, refused beyond; detail goes in description"
     # Code in a repository is delegated to subagents (the PreToolUse gate of
     # on-tool.sh and the Stop rule enforce it); off with KODFLOW_ROOT=off.
     [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it."

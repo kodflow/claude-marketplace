@@ -23,8 +23,8 @@
 // `parent`, the task it is a subtask of (three levels at most); `blockedBy`,
 // the tasks it waits on; `ref`, a short handle (T0, C6) the tree shows.
 
-/** The title column of the task tree; tasks.py allowed 40. */
-export const MAX_SUBJECT = 18;
+/** A task title: the tree cuts it at 18 cells, the detail line shows it whole; tasks.py allowed 40. */
+export const MAX_SUBJECT = 30;
 export const MAX_TITLE = 20;
 /** A ref is a handle (T0, C6, #12), not a name. */
 export const MAX_REF = 5;
@@ -1046,7 +1046,7 @@ export const TOOLS: readonly {
       "of the epic the task belongs to (task_list, or the Epics line given with each prompt, lists them), " +
       "or 0 for a task outside any epic; open a new subject with task_epic first. task_focus the epic when " +
       'you start its work. A change to an already completed task is a new task "Rework #N: ..." in that ' +
-      "task's epic. subject: at most 18 characters, the title column of the task tree, " +
+      "task's epic. subject: at most 30 characters, the title of the task in the task tree, " +
       'imperative, no final punctuation ("Add effort gauge"); detail goes in description, which the tree ' +
       "shows under the selected task. New tasks start pending." +
       TREE +
@@ -1058,7 +1058,7 @@ export const TOOLS: readonly {
           type: "string",
           maxLength: MAX_SUBJECT,
           description:
-            "Short imperative title, 18 characters at most; the detail goes in description.",
+            "Short imperative title, 30 characters at most; the detail goes in description.",
         },
         description: { type: "string", description: "What needs to be done." },
         epic: {
@@ -1085,7 +1085,7 @@ export const TOOLS: readonly {
       "tied to it. With worker, the start is refused if that subagent is stopped or already holds another " +
       "task; without it, a start beyond the worker count is refused. The link is dropped when the task " +
       "leaves in_progress. A refusal lists the running subagents and who holds each task in progress. " +
-      "subject: at most 18 characters, the detail goes in description. parent, blocked_by and ref " +
+      "subject: at most 30 characters, the detail goes in description. parent, blocked_by and ref " +
       'change the task\'s place in the tree (parent="" or blocked_by=[] or ref="" clears one); a deleted ' +
       "task's subtasks move up a level and the tasks waiting on it stop waiting.",
     inputSchema: {
@@ -1099,7 +1099,7 @@ export const TOOLS: readonly {
         subject: {
           type: "string",
           maxLength: MAX_SUBJECT,
-          description: "New title, 18 characters at most.",
+          description: "New title, 30 characters at most.",
         },
         description: { type: "string" },
         worker: {
@@ -1174,7 +1174,7 @@ export const TOOLS: readonly {
           type: "string",
           maxLength: MAX_SUBJECT,
           description:
-            'What the user must do, imperative, 18 characters at most ("Go for NAS reboot").',
+            'What the user must do, imperative, 30 characters at most ("Go for NAS reboot").',
         },
         description: {
           type: "string",
