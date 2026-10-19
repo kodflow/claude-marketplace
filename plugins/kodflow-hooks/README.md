@@ -245,7 +245,12 @@ line-by-line match) read the same files with the same format: one ERE a
 line, `#` and blank lines skipped, `# @scope: <list>` for what follows.
 
 A commit message meets every pattern, the strict file included (vendor
-keywords such as `\bclaude\b`, `.claude/` paths). A pull or merge request
+keywords such as `\bclaude\b`, `.claude/` paths). The keywords aim at a
+mention of the assistant, not at a technical name: the word glued to an
+alphanumeric by `-`, `_`, `.` or `/` (`super-claude`, `claude-code.d.ts`,
+`CLAUDE.md`, `@anthropic-ai/sdk`) or inside backticks is set aside before
+the keyword pass, which is the only pass that reads that text; attribution
+trailers and `.claude/` leaks see the message as written. A pull or merge request
 title or body meets the `commit,pr` scope only (AI trailers, AI noreply
 addresses, "Generated with/by", the robot emoji, "AI-assisted"): a PR may
 well be about the tooling, so naming Claude Code or a `.claude/` path, or a

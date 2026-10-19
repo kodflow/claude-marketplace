@@ -139,7 +139,25 @@ export function scan(
   for (const p of rules.attr)
     if (p.re.test(hay)) return { motif: p.motif, pattern: p.re.source, kind };
   if (kind !== "commit") return undefined;
+  const plain = plainNames(hay);
   for (const p of rules.commit)
-    if (p.re.test(hay)) return { motif: p.motif, pattern: p.re.source, kind };
+    if (p.re.test(p.motif === "attribution" ? plain : hay))
+      return { motif: p.motif, pattern: p.re.source, kind };
   return undefined;
+}
+
+/**
+ * The vendor keywords (claude, anthropic) aim at a mention of the assistant,
+ * not at a name that happens to contain the word. A name is technical when
+ * the word is glued to an alphanumeric by - _ . or / (super-claude,
+ * claude-code.d.ts, CLAUDE.md, @anthropic-ai/sdk) or sits inside backticks;
+ * such an occurrence becomes `x`. Only the keyword pass reads this text:
+ * leaks (.claude/ paths) and the attribution patterns see the text as
+ * written. `hay` is lowercased. Same rule as _plain_names of on-tool.sh.
+ */
+export function plainNames(hay: string): string {
+  return hay
+    .replace(/`[^`\n]*(claude|anthropic)[^`\n]*`/g, " ")
+    .replace(/([a-z0-9][-._/])(claude|anthropic)/g, "$1x")
+    .replace(/(claude|anthropic)([-_/][a-z0-9]|\.[a-z0-9])/g, "x$2");
 }

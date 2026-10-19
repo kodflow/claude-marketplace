@@ -600,10 +600,23 @@ _load_patterns() {
     while IFS= read -r line; do [ -n "$line" ] && COMMIT_PATTERNS+=("attribution|$line"); done <<< "$kw"
 }
 
+# The vendor keywords (claude, anthropic) aim at a mention of the assistant,
+# not at a name that happens to contain the word. A name is technical when the
+# word is glued to an alphanumeric by - _ . or / (super-claude, claude-code.d.ts,
+# CLAUDE.md, @anthropic-ai/sdk) or sits inside backticks. Such an occurrence is
+# replaced by `x` before the keyword patterns run; `.claude/` leaks and the
+# attribution patterns never see this text. $1 lowercased text.
+_plain_names() {
+    printf '%s' "$1" | sed -E \
+        -e 's/`[^`]*(claude|anthropic)[^`]*`/ /g' \
+        -e 's/([a-z0-9][-._\/])(claude|anthropic)/\1x/g' \
+        -e 's/(claude|anthropic)([-_\/][a-z0-9]|\.[a-z0-9])/x\2/g'
+}
+
 # $1 kind (commit|pr), $2 text → F_ATTR "<motif> <pattern>" on the first hit.
 _scan() {
     [ -n "$F_ATTR" ] && return 0
-    local p hay r bad="(hooks/patterns unreadable or malformed: nothing to check $1 text against)"
+    local p hay hay2 r bad="(hooks/patterns unreadable or malformed: nothing to check $1 text against)"
     hay=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
     case "$hay" in *[![:space:]]*) ;; *) return 0 ;; esac
     _load_patterns
@@ -618,8 +631,13 @@ _scan() {
         F_ATTR_KIND=$1; return 0
     done
     [ "$1" = commit ] || return 0
+    local plain
+    plain=$(_plain_names "$hay")
     for p in "${COMMIT_PATTERNS[@]}"; do
-        printf '%s' "$hay" | grep -qiE -- "${p#*|}" 2>/dev/null; r=$?
+        # A leak is read on the text as written; a vendor keyword on the text
+        # with technical names set aside, so `super-claude` is not a mention.
+        if [ "${p%%|*}" = attribution ]; then hay2=$plain; else hay2=$hay; fi
+        printf '%s' "$hay2" | grep -qiE -- "${p#*|}" 2>/dev/null; r=$?
         [ $r -eq 1 ] && continue
         [ $r -eq 0 ] && F_ATTR="${p%%|*} ${p#*|}" || F_ATTR="attribution $bad"
         F_ATTR_KIND=$1; return 0
