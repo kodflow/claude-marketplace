@@ -138,6 +138,11 @@ jobs:
       - name: Hook scripts behave, bash-guard corpus included
         run: bash scripts/tests/test_hooks.sh
 
+      # The commit identity a forge expects (lib/identity.sh): real
+      # repositories, example rules, git's own answer on an empty address.
+      - name: Commit identity check
+        run: bash plugins/kodflow-hooks/tests/test_identity.sh
+
       # on-session.sh warns when an installed guard differs from the
       # fingerprint shipped with it. The file is generated; a change to a
       # guard that did not regenerate it would make every session warn.
@@ -220,6 +225,8 @@ jobs:
         run: /bin/bash scripts/tests/test_route_agent.sh
       - name: Cleanup of a subagent's worktree under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-hooks/tests/test_cleanup.sh
+      - name: Commit identity check under /bin/bash 3.2
+        run: HOOK_SHELL=/bin/bash /bin/bash plugins/kodflow-hooks/tests/test_identity.sh
       - name: Recap reader under /bin/bash 3.2
         run: RECAP_BASH=/bin/bash /bin/bash scripts/tests/test_recap.sh
 

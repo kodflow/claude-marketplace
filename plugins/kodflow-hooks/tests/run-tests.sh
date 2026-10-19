@@ -3,7 +3,8 @@
 # scripts/tests/test_hooks.sh at the repository root, the delegation gate by
 # test_root_gate.sh here, the routing gate, the gated-model fallback and the
 # agent feedback by test_agents.sh, the Go-project rule by test_gomod.sh, the
-# cleanup of a subagent's worktree on close by test_cleanup.sh, the mod by tests/mod: run-node.ts under node, the
+# cleanup of a subagent's worktree on close by test_cleanup.sh, the commit
+# identity by test_identity.sh, the mod by tests/mod: run-node.ts under node, the
 # *.test.ts files under `claude plugin test`).
 set -e
 cd "$(dirname "$0")"
@@ -20,3 +21,4 @@ bash test_lock.sh
 bash test_zsh_safe.sh
 bash test_gomod.sh
 bash test_cleanup.sh
+bash test_identity.sh
