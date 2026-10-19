@@ -1,8 +1,8 @@
 // conformance.ts — replays the corpus recorded from tasks.py on the port,
 // then the user's tasks (conformance.human.corpus.ts), added after it.
 //
-// One change since is deliberate: a subject holds 18 characters, not 40, to
-// fit the task tree's title column. The corpus is replayed amended for it
+// One change since is deliberate: a subject holds 30 characters, not 40, to
+// keep the task tree's title short. The corpus is replayed amended for it
 // (AMEND: its long subjects shortened, its limits and its refusal text
 // moved), every other byte as recorded; the two tools whose text changed
 // keep every argument tasks.py gave them (CHANGED).
@@ -79,17 +79,15 @@ export function call(
 const OLD_REFUSAL =
   "subject is 41 characters, the limit is 40: it is shown in full on the status line.";
 const NEW_REFUSAL =
-  "subject is 19 characters, the limit is 18: it is the title column of the task tree and is shown in full on the status line.";
+  "subject is 31 characters, the limit is 30: it is the title column of the task tree and is shown in full on the status line.";
 
-/** The corpus' text with the 18-character subject in place of the 40. */
+/** The corpus' text with the 30-character subject in place of the 40. */
 const AMEND: readonly [RegExp, string][] = [
-  [/(?<!x)x{41}(?!x)/g, "x".repeat(19)],
-  [/(?<!x)x{40}(?!x)/g, "x".repeat(18)],
-  [/(?<!y)y{41}(?!y)/g, "y".repeat(19)],
-  [/(?:😀){41}/gu, "😀".repeat(19)],
-  [/(?:😀){40}/gu, "😀".repeat(18)],
-  [/Freeze golden renders/g, "Freeze goldens"],
-  [/Give the go for the reboot/g, "Go for the reboot"],
+  [/(?<!x)x{41}(?!x)/g, "x".repeat(31)],
+  [/(?<!x)x{40}(?!x)/g, "x".repeat(30)],
+  [/(?<!y)y{41}(?!y)/g, "y".repeat(31)],
+  [/(?:😀){41}/gu, "😀".repeat(31)],
+  [/(?:😀){40}/gu, "😀".repeat(30)],
   [new RegExp(OLD_REFUSAL, "g"), NEW_REFUSAL],
 ];
 

@@ -363,3 +363,30 @@ test("a commit turns the loop's writes green, with no process run and no scan", 
   const marks = await ui.findAll({ type: "Text", text: "C" });
   expect(marks.map((m: any) => m.props.color)).toContain("#5faf5f");
 });
+
+test("an epic whose last task was just done stays 20 minutes, in the tree, then goes with no change to tasks.json", async ($, on) => {
+  const { h, clock } = host(on);
+  writeTasks(h, [T("1", "completed"), T("2", "completed")], 1);
+  await start($, clock);
+  const drawn = async () => {
+    const ui = await $.ui.mount({
+      plugin: "kodflow-hud",
+      surface: "terminal",
+      component: "Pane",
+      requestId: "hud-tasks",
+      props: PANE(100),
+    });
+    const text = capture(await ui.drawn({ in: "tree" }));
+    await ui.unmount();
+    return text;
+  };
+  const first = await drawn();
+  expect(first).toContain("◆ #2     SDK status-line");
+  console.log(first);
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches" }]);
+  await clock.advance(20 * 60_000);
+  expect(await drawn()).toContain("◆ #2     SDK status-line");
+  // Past 30 minutes since the last one was done: today's board, the file untouched
+  await clock.advance(11 * 60_000);
+  expect(await drawn()).not.toContain("SDK status-line");
+});

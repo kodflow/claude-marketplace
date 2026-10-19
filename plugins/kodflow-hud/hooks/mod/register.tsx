@@ -138,6 +138,9 @@ let lastMtime: number | undefined = -1;
 let modelsMtime: number | undefined = -1;
 let modelsPath = "";
 let allTasks: HudTask[] = [];
+// tasks.json as last read: the board is judged again on every poll, since an
+// epic done 30 minutes ago leaves it without the file changing
+let lastText: string | undefined;
 let lastCi = 0;
 let root: string | undefined;
 let home: string | undefined;
@@ -257,14 +260,15 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
           raw = undefined;
         }
         allTasks = parseTasks(raw);
-        const board = parseBoard(text);
-        if (!same(await read($, boardAtom), board))
-          await update($, boardAtom, () => board);
+        lastText = text;
         const seen = seenFrom(allTasks, await read($, seenAtom), session);
         if (seen) await update($, seenAtom, () => seen);
         lastSession = session;
         lastMtime = mtime;
       }
+      const board = parseBoard(lastText, now);
+      if (!same(await read($, boardAtom), board))
+        await update($, boardAtom, () => board);
       await pollModels($, path);
     }
     const listed = await $.agent.list().catch(() => []);

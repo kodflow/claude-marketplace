@@ -4,7 +4,8 @@
 // tasks.json (version 2) is kodflow-hooks' file, a contract it shares with
 // the status line and lib/epics.jq; this module only reads it. An epic is
 // open as the status line counts it: a task left to do, or the agent's active
-// epic while it has no task yet. Tasks filed under no epic (epic 0) form one
+// epic while it has no task yet; it stays listed 30 minutes after its last
+// task was done, so what was opened and closed in seconds is still seen. Tasks filed under no epic (epic 0) form one
 // more group, « Hors épopée », with no number (its id is 0): the pane's tab
 // already says « Tâches », so the group does not say it again.
 //
@@ -23,6 +24,8 @@ import { safe } from "./paths.ts";
 
 export const MAIN = "main";
 export const NO_EPIC_TITLE = "Hors épopée";
+/** How long an epic with nothing left to do stays on the board after its last task was done. */
+export const KEEP_DONE_MS = 30 * 60_000;
 /** What `$.agent.list()` reports for an agent whose loop still stands. */
 export const LIVE = new Set(["running", "waiting", "idle"]);
 
@@ -76,10 +79,25 @@ export function parseTasks(raw: unknown): HudTask[] {
 }
 
 /**
- * The board: the open epics, most recently touched first, then the tasks
- * filed under no epic while one of them is left to do.
+ * Whether a group with nothing left to do is still shown: its last task was
+ * done less than `KEEP_DONE_MS` ago. A completed task's `updated` (seconds)
+ * is when it was done, kodflow-hooks stamping it on the status change. With
+ * no clock given the board is what it was: finished groups go at once.
  */
-export function parseBoard(fileText: string | undefined): HudBoard {
+function justDone(tasks: readonly HudTask[], now: number | undefined): boolean {
+  if (now === undefined || tasks.length === 0) return false;
+  const last = Math.max(...tasks.map((t) => t.updated));
+  return last > 0 && now - last * 1000 < KEEP_DONE_MS;
+}
+
+/**
+ * The board: the open epics, most recently touched first, then the tasks
+ * filed under no epic while one of them is left to do. With `now` (ms), an
+ * epic or the group under no epic whose last task was done less than 30
+ * minutes ago is kept too, after the ones with work left, so a question
+ * opened and closed in seconds is still seen.
+ */
+export function parseBoard(fileText: string | undefined, now?: number): HudBoard {
   if (fileText === undefined) return { found: false, epics: [] };
   let raw: unknown;
   try {
@@ -90,15 +108,17 @@ export function parseBoard(fileText: string | undefined): HudBoard {
   const tasks = parseTasks(raw);
   const data: Obj = isObj(raw) ? raw : {};
   const active: Obj = isObj(data.active) ? data.active : {};
-  const epics: HudEpic[] = [];
+  const open: HudEpic[] = [];
+  const kept: HudEpic[] = [];
   for (const e of Array.isArray(data.epics) ? data.epics : []) {
     if (!isObj(e) || !Number.isInteger(e.id)) continue;
     const agent = text(e.agent) || MAIN;
     const own = tasks.filter((t) => t.epic === e.id && t.agent === agent);
     const left = own.some((t) => t.status !== "completed");
     const emptyActive = own.length === 0 && active[agent] === e.id;
-    if (!left && !emptyActive) continue;
-    epics.push({
+    const recent = !left && !emptyActive && justDone(own, now);
+    if (!left && !emptyActive && !recent) continue;
+    (recent ? kept : open).push({
       id: e.id,
       title: text(e.title),
       agent,
@@ -107,18 +127,22 @@ export function parseBoard(fileText: string | undefined): HudBoard {
       tasks: own,
     });
   }
-  epics.sort((a, b) => b.touched - a.touched);
+  open.sort((a, b) => b.touched - a.touched);
+  kept.sort((a, b) => b.touched - a.touched);
   const loose = tasks.filter((t) => t.epic === 0);
-  if (loose.some((t) => t.status !== "completed"))
-    epics.push({
+  const looseLeft = loose.some((t) => t.status !== "completed");
+  if (looseLeft || justDone(loose, now)) {
+    const group: HudEpic = {
       id: 0,
       title: NO_EPIC_TITLE,
       agent: MAIN,
       created: Math.min(...loose.map((t) => t.updated)),
       touched: 0,
       tasks: loose,
-    });
-  return { found: true, epics };
+    };
+    (looseLeft ? open : kept).push(group);
+  }
+  return { found: true, epics: [...open, ...kept] };
 }
 
 /** What the board needs from the world to judge a task. */
