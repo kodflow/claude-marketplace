@@ -11,7 +11,7 @@ claude plugin install kodflow-shell@kodflow
 ```
 
 Le hook `SessionStart` fait le reste au prochain lancement de `claude` : il copie ce que le
-plugin embarque dans `~/.claude/kodflow-shell/`, lie `super-claude` et `claude-sessions` dans
+plugin embarque dans `~/.claude/kodflow-shell/`, lie `super-claude`, `superclaude` (la même commande, sans tiret) et `claude-sessions` dans
 `~/.local/bin`, et branche l'implémentation zsh (via `$ZSH_CUSTOM` quand oh-my-zsh est là, une
 ligne marquée dans `.zshrc` sinon). Rien à retaper après une mise à jour du marketplace :
 la même synchronisation se rejoue à chaque lancement. En une ligne, tout de suite, sans

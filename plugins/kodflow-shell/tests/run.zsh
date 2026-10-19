@@ -250,17 +250,38 @@ box=$(new_sandbox setup)
 fakehome=$box/home; mkdir -p $fakehome
 run_setup $fakehome --quiet >/dev/null 2>&1 || true
 [[ -L $fakehome/.local/bin/super-claude ]] && ok "installe le lien" || ko "installe le lien" "absent"
+is "superclaude pointe sur la cible de super-claude" "$(readlink $fakehome/.local/bin/superclaude)" \
+  "$fakehome/.claude/kodflow-shell/bin/super-claude"
+rm -f $fakehome/.local/bin/superclaude
+out=$(run_setup $fakehome --check 2>&1)
+[[ $out == *"à lier  $fakehome/.local/bin/superclaude"* ]] && ok "--check signale superclaude absent" \
+  || ko "--check signale superclaude absent" "$out"
+[[ ! -e $fakehome/.local/bin/superclaude ]] && ok "--check ne le recrée pas" || ko "--check ne le recrée pas" "créé"
+run_setup $fakehome --quiet >/dev/null 2>&1 || true
+[[ -L $fakehome/.local/bin/superclaude ]] && ok "le lien manquant est reposé" || ko "le lien manquant est reposé" "absent"
 out=$(run_setup $fakehome --check --uninstall 2>&1)
 [[ -L $fakehome/.local/bin/super-claude ]] && ok "--check --uninstall ne supprime rien" \
   || ko "--check --uninstall ne supprime rien" "le lien a disparu"
 
 # --- 13. désinstallation : ne touche pas au lien d'un autre -----------------
 ln -sfn /bin/true $fakehome/.local/bin/claude-sessions
+rm -f $fakehome/.local/bin/superclaude
+ln -sfn /bin/true $fakehome/.local/bin/superclaude
 out=$(run_setup $fakehome --uninstall 2>&1)
+[[ -L $fakehome/.local/bin/superclaude ]] && ok "épargne un superclaude étranger" \
+  || ko "épargne un superclaude étranger" "supprimé"
 [[ -L $fakehome/.local/bin/claude-sessions ]] && ok "épargne un lien étranger" \
   || ko "épargne un lien étranger" "supprimé"
 [[ ! -e $fakehome/.local/bin/super-claude ]] && ok "retire son propre lien" \
   || ko "retire son propre lien" "encore là"
+
+# superclaude à nous, lui, part avec le reste
+box=$(new_sandbox unlink-own)
+fakehome=$box/home; mkdir -p $fakehome
+run_setup $fakehome --quiet >/dev/null 2>&1 || true
+run_setup $fakehome --uninstall >/dev/null 2>&1
+[[ ! -e $fakehome/.local/bin/superclaude && ! -L $fakehome/.local/bin/superclaude ]] \
+  && ok "retire son propre superclaude" || ko "retire son propre superclaude" "encore là"
 
 # --- 14. mise à jour : un fichier retiré en amont disparaît -----------------
 box=$(new_sandbox stale)

@@ -26,7 +26,7 @@ allowed-tools:
 
 | Ce qui est posé | Où | Pourquoi là |
 |---|---|---|
-| `super-claude`, `claude-sessions` | liens dans `~/.local/bin` | déjà dans le PATH, donc aucune variable à modifier |
+| `super-claude`, `superclaude`, `claude-sessions` | liens dans `~/.local/bin` | déjà dans le PATH, donc aucune variable à modifier |
 | l'implémentation zsh | `$ZSH_CUSTOM/kodflow-shell.zsh` (oh-my-zsh la source seule) sinon une ligne marquée dans `.zshrc` | complétion et autosuggestion vivent dans le shell interactif, pas dans un binaire |
 | le contenu du plugin | copié dans `~/.claude/kodflow-shell/` | le plugin s'installe dans un chemin versionné qui disparaît à chaque update ; les liens pointent vers un chemin stable |
 
@@ -50,6 +50,11 @@ le marketplace suffit à mettre à jour le shell, sans rien retaper.
   Une fonction du même nom masque la commande : le plugin livrerait des mises à jour que
   personne n'exécute. Le setup commente l'ancienne définition dans `~/.shell-functions.sh` et
   en garde une sauvegarde `.pre-kodflow-shell` — le dire quand ça arrive.
+- `superclaude` (sans tiret) est un second lien vers la même cible que `super-claude`. S'il
+  manque, `--check` affiche `à lier …/superclaude` : le dire, et proposer `install`. Un
+  `superclaude` qui n'est pas à nous (fichier ou lien ailleurs) est laissé tel quel, et la
+  désinstallation ne le touche pas. Une fonction ou un alias `superclaude` dans le rc de
+  l'utilisateur le masquerait : vérifier avec `type superclaude`.
 - Après un premier install, la complétion n'est active que dans un **nouveau** shell (`exec zsh`).
   Le dire au lieu de laisser croire que ça n'a pas marché.
 - Si `~/.local/bin` n'est pas dans le PATH, le script le signale : c'est la seule chose que

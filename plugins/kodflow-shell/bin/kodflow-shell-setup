@@ -64,7 +64,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
             *)  say "ignoré  $path (ne pointe pas vers $DEST)" ;;
         esac
     }
-    for f in super-claude claude-sessions; do unlink_ours "$BINDIR/$f"; done
+    for f in super-claude claude-sessions superclaude; do unlink_ours "$BINDIR/$f"; done
     unlink_ours "$OMZ_CUSTOM/kodflow-shell.zsh"
     if [ -f "$ZSHRC" ] && grep -q "$MARKER" "$ZSHRC" 2>/dev/null; then
         if [ "$CHECK" -eq 1 ]; then
@@ -115,8 +115,12 @@ fi
 [ "$synced" -eq 0 ] && say "à jour  $DEST"
 
 # ------------------------------------------------------------------ PATH ----
-for f in super-claude claude-sessions; do
-    want=$DEST/bin/$f
+# link-name:target-name. superclaude is the dash-less spelling the old shell
+# function was known by; it shares super-claude's absolute mirror target so the
+# ownership test above stays a plain prefix match on $DEST.
+for pair in super-claude:super-claude claude-sessions:claude-sessions superclaude:super-claude; do
+    f=${pair%%:*}
+    want=$DEST/bin/${pair#*:}
     have=$(readlink "$BINDIR/$f" 2>/dev/null || echo "")
     if [ "$have" = "$want" ]; then
         say "ok      $BINDIR/$f"
