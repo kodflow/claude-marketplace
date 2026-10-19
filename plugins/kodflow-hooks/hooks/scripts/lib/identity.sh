@@ -89,6 +89,18 @@ kf_ident_url() {
     [ -n "$KF_IH" ]
 }
 
+# $1 a remote URL → the same without its userinfo (user:token@), for display:
+# a refusal is read by the model and lands in the session log.
+kf_ident_shown() {
+    local u=$1 r hp
+    case "$u" in
+        *://*@*)
+            r=${u#*://}; hp=${r%%/*}
+            case "$hp" in *@*) u=${u%%://*}://${hp##*@}${r#"$hp"} ;; esac ;;
+    esac
+    printf '%s' "$u"
+}
+
 kf_ident_match() {
     local h=$1 p=$2 i=0 n=${#KF_IR_HOST[@]} hg
     KF_IM=""
@@ -124,7 +136,7 @@ _kf_ident_split() {
 }
 
 kf_ident_check() {
-    local dir=$1 file url ia ic an ae cn ce src="" en ee lea lee lec
+    local dir=$1 file url shown ia ic an ae cn ce src="" en ee lea lee lec
     KF_ID_TITLE=""; KF_ID_MSG=()
     [ "${KODFLOW_COMMIT_IDENTITY:-}" = off ] && return 0
     file=$(kf_ident_file)
@@ -139,9 +151,10 @@ kf_ident_check() {
             "Add it first: git -C $dir remote add origin <url>, then commit.")
         return 2
     fi
+    shown=$(kf_ident_shown "$url")
     if ! kf_ident_url "$url" || ! kf_ident_match "$KF_IH" "$KF_IP"; then
-        KF_ID_TITLE="COMMIT BLOCKED — no identity rule for the host of origin (${KF_IH:-$url})"
-        KF_ID_MSG=("origin is $url; no rule of $file names its host." \
+        KF_ID_TITLE="COMMIT BLOCKED — no identity rule for the host of origin (${KF_IH:-$shown})"
+        KF_ID_MSG=("origin is $shown; no rule of $file names its host." \
             "Add a rule for it there (the user's file), or fix the remote. Unknown hosts are refused.")
         return 2
     fi
@@ -153,11 +166,11 @@ kf_ident_check() {
     if [ -n "${KF_ID_AUTHOR:-}" ]; then
         case "$KF_ID_AUTHOR" in
             *'<'*'>'*) ia=$KF_ID_AUTHOR ;;
-            *) ia=$(_kf_ident_git -C "$dir" log --all -i -1 --author="$KF_ID_AUTHOR" --format='%an <%ae>') || ia="" ;;
+            *) ia=$(_kf_ident_git -C "$dir" ${KF_ID_CFG[@]+"${KF_ID_CFG[@]}"} log --all -i -1 --author="$KF_ID_AUTHOR" --format='%an <%ae>') || ia="" ;;
         esac
         src="--author"
     elif [ "${KF_ID_RESET:-0}" != 1 ] && { [ -n "${KF_ID_REUSE:-}" ] || [ "${KF_ID_AMEND:-0}" = 1 ]; }; then
-        ia=$(_kf_ident_git -C "$dir" log -1 --format='%an <%ae>' "${KF_ID_REUSE:-HEAD}" --) || ia=""
+        ia=$(_kf_ident_git -C "$dir" ${KF_ID_CFG[@]+"${KF_ID_CFG[@]}"} log -1 --format='%an <%ae>' "${KF_ID_REUSE:-HEAD}" --) || ia=""
         src="the reused commit (--amend, -C, -c keep its author; --reset-author takes yours)"
     fi
     _kf_ident_split "$ia" || return 0
@@ -166,7 +179,7 @@ kf_ident_check() {
     lec=$(printf '%s' "$ce" | tr '[:upper:]' '[:lower:]')
     [ "$an" = "$en" ] && [ "$lea" = "$lee" ] && [ "$cn" = "$en" ] && [ "$lec" = "$lee" ] && return 0
     KF_ID_TITLE="COMMIT BLOCKED — commit identity does not match ${KF_IH}"
-    KF_ID_MSG=("origin: $url (rule: ${KF_IR_HOST[KF_IM]} ${KF_IR_PATH[KF_IM]})" \
+    KF_ID_MSG=("origin: $shown (rule: ${KF_IR_HOST[KF_IM]} ${KF_IR_PATH[KF_IM]})" \
         "expected:  $en <$ee>" \
         "author:    $an <$ae>${src:+  (from $src)}" \
         "committer: $cn <$ce>" \

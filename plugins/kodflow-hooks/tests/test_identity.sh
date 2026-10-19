@@ -13,7 +13,8 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 T=$(cd "$T" && pwd -P)
 export HOME=$T/home CLAUDE_CONFIG_DIR=$T/home/.claude CLAUDE_PROJECT_DIR=$T/repo TMPDIR=$T/tmp
 export KODFLOW_ROOT=off GIT_CONFIG_NOSYSTEM=1
-unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL KODFLOW_COMMIT_IDENTITY GIT_DIR GIT_WORK_TREE
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL EMAIL KODFLOW_COMMIT_IDENTITY GIT_DIR GIT_WORK_TREE \
+    GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
 mkdir -p "$HOME" "$TMPDIR" "$CLAUDE_CONFIG_DIR/kodflow"
 RULES=$CLAUDE_CONFIG_DIR/kodflow/commit-identity.conf
 
@@ -129,6 +130,14 @@ pass_ "git -C another repository, its own identity" "git -C $T/other commit -m \
 repo "$T/repo" https://example.org/o/r.git "$GH" "$GHE"
 block "unknown host refused" 'git commit -m "feat: x"'
 printf '%s' "$ERR" | grep -q 'no identity rule' && ok "the refusal names the missing rule" || bad "unknown host wording" "$ERR"
+repo "$T/repo" https://jdoe:s3cr3t-T0KEN@example.org/o/r.git "$GH" "$GHE"
+block "unknown host with credentials in origin refused" 'git commit -m "feat: x"'
+printf '%s' "$ERR$OUT" | grep -q 's3cr3t-T0KEN' && bad "the token stays out of the refusal" "$ERR" \
+    || { printf '%s' "$ERR" | grep -q 'https://example.org/o/r.git' && ok "the token stays out of the refusal" || bad "shown URL" "$ERR"; }
+repo "$T/repo" https://jdoe:s3cr3t-T0KEN@github.com/o/r.git "$GH" x@example.org
+block "known host with credentials in origin, mismatch" 'git commit -m "feat: x"'
+printf '%s' "$ERR$OUT" | grep -qE 's3cr3t-T0KEN|jdoe:' && bad "the token stays out of the mismatch refusal" "$ERR" \
+    || { printf '%s' "$ERR" | grep -q 'origin: https://github.com/o/r.git' && ok "the token stays out of the mismatch refusal" || bad "shown URL" "$ERR"; }
 repo "$T/repo" "$T/bare.git" "$GH" "$GHE"
 block "a local path origin names no host: refused" 'git commit -m "feat: x"'
 repo "$T/repo" "" "$GH" "$GHE"
@@ -143,6 +152,17 @@ git -C "$T/repo" config user.name "$GH"; git -C "$T/repo" config user.email "$GH
 block "--amend of a commit by another author" 'git commit --amend -m "feat: x"'
 pass_ "--amend --reset-author" 'git commit --amend --reset-author -m "feat: x"'
 block "-C HEAD reuses the old author" 'git commit -C HEAD'
+# --git-dir/--work-tree name the repository: the reused author is read there,
+# not in the directory the line runs from (here a repository with a good HEAD).
+repo "$T/gd" https://github.com/o/r.git "Old Name" old@example.org
+git -C "$T/gd" commit -q --allow-empty -m "chore: seed"
+git -C "$T/gd" config user.name "$GH"; git -C "$T/gd" config user.email "$GHE"
+repo "$T/repo" https://github.com/o/r.git "$GH" "$GHE"
+git -C "$T/repo" commit -q --allow-empty -m "chore: seed"
+block "--git-dir/--work-tree --amend reads the author of that repository" \
+    "git --git-dir=$T/gd/.git --work-tree=$T/gd commit --amend -m \"feat: x\""
+pass_ "--git-dir/--work-tree --amend --reset-author" \
+    "git --git-dir $T/gd/.git --work-tree $T/gd commit --amend --reset-author -m \"feat: x\""
 
 echo "== identity from the global configuration and includeIf"
 repo "$T/repo" https://github.com/o/r.git x x
