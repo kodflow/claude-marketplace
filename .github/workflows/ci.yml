@@ -111,6 +111,11 @@ jobs:
           git diff --exit-code -- plugins/kodflow-hooks/hooks/routing-index.tsv \
             || { echo "::error::routing-index.tsv is stale — run scripts/build-routing-index.py"; exit 1; }
 
+      # Agents do not receive the shared files, so the plan review contract is
+      # copied into each routed agent; a missing or drifted copy fails here.
+      - name: Every routed agent carries the plan review mode
+        run: python3 scripts/tests/test_plan_review_mode.py
+
       - name: Shell scripts parse
         run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
 

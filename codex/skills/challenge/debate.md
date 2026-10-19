@@ -126,12 +126,18 @@ angle rather than assume it passed.
 Each reviewer gets the **plan text inline**, not a path. A reviewer that has to
 go fetch the plan spends its turns fetching instead of judging.
 
-The brief, per reviewer. The three lenses run on `general-purpose` by design,
-so their brief opens with `[general-purpose-ok]`, the marker the kodflow-hooks routing gate
-reads as a deliberate dispatch; a specialist's brief does not need it.
+The brief, per reviewer. Every brief opens with the literal marker `Plan review
+mode` and carries the same six-field contract: that marker is what switches a
+specialist from the output format of its own definition to this one, and the
+caller's format wins over the agent's, always (see "Plan review mode" in
+`../_shared/specialists.md`). The three lenses run on `general-purpose` by
+design, so their brief opens with `[general-purpose-ok]`, the marker the
+kodflow-hooks routing gate reads as a deliberate dispatch, then the line
+`Plan review mode`; a specialist's brief starts with `Plan review mode` alone.
 
 ```
 [general-purpose-ok]
+Plan review mode
 Here is a plan. Argue against it from the <lens> lens.
 
 <the full plan>
@@ -139,14 +145,19 @@ Here is a plan. Argue against it from the <lens> lens.
 Constraints this project has already accepted:
 <the MUST/MUST NOT constraints from the ledger, verbatim>
 
-Return objections only. For each: what breaks, how you know, and what would
-have to change. An objection with no concrete failure behind it is noise —
-leave it out. If the plan is sound from your lens, say so and stop; do not
-manufacture an objection to look useful.
+Return objections only; the output format of
+your own definition does not apply here. For each objection, six fields:
+severity (blocking / material / minor), claim, evidence (file:line, or the plan
+line it contradicts), remedy, consulted (the documentation you checked, one URL
+per source), unverified (what you could not confirm, and what you tried). An
+objection with no concrete failure behind it is noise — leave it out. If the
+plan is sound from your lens, say so and stop; do not manufacture an objection
+to look useful.
 ```
 
-Structured return per objection: `severity` (blocking / material / minor),
-`claim`, `evidence` (file:line, or the plan line it contradicts), `remedy`.
+Structured return per objection: `severity`, `claim`, `evidence`, `remedy`,
+`consulted`, `unverified` — the six fields of the contract, the same for the
+lenses, the specialists and Codex.
 
 ### 2.2 Triage — you, not a reviewer
 
