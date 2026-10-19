@@ -114,3 +114,28 @@ more, but that it goes and checks.
   cancelled?" gets an answer.
 - **Say what is already decided.** Pass the constraint ledger's MUST entries, so
   the specialist argues within them rather than against them.
+
+## Plan review, one contract for every specialist
+
+`/challenge` sends a plan, with nothing built yet, to a specialist whose own
+definition is written for auditing an artifact and returns JSON or a Dockerfile
+verdict. Left alone, each agent arbitrates between the two formats by itself.
+The mode below removes the arbitration: one rule, one contract.
+
+An invoked agent does not receive the files of this folder, so the section that
+follows is **copied verbatim** into the body of every agent in the routing
+table, and `scripts/tests/test_plan_review_mode.py` fails when a routed agent
+lacks it or carries a different text. This file holds the canonical wording;
+edit it here first, then in every agent. The caller's brief opens with the
+literal marker `Plan review mode` and restates the six fields.
+
+## Plan review mode
+
+This mode is on when the brief starts with `Plan review mode`, asks for objections to a plan (nothing built yet), or asks for a read-only review of a plan or code in the caller's own format. One rule decides the format: the caller's format replaces this agent's output format, and no output-format section of this file overrides it. Outside this mode the output format of this file applies unchanged.
+
+In this mode:
+
+- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the documentation actually checked for this claim, one URL per source) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
+- A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
+- If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
+- Stay read-only: no file edits, no formatter or fixer that rewrites files, no install or sync. Prefer a check or diff mode, and report a tool that is missing under `unverified`.
