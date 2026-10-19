@@ -215,6 +215,48 @@ is refused exactly three things:
 | `Bash` | `git commit`, `push`, `rebase`, `cherry-pick`, `merge`, `am`, `apply`, `revert`, `reset --hard`, `worktree add`; `gh pr create`, `glab mr create` — wherever the shell reader finds them (below) | everything else: no allow-list, no redirection rule, unknown commands pass; `gh pr merge` and `glab mr merge` pass the delegation gate, and the merge gate then asks for the mod's token (above) |
 | forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | file, branch, push and pull-request writes, and any tool not classified | reads, merges, reviews, comments, issues (decided in the jq-free fast path) |
 
+## Commit identity
+
+A commit carries a name and an address to wherever its repository is
+pushed. Before every `git commit` the shell reader finds, `on-tool.sh`
+(BLOCK 2b, `lib/identity.sh`) holds that identity to the one the user's
+rules give the forge of `origin`, so an address meant for one host never
+lands on another. The rules are the user's and stay out of this repository:
+`${CLAUDE_CONFIG_DIR:-~/.claude}/kodflow/commit-identity.conf`
+(`commit-identity.example.conf` beside this README shows the format with
+example values).
+
+- **The forge** is `origin` as `git remote get-url` gives it (insteadOf
+  applied): https, `ssh://user@host:port/…`, `git@host:path`, CodeCommit
+  with a key id and `codecommit::<region>://`. No `origin`, a local path,
+  or a host no rule names: refused.
+- **The identity** is the one git will write, author and committer, name and
+  address: `git var GIT_AUTHOR_IDENT` and `GIT_COMMITTER_IDENT` run in the
+  commit's directory (`-C`, `cd … &&`), with the line's `-c`,
+  `--config-env`, `--git-dir`, and the `GIT_*`, `EMAIL`, `HOME` it sets
+  (`X=v git`, `env [-i] [-u X] X=v git`, `export X=v; …`), so local, global
+  and `includeIf` configuration all count; then `--author`, or the reused
+  commit's author for `--amend`, `-C`, `-c` unless `--reset-author`. The
+  address is compared without case, the name exactly.
+- **An empty address** (`<>` in a rule) is what git writes for
+  `user.email=""`, with or without `user.useConfigOnly`
+  (`tests/test_identity.sh` asks git each run). A rule with an address
+  refuses an empty one, and a rule without refuses any.
+- **A refusal** (`[motif:commit-identity]`) names the rule, the expected
+  identity, the author and committer found, and the two `git -C <dir> config`
+  commands to run. The hook never changes a configuration.
+- **Fail open**: no rules file, the check is off and says so once a session
+  (`systemMessage`); a malformed or unreadable one voids the whole file the
+  same way rather than enforce half a policy; git missing, not a repository,
+  or a value the reader cannot know (a `$` or a backtick in it) leaves the
+  commit alone. `KODFLOW_COMMIT_IDENTITY=off` turns it off.
+- **Not covered**: a commit made by `merge`, `rebase`, `cherry-pick`,
+  `revert`, `am` or `pull` (their committer), a commit through a forge MCP
+  tool, `nohup env X=v git …` and other wrappers before `env`, a variable
+  set without `export` and not exported already, and the gaps of the shell
+  reader itself (an alias, `$c commit`). The mod does not double this
+  check, like the staged-secret scan: it needs git.
+
 ## The shell reader
 
 A regex over the raw line cannot tell `git "commit"`, `\git commit` or
@@ -735,13 +777,14 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KODFLOW_ISOLATION=off` | the isolation gate is off for the session |
 | `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
 | `KODFLOW_FEEDBACK=off` | no rule 6, nothing kept, nothing proposed |
+| `KODFLOW_COMMIT_IDENTITY=<path>` · `off` | another commit-identity rules file, or the check off (default `${CLAUDE_CONFIG_DIR:-~/.claude}/kodflow/commit-identity.conf`, absent means off) |
 | `KODFLOW_CLEANUP=off` | no worktree, branch or remote branch is removed on close, no notice; `KODFLOW_CLEANUP_TIMEOUT` (seconds, default 15) bounds each `gh` and push call |
 
 ## Tests
 
 ```
 bash scripts/tests/test_hooks.sh
-bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh + test_cleanup.sh
+bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh + test_cleanup.sh + test_identity.sh
 claude plugin validate --json plugins/kodflow-hooks
 claude plugin test plugins/kodflow-hooks         # tests/mod/*.test.ts, in the engine
 node plugins/kodflow-hooks/tests/mod/run-node.ts # corpora, real disk, several processes, invariants

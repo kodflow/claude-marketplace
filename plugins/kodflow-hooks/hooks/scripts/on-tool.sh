@@ -694,6 +694,8 @@ _specs_from() {
 # $1 command index, A/NAME set. git: its globals, then the subcommand.
 _guard_git() {
     local y=1 na=${#A[@]} gdir=$GDIR v lc sub msg="" farg="" hay
+    local -a icfg=()
+    local iauthor="" ireuse="" iamend=0 ireset=0 iunsure=0
     while [ $y -lt $na ]; do
         v=${A[y]}
         case "$v" in
@@ -701,9 +703,13 @@ _guard_git() {
             -c|--config-env)
                 lc=$(printf '%s' "${A[y+1]:-}" | tr '[:upper:]' '[:lower:]')
                 case "$lc" in core.hookspath=*) F_HOOKS=1 ;; esac
+                icfg+=("$v" "${A[y+1]:-}")
                 y=$((y+2)); continue ;;
-            --config-env=*) lc=$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]'); case "$lc" in *=core.hookspath=*) F_HOOKS=1 ;; esac ;;
-            --git-dir|--work-tree|--namespace|--super-prefix) y=$((y+2)); continue ;;
+            --config-env=*) lc=$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]'); case "$lc" in *=core.hookspath=*) F_HOOKS=1 ;; esac
+                icfg+=("$v") ;;
+            --git-dir|--work-tree) icfg+=("$v" "${A[y+1]:-}"); y=$((y+2)); continue ;;
+            --git-dir=*|--work-tree=*) icfg+=("$v") ;;
+            --namespace|--super-prefix) y=$((y+2)); continue ;;
             -*) ;;
             *) break ;;
         esac
@@ -762,8 +768,13 @@ _guard_git() {
                     --message=*|--trailer=*) msg=$msg$'\n'${v#*=} ;;
                     -F|--file) farg=${A[y+1]:-}; y=$((y+2)); continue ;;
                     --file=*) farg=${v#*=} ;;
-                    -C|-c|-t|--reuse-message|--reedit-message|--author|--date|--cleanup|--template|--fixup|--squash) y=$((y+2)); continue ;;
-                    --amend) F_AMEND=1 ;;
+                    --author) iauthor=${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --author=*) iauthor=${v#*=} ;;
+                    -C|-c|--reuse-message|--reedit-message) ireuse=${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --reuse-message=*|--reedit-message=*) ireuse=${v#*=} ;;
+                    --reset-author) ireset=1 ;;
+                    -t|--date|--cleanup|--template|--fixup|--squash) y=$((y+2)); continue ;;
+                    --amend) F_AMEND=1; iamend=1 ;;
                     --all) F_CALL=1 ;;
                     --*) _is_noverify "$v" && F_NV="--no-verify on git commit" ;;
                     -*)   # a short cluster: n is --no-verify, m F C c t take the rest or the next word
@@ -776,7 +787,7 @@ _guard_git() {
                                 u|S) break ;;   # -uno, -S<key>: an attached optional argument
                                 m|F|C|c|t)
                                     if [ -z "$rest" ]; then rest=${A[y+1]:-}; y=$((y+1)); fi
-                                    case "$ch" in m) msg=$msg$'\n'$rest ;; F) farg=$rest ;; esac
+                                    case "$ch" in m) msg=$msg$'\n'$rest ;; F) farg=$rest ;; C|c) ireuse=$rest ;; esac
                                     break ;;
                             esac
                             cl=$rest
@@ -792,7 +803,20 @@ _guard_git() {
             hay=$msg
             [ -n "$farg" ] && hay=$hay$'\n'$(_p_file "$farg" "$1")
             [ "${F_AMEND:-0}" = 1 ] && [ -z "$msg$farg" ] && hay=$hay$'\n'$(git -C "$gdir" log -1 --pretty=%B 2>/dev/null)
-            _scan commit "$hay" ;;
+            _scan commit "$hay"
+            # The identity this very commit goes out with (lib/identity.sh).
+            # A value the reader cannot know (a $ or a backtick) is not judged.
+            [ -n "$F_IDENT_T" ] && return 0
+            case "${icfg[*]} $iauthor $ireuse ${ID_LINE_ENV[*]} ${ID_CMD_ENV[*]}" in *[\$\`]*) iunsure=1 ;; esac
+            . "$LIB/identity.sh" 2>/dev/null || return 0
+            KF_ID_CFG=(${icfg[@]+"${icfg[@]}"}); KF_ID_ENV=(${ID_LINE_ENV[@]+"${ID_LINE_ENV[@]}"} ${ID_CMD_ENV[@]+"${ID_CMD_ENV[@]}"})
+            KF_ID_AUTHOR=$iauthor; KF_ID_REUSE=$ireuse; KF_ID_AMEND=$iamend; KF_ID_RESET=$ireset; KF_ID_UNSURE=$iunsure
+            kf_ident_check "$gdir"
+            case $? in
+                2) F_IDENT_T=$KF_ID_TITLE; F_IDENT_M=("${KF_ID_MSG[@]}") ;;
+                3) F_IDENT_OFF=absent ;;
+                4) F_IDENT_OFF="malformed ($KF_IR_ERR)" ;;
+            esac ;;
         merge)
             while [ $y -lt $na ]; do
                 v=${A[y]}
@@ -1113,6 +1137,7 @@ pre_bash() {
     [ -n "$CMD" ] || exit 0
     F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
     F_MODW=""; F_PLUG=""; GDIR=""; F_MREPO=""; F_MCPJSON=""; F_CALL=0; F_CGDIR=""
+    F_IDENT_T=""; F_IDENT_M=(); F_IDENT_OFF=""; ID_LINE_ENV=(); ID_CMD_ENV=()
 
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
     # $'…' string may spell one in escapes, so it is always read. tr, not
@@ -1132,6 +1157,7 @@ pre_bash() {
         done
         _p_argv $k; F_HOOKS=0
         case "$US${P_W[k]}" in *"${US}GH_REPO="*) r=${P_W[k]#*GH_REPO=}; F_MREPO=${r%%"$US"*} ;; esac
+        _ident_env $k
         case "$NAME" in
             claude) _guard_claude ;;
             git) _guard_git $k ;;
@@ -1164,6 +1190,10 @@ pre_bash() {
             "Remove AI attribution (co-authored-by, generated by, 🤖) and, in a commit, workflow leaks (.claude/ paths, Plan: footers)." \
             "The repo's commit-msg hook and the post-commit gate block the same thing."
     fi
+
+    # --- BLOCK 2b: the commit's identity is the one its forge expects -------
+    # The user's rules (lib/identity.sh); no rules file, the check is off.
+    [ -n "$F_IDENT_T" ] && _motif_block commit-identity "$F_IDENT_T" "${F_IDENT_M[@]}"
 
     # --- BLOCK 3: mcp.json added or changed, secrets in the staged blobs ----
     # One read of the index serves both. It is the index, not the working
@@ -1229,8 +1259,65 @@ pre_bash() {
     elif [ -n "$F_MERGE" ]; then
         _merge_main "$F_MERGE" "$CMD"
     fi
+    _ident_notice
     _log
     exit 0
+}
+
+# The commit-identity check off (no rules file) or void (a malformed one):
+# said once a session per state, to the user, and the commit goes on.
+_ident_notice() {
+    [ -n "$F_IDENT_OFF" ] || return 0
+    local mark=$SDIR/commit-identity-notice prev="" file
+    [ -f "$mark" ] && read -r prev < "$mark" 2>/dev/null
+    [ "$prev" = "$F_IDENT_OFF" ] && return 0
+    mkdir -p "$SDIR" 2>/dev/null && printf '%s\n' "$F_IDENT_OFF" > "$mark" 2>/dev/null
+    file=$(kf_ident_file 2>/dev/null)
+    jq -n -c --arg m "kodflow-hooks: commit identity not checked, rules file $F_IDENT_OFF: $file (see the kodflow-hooks README, commit identity)" \
+        '{systemMessage:$m}' 2>/dev/null
+}
+
+# $1 command index: the variables a command line hands git. `export X=v` and
+# `unset X` hold for the rest of the line (ID_LINE_ENV), a bare `X=v` too
+# when X is already exported; `X=v git …` and `env [-i] [-u X] X=v git …`
+# for that command only (ID_CMD_ENV). Only what can change an identity:
+# GIT_*, EMAIL, HOME, XDG_CONFIG_HOME.
+_ident_env() {
+    local w x=0 nw inenv=0 re='^(GIT_[A-Z_]+|EMAIL|HOME|XDG_CONFIG_HOME)='
+    ID_CMD_ENV=()
+    _p_words "${P_W[$1]}"; nw=${#W[@]}
+    case "$NAME" in
+        export|unset)
+            for w in "${W[@]:1}"; do
+                if [ "$NAME" = unset ]; then [[ $w=x =~ $re ]] && ID_LINE_ENV+=("-$w")
+                else [[ $w =~ $re ]] && ID_LINE_ENV+=("$w"); fi
+            done
+            return 0 ;;
+        '')
+            for w in "${W[@]}"; do
+                [[ $w =~ $re ]] && [ -n "$(printenv "${w%%=*}" 2>/dev/null)" ] && ID_LINE_ENV+=("$w")
+            done
+            return 0 ;;
+    esac
+    while [ $x -lt $nw ]; do
+        w=${W[x]}
+        if [[ $w =~ $re ]]; then ID_CMD_ENV+=("$w")
+        elif [[ $w =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then :
+        elif [ $inenv = 0 ]; then
+            case "$w" in '!'|'{'|'}'|if|then|else|elif|do|while|until) x=$((x+1)); continue ;; esac
+            [ "${w##*/}" = env ] && inenv=1 || break
+        else
+            case "$w" in
+                -i|--ignore-environment|-) ID_CMD_ENV+=('!') ;;
+                -u|--unset) x=$((x+1)); ID_CMD_ENV+=("-${W[x]:-}") ;;
+                --unset=*) ID_CMD_ENV+=("-${w#*=}") ;;
+                -C|-S|--chdir) x=$((x+1)) ;;
+                -*) ;;
+                *) break ;;
+            esac
+        fi
+        x=$((x+1))
+    done
 }
 
 # ============================================================================
