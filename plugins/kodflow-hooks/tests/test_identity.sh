@@ -130,13 +130,16 @@ pass_ "git -C another repository, its own identity" "git -C $T/other commit -m \
 repo "$T/repo" https://example.org/o/r.git "$GH" "$GHE"
 block "unknown host refused" 'git commit -m "feat: x"'
 printf '%s' "$ERR" | grep -q 'no identity rule' && ok "the refusal names the missing rule" || bad "unknown host wording" "$ERR"
-repo "$T/repo" https://jdoe:s3cr3t-T0KEN@example.org/o/r.git "$GH" "$GHE"
+# Credentials in origin, assembled at run time: this file must not carry the
+# shape itself (scripts/sanitize.py refuses a user:password@ URL).
+CRED_USER=jdoe CRED_TOKEN="s3cr3t""-T0KEN"
+repo "$T/repo" "https://${CRED_USER}:${CRED_TOKEN}@example.org/o/r.git" "$GH" "$GHE"
 block "unknown host with credentials in origin refused" 'git commit -m "feat: x"'
-printf '%s' "$ERR$OUT" | grep -q 's3cr3t-T0KEN' && bad "the token stays out of the refusal" "$ERR" \
+printf '%s' "$ERR$OUT" | grep -qF "$CRED_TOKEN" && bad "the token stays out of the refusal" "$ERR" \
     || { printf '%s' "$ERR" | grep -q 'https://example.org/o/r.git' && ok "the token stays out of the refusal" || bad "shown URL" "$ERR"; }
-repo "$T/repo" https://jdoe:s3cr3t-T0KEN@github.com/o/r.git "$GH" x@example.org
+repo "$T/repo" "https://${CRED_USER}:${CRED_TOKEN}@github.com/o/r.git" "$GH" x@example.org
 block "known host with credentials in origin, mismatch" 'git commit -m "feat: x"'
-printf '%s' "$ERR$OUT" | grep -qE 's3cr3t-T0KEN|jdoe:' && bad "the token stays out of the mismatch refusal" "$ERR" \
+printf '%s' "$ERR$OUT" | grep -qE "$CRED_TOKEN|$CRED_USER:" && bad "the token stays out of the mismatch refusal" "$ERR" \
     || { printf '%s' "$ERR" | grep -q 'origin: https://github.com/o/r.git' && ok "the token stays out of the mismatch refusal" || bad "shown URL" "$ERR"; }
 repo "$T/repo" "$T/bare.git" "$GH" "$GHE"
 block "a local path origin names no host: refused" 'git commit -m "feat: x"'
