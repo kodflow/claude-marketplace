@@ -54,6 +54,19 @@ jobs:
           pip install --quiet pyyaml
           python3 scripts/validate-frontmatter.py .
 
+      # The mod lanes' wiring (kodflow/ktn-linter#788), read from the
+      # workflows as YAML: every GATES target run by a blocking job here,
+      # every `make` target a workflow runs declared, the ADVISORY latest lane
+      # off push and pull_request and in no `needs`, setup-node by sha.
+      - name: The mod lanes are wired as the Makefile declares
+        run: make ci-gates-check
+
+      # The lane scripts against a fake engine and a fake gh: neutral on
+      # "turned off" (and red without the precondition), one issue for two
+      # latest runs on the same gap, each ci-gates-check refusal planted.
+      - name: The mod lane scripts behave
+        run: make mod-lane-check
+
       # The orchestrator's model comes from detect-models.sh: no guess when the
       # cache is unreadable, never a gated model, a missing list failing closed.
       - name: The model detector neither guesses nor reports a gated model
@@ -239,7 +252,7 @@ jobs:
       CLAUDE_CODE_VERSION: 2.1.296
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
 
       - name: Claude Code, pinned
@@ -321,73 +334,35 @@ jobs:
   # oldest version kodflow/ktn-linter#774 measured, above the engine the job
   # above pins: it gets an engine of its own, pinned and bumped by hand.
   # Nothing here can redden ktn-linter's release: this repository publishes
-  # the plugin, by commit (git-subdir), and ktn-linter does not depend on it.
+  # the plugin, by commit (git-subdir) and by its own kodflow-ktn/v* tags
+  # (kodflow-ktn-release.yml), and ktn-linter does not depend on it. The
+  # latest engine is mod-latest.yml's, scheduled and advisory (#788).
   mod-ktn:
     runs-on: ubuntu-latest
     env:
       CLAUDE_CODE_VERSION: 2.1.301
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
 
       # The pure modules — the activation predicate replayed on ktn-linter's
       # golden table, the reducer, the renderer — under node alone: no engine,
-      # no npm dependency, the TypeScript run as it is. This step never waits
-      # on Claude Code, so it stays meaningful when the engine lane cannot run.
+      # no npm dependency, the TypeScript run as it is. Before the engine is
+      # installed, so its verdict stands whatever happens to the engine.
       - name: kodflow-ktn's pure modules (node --test)
-        run: node --test plugins/kodflow-ktn/tests/pure/*.spec.ts
+        run: make mod-pure
 
       - name: Claude Code, pinned
         run: |
           npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           claude --version
 
-      # As for the other mods, plus two facts of the mod's contract: exactly
-      # one session.start (two without a matcher keep a module from loading),
-      # and no tool hook at all (the mod completes ktn-linter's hooks, it never
-      # stands in for them).
-      - name: The engine reads kodflow-ktn as meant
-        run: |
-          set +e
-          claude plugin validate --strict --json plugins/kodflow-ktn > validate-ktn.json
-          set -e
-          cat validate-ktn.json
-          python3 - <<'PY'
-          import json, re, sys
-          r = json.load(open("validate-ktn.json"))
-          parts = [r["manifest"]] + r.get("contents", [])
-          errors = [e for p in parts for e in p.get("errors", [])]
-          warnings = [w for p in parts for w in p.get("warnings", []) if w.get("path") != "version"]
-          notes = [n for p in parts for n in p.get("notes", [])]
-          bad = errors + warnings
-          for item in bad:
-              print("::error::%s" % item)
-          hooked = [n for n in notes if n.startswith("./mod/register.ts hooks:")]
-          if len(hooked) != 1:
-              print("::error::the hooks module was not read"); sys.exit(1)
-          # "a, b{component=Pane, requestId=x}, c": a matcher holds commas of its own
-          events = re.findall(r"([\w.]+)(?:\{[^}]*\})?(?:, |$)", hooked[0].split(":", 1)[1].strip())
-          if events.count("session.start") != 1:
-              print("::error::%d session.start hooks, exactly one expected" % events.count("session.start")); bad.append("start")
-          tools = [e for e in events if e in ("tool.call", "tool.check", "classic.PreToolUse", "classic.PostToolUse", "classic.PostToolUseFailure")]
-          if tools:
-              print("::error::tool hooks registered: %s" % tools); bad.append("tools")
-          print("hooks:", events)
-          sys.exit(1 if bad else 0)
-          PY
-
-      # `claude plugin test` exits 1 when hooks modules are turned off on the
-      # runner (a remote switch, disableAllHooks): that is no verdict on the
-      # mod, so the lane ends neutral with an annotation instead of red.
-      - name: kodflow-ktn's tests, in the engine (claude plugin test)
-        run: |
-          set +e
-          claude plugin test plugins/kodflow-ktn 2>&1 | tee plugin-test-ktn.log
-          rc=${PIPESTATUS[0]}
-          set -e
-          if [ "$rc" -ne 0 ] && grep -qi 'turned off' plugin-test-ktn.log; then
-            echo "::warning::hooks modules are turned off on this runner: the engine lane is neutral, the node lane above still ran"
-            exit 0
-          fi
-          exit "$rc"
+      # make mod-check (the gate GATES names): the pure modules again, the
+      # fixtures' pin, the validator — exactly one session.start, no tool
+      # hook, the surface tests/fixtures/surface.json commits — and
+      # `claude plugin test` behind its precondition: a probe mod
+      # (scripts/mod-lane/probe) asked first, so hooks modules turned off on
+      # the runner end the engine lane neutral with an annotation, never red.
+      - name: kodflow-ktn's lanes (make mod-check)
+        run: make mod-check
