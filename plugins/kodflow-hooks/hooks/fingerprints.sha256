@@ -1,4 +1,4 @@
-a52e9da5c9c0f9aea72daef05bb82b16faa4f7d9ab1cff939b4745e82baf6f40  scripts/on-tool.sh
+14cabfea33b4ae6628e57161debdc36dde48cb832918b6b464d38292fc065530  scripts/on-tool.sh
 fa54df047d49bb1c2a1d9b6e07e78978891b2eb64dc44acef2c461a0fda6c833  scripts/lib/agents.sh
 30be38b7586aa279deae21649829bde58dd11d3ba4bf41c00a2d8f6299d8fada  scripts/lib/identity.sh
 ab46c47874745357fb410aca74199d26b927597ea597b1a759cfee8c5e2f91b1  gated-models.txt

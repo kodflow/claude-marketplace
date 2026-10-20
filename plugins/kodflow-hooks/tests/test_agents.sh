@@ -239,6 +239,29 @@ run on-tool.sh "$(skill kodflow-specialists:deep-skill | wide)"
 # An unreadable gated list falls back to the policy's model
 ( . "$S/lib/agents.sh"; KF_AGENTS_LIB=$T/nowhere; unset KF_GATED; kf_is_gated claude-fable-5-1 ) && ok "an unreadable gated list still gates fable" || bad "gated unreadable" ""
 
+echo "== gated models · the call's text is data, never shell"
+# The fields are read by one jq call whose @sh output goes to eval: only that
+# output may reach eval. Were it the tool_input's own JSON, a $(...) or a
+# backtick quoted in a prompt would run as the hook's user.
+PW=$T/pwned
+P="Reply ok. \$(touch $PW-dollar) \`touch $PW-tick\`"
+pwned() { [ ! -e "$PW-dollar" ] && [ ! -e "$PW-tick" ] && ok "$1" || bad "$1" "$(echo "$PW"-*)"; rm -f "$PW-dollar" "$PW-tick"; }
+run on-tool.sh "$(agent "probe" "" "$P")"
+pwned "a prompt's command substitution and backticks do not run (main thread)"
+run on-tool.sh "$(fixture "PreToolUse Agent, from inside a subagent (agent_id set)" | jq -c --arg p "$P" '.tool_input.prompt = $p')"
+pwned "nor from a subagent"
+date +%s > "$SD/mod-beat"
+run on-tool.sh "$(agent "probe" "" "$P")"
+pwned "nor while the mod beats (the fields are read before the beat)"
+rm -f "$SD/mod-beat"
+run on-tool.sh "$(skill kodflow-specialists:calm | jq -c --arg a "$P" '.tool_input.args = $a')"
+pwned "nor a skill's args"
+# A \u escape only jq decodes: the fields come from jq, not the regex fallback
+run on-tool.sh "$(agent "probe" "" "x" fable | sed 's/"model":"fable"/"model":"\\u0066able"/')"
+[ "$RC" -eq 2 ] && motif fable && ok "a per-call model is decoded by jq (\\u0066able is fable)" || bad "jq model" "rc=$RC $ERR"
+run on-tool.sh "$(skill kodflow-specialists:deep-skill | sed 's/deep-skill/d\\u0065ep-skill/')"
+[ "$RC" -eq 2 ] && motif fable && ok "a skill name is decoded by jq too" || bad "jq skill" "rc=$RC $ERR"
+
 echo "== SessionStart · a session that starts on a gated model is told"
 run on-session.sh "$(fixture "SessionStart startup, headless (no model key)" '.model = "claude-fable-5-1"')"
 printf '%s' "$OUT" | jq -e '(.systemMessage | test("gated model")) and (.hookSpecificOutput.additionalContext | test("gated model"))' >/dev/null 2>&1 \
