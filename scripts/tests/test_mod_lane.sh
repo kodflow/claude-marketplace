@@ -130,7 +130,15 @@ plant "an advisory workflow on pull_request" .github/workflows/mod-latest.yml " 
   pull_request:" "advisory workflow mod-latest.yml runs on pull_request"
 plant "a gate ci.yml does not run" .github/workflows/ci.yml "run: make mod-check" "run: make mod-pure" "gate mod-check is not run"
 plant "a make target the Makefile lacks" .github/workflows/ci.yml "run: make mod-check" "run: make mod-check && make nowhere" "runs \`make nowhere\`"
+plant "a second goal the Makefile lacks" .github/workflows/ci.yml "run: make mod-check" "run: make -C . V=1 mod-check nowhere2" "runs \`make nowhere2\`"
+plant "a gate run by a step allowed to fail" .github/workflows/ci.yml "        run: make mod-check" "        continue-on-error: true
+        run: make mod-check" "gate mod-check is not run"
 plant "a job that needs the advisory lane" .github/workflows/kodflow-ktn-release.yml "needs: gate" "needs: [gate, mod-ktn-latest]" "needs mod-ktn-latest of the advisory"
+
+for bad in --chek --Check; do
+  if KTN_FIXTURES_DIR="$work/none" bash "$root/scripts/sync-ktn-fixtures.sh" "$bad" >/dev/null 2>&1; then ko "sync-ktn-fixtures.sh ran with $bad"
+  else [ $? -eq 2 ] && ok "sync-ktn-fixtures.sh refuses the mode $bad before any work" || ko "sync-ktn-fixtures.sh $bad: wrong status"; fi
+done
 
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
