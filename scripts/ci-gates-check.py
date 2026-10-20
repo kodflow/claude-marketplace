@@ -19,7 +19,31 @@ import sys
 import yaml
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
-MAKE = re.compile(r"(?:^|[\s;&|(])make\s+((?:-\S+\s+)*)([A-Za-z0-9_.-]+)")
+# Flags of make that take the next word as their value
+VALUED = {"-C", "-f", "-I", "-o", "-W", "--directory", "--file", "--makefile", "--include-dir", "--old-file", "--what-if"}
+
+
+def goals(text):
+    """Every goal of every `make` command in a run script: its flags, their
+    values and VAR=value assignments skipped, up to the command's end."""
+    out = []
+    for line in text.splitlines():
+        words = re.split(r"\s+", re.sub(r"[;&|()]", " ; ", line).strip())
+        i = 0
+        while i < len(words):
+            if words[i] != "make":
+                i += 1
+                continue
+            i += 1
+            while i < len(words) and words[i] != ";":
+                w = words[i]
+                if w in VALUED:
+                    i += 2
+                    continue
+                if not w.startswith("-") and "=" not in w and re.fullmatch(r"[A-Za-z0-9_.-]+", w):
+                    out.append(w)
+                i += 1
+    return out
 
 
 def arg(name, default=""):
@@ -36,8 +60,10 @@ def triggers(doc):
     return set((on or {}).keys())
 
 
-def runs(job):
+def runs(job, blocking=False):
     for step in job.get("steps", []) or []:
+        if blocking and isinstance(step, dict) and step.get("continue-on-error"):
+            continue
         if isinstance(step, dict) and isinstance(step.get("run"), str):
             yield step["run"]
 
@@ -65,8 +91,8 @@ def main():
     for job in (flows.get("ci.yml", {}).get("jobs") or {}).values():
         if job.get("continue-on-error"):
             continue
-        for text in runs(job):
-            ci_made.update(m.group(2) for m in MAKE.finditer(text))
+        for text in runs(job, blocking=True):
+            ci_made.update(goals(text))
     for gate in gates:
         if gate not in targets:
             bad.append("gate %s is no target of the Makefile" % gate)
@@ -76,9 +102,9 @@ def main():
     for name, doc in flows.items():
         for job_name, job in (doc.get("jobs") or {}).items():
             for text in runs(job):
-                for m in MAKE.finditer(text):
-                    if m.group(2) not in targets:
-                        bad.append("%s/%s runs `make %s`, which the Makefile does not declare" % (name, job_name, m.group(2)))
+                for goal in goals(text):
+                    if goal not in targets:
+                        bad.append("%s/%s runs `make %s`, which the Makefile does not declare" % (name, job_name, goal))
             for ref in uses(job):
                 action, _, version = ref.partition("@")
                 if action == "actions/setup-node" and not SHA.match(version):
