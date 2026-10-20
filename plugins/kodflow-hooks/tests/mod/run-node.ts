@@ -4,7 +4,8 @@
 //   node run-node.ts            the conformance corpus, the store on disk,
 //                               the Go-project rule on disk, then the
 //                               bash-guard corpus against the mod's guards
-//   node run-node.ts --worker DIR N   (internal) N task_create in DIR
+//   node run-node.ts --worker DIR N WAIT_MS   (internal) N task_create in
+//                               DIR, each waiting up to WAIT_MS for the lock
 //
 // Node 22.18 or later runs the TypeScript as it is (type stripping).
 import { execFile } from "node:child_process";
@@ -77,19 +78,30 @@ const disk: Port = {
   now: () => Date.now(),
 };
 
-async function create(dir: string, subject: string): Promise<string> {
+async function create(
+  dir: string,
+  subject: string,
+  waitMs?: number,
+): Promise<string> {
   const step = plan("task_create", "main", { subject, epic: 0 });
-  return mutate(disk, dir, (data) =>
-    step.run(data, { now: Math.floor(Date.now() / 1000), workers: [] }),
+  return mutate(
+    disk,
+    dir,
+    (data) =>
+      step.run(data, { now: Math.floor(Date.now() / 1000), workers: [] }),
+    waitMs,
   );
 }
 
 if (process.argv[2] === "--worker") {
   const dir = process.argv[3]!;
   const n = Number(process.argv[4]);
+  const waitMs = process.argv[5] ? Number(process.argv[5]) : undefined;
   // Unawaited on purpose: the in-process queue must serialise them
   await Promise.all(
-    Array.from({ length: n }, (_, i) => create(dir, `p${process.pid} t${i}`)),
+    Array.from({ length: n }, (_, i) =>
+      create(dir, `p${process.pid} t${i}`, waitMs),
+    ),
   );
   process.exit(0);
 }
@@ -168,9 +180,21 @@ try {
   const shared = join(root, "kodflow", "sessions", "race");
   const PROCS = 6;
   const EACH = 8;
+  // What is held here is mutual exclusion, so no writer may write through.
+  // With the hooks' 2 s budget it could: 48 turns of a lock taken by
+  // polling, each spending four process spawns, overrun 2 s for some waiter
+  // on a loaded runner, and the fail-open write (tested above) then lost a
+  // task. The budget is therefore one no run of this test reaches.
+  const NEVER_MS = 600_000;
   await Promise.all(
     Array.from({ length: PROCS }, () =>
-      run(process.execPath, [HERE, "--worker", shared, String(EACH)]),
+      run(process.execPath, [
+        HERE,
+        "--worker",
+        shared,
+        String(EACH),
+        String(NEVER_MS),
+      ]),
     ),
   );
   const data = JSON.parse(readFileSync(join(shared, "tasks.json"), "utf8"));
