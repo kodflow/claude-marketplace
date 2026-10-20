@@ -185,7 +185,8 @@ test("after a /clear that emptied $.state the pane draws the rewritten snapshot,
   expect(await ui.find({ text: /7 constats/ })).toBeDefined();
 });
 
-test("a 10 000-character file name, zero rows and one column: still a valid tree", async ($, on) => {
+// #777's contract, on the native mode it kept; the windowed mode's own is in window.test.ts
+test("a 10 000-character file name, zero rows and one column: still a valid tree", { options: { scrolling: "native" } }, async ($, on) => {
   const long = "y".repeat(10_000) + ".go";
   const { clock } = served(on, async (url) =>
     url.includes("/status")
