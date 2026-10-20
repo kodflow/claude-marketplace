@@ -55,9 +55,18 @@ function enqueue<T>(dir: string, work: () => Promise<T>): Promise<T> {
   return next;
 }
 
-/** Take the lock directory; true when held, false when written through. */
-export async function lock(port: Port, lockDir: string): Promise<boolean> {
-  const deadline = port.now() + LOCK_WAIT_MS;
+/**
+ * Take the lock directory; true when held, false when written through.
+ * `waitMs` is the budget before writing through: LOCK_WAIT_MS for every
+ * hook, larger only where a caller must never write through (a test of
+ * mutual exclusion, which the fail-open budget would otherwise race).
+ */
+export async function lock(
+  port: Port,
+  lockDir: string,
+  waitMs: number = LOCK_WAIT_MS,
+): Promise<boolean> {
+  const deadline = port.now() + waitMs;
   for (;;) {
     if ((await port.run(["mkdir", lockDir])).exitCode === 0) return true;
     const m = await port.mtime(lockDir);
@@ -100,18 +109,20 @@ export async function load(
 /**
  * Read the list, apply `change`, write it back: one at a time per directory,
  * under the lock. When `change` throws (a refusal), nothing is written.
+ * `waitMs` is lock()'s budget before writing through.
  */
 export function mutate<T>(
   port: Port,
   dir: string,
   change: (data: Data) => T,
+  waitMs: number = LOCK_WAIT_MS,
 ): Promise<T> {
   return enqueue(dir, async () => {
     const made = await port.run(["mkdir", "-p", dir]);
     if (made.exitCode !== 0)
       throw new Error(`cannot create ${dir}: ${made.stderr.trim()}`);
     const lockDir = `${dir}/.lock.d`;
-    const held = await lock(port, lockDir);
+    const held = await lock(port, lockDir, waitMs);
     try {
       const data = parse(
         await port.read(tasksFile(dir)),
