@@ -149,6 +149,8 @@ export function parseModel(text: string): ModelRead {
       // Cut by the server or by us: the rest is the web UI's
       truncated: raw.truncated === true || rawNodes.length > nodes.length,
       hidden: Math.max(0, total - nodes.length),
+      from: num(raw.window?.offset),
+      total: Math.max(total, nodes.length),
     },
   };
 }

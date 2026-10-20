@@ -59,6 +59,10 @@ export type KtnModel = {
   truncated: boolean;
   /** Visible nodes not in this window: the web UI's to show. */
   hidden: number;
+  /** The window's first node, as the daemon served it (pkg/view `window.offset`). */
+  from: number;
+  /** Every visible node of the tree, the window's included (`window.total`). */
+  total: number;
 };
 
 /**
@@ -117,6 +121,10 @@ export type KtnTree = {
   nodes: KtnNode[];
   truncated: boolean;
   hidden: number;
+  /** The index of `nodes[0]` in the whole tree (the windowed mode, #787). */
+  from?: number;
+  /** Every visible node of the tree (the windowed mode, #787). */
+  total?: number;
 };
 
 declare module "claude-code" {
@@ -127,6 +135,14 @@ declare module "claude-code" {
       tree: KtnTree;
       /** The dir: and file: ids the person opened in the pane. No secret. */
       expanded: string[];
+      /**
+       * The first row of the tree the windowed pane shows (#787): ONE value
+       * for the instance, shared by every surface that draws it — each
+       * render re-clamps it to its own rows, so a surface draws at a time.
+       */
+      offset: number;
+      /** The severities the pane shows; empty for all of them (#787). */
+      filter: string[];
     };
   }
 }

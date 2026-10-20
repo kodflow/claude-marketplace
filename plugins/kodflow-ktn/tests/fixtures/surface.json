@@ -6,7 +6,8 @@
     "session.start",
     "turn.complete",
     "ui.close",
-    "ui.render"
+    "ui.render",
+    "ui.scroll"
   ],
   "calls": [
     "$.clock.after",

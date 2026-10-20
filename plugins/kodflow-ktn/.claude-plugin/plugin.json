@@ -25,6 +25,16 @@
       "title": "Open the pane at start",
       "description": "Open the ktn pane when a Go session starts. Off by default: the engine seats a pane nobody asked for only from 144 columns, and once you have opened it with /ktn-view it seats it again from 110, in every later session.",
       "default": false
+    },
+    "scrolling": {
+      "type": "string",
+      "title": "Scrolling",
+      "description": "window: the pane scrolls a window of the tree the daemon serves in slices, the wheel and the arrows moving it (kodflow/ktn-linter#787). native: the engine scrolls the whole tree the daemon serves (the way back).",
+      "options": [
+        "window",
+        "native"
+      ],
+      "default": "window"
     }
   }
 }

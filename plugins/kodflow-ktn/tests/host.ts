@@ -30,6 +30,10 @@ export type Host = {
   writes: unknown[];
   /** When set, `$.state.get` answers as a store that lost everything. */
   stateLost: boolean;
+  /** Values `$.state.get` answers for these keys, whatever was written (#787). */
+  plant: Record<string, unknown>;
+  /** The engine window's offset each `ui.scroll` left it at, in order (#787). */
+  scrolls: number[];
 };
 
 const entry = (name: string, kind: "file" | "dir" | "other" = "file") => ({
@@ -83,6 +87,8 @@ export function host(on: any, over: Partial<Host> = {}) {
     state: {},
     writes: [],
     stateLost: false,
+    plant: {},
+    scrolls: [],
     ...over,
   };
   const clock = mock.clock(on, { now: NOW });
@@ -94,9 +100,16 @@ export function host(on: any, over: Partial<Host> = {}) {
     if (h.stateLost) h.stateLost = false;
     return next(e);
   });
-  on("state.get", async (_$: any, e: any, next: any) =>
-    h.stateLost ? { value: { value: undefined, version: 0 } } : next(e),
-  );
+  on("state.get", async (_$: any, e: any, next: any) => {
+    if (h.stateLost) return { value: { value: undefined, version: 0 } };
+    if (e.plugin === "kodflow-ktn" && e.key in h.plant) return { value: { value: h.plant[e.key], version: 1 } };
+    return next(e);
+  });
+  // The engine's window: where the chain left it
+  on("ui.scroll", async (_$: any, e: any) => {
+    h.scrolls.push(e.offset);
+    return {};
+  });
   on("turn.complete", async (_$: any, e: any) => ({ text: e.answer ?? "" }));
   on("classic.SessionStart", async () => ({}));
   on("session.surfaces", async () => ({ value: h.surfaces }));
