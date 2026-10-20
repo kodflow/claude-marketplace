@@ -35,6 +35,7 @@ import {
   RACE_SLACK_MS,
   UI_BOOT,
   VIEW_ROUTE,
+  WINDOW_ROWS,
 } from "./contract.ts";
 import {
   classifyRejection,
@@ -105,6 +106,15 @@ export class Client {
   rev = 0;
   /** Directory and file ids the pane asked to see opened (#777). */
   expand: string[] = [];
+  /**
+   * The windowed mode (#787): each request names its window, `offset=from`
+   * and `limit=WINDOW_ROWS`; off, the daemon's default window is asked.
+   */
+  windowed = false;
+  /** The window's first node, in the windowed mode. */
+  from = 0;
+  /** The severities asked for (`severity=`), empty for all (#787). */
+  filter: string[] = [];
   /** The long-poll's wait while a pane is placed, 0 otherwise. */
   waitS = 0;
   launching = false;
@@ -127,6 +137,7 @@ export class Client {
     this.rev = 0;
     this.model = undefined;
     this.expand = [];
+    this.from = 0;
     this.set({ kind: "loading", launch: "none" });
   }
 
@@ -262,6 +273,8 @@ export class Client {
     const q = [`workspace=${encodeURIComponent(this.workspace)}`, `wait=${waitS}`];
     if (this.rev > 0) q.push(`since=${this.rev}`);
     for (const id of this.expand) q.push(`expand=${encodeURIComponent(id)}`);
+    if (this.windowed) q.push(`offset=${this.from}`, `limit=${WINDOW_ROWS}`);
+    if (this.filter.length > 0) q.push(`severity=${this.filter.map(encodeURIComponent).join(",")}`);
     return q.join("&");
   }
 
@@ -407,6 +420,26 @@ export class Client {
   /** The pane changed what it shows opened: the next answer must be whole. */
   setExpand(ids: string[]): void {
     this.expand = ids;
+    this.rev = 0;
+  }
+
+  /**
+   * The windowed pane scrolled near the edge of what it holds (#787): the
+   * next request asks for the window from `from`. Returns false when that
+   * window is already the one asked for, so a scroll inside it asks nothing.
+   */
+  setWindow(from: number): boolean {
+    const next = Math.max(0, Math.floor(from));
+    if (next === this.from) return false;
+    this.from = next;
+    this.rev = 0;
+    return true;
+  }
+
+  /** The pane's severity filter changed: the next answer must be whole. */
+  setFilter(severities: string[]): void {
+    this.filter = severities;
+    this.from = 0;
     this.rev = 0;
   }
 
