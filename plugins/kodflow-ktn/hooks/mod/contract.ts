@@ -71,6 +71,24 @@ export const UI_BOOT = "/ui/boot";
  */
 export const RENDER_BUDGET = 90_000;
 
+/**
+ * The mod's own window over the tree (kodflow/ktn-linter#787), the
+ * `scrolling: window` mode: the daemon serves WINDOW_ROWS nodes from an
+ * offset (`offset=` / `limit=`, pkg/view), the snapshot kept in `$.state` is
+ * cut at WINDOW_MAX_CHARS of text (re-read on every render, so on every
+ * wheel tick), and a scroll that comes within WINDOW_EDGE rows of either end
+ * of what is held asks for the next window, detached.
+ */
+export const WINDOW_ROWS = 180;
+export const WINDOW_MAX_CHARS = 70_000;
+export const WINDOW_EDGE = 20;
+
+/**
+ * pkg/view/query.go `paramSeverity`: the severity filter the pane sends
+ * (`/ktn-view filtre error,warning`), each value one of these.
+ */
+export const SEVERITIES = ["error", "warning", "info"] as const;
+
 /** pkg/view/wire.go `CodeWorkspaceNotServed`. */
 export const NOT_SERVED = "workspace_not_served";
 
