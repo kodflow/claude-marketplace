@@ -1,0 +1,34 @@
+{
+  "events": [
+    "classic.SessionStart",
+    "command.run",
+    "session.attach",
+    "session.start",
+    "turn.complete",
+    "ui.close",
+    "ui.render"
+  ],
+  "calls": [
+    "$.clock.after",
+    "$.clock.now",
+    "$.command.register",
+    "$.env.get",
+    "$.fs.list",
+    "$.fs.read",
+    "$.http.fetch",
+    "$.process.run",
+    "$.session.root",
+    "$.session.surfaces",
+    "$.session.version",
+    "$.state.get",
+    "$.state.set",
+    "$.ui.close",
+    "$.ui.invalidate",
+    "$.ui.log",
+    "$.ui.open",
+    "$.ui.panes",
+    "$.ui.resolve",
+    "$.ui.status",
+    "$.ui.toast"
+  ]
+}

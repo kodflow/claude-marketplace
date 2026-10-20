@@ -1,0 +1,70 @@
+# mod-latest — kodflow-ktn against the LATEST Claude Code (kodflow/ktn-linter#788).
+#
+# ADVISORY: scheduled and on demand only, never on a push or a pull request,
+# and in no other workflow's `needs` (`make ci-gates-check` holds both). Nine
+# releases of eleven touched the mods' API in one stretch (2.1.287 to 2.1.299):
+# this lane tells the maintainer before a person does, it blocks nobody.
+#
+# It compares only what the mod uses: the set of events it hooks and of `$`
+# calls it makes, as the latest validator reads them, against the committed
+# plugins/kodflow-ktn/tests/fixtures/surface.json (which the pinned lane holds
+# the source to), plus the validator's findings and the engine suite's
+# verdict. A gap is kept in ONE rolling issue, deduplicated by the label
+# mod-latest and the gap's signature: two runs on the same gap write nothing,
+# a run with no gap closes it.
+name: mod-latest
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: mod-latest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mod-ktn-latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '24' }
+
+      - name: Claude Code, latest
+        id: engine
+        run: |
+          npm install -g "@anthropic-ai/claude-code@latest"
+          echo "version=$(claude --version | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # Every step below records and goes on: the comparison is the verdict,
+      # and it is the issue's to carry, not this run's colour.
+      - name: The validator's reading, the engine suite behind its precondition
+        id: read
+        run: |
+          set +e
+          python3 scripts/mod-surface.py validate plugins/kodflow-ktn --report report.json > validate.log 2>&1
+          cat validate.log
+          bash scripts/mod-lane.sh plugins/kodflow-ktn > lane.log 2>&1
+          cat lane.log
+          echo "verdict=$(tail -n 1 lane.log)" >> "$GITHUB_OUTPUT"
+
+      - name: The gap against the committed surface
+        run: |
+          python3 scripts/mod-surface.py gap report.json plugins/kodflow-ktn/tests/fixtures/surface.json "${{ steps.read.outputs.verdict }}" > gap.txt
+          echo "--- gap on ${{ steps.engine.outputs.version }}"
+          cat gap.txt
+
+      - name: One rolling issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash scripts/mod-latest-issue.sh gap.txt "${{ steps.engine.outputs.version }}"

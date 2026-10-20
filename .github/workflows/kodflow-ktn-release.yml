@@ -1,0 +1,48 @@
+# kodflow-ktn-release — the mod's own publication (kodflow/ktn-linter#788).
+#
+# The mod is a plugin of this marketplace, never an artefact of ktn-linter: no
+# Go tag, no Go release waits on it, and nothing here can redden one. A
+# consumer gets it by commit (git-subdir, the default) or pins one of these
+# tags in its own settings ("ref": "kodflow-ktn/v0.1.0").
+#
+# The gate is the pinned lane itself: the tag's commit passes `make mod-check`
+# on the engine ci.yml pins before a release names it. The advisory latest lane
+# (mod-latest.yml) is in no `needs` here, and never will be: a new Claude Code
+# release must not hold up — or take back — a published version.
+name: kodflow-ktn-release
+
+on:
+  push:
+    tags: ['kodflow-ktn/v*']
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      CLAUDE_CODE_VERSION: 2.1.301
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '24' }
+      - name: Claude Code, pinned as in ci.yml
+        run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+      - name: The tag passes the mod's lanes
+        run: make mod-check
+
+  publish:
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: A release named by the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes "kodflow-ktn at ${GITHUB_SHA}: pin it with \"ref\": \"${GITHUB_REF_NAME}\" in extraKnownMarketplaces (see the repository README)."
