@@ -59,6 +59,10 @@ empty.
 mod already holds and never waits on the daemon (a command that waits holds
 the prompt for up to 30 s); it sends a refresh in the background.
 
+`/ktn-view filtre error,warning` shows those severities only (sent as
+`severity=`, the daemon filters and counts); `/ktn-view filtre` shows them all
+again. A word that is not `error`, `warning` or `info` is said and ignored.
+
 ## The daemon
 
 The mod reads the per-user daemon of ktn-linter (`KTN_USER_DAEMON=1`, kodflow/ktn-linter#757)
@@ -114,10 +118,35 @@ answer, the launch button when the daemon is down. Below, the findings as a
 their counts, only the children of the ones opened. A press on a directory or
 a file opens or folds it (the key of each row is the model's stable
 `dir:` / `file:` id, never a line or a counter); the opened ids live in
-`$.state` and come back after a hot reload. The pane does not window the
-tree: the engine scrolls it natively, the daemon bounds it, and a window
-that stops short says "… N de plus, voir l'UI web". The drawing stops its
-rows below the engine's 100 000 characters.
+`$.state` and come back after a hot reload. A press on a finding shows its
+detail above the tree — rule, severity, phase, `file:line` in a `Code`
+block, the message — and a second press, or **Fermer le détail**, hides it.
+
+**Scrolling** (`scrolling`, kodflow/ktn-linter#787):
+
+- `window` (default): the mod windows the tree. The daemon serves 180 nodes
+  from an offset (`offset=` / `limit=`); the snapshot kept in `$.state` is cut
+  at 70 000 characters, since it is read again on every render, so on every
+  wheel tick. The render stays pure: it draws the rows of ITS body
+  (`scroll.bodyRows` less the head) from one offset, which it re-clamps to
+  those rows. One pane is evaluated per surface with its own rows, and
+  `ui.scroll` carries neither the surface nor the other surface's rows, so the
+  offset is one value for the instance: a surface draws at a time. The head
+  says `lignes a–b sur N`. `ui.scroll` moves the offset by `by`, clamped with
+  the snapshot's total (never `contentRows`, which counts only the rows
+  drawn), and keeps the engine's own window at the top; one spare row below
+  the body leaves the engine a row to scroll, so it raises `ui.scroll` for
+  the wheel and the arrows. Within 20 rows of either end of what is held, the
+  next window, centred on what is looked at, is asked for on the clock,
+  detached: a hook never waits on the daemon. A row not held yet draws as
+  `…`. Windowing on `e.viewport` was set aside: it does not reflect the
+  pane's body.
+- `native`: the way back to #777 — the engine scrolls the whole tree the
+  daemon serves, and a window that stops short says "… N de plus, voir l'UI
+  web".
+
+Either way the drawing stops its rows below the engine's 100 000
+characters.
 
 While the pane is placed, and only then, one timer exists: a chain of
 one-shot timers, 3 s apart, each long-polling the daemon (`wait=20`, raced
