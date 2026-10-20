@@ -67,7 +67,7 @@ _forge_ok() {
 _fable_fields() {
     [ -n "${FF_DONE:-}" ] && return 0
     FF_DONE=1 FF_SID="" FF_MODEL="" FF_TYPE="" FF_SKILL="" FF_CWD=""
-    if command -v jq >/dev/null 2>&1 && eval "$(printf '%s' "$INPUT" | jq -r '.tool_input // {} as $i | @sh "FF_SID=\(.session_id // "" | tostring) FF_MODEL=\($i.model // "" | tostring) FF_TYPE=\($i.subagent_type // "" | tostring) FF_SKILL=\($i.skill // "" | tostring) FF_CWD=\(.cwd // "" | tostring)"' 2>/dev/null)"; then
+    if command -v jq >/dev/null 2>&1 && eval "$(printf '%s' "$INPUT" | jq -r '(.tool_input // {}) as $i | @sh "FF_SID=\(.session_id // "" | tostring) FF_MODEL=\($i.model // "" | tostring) FF_TYPE=\($i.subagent_type // "" | tostring) FF_SKILL=\($i.skill // "" | tostring) FF_CWD=\(.cwd // "" | tostring)"' 2>/dev/null)"; then
         return 0
     fi
     local w='[[:space:]]*'
