@@ -27,6 +27,13 @@
 // and once the person has opened it, it seats it again from 110, session
 // after session — measured by #774). While it is placed, and only then, a
 // tick long-polls the daemon; closed, no timer is left.
+//
+// The tree is windowed by the mod (#787, `scrolling: window`, the default):
+// the daemon serves WINDOW_ROWS nodes from an offset, `$.state` keeps that
+// snapshot under WINDOW_MAX_CHARS, the render stays pure and draws the rows
+// of ITS body from ONE offset it re-clamps, and `ui.scroll` moves that offset
+// with the snapshot's total — asking for the next window, detached, near an
+// edge. `scrolling: native` is the way back to #777's native scrolling.
 
 import type { Register } from "claude-code";
 import type { KtnActivation, KtnDaemon, KtnModel, KtnSnap, KtnTree } from "../../types";
@@ -37,6 +44,7 @@ import {
   PANE_ID,
   PROBE_MAX_CALLS,
   PROBE_MAX_MS,
+  SEVERITIES,
 } from "./contract.ts";
 import { atLeast } from "./engine.ts";
 import {
@@ -48,11 +56,13 @@ import {
   type Activation,
   type Resolution,
 } from "./project.ts";
-import { band, pane, safe, stateLine, statusText } from "./view.ts";
+import { band, capWindow, nextWindow, pane, safe, scrolled, stateLine, statusText } from "./view.ts";
 
 const SNAP = { plugin: "kodflow-ktn", key: "snap" } as const;
 const TREE = { plugin: "kodflow-ktn", key: "tree" } as const;
 const EXPANDED = { plugin: "kodflow-ktn", key: "expanded" } as const;
+const OFFSET = { plugin: "kodflow-ktn", key: "offset" } as const;
+const FILTER = { plugin: "kodflow-ktn", key: "filter" } as const;
 
 // The module's own copy: the fast source. A reload starts it over, and the
 // next reconciliation rebuilds it from the disk; `$.state` keeps what is drawn.
@@ -72,6 +82,18 @@ let expanded: string[] = [];
  * which the model reads.
  */
 let uiLink: UiLink | undefined;
+/** `window` (the mod windows the tree, #787) or `native` (#777, the rollback). */
+let scrolling: "window" | "native" = "window";
+/** The windowed pane's first row; `$.state` holds the copy every surface reads. */
+let offset = 0;
+/** Rows the last windowed render gave its head, so a scroll clamps to the tree's rows. */
+let headRows = 0;
+/** The snapshot last written, for the scroll's edge check without a read. */
+let heldTree: KtnTree | undefined;
+/** The severities shown, empty for all. */
+let filter: string[] = [];
+/** The finding whose detail the pane shows. */
+let detail: string | undefined;
 
 // $.state takes JSON data: no undefined anywhere in it
 const plain = <T>(v: T): T => JSON.parse(JSON.stringify(v));
@@ -116,13 +138,46 @@ async function openPane($: any): Promise<boolean> {
 }
 
 async function writeTree($: any, model: KtnModel): Promise<void> {
+  const nodes = scrolling === "window" ? capWindow(model.nodes) : model.nodes;
   const tree: KtnTree = {
     workspace: snap.workspace ?? "",
-    nodes: model.nodes,
-    truncated: model.truncated,
+    nodes,
+    truncated: model.truncated || nodes.length < model.nodes.length,
     hidden: model.hidden,
   };
+  if (scrolling === "window") {
+    tree.from = model.from;
+    tree.total = model.total;
+  }
+  heldTree = tree;
   await $.state.set(TREE, plain(tree)).catch(() => undefined);
+}
+
+/** The windowed pane's offset, written where every surface reads it. */
+async function setOffset($: any, next: number): Promise<void> {
+  offset = next;
+  await $.state.set(OFFSET, next).catch(() => undefined);
+}
+
+/** A press on a finding: its detail, or none when it is the one shown. */
+function inspect($: any, id: string): void {
+  detail = detail === id ? undefined : id;
+  $.ui.invalidate("ui.render");
+}
+
+/** `/ktn-view filtre error,warning`: the severities shown, none for all. */
+async function setFilter($: any, words: string): Promise<string> {
+  const asked = words.split(/[\s,]+/).filter(Boolean);
+  const known = asked.filter((w) => (SEVERITIES as readonly string[]).includes(w));
+  filter = [...new Set(known)];
+  detail = undefined;
+  await $.state.set(FILTER, filter).catch(() => undefined);
+  await setOffset($, 0);
+  client?.setFilter(filter);
+  client?.nudge();
+  const left = asked.filter((w) => !known.includes(w));
+  const said = filter.length ? `ktn: filtre ${filter.join(", ")}` : "ktn: filtre retiré";
+  return left.length ? `${said} (ignoré : ${left.join(", ")} ; attendu : ${SEVERITIES.join(", ")})` : said;
 }
 
 /** A press on a directory or a file of the tree: open it, or fold it. */
@@ -197,7 +252,10 @@ async function probe($: any): Promise<void> {
     if (!same) {
       expanded = [];
       uiLink = undefined;
+      detail = undefined;
+      heldTree = undefined;
       client?.setExpand([]);
+      await setOffset($, 0);
     }
     client?.setWorkspace(workspace);
     status($);
@@ -244,11 +302,17 @@ async function start($: any, surfaces: readonly string[]): Promise<void> {
   // the terminal does not draw, the button becomes a command to copy
   const canRun = surfaces.includes("terminal");
   client = new Client(portOf($, canRun));
+  client.windowed = scrolling === "window";
   // A hot reload keeps $.state: the person's opened folders come back
   const held = await $.state.get(EXPANDED).catch(() => undefined);
   if (Array.isArray(held?.value)) {
     expanded = held.value.filter((x: unknown) => typeof x === "string").slice(0, 500);
     client.setExpand(expanded);
+  }
+  const kept = await $.state.get(FILTER).catch(() => undefined);
+  if (Array.isArray(kept?.value)) {
+    filter = kept.value.filter((x: unknown) => (SEVERITIES as readonly string[]).includes(x as string));
+    client.setFilter(filter);
   }
   await $.command
     .register({
@@ -290,6 +354,7 @@ function launch(): void {
 export const register: Register = (on, options) => {
   activation = parseActivation(options.activation);
   autoOpen = options.autoOpen === true;
+  scrolling = options.scrolling === "native" ? "native" : "window";
 
   // ONE session.start: two without a matcher keep the module from loading
   on("session.start", async ($, e, next) => {
@@ -331,6 +396,7 @@ export const register: Register = (on, options) => {
   // and a refresh leaves in the background.
   on("command.run", { command: "ktn-view" }, async ($, e) => {
     const arg = String(e.args ?? "").trim().toLowerCase();
+    if (arg === "filtre" || arg.startsWith("filtre ")) return { text: await setFilter($, arg.slice(6)) };
     if (arg === "off" || arg === "close") {
       client?.setTicking(false);
       await $.ui.close({ id: PANE_ID }).catch(() => undefined);
@@ -360,14 +426,49 @@ export const register: Register = (on, options) => {
       uiLink && (uiLink.expiresAt === 0 || uiLink.expiresAt > now)
         ? { url: uiLink.url, label: uiLink.url.split("#")[0]! }
         : undefined;
+    let win: { offset: number; bodyRows: number } | undefined;
+    if (scrolling === "window") {
+      const shared = (await $.state.get(OFFSET).catch(() => undefined))?.value;
+      const rows = Number((e.props as any)?.scroll?.bodyRows);
+      win = { offset: typeof shared === "number" ? shared : offset, bodyRows: Number.isFinite(rows) ? rows : 0 };
+    }
     return safe(els, () =>
-      pane(els, { snap: held, tree, link, now }, {
+      pane(els, { snap: held, tree, link, now, window: win, filter, detail, onLayout: (rows: number) => {
+        headRows = Math.max(0, (win?.bodyRows ?? 0) - rows);
+      } }, {
         launch,
         toggle: (id) => void toggle($, id),
         openUi: () => void openUi($),
+        inspect: (id) => inspect($, id),
       }),
     );
   });
+
+  // The windowed pane's scroll (#787): the mod moves its own offset, with
+  // the snapshot's total (never `e.contentRows`, which counts the rows drawn)
+  // and the rows this site's body gives the tree; the engine's own window is
+  // kept at the top. Near an edge of what is held, the next window is asked
+  // for, detached on the clock: the hook never waits on the daemon.
+  on("ui.scroll", { component: "Pane", requestId: "ktn-view" }, async ($, e, next) => {
+    if (scrolling !== "window") return next(e);
+    // After a hot reload the module's copy is gone; `$.state` kept it
+    heldTree ??= (await $.state.get(TREE).catch(() => undefined))?.value;
+    const tree = heldTree;
+    if (!tree) return next(e);
+    const total = tree.total ?? tree.nodes.length;
+    const rows = Math.max(1, e.bodyRows - headRows);
+    // The offset the renders read: after a hot reload the module's is 0
+    const shared = (await $.state.get(OFFSET).catch(() => undefined))?.value;
+    const from = typeof shared === "number" ? shared : offset;
+    const moved = scrolled(from, e.by, total, rows);
+    if (moved !== from) {
+      await setOffset($, moved);
+      $.ui.invalidate("ui.render");
+    }
+    const ask = nextWindow(tree, moved, rows);
+    if (ask !== undefined && client?.setWindow(ask)) $.clock.after(0, () => client?.nudge());
+    return next({ ...e, offset: 0 });
+  }).catch(($, e, next) => next(e));
 
   // The band above the prompt, while there is something to act on
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
