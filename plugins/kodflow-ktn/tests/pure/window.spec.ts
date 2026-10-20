@@ -10,7 +10,7 @@ import { WINDOW_EDGE, WINDOW_MAX_CHARS, WINDOW_ROWS } from "../../hooks/mod/cont
 import { parseModel } from "../../hooks/mod/daemon.ts";
 import { capWindow, clampOffset, maxOffset, nextWindow, pane, safe, scrolled } from "../../hooks/mod/view.ts";
 import type { KtnNode, KtnSnap, KtnTree } from "../../types/index.d.ts";
-import { WS, statusJson, world } from "./harness.ts";
+import { WS, deferred, modelJson, statusJson, world } from "./harness.ts";
 import { ELS, all, installH, textSize, texts } from "./render.ts";
 
 installH();
@@ -75,6 +75,41 @@ test("the next window: nothing inside, centred near either edge, never the one h
   assert.equal(nextWindow(undefined, 10, 30), undefined);
   const end = nextWindow(window100k(TOTAL - WINDOW_ROWS - 10), TOTAL - 5, 30)!;
   assert.equal(end, TOTAL - WINDOW_ROWS);
+});
+
+test("a window capWindow cut short still advances: the next one starts past what it asked before", () => {
+  // 180 nodes in all, the window from 0 cut to 100 by the cap: centring on
+  // WINDOW_ROWS asked for 0 again, and rows 100-179 stayed "…" for good
+  const cut: KtnTree = { ...window100k(0), total: WINDOW_ROWS, nodes: window100k(0).nodes.slice(0, 100) };
+  const offset = 90;
+  const rows = 20;
+  const next = nextWindow(cut, offset, rows);
+  assert.ok(next !== undefined && next > 0, String(next));
+  assert.ok(next! <= offset && offset + rows <= next! + 100, `${next} does not hold [${offset}, ${offset + rows})`);
+  // Uncut, the same view asks nothing: the end of the tree is held
+  assert.equal(nextWindow({ ...window100k(0), total: WINDOW_ROWS }, offset, rows), undefined);
+});
+
+test("an answer to a query that no longer stands is dropped: its revision never goes out with the new window", async () => {
+  const w = world();
+  const c = new Client(w.port);
+  c.windowed = true;
+  c.setWorkspace(WS);
+  const slow = deferred<{ status: number; text: string }>();
+  w.daemon = async (p) => (p.startsWith("/status") ? { status: 200, text: statusJson() } : slow.promise);
+  const pending = c.refresh();
+  await new Promise((r) => setImmediate(r));
+  // The pane scrolled while the old window's request was in flight
+  assert.equal(c.setWindow(360), true);
+  slow.resolve({ status: 200, text: modelJson({ rev: 42 }) });
+  await pending;
+  assert.equal(c.rev, 0);
+  assert.equal(c.model, undefined);
+  w.daemon = async (p) => (p.startsWith("/status") ? { status: 200, text: statusJson() } : { status: 204, text: "" });
+  await c.refresh();
+  const sent = new URLSearchParams(w.requests.at(-1)!.split("?")[1]);
+  assert.equal(sent.get("since"), null);
+  assert.equal(sent.get("offset"), "360");
 });
 
 test("the snapshot is cut at WINDOW_MAX_CHARS of text", () => {
