@@ -193,13 +193,48 @@ each tree, then update `KTN_LINTER_SHA` in `hooks/mod/contract.ts`.
 (`pkg/view/testdata/golden`), byte for byte at the commit `SOURCE` names. The
 pure tests read every one back whole, check that the expansions the mod sends
 are the golden queries' own, and draw them under the 100 000-character
-limit.
+limit. ktn-linter is private, so a public CI cannot read the pinned commit:
+CI holds only the pin (`SOURCE`'s sha is `KTN_LINTER_SHA`), and
+`scripts/sync-ktn-fixtures.sh --check` is the maintainer's byte-for-byte check
+through `gh` (without an argument it rewrites the copies from the pin).
 
-## Tests
+## Tests and CI
 
 ```
-node --test plugins/kodflow-ktn/tests/pure/*.spec.ts   # pure modules, no engine
-claude plugin test plugins/kodflow-ktn                 # the hooks, in the engine
+make mod-check        # all of it, as CI runs it (from the repository root)
+make mod-pure         # pure modules under node --test, no engine
+make mod-engine       # claude plugin test, behind its precondition
 ```
 
 Node 22.18 or later runs the TypeScript as it is. No npm dependency.
+
+The lanes (kodflow/ktn-linter#788), none of which can redden ktn-linter's
+release — the plugin is published here, by commit or by its own
+`kodflow-ktn/v*` tags (`kodflow-ktn-release.yml`, gated on `make mod-check`):
+
+- **`mod-ktn` in `ci.yml`, blocking.** The pure modules first, before the
+  engine is installed, so their verdict stands whatever happens to it; then
+  `make mod-check` on Claude Code pinned by `CLAUDE_CODE_VERSION`, bumped by
+  hand: the validator (one `session.start`, no tool hook, and the surface —
+  the events hooked and the `$` calls made — equal to
+  `tests/fixtures/surface.json`), then `claude plugin test`.
+- **The precondition.** `claude plugin test` exits 1 when hooks modules are
+  turned off on the machine (a remote switch, `disableAllHooks`). The engine
+  is first asked about a probe mod with one passing test
+  (`scripts/mod-lane/probe`): "turned off" there ends the lane neutral with a
+  `::warning::`, never red; any other failure of the probe stays red.
+- **`mod-latest.yml`, advisory.** Daily and on demand, never on a push or a
+  pull request, in no `needs`: the latest Claude Code against the committed
+  surface, the validator's findings and the engine suite's verdict, kept in
+  one rolling issue labelled `mod-latest` (two runs on the same gap write
+  nothing; a run with no gap closes it).
+- **`make ci-gates-check`** reads the workflows as YAML: `mod-check` is run by
+  a blocking job of `ci.yml`, every `make` target a workflow runs exists, the
+  advisory workflow stays off push and pull requests and out of every `needs`,
+  `actions/setup-node` is pinned by a 40-character sha.
+  `make mod-lane-check` tests all of the above against a fake engine and a
+  fake `gh`.
+
+A change to the surface (a new event, a new `$` call) rewrites
+`tests/fixtures/surface.json` in the same change:
+`python3 scripts/mod-surface.py surface <claude plugin validate --json report>`.
