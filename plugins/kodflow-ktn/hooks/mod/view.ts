@@ -8,7 +8,7 @@
 // `safe` turns any throw into a fallback tree of Box and Text, never a
 // closed pane or an empty band.
 import type { KtnCounts, KtnDaemon, KtnNode, KtnSnap, KtnTree } from "../../types";
-import { RENDER_BUDGET } from "./contract.ts";
+import { RENDER_BUDGET, WINDOW_EDGE, WINDOW_MAX_CHARS, WINDOW_ROWS } from "./contract.ts";
 import { clean } from "./sanitize.ts";
 
 declare const h: (type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => any;
@@ -20,6 +20,8 @@ export type Actions = {
   toggle?: (id: string) => void;
   /** Mints a link to the web UI. */
   openUi?: () => void;
+  /** Shows a finding's detail, or hides it when it is the one shown (#787). */
+  inspect?: (id: string) => void;
 };
 
 /** h without the empty children a conditional leaves behind. */
@@ -180,10 +182,14 @@ function row(els: Els, n: KtnNode, actions: Actions): { tree: any; size: number 
   if (n.kind === "finding") {
     const text = `${indent}L${n.line ?? 0} ${n.rule ?? ""} ${n.message ?? ""}`;
     const color = SEVERITY_COLOR[n.severity ?? ""];
-    return {
-      tree: el(els.Text, color ? { color, wrap: "truncate-end" } : { dimColor: true, wrap: "truncate-end" }, text),
-      size: text.length,
-    };
+    const label = el(els.Text, color ? { color, wrap: "truncate-end" } : { dimColor: true, wrap: "truncate-end" }, text);
+    // Pressed: its detail above the tree (#787)
+    if (actions.inspect)
+      return {
+        tree: el(els.Button, { key: n.id, plain: true, onPress: () => actions.inspect?.(n.id) }, label),
+        size: text.length,
+      };
+    return { tree: label, size: text.length };
   }
   const mark = n.expanded ? "▾" : "▸";
   const label = `${indent}${mark} ${n.name}${n.kind === "dir" && n.name !== "." ? "/" : ""}`;
@@ -209,7 +215,98 @@ export type PaneData = {
   /** The link the person minted, held by the module alone. */
   link?: { url: string; label: string };
   now: number;
+  /**
+   * The windowed mode (#787): the first row the mod shows and the rows of
+   * THIS render's body (`e.props.scroll.bodyRows`). Absent: the engine
+   * scrolls the whole tree natively (#777).
+   */
+  window?: { offset: number; bodyRows: number };
+  /** The severities shown, empty for all (#787). */
+  filter?: string[];
+  /** The id of the finding whose detail is shown (#787). */
+  detail?: string;
+  /** Told the rows the windowed render gave the tree (its body less its head). */
+  onLayout?: (rows: number) => void;
 };
+
+// --- the windowed mode (kodflow/ktn-linter#787) -------------------------------
+//
+// The daemon serves a window of WINDOW_ROWS nodes from `from`; the pane draws
+// [offset, offset + rows) of the whole tree, `rows` being THIS render's body
+// less the head. One instance is evaluated per surface with its own rows,
+// and `ui.scroll` carries neither the surface nor the other surface's rows:
+// the offset is one value, and every render re-clamps it to its own rows.
+
+/** The last first row a window of `rows` rows may show over `total`. */
+export function maxOffset(total: number, rows: number): number {
+  return Math.max(0, Math.floor(total) - Math.max(1, Math.floor(rows)));
+}
+
+/** `offset` brought inside [0, maxOffset]; anything not a number is 0. */
+export function clampOffset(offset: number, total: number, rows: number): number {
+  const o = Number.isFinite(offset) ? Math.floor(offset) : 0;
+  return Math.min(Math.max(0, o), maxOffset(total, rows));
+}
+
+/**
+ * `ui.scroll`: the offset moved by `by` rows, clamped with the snapshot's
+ * total — never `e.contentRows`, which counts only the rows drawn.
+ */
+export function scrolled(offset: number, by: number, total: number, rows: number): number {
+  return clampOffset((Number.isFinite(offset) ? offset : 0) + (Number.isFinite(by) ? by : 0), total, rows);
+}
+
+/**
+ * The window to ask for next, or undefined while [offset, offset + rows)
+ * stays more than WINDOW_EDGE rows inside what the snapshot holds. The new
+ * window is centred on what the person looks at.
+ */
+export function nextWindow(tree: KtnTree | undefined, offset: number, rows: number): number | undefined {
+  if (!tree) return undefined;
+  const from = tree.from ?? 0;
+  const held = tree.nodes.length;
+  const total = tree.total ?? from + held;
+  const nearTop = from > 0 && offset < from + WINDOW_EDGE;
+  const nearEnd = from + held < total && offset + rows > from + held - WINDOW_EDGE;
+  if (!nearTop && !nearEnd) return undefined;
+  const centred = offset - Math.floor(Math.max(0, WINDOW_ROWS - rows) / 2);
+  const next = Math.min(Math.max(0, centred), Math.max(0, total - WINDOW_ROWS));
+  return next === from ? undefined : next;
+}
+
+/** The text a node weighs in the snapshot, as the engine counts characters. */
+const weight = (n: KtnNode) => n.id.length + n.name.length + (n.rule?.length ?? 0) + (n.message?.length ?? 0) + 16;
+
+/**
+ * The nodes the snapshot keeps: the window as served, cut once its text
+ * passes WINDOW_MAX_CHARS — `$.state` is re-read on every render, so on
+ * every wheel tick, and the worker every mod shares pays for its size.
+ */
+export function capWindow(nodes: KtnNode[], maxChars = WINDOW_MAX_CHARS): KtnNode[] {
+  let used = 0;
+  let i = 0;
+  for (; i < nodes.length; i++) {
+    used += weight(nodes[i]!);
+    if (used > maxChars) break;
+  }
+  return i === nodes.length ? nodes : nodes.slice(0, i);
+}
+
+/** The detail of the finding `id`, drawn above the tree. */
+function detailOf(els: Els, n: KtnNode, actions: Actions): any {
+  const file = n.parent?.startsWith("file:") ? n.parent.slice(5) : "?";
+  return el(
+    els.Box,
+    { flexDirection: "column" },
+    el(els.Text, { bold: true, wrap: "truncate-end" }, `${n.rule ?? "?"} · ${n.severity ?? "?"} · phase ${n.phase ?? "?"}`),
+    el(els.Code, { source: clean(`${file}:${n.line ?? 0}`, 1_100), language: "text" }),
+    el(els.Text, null, n.message ?? ""),
+    actions.inspect ? el(els.Button, { key: "ktn-detail-close", label: "Fermer le détail", onPress: () => actions.inspect?.(n.id) }) : null,
+  );
+}
+
+/** How many rows a head element takes: a detail block counts its lines. */
+const headRows = (head: any[]) => head.reduce((s, h) => s + (h?.props?.flexDirection === "column" ? 4 : 1), 0);
 
 /**
  * The pane: the synthesis first (the state, the workspace, the totals by
@@ -244,8 +341,15 @@ export function pane(els: Els, data: PaneData, actions: Actions): any {
         : el(els.Button, { key: "ktn-open-ui", label: "Ouvrir l'UI web", onPress: actions.openUi }),
     );
   }
-  const rows: any[] = [];
   const t = d?.kind === "ready" ? data.tree : undefined;
+  const filter = (data.filter ?? []).filter((s) => typeof s === "string");
+  if (filter.length > 0)
+    head.push(el(els.Text, { dimColor: true, wrap: "truncate-end" }, `filtre : ${clean(filter.join(", "), 60)}`));
+  const shown = data.detail && t ? t.nodes.find((n) => n.id === data.detail && n.kind === "finding") : undefined;
+  if (shown) head.push(detailOf(els, shown, actions));
+  if (data.window && t && t.workspace === snap.workspace)
+    return windowed(els, head, t, data.window, actions, data.onLayout);
+  const rows: any[] = [];
   if (t && t.workspace === snap.workspace) {
     let used = 0;
     let left = 0;
@@ -263,4 +367,45 @@ export function pane(els: Els, data: PaneData, actions: Actions): any {
       rows.push(el(els.Text, { dimColor: true }, `… ${more > 0 ? `${more} de plus, ` : ""}voir l'UI web`));
   }
   return el(els.Box, { flexDirection: "column" }, head, rows);
+}
+
+/**
+ * The windowed tree: the head, then the rows [offset, offset + rows) of the
+ * whole tree, re-clamped to THIS render's rows, plus one spare row so the
+ * engine always has a row to scroll — and therefore raises `ui.scroll` for
+ * the wheel and the arrows, which the mod answers with its own offset. A
+ * row the snapshot does not hold yet draws as "…", never as a gap.
+ */
+function windowed(
+  els: Els,
+  head: any[],
+  t: KtnTree,
+  w: { offset: number; bodyRows: number },
+  actions: Actions,
+  onLayout?: (rows: number) => void,
+): any {
+  const from = t.from ?? 0;
+  const total = Math.max(t.total ?? from + t.nodes.length, 0);
+  const bodyRows = Number.isFinite(w.bodyRows) ? Math.max(0, Math.floor(w.bodyRows)) : 0;
+  // The position line is a row of the head too
+  const rows = Math.max(0, bodyRows - headRows(head) - (total > 0 ? 1 : 0));
+  const offset = clampOffset(w.offset, total, rows);
+  onLayout?.(rows);
+  if (total > 0)
+    head.push(el(els.Text, { dimColor: true }, `lignes ${offset + 1}–${Math.min(offset + Math.max(rows, 1), total)} sur ${total}`));
+  const out: any[] = [];
+  let used = 0;
+  const end = Math.min(total, offset + rows + 1);
+  for (let i = offset; i < end && used < RENDER_BUDGET; i++) {
+    const n = t.nodes[i - from];
+    if (!n) {
+      out.push(el(els.Text, { dimColor: true }, "…"));
+      used += 1;
+      continue;
+    }
+    const r = row(els, n, actions);
+    used += r.size;
+    out.push(r.tree);
+  }
+  return el(els.Box, { flexDirection: "column" }, head, out);
 }
