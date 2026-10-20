@@ -21,6 +21,10 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dir="${KTN_FIXTURES_DIR:-$root/plugins/kodflow-ktn/tests/fixtures/view}"
 contract="${KTN_CONTRACT:-$root/plugins/kodflow-ktn/hooks/mod/contract.ts}"
 mode="${1:-sync}"
+case "$mode" in
+  sync | --pin | --check) ;;
+  *) echo "usage: sync-ktn-fixtures.sh [--pin | --check]" >&2; exit 2 ;;
+esac
 
 field() { sed -n "s/^$1=//p" "$dir/SOURCE"; }
 repo="$(field repo)"
