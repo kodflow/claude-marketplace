@@ -259,7 +259,10 @@ export function scrolled(offset: number, by: number, total: number, rows: number
 /**
  * The window to ask for next, or undefined while [offset, offset + rows)
  * stays more than WINDOW_EDGE rows inside what the snapshot holds. The new
- * window is centred on what the person looks at.
+ * window is centred on what the person looks at, over the span a window
+ * actually keeps: WINDOW_ROWS, or fewer once capWindow cut it — centring
+ * on WINDOW_ROWS then would ask again for the window held, and the rows
+ * past the cut would stay "…".
  */
 export function nextWindow(tree: KtnTree | undefined, offset: number, rows: number): number | undefined {
   if (!tree) return undefined;
@@ -269,8 +272,9 @@ export function nextWindow(tree: KtnTree | undefined, offset: number, rows: numb
   const nearTop = from > 0 && offset < from + WINDOW_EDGE;
   const nearEnd = from + held < total && offset + rows > from + held - WINDOW_EDGE;
   if (!nearTop && !nearEnd) return undefined;
-  const centred = offset - Math.floor(Math.max(0, WINDOW_ROWS - rows) / 2);
-  const next = Math.min(Math.max(0, centred), Math.max(0, total - WINDOW_ROWS));
+  const span = Math.min(WINDOW_ROWS, Math.max(1, held));
+  const centred = offset - Math.floor(Math.max(0, span - rows) / 2);
+  const next = Math.min(Math.max(0, centred), Math.max(0, total - span));
   return next === from ? undefined : next;
 }
 
