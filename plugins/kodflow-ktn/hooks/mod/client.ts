@@ -104,6 +104,13 @@ export class Client {
   failures = 0;
   breakerUntil = 0;
   rev = 0;
+  /**
+   * Bumped whenever what is asked changes — the workspace, the opened ids,
+   * the window, the filter (#787). An answer to a request of an older shape
+   * is dropped: its revision would otherwise be sent with the new query and
+   * its model drawn as the new window.
+   */
+  shape = 0;
   /** Directory and file ids the pane asked to see opened (#777). */
   expand: string[] = [];
   /**
@@ -135,6 +142,7 @@ export class Client {
     if (ws === this.workspace) return;
     this.workspace = ws;
     this.rev = 0;
+    this.shape++;
     this.model = undefined;
     this.expand = [];
     this.from = 0;
@@ -321,8 +329,10 @@ export class Client {
       if (parsed.protocol !== PROTOCOL_VERSION) return this.incompatibleWith(parsed.protocol);
       this.handshaken = true;
     }
+    const asked = this.shape;
     const r = await this.request(`${VIEW_ROUTE}?${this.query(waitS)}`, waitS);
-    if (r === STALE) return;
+    // STALE, or an answer about a query that no longer stands
+    if (r === STALE || asked !== this.shape) return;
     if (isFailure(r)) return this.failed(r);
     if (r.status === 204) return this.served(now, undefined);
     if (r.status === 200) {
@@ -421,6 +431,7 @@ export class Client {
   setExpand(ids: string[]): void {
     this.expand = ids;
     this.rev = 0;
+    this.shape++;
   }
 
   /**
@@ -433,6 +444,7 @@ export class Client {
     if (next === this.from) return false;
     this.from = next;
     this.rev = 0;
+    this.shape++;
     return true;
   }
 
@@ -441,6 +453,7 @@ export class Client {
     this.filter = severities;
     this.from = 0;
     this.rev = 0;
+    this.shape++;
   }
 
   private sleep(ms: number): Promise<void> {
