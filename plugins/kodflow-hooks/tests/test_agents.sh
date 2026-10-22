@@ -324,10 +324,17 @@ stop
 proposes && printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("lacks WebFetch") and test("Open nothing before the user says yes")' >/dev/null 2>&1 \
     && ok "the user present: proposed, asking before any issue" || bad "proposal" "$OUT"
 stop; proposes && bad "proposed twice" "$OUT" || ok "proposed once"
-run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-new" | .last_assistant_message = "x\n## Agent feedback\nA new point."')"
+run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-new" | .agent_type = "kodflow-specialists:developer-specialist-go" | .last_assistant_message = "x\n## Agent feedback\nA new point."')"
 stop; proposes && printf '%s' "$OUT" | grep -q 'A new point' && ! printf '%s' "$OUT" | grep -q 'lacks WebFetch' \
     && ok "a new entry is proposed alone" || bad "new entry" "$OUT"
-run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-late" | .last_assistant_message = "x\n## Agent feedback\nLater."')"
+# An agent with no definition file (t0rec:rec-frontmatter is installed
+# nowhere) has nothing to diff: passed over, and the instruction with it
+run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-nodef" | .last_assistant_message = "x\n## Agent feedback\nNo file behind me."')"
+tail -n 1 "$SD/agent-feedback.jsonl" | jq -e '.agent_id == "a-nodef" and .definition == null' >/dev/null 2>&1 \
+    && ok "an agent with no definition file is still kept" || bad "nodef kept" "$(tail -n 1 "$SD/agent-feedback.jsonl")"
+stop; ! proposes && ! printf '%s' "$OUT" | grep -q 'No file behind me' && ! printf '%s' "$OUT" | grep -q 'a file not found' \
+    && ok "but not proposed: no definition, no diff to show" || bad "nodef proposed" "$OUT"
+run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-late" | .agent_type = "kodflow-specialists:developer-specialist-go" | .last_assistant_message = "x\n## Agent feedback\nLater."')"
 stop KODFLOW_FEEDBACK=off; proposes && bad "stop off" "$OUT" || ok "KODFLOW_FEEDBACK=off: no proposal"
 printf '%s\n' "$(( $(date +%s) - 3600 ))" > "$SD/composer-at"; rm -f "$SD/mod-beat"
 run on-user.sh "$(jq -n -c --arg sid "$SID" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:$sid,hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"go on"}')" KODFLOW_MOD=off

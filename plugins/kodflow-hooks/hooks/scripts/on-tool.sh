@@ -1301,9 +1301,9 @@ pre_edit() {
         done ;;
     esac
 
-    # No linter call here: ktn-linter delivers its own verdict through the
-    # command hooks `ktn-linter hook install` writes (kodflow/ktn-linter#771).
-    # A call from this script would report the same finding twice.
+    # No linter call before the edit: the file is linted once it is written
+    # (post_edit, lib/lint.sh), and not at all when ktn-linter's own hooks
+    # (`ktn-linter hook install`, kodflow/ktn-linter#771) already do it.
     _log
     exit 0
 }
@@ -1332,6 +1332,16 @@ post_edit() {
     # --- OBSERVE: remember the edit for the Stop hook --------------------------
     # A plain append: the path is data, never part of a command.
     mkdir -p "$STATE" 2>/dev/null && printf '%s\n' "$FILE" >> "$STATE/edited" 2>/dev/null
+
+    # --- TRANSFORM: ktn-linter on the Go file just edited (lib/lint.sh) ------
+    # After the formatter, while the model still holds the file; nothing when
+    # ktn-linter's own PostToolUse hook already lints it. KODFLOW_LINT=off.
+    if [ "${KODFLOW_LINT:-}" != off ] && [ -f "$LIB/lint.sh" ] && [ "$TOOL" != NotebookEdit ]; then
+        # shellcheck source=lib/lint.sh
+        . "$LIB/lint.sh" && kf_lint "$FILE" "$PROJECT_DIR" "$STATE" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "$TOOL"
+        [ -n "$KF_LINT" ] && ctx="${ctx:+$ctx
+}$KF_LINT"
+    fi
 
     # --- OBSERVE: risky constructs, once per session each ------------------------
     # PostToolUse additionalContext is the channel Claude actually reads;
