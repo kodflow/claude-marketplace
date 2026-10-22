@@ -245,7 +245,7 @@ try {
 
 console.log("== bash-guard corpus, the mod's guards (a real git repository)");
 // The same stage as scripts/tests/test_hooks.sh: a repository on feat/test,
-// KODFLOW_ROOT off but for the rows marked root, no merge token.
+// KODFLOW_ROOT off but for the rows marked root.
 const lab = mkdtempSync(join(tmpdir(), "kf-guard-"));
 try {
   const repo = join(lab, "repo");
@@ -280,7 +280,6 @@ try {
         return undefined;
       }
     },
-    mergeAllowed: async () => false,
     patterns: async () => rules,
   };
   const r = await replay(corpus, base);

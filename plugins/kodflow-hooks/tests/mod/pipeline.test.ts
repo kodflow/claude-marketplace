@@ -1,15 +1,9 @@
 // pipeline.test.ts — the Bash pipeline's pure modules, under `claude plugin
 // test`: the policies' order and failures, the output filter, the secret
-// veil, the merge gate, the blast radius, and the invariants over the whole
-// module. Credential shapes are assembled at run time: this file must not
+// veil, the shell reader, and the invariants over the whole module. Credential shapes are assembled at run time: this file must not
 // carry one itself (scripts/sanitize.py).
 import { test, expect } from "claude-code/testing";
-import {
-  runBash,
-  mergeFailure,
-  mayMerge,
-  type Policies,
-} from "../../hooks/mod/pipeline.ts";
+import { runBash, type Policies } from "../../hooks/mod/pipeline.ts";
 import {
   BYTE_READS,
   FILTER_VERSIONS,
@@ -24,20 +18,6 @@ import {
   veil,
   veilResult,
 } from "../../hooks/mod/veil.ts";
-import {
-  classifyBash,
-  classifyMcp,
-  gate,
-  githubCi,
-  isExempt,
-  remoteRepo,
-  resetApprovals,
-  writtenConsent,
-  YES,
-  NO,
-  type MergePort,
-} from "../../hooks/mod/merge.ts";
-import { blastRadius } from "../../hooks/mod/blast.ts";
 import { parse, argvOf, ansiC } from "../../hooks/mod/shell.ts";
 import { withLease } from "../../hooks/mod/guards.ts";
 
@@ -60,9 +40,7 @@ const R = {
 function policies(over: Partial<Policies> = {}) {
   const log: string[] = [];
   const p: Policies = {
-    merge: async () => undefined,
     guards: async () => undefined,
-    blast: async () => undefined,
     filter: async (r) => r,
     log: (policy, decision) => log.push(`${policy}:${decision}`),
     ...over,
@@ -84,23 +62,14 @@ const boom = async (): Promise<never> => {
   throw new Error("injected");
 };
 
-test("policies run in order: merge, guards, blast, the call, the filter", async () => {
+test("policies run in order: guards, the call, the filter", async () => {
   const seen: string[] = [];
   const { p } = policies({
-    merge: async () => (seen.push("merge"), undefined),
     guards: async () => (seen.push("guards"), undefined),
-    blast: async () => (seen.push("blast"), undefined),
     filter: async (r) => (seen.push("filter"), r),
   });
   await runBash(async () => (seen.push("next"), R), p);
-  expect(seen).toEqual(["merge", "guards", "blast", "next", "filter"]);
-});
-
-test("a failing merge policy refuses, and the call never runs", async () => {
-  const { out, ran, log } = await play({ merge: boom });
-  expect(ran).toBe(0);
-  expect((out as any).deny).toContain("[motif:merge]");
-  expect(log).toEqual(["merge:deny"]);
+  expect(seen).toEqual(["guards", "next", "filter"]);
 });
 
 test("a failing guard policy is logged and the call goes on", async () => {
@@ -110,13 +79,6 @@ test("a failing guard policy is logged and the call goes on", async () => {
   expect(log).toEqual(["guards:error"]);
 });
 
-test("a failing blast policy is logged and the call goes on", async () => {
-  const { out, ran, log } = await play({ blast: boom });
-  expect(ran).toBe(1);
-  expect(out).toBe(R);
-  expect(log).toEqual(["blast:error"]);
-});
-
 test("a failing filter returns r untouched", async () => {
   const { out, ran, log } = await play({ filter: boom });
   expect(ran).toBe(1);
@@ -124,20 +86,11 @@ test("a failing filter returns r untouched", async () => {
   expect(log).toEqual(["filter:error"]);
 });
 
-test("a refusal stops the line where it is raised", async () => {
+test("a guard refusal stops the line, the call never runs", async () => {
   const deny = { deny: "no" };
-  for (const k of ["merge", "guards", "blast"] as const) {
-    const { out, ran } = await play({ [k]: async () => deny });
-    expect(out).toBe(deny);
-    expect(ran).toBe(0);
-  }
-});
-
-test("the hook's last resort refuses a line that may merge, nothing else", () => {
-  expect(mayMerge("gh pr merge 3")).toBe(true);
-  expect(mayMerge("curl -X PUT https://x/repos/o/r/pulls/3/merge")).toBe(true);
-  expect(mayMerge("git status")).toBe(false);
-  expect(mergeFailure(new Error("x")).deny).toContain("[motif:merge]");
+  const { out, ran } = await play({ guards: async () => deny });
+  expect(out).toBe(deny);
+  expect(ran).toBe(0);
 });
 
 // ---------------------------------------------------------------------------
@@ -393,507 +346,8 @@ test("veil: past the size budget the result comes back as it was (fail open)", (
 });
 
 // ---------------------------------------------------------------------------
-// L5 · the merge gate
+// reader details
 // ---------------------------------------------------------------------------
-
-const HEAD = "0123456789abcdef0123456789abcdef01234567";
-const OTHER = "fedcba9876543210fedcba9876543210fedcba98";
-const env = (origin?: string) => ({
-  ghRepo: undefined,
-  origin: async () => origin,
-});
-
-test("classify: the target from -R, GH_REPO, a URL, an API path, owner/repo, project_id", async () => {
-  const t = async (line: string, o?: string) => {
-    const c = await classifyBash(line, env(o));
-    return c.kind === "merge"
-      ? c.target
-        ? `${c.target.host}:${c.target.repo}#${c.target.number}@${c.target.pinned ?? ""}`
-        : `?${c.ambiguous}`
-      : "none";
-  };
-  expect(await t("gh pr merge 12 -R o/r --squash")).toBe("github:o/r#12@");
-  expect(await t(`gh pr merge 12 --repo=o/r --match-head-commit ${HEAD}`)).toBe(
-    `github:o/r#12@${HEAD}`,
-  );
-  expect(await t("GH_REPO=o/r gh pr merge 12")).toBe("github:o/r#12@");
-  expect(await t("gh pr merge https://github.com/o/r/pull/9")).toBe(
-    "github:o/r#9@",
-  );
-  expect(await t("gh pr merge 3", "git@github.com:o/r.git")).toBe(
-    "github:o/r#3@",
-  );
-  expect(await t(`gh api -X PUT repos/o/r/pulls/4/merge -f sha=${HEAD}`)).toBe(
-    `github:o/r#4@${HEAD}`,
-  );
-  expect(await t(`glab mr merge 5 -R g/sub/p --sha ${HEAD}`)).toBe(
-    `gitlab:g/sub/p#5@${HEAD}`,
-  );
-  expect(await t("glab api -X PUT projects/g%2Fp/merge_requests/6/merge")).toBe(
-    "gitlab:g/p#6@",
-  );
-  expect(await t("git status")).toBe("none");
-  expect(await t("git merge-base a b")).toBe("none");
-  expect(await t("gh pr view 3")).toBe("none");
-  // Ambiguous: refused
-  expect((await t("gh pr merge")).startsWith("?")).toBe(true);
-  expect((await t("gh pr merge feat/x -R o/r")).startsWith("?")).toBe(true);
-  expect((await t("gh pr merge 3")).startsWith("?")).toBe(true); // no repo anywhere
-  expect(
-    (
-      await t("cd ../other && gh pr merge 3", "git@github.com:o/r.git")
-    ).startsWith("?"),
-  ).toBe(true);
-  expect(
-    (await t("gh pr merge 1 -R o/r && gh pr merge 2 -R o/r")).startsWith("?"),
-  ).toBe(true);
-  expect(
-    (
-      await t(
-        "gh api graphql -f query='mutation { mergePullRequest(input:{}) { x } }'",
-      )
-    ).startsWith("?"),
-  ).toBe(true);
-  expect(
-    (
-      await t("curl -X PUT https://api.github.com/repos/o/r/pulls/1/merge")
-    ).startsWith("?"),
-  ).toBe(true);
-  const m = classifyMcp("mcp__github__merge_pull_request", {
-    owner: "o",
-    repo: "r",
-    pullNumber: 3,
-    sha: HEAD,
-  });
-  expect(
-    m.kind === "merge" && m.target?.repo === "o/r" && m.target.pinned === HEAD,
-  ).toBe(true);
-  const g = classifyMcp("mcp__gitlab__merge_merge_request", {
-    project_id: "7",
-    merge_request_iid: "2",
-  });
-  expect(g.kind === "merge" && g.target?.repo === "7").toBe(true);
-  const auto = classifyMcp("mcp__gitlab__update_merge_request", {
-    merge_when_pipeline_succeeds: true,
-  });
-  expect(auto.kind === "merge" && !!auto.ambiguous).toBe(true);
-  expect(classifyMcp("mcp__github__get_me", {}).kind).toBe("none");
-  expect(remoteRepo("https://gitlab.com/g/sub/p.git")).toEqual({
-    host: "gitlab",
-    repo: "g/sub/p",
-  });
-});
-
-type Fake = MergePort & {
-  asked: string[];
-  tokens: string[];
-  runs: string[][];
-  notes: string[];
-  consumed: number;
-};
-
-function fake(
-  over: Partial<{
-    head: string;
-    rollup: unknown;
-    ask: () => Promise<string>;
-    present: boolean;
-    run: MergePort["run"];
-    exemptions: string;
-    now: number;
-    /** The text of the user's last prompt typed at the terminal. */
-    prompt: string;
-    /** KODFLOW_MERGE_CONSENT=off */
-    consentOff: boolean;
-  }> = {},
-): Fake {
-  let prompt = over.prompt;
-  const f: Fake = {
-    asked: [],
-    tokens: [],
-    runs: [],
-    notes: [],
-    consumed: 0,
-    run:
-      over.run ??
-      (async (argv) => {
-        f.runs.push(argv);
-        return {
-          exitCode: 0,
-          stderr: "",
-          stdout: JSON.stringify({
-            headRefOid: over.head ?? HEAD,
-            state: "OPEN",
-            statusCheckRollup: over.rollup ?? [
-              {
-                __typename: "CheckRun",
-                name: "ci",
-                status: "COMPLETED",
-                conclusion: "SUCCESS",
-              },
-            ],
-          }),
-        };
-      }),
-    ask: async (q) => {
-      f.asked.push(q);
-      return over.ask ? over.ask() : YES;
-    },
-    writeToken: async (t) => void f.tokens.push(t),
-    now: () => over.now ?? 1_000_000_000_000,
-    lastComposerAt: () =>
-      over.present === false
-        ? undefined
-        : (over.now ?? 1_000_000_000_000) - 60_000,
-    exemptions: async () => over.exemptions,
-    note: (t) => void f.notes.push(t),
-    lastPrompt: () => prompt,
-    consume: () => {
-      f.consumed++;
-      prompt = undefined;
-    },
-    consentOff: async () => over.consentOff ?? false,
-  };
-  return f;
-}
-
-const merge = (line: string) => classifyBash(line, env());
-const denied = (g: any) => (g && "deny" in g ? (g.deny as string) : "");
-
-test("gate: a subagent is refused without condition", async () => {
-  resetApprovals();
-  const f = fake();
-  const g = await gate(
-    await merge(`gh pr merge 1 -R o/r --match-head-commit ${HEAD}`),
-    { agentId: "a1" },
-    f,
-  );
-  expect(denied(g)).toContain("a subagent does not merge");
-  expect(f.runs.length + f.asked.length + f.tokens.length).toBe(0);
-});
-
-test("gate: an unpinned merge is refused with the exact command, nothing asked", async () => {
-  resetApprovals();
-  const f = fake();
-  const g = await gate(await merge("gh pr merge 12 -R o/r --squash"), {}, f);
-  expect(denied(g)).toContain(
-    `gh pr merge 12 -R o/r --squash --match-head-commit ${HEAD}`,
-  );
-  expect(denied(g)).toContain("[motif:merge]");
-  expect(f.runs[0]).toEqual([
-    "gh",
-    "pr",
-    "view",
-    "12",
-    "-R",
-    "o/r",
-    "--json",
-    "headRefOid,state,statusCheckRollup",
-  ]);
-  expect(f.asked).toEqual([]);
-  const viaEnv = await gate(
-    await merge("GH_REPO=o/r gh pr merge 12"),
-    {},
-    fake(),
-  );
-  expect(denied(viaEnv)).toContain(
-    `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
-  );
-  const api = await gate(
-    await merge("gh api -X PUT repos/o/r/pulls/4/merge"),
-    {},
-    fake(),
-  );
-  expect(denied(api)).toContain(
-    `gh api -X PUT repos/o/r/pulls/4/merge -f sha=${HEAD}`,
-  );
-  const mcp = await gate(
-    classifyMcp("mcp__github__merge_pull_request", {
-      owner: "o",
-      repo: "r",
-      pullNumber: 3,
-    }),
-    {},
-    fake(),
-  );
-  expect(denied(mcp)).toContain(`"sha": "${HEAD}"`);
-});
-
-test("gate: pinned to another head, refused with the new head", async () => {
-  resetApprovals();
-  const g = await gate(
-    await merge(`gh pr merge 12 -R o/r --match-head-commit ${OTHER}`),
-    {},
-    fake(),
-  );
-  expect(denied(g)).toContain("the head moved");
-  expect(denied(g)).toContain(`--match-head-commit ${HEAD}`);
-});
-
-test("gate: CI not green, refused before any question", async () => {
-  resetApprovals();
-  for (const [rollup, word] of [
-    [
-      [{ __typename: "CheckRun", name: "ci", status: "IN_PROGRESS" }],
-      "pending",
-    ],
-    [
-      [
-        {
-          __typename: "CheckRun",
-          name: "ci",
-          status: "COMPLETED",
-          conclusion: "FAILURE",
-        },
-      ],
-      "failing",
-    ],
-    [[], "none"],
-  ] as const) {
-    const f = fake({ rollup });
-    const g = await gate(
-      await merge(`gh pr merge 12 -R o/r --match-head-commit ${HEAD}`),
-      {},
-      f,
-    );
-    expect(denied(g)).toContain(`(${word})`);
-    expect(f.asked).toEqual([]);
-  }
-  expect(
-    githubCi([{ __typename: "StatusContext", context: "x", state: "SUCCESS" }])
-      .ci,
-  ).toBe("green");
-});
-
-test("gate: no one at the prompt in 10 minutes, refused (waiting for the user)", async () => {
-  resetApprovals();
-  const f = fake({ present: false });
-  const g = await gate(
-    await merge(`gh pr merge 12 -R o/r --match-head-commit ${HEAD}`),
-    {},
-    f,
-  );
-  expect(denied(g)).toContain("waiting for the user's OK");
-  expect(f.asked).toEqual([]);
-});
-
-test("gate: yes writes the token bound to the SHA, then the approval holds a few minutes", async () => {
-  resetApprovals();
-  const f = fake();
-  const line = `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`;
-  const g: any = await gate(await merge(line), {}, f);
-  expect(g).toEqual({ allow: false, sha: HEAD });
-  expect(f.asked.length).toBe(1);
-  expect(f.asked[0]).toContain("o/r#12");
-  expect(f.tokens[0]!.split("\n")[0]).toBe(HEAD);
-  // Same (repo, PR, SHA) within the window: no second question
-  const again = fake();
-  expect(await gate(await merge(line), {}, again)).toEqual({
-    allow: false,
-    sha: HEAD,
-  });
-  expect(again.asked).toEqual([]);
-  expect(again.tokens.length).toBe(1);
-  // Past the window: asked again
-  const later = fake({ now: 1_000_000_000_000 + 6 * 60_000 });
-  await gate(await merge(line), {}, later);
-  expect(later.asked.length).toBe(1);
-});
-
-test("gate: no, a dismissed question, a forge that fails or times out: refused", async () => {
-  resetApprovals();
-  const line = `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`;
-  const no = fake({ ask: async () => NO });
-  expect(denied(await gate(await merge(line), {}, no))).toContain(
-    "the user said no",
-  );
-  expect(no.tokens).toEqual([]);
-  const gone = fake({
-    ask: async () => Promise.reject(new Error("dismissed")),
-  });
-  expect(denied(await gate(await merge(line), {}, gone))).toContain(
-    "dismissed",
-  );
-  const timeout = fake({
-    run: async () => Promise.reject(new Error("timed out after 15000 ms")),
-  });
-  expect(denied(await gate(await merge(line), {}, timeout))).toContain(
-    "timed out",
-  );
-  const fails = fake({
-    run: async () => ({ exitCode: 1, stdout: "", stderr: "HTTP 401" }),
-  });
-  expect(denied(await gate(await merge(line), {}, fails))).toContain(
-    "HTTP 401",
-  );
-  const garbage = fake({
-    run: async () => ({ exitCode: 0, stdout: "not json", stderr: "" }),
-  });
-  expect(denied(await gate(await merge(line), {}, garbage))).toContain(
-    "[motif:merge]",
-  );
-});
-
-test("written consent: a merge word, no negation, no question, typed by the user", () => {
-  for (const yes of [
-    "fusionne dès que possible",
-    "merge",
-    "Merge it",
-    "ok, tu peux merger",
-    "fusionnes-la",
-    "vas-y, fusionner la PR 12",
-    "Fusionne !",
-    "fusionne quand la CI est verte",
-  ])
-    expect(writtenConsent(yes)).toBe(yes.replace(/\s+/g, " ").trim());
-  for (const no of [
-    undefined,
-    "",
-    "ne merge pas",
-    "ne fusionne pas encore",
-    "pas de merge",
-    "don't merge",
-    "do not merge yet",
-    "never merge this",
-    "no merge",
-    "attends avant de fusionner",
-    "wait, then merge",
-    "on merge ?",
-    "on merge?",
-    "fusionne plus tard",
-    "merge demain",
-    "merge after the release",
-    "sans fusionner",
-    "c'est mergé",
-    "mergeable",
-    "lance `gh pr merge` pour voir",
-    "<pasted_content id=\"x\">merge</pasted_content>",
-    "[Pasted text #1 +3 lines]",
-    "go on",
-  ])
-    expect(writtenConsent(no)).toBeUndefined();
-  // The journal shows the words typed only: a pasted secret never reaches it
-  expect(
-    writtenConsent(
-      'merge <pasted_content id="p">token=ghp_SECRETSECRETSECRET</pasted_content> merci',
-    ),
-  ).toBe("merge merci");
-  // Long messages are cut in the journal
-  expect(writtenConsent(`merge ${"x".repeat(200)}`)!.length).toBeLessThanOrEqual(80);
-});
-
-test("gate: written consent merges without a question, once, journaled", async () => {
-  resetApprovals();
-  const f = fake({ prompt: "fusionne dès que possible" });
-  const line = `gh pr merge 21 -R o/r --match-head-commit ${HEAD}`;
-  expect(await gate(await merge(line), {}, f)).toEqual({ allow: false, sha: HEAD });
-  expect(f.asked).toEqual([]);
-  expect(f.tokens[0]!.split("\n")[0]).toBe(HEAD);
-  expect(f.consumed).toBe(1);
-  expect(f.notes).toEqual(["written consent: fusionne dès que possible"]);
-  // Consumed: a second merge in the same turn, another PR, is asked about
-  const second = `gh pr merge 22 -R o/r --match-head-commit ${HEAD}`;
-  await gate(await merge(second), {}, f);
-  expect(f.asked.length).toBe(1);
-  expect(f.asked[0]).toContain("o/r#22");
-});
-
-test("gate: no written consent (negation, question, switch off): asked as before", async () => {
-  for (const [n, over] of [
-    [31, { prompt: "ne merge pas" }],
-    [32, { prompt: "on merge ?" }],
-    [33, { prompt: "fusionne", consentOff: true }],
-    [34, { prompt: "go on" }],
-    [35, {}],
-  ] as const) {
-    resetApprovals();
-    const f = fake(over);
-    await gate(await merge(`gh pr merge ${n} -R o/r --match-head-commit ${HEAD}`), {}, f);
-    expect(f.asked.length).toBe(1);
-    expect(f.consumed).toBe(0);
-  }
-});
-
-test("gate: written consent changes nothing else (subagent, unpinned, CI, presence)", async () => {
-  resetApprovals();
-  const sub = fake({ prompt: "fusionne" });
-  expect(
-    denied(await gate(await merge(`gh pr merge 41 -R o/r --match-head-commit ${HEAD}`), { agentId: "a1" }, sub)),
-  ).toContain("a subagent does not merge");
-  const unpinned = fake({ prompt: "fusionne" });
-  expect(denied(await gate(await merge("gh pr merge 42 -R o/r"), {}, unpinned))).toContain("not pinned");
-  const red = fake({
-    prompt: "fusionne",
-    rollup: [{ __typename: "CheckRun", name: "ci", status: "COMPLETED", conclusion: "FAILURE" }],
-  });
-  expect(
-    denied(await gate(await merge(`gh pr merge 43 -R o/r --match-head-commit ${HEAD}`), {}, red)),
-  ).toContain("CI is not green");
-  const away = fake({ prompt: "fusionne", present: false });
-  expect(
-    denied(await gate(await merge(`gh pr merge 44 -R o/r --match-head-commit ${HEAD}`), {}, away)),
-  ).toContain("waiting for the user's OK");
-  for (const f of [sub, unpinned, red, away]) {
-    expect(f.tokens).toEqual([]);
-    expect(f.consumed).toBe(0);
-  }
-});
-
-test("gate: an exempt repository passes, journaled; kodflow/claude-marketplace never is", async () => {
-  resetApprovals();
-  const f = fake({ exemptions: "# x\no/r\nkodflow/claude-marketplace\n" });
-  expect(await gate(await merge("gh pr merge 1 -R o/r"), {}, f)).toEqual({
-    allow: false,
-    sha: "",
-  });
-  expect(f.notes.length).toBe(1);
-  const k = fake({ exemptions: "kodflow/claude-marketplace\n" });
-  expect(
-    denied(
-      await gate(
-        await merge("gh pr merge 1 -R kodflow/claude-marketplace"),
-        {},
-        k,
-      ),
-    ),
-  ).toContain("not pinned");
-  expect(isExempt("O/R # c\n", "o/r")).toBe(true); // a comment ends the line
-  expect(isExempt("o/r # c\n", "O/R")).toBe(true);
-  expect(
-    isExempt("kodflow/claude-marketplace\n", "kodflow/claude-marketplace"),
-  ).toBe(false);
-});
-
-// ---------------------------------------------------------------------------
-// blast radius, reader details
-// ---------------------------------------------------------------------------
-
-test("blast radius: rm -rf in its spellings, reset --hard, a forced push", () => {
-  const b = (l: string) => blastRadius(parse(l)).length;
-  for (const l of [
-    "rm -rf build",
-    "rm -fr x",
-    "rm -r -f x",
-    "rm --recursive --force x",
-    "sudo rm -Rf /opt/x",
-    "cd x && rm -rf y",
-    "git reset --hard origin/main",
-    "git push --force origin feat",
-    "git push origin +feat",
-    "bash -c 'rm -rf x'",
-  ])
-    expect(b(l)).toBe(1);
-  for (const l of [
-    "rm -r x",
-    "rm -f x",
-    "rm x",
-    "git reset HEAD~1",
-    "git push --force-with-lease origin feat",
-    "echo 'rm -rf x'",
-    "ls",
-  ])
-    expect(b(l)).toBe(0);
-});
 
 test("reader: argv past wrappers, ANSI-C strings, the forced-push fix", () => {
   expect(
@@ -916,7 +370,7 @@ test("reader: argv past wrappers, ANSI-C strings, the forced-push fix", () => {
 test("invariant: whatever the policies, the pipeline answers r, a filtered r with the same keys, or { deny }", async () => {
   const lines = ["git status", "gh pr merge 1", "rm -rf x", "ls -la", "cat a"];
   for (const line of lines)
-    for (const fail of ["merge", "guards", "blast", "filter", "none"]) {
+    for (const fail of ["guards", "filter", "none"]) {
       const { p } = policies({
         [fail]: fail === "none" ? undefined : boom,
         filter:

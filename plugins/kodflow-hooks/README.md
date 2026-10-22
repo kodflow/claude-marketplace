@@ -9,7 +9,7 @@ list.
 Two halves. The shell scripts (`hooks/scripts/`) hold every hard guard and run
 on any Claude Code. The function hooks (`hooks/mod/`, a mod: TypeScript the
 engine loads from `hooks/hooks.json` → `modules`) serve the task tools,
-blank the attribution text, agree a merge with the user, double the Bash
+blank the attribution text, double the Bash
 guards, compress Bash output and mask secrets in every tool's result; they
 need **Claude Code 2.1.293 or later**.
 
@@ -17,8 +17,8 @@ need **Claude Code 2.1.293 or later**.
 
 `hooks/mod/register.ts` is wiring only, one `on(...)` per event; the logic
 sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
-`paths.ts`, `lint.ts`, `shell.ts`, `patterns.ts`, `guards.ts`, `merge.ts`,
-`blast.ts`, `filter.ts`, `veil.ts`, `pipeline.ts`, `fable.ts`, `cleanup.ts`, and for the three machine
+`paths.ts`, `lint.ts`, `shell.ts`, `patterns.ts`, `guards.ts`,
+`filter.ts`, `veil.ts`, `pipeline.ts`, `fable.ts`, `cleanup.ts`, and for the three machine
 guards `machine-guards.ts` over a port, with `modwall.ts`, `collision.ts`,
 `zsh.ts`), which never touch `$`: the engine follows `$` and `on` only inside
 register.ts.
@@ -31,14 +31,13 @@ register.ts.
 | `classic.SessionStart`, `prompt.submit`, every `tool.call` | writes the beat, `<config>/kodflow/sessions/<session>/mod-beat` (time in seconds), before the shell hook of the same event runs, once the tools are registered |
 | `tool.call` on a task tool | answers it (below); a refusal is `{ deny }` with the text the model reads, an internal failure a text error, never a crash |
 | `tool.call` on Bash | one pipeline of ordered policies (`pipeline.ts`), below |
-| `tool.call` on a forge merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`) | the merge gate, below |
 | every `tool.call`, after the tool ran | secrets masked in the result (`veil.ts`), below |
-| `prompt.submit` | remembers when the user last pressed Enter (`origin.kind` `composer`, `notePrompt` of machine-guards.ts, read through `lastComposerAt()`): the merge, blast-radius and collision questions are put only to someone who typed in the last 10 minutes |
+| `prompt.submit` | remembers when the user last pressed Enter (`origin.kind` `composer`, `notePrompt` of machine-guards.ts, read through `lastComposerAt()`): the collision and gated-model questions are put only to someone who typed in the last 10 minutes |
 | `attribution.text` | `""` for `commit` and `pr`; `exemption` and `remedy` untouched |
 | `plugin.register` | **modwall**: refuses every user-tier hooks module whose provenance is not `*@kodflow` (the list is in `modwall.ts`, nothing the model writes widens it); built-in and managed tiers are not judged. Each decision goes to `$.store` (`modwall`, last 100) and the debug log; a refusal is toasted once the session binds |
 | `command.run` · `/kodflow-mods` | the modules judged at this load, and the refusals on record |
 | `session.start` | **zsh-safe**: `ZDOTDIR` → `hooks/zsh`, the user's own in `KODFLOW_USER_ZDOTDIR` (`""` when unset); `hooks/zsh/.zshenv` gives ZDOTDIR back, sources the user's `.zshenv`, then `setopt nonomatch noequals`: `echo *.none` prints `*.none` instead of failing |
-| `tool.call` on `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | **collision-guard**: when another session of this machine, beating within 30 min, wrote the same file within 30 min (its `edits.tsv`), asks Continue / Move to a worktree (the model is told to call `EnterWorktree`) / Cancel, but only when the user typed a prompt at the terminal (`origin.kind` `composer`, noted by `prompt.submit`) in the last 10 minutes, the presence rule of the merge gate: otherwise it journals the collision to the debug log and lets the edit through, so a night run never waits on a question; once written, notes `<seconds>\t<path>` in `<config>/kodflow/sessions/<session>/edits.tsv` (no prompt, no content); `<config>/projects` is never checked |
+| `tool.call` on `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | **collision-guard**: when another session of this machine, beating within 30 min, wrote the same file within 30 min (its `edits.tsv`), asks Continue / Move to a worktree (the model is told to call `EnterWorktree`) / Cancel, but only when the user typed a prompt at the terminal (`origin.kind` `composer`, noted by `prompt.submit`) in the last 10 minutes (the presence rule): otherwise it journals the collision to the debug log and lets the edit through, so a night run never waits on a question; once written, notes `<seconds>\t<path>` in `<config>/kodflow/sessions/<session>/edits.tsv` (no prompt, no content); `<config>/projects` is never checked |
 | `session.end` | empties this session's `edits.tsv` |
 | `agent.spawn` | **gated models**: passes or refuses a spawn on the model it would run on, never writes one (below) |
 | `tool.call` on `Skill` | **gated models**: a skill whose frontmatter names one passes only with the session's grant, asked once like a spawn |
@@ -55,53 +54,16 @@ with its own failure rule. No policy ever answers `allow`, and none answers
 
 | # | Policy | What it does | A failure |
 |---|--------|--------------|-----------|
-| 1 | merge gate (`merge.ts`) | below | refuses |
-| 2 | guards (`guards.ts`) | the shell's Bash guards doubled, refusal only: same reader (`shell.ts`, a port of on-tool.sh's), same order of blocks, same motifs; the bash-guard corpus is replayed against both. The staged-secret scan stays the shell's alone; the mcp.json refusal is doubled (the index read by name only), and the generic `tool.call` hook holds the forge tools to it | is logged, the call goes on |
-| 3 | blast radius (`blast.ts`) | `rm` recursive and forced, `git reset --hard`, a forced push: `$.ui.ask` while the user is at the prompt; nobody there, the call goes on | is logged, the call goes on |
-| 4 | the call | the shell's `PreToolUse` runs beneath, as ever | — |
-| 5 | output filter (`filter.ts`, L3) | a line that is exactly one `git status`, `git log`, `git diff`, `ls -l`, `find` or `grep -rn` gets its stdout shortened (hints, index lines, columns, repeated prefixes); never a read whose bytes count (`cat`, `head`, `tail`, `sed`, `diff`, `git show`, `git cat-file`, …), never a failed, interrupted, persisted, image, background or structured result, only when `stdout` is a string and the engine version is inside `FILTER_VERSIONS` (CI checks the pinned one is). Every other key of the result is kept | returns the result untouched |
+| 1 | guards (`guards.ts`) | the shell's Bash guards doubled, refusal only: same reader (`shell.ts`, a port of on-tool.sh's), same order of blocks, same motifs; the bash-guard corpus is replayed against both. The staged-secret scan stays the shell's alone; the mcp.json refusal is doubled (the index read by name only), and the generic `tool.call` hook holds the forge tools to it | is logged, the call goes on |
+| 2 | the call | the shell's `PreToolUse` runs beneath, as ever | — |
+| 3 | output filter (`filter.ts`, L3) | a line that is exactly one `git status`, `git log`, `git diff`, `ls -l`, `find` or `grep -rn` gets its stdout shortened (hints, index lines, columns, repeated prefixes); never a read whose bytes count (`cat`, `head`, `tail`, `sed`, `diff`, `git show`, `git cat-file`, …), never a failed, interrupted, persisted, image, background or structured result, only when `stdout` is a string and the engine version is inside `FILTER_VERSIONS` (CI checks the pinned one is). Every other key of the result is kept | returns the result untouched |
 
 Each decision and failure is one `ModPolicy` line in the session log.
 
-### The merge gate (D4)
-
-A subagent never merges. From the main thread a merge passes only:
-
-1. its target named: `-R`, `GH_REPO`, an API path, `owner`/`repo`,
-   `project_id`, else the session directory's single remote; anything
-   ambiguous (no number, a branch, a GraphQL node id, a raw HTTP call, two
-   merges on a line, a `cd` before an unnamed one) is refused;
-2. pinned to the head it was shown: unpinned, it is refused with the exact
-   command to run (`--match-head-commit <sha>`, `--sha <sha>`, `-f sha=<sha>`,
-   `"sha"`), nothing rewritten; pinned to another head, refused with the new one;
-3. its CI green, read with `gh` or `glab` (15 s, a failure refuses);
-4. the user at the prompt in the last 10 minutes, else "waiting for the
-   user's OK"; then `$.ui.ask`. A yes writes
-   `<config>/kodflow/sessions/<sid>/merge-ok/<tool_use_id>`, the SHA first,
-   and lets the call go on intact; the yes holds five minutes per
-   (repository, number, SHA).
-
-**Written consent.** When the user's last prompt typed at the terminal
-(`origin.kind` `composer`) already says it, the question is skipped: a word
-that merges standing alone (`merge`, `merger`, `fusionne`, `fusionner`,
-`fusionnes`), no question mark, no negation, wait or later (`ne`, `pas`,
-`jamais`, `attends`, `plus tard`, `not`, `wait`, `later`, `before`…), counted
-on the words typed only (a pasted block, a paste placeholder and a `code span`
-are dropped first). That prompt writes the same token as a yes and serves one
-merge: it is consumed, and the next merge without a new message is asked
-about. Each use is journaled `merge: written consent: <first 80 characters>`.
-Everything above still holds: a subagent, an unpinned or moved head, a CI not
-green are refused whatever the prompt says. `KODFLOW_MERGE_CONSENT=off`
-(environment or the `env` block of the settings) keeps the question every
-time; a failed read of that switch keeps it too. Accepted gap: the presence
-rule comes first, so a consent written more than 10 minutes ago gives
-"waiting for the user's OK", never a merge.
-
-`on-tool.sh` refuses a main-thread merge without that token, fresh and naming
-a SHA the call carries, and spends it. The one exception is
-`merge-exemptions.txt` (versioned, fingerprinted, changed by pull request
-only, each use journaled `root_guard: merge-exempt`), where
-`kodflow/claude-marketplace` is never honoured.
+A merge asks nothing and waits on no one: from the main thread it is
+journaled (`root_guard: merge`), from a subagent it is refused. No command is
+put to the user for being irreversible (`rm -rf` included); the guards above
+still refuse what they refuse (a forced push, the delegation gate's writes).
 
 ### The secret veil
 
@@ -137,8 +99,7 @@ answer; older, the mod was loaded and is gone; absent, it never loaded.
 | attribution text | Claude Code's own (the shell guard still refuses AI attribution in a commit) |
 | what the user is told | once per session that the task tools did not load (not with `KODFLOW_MOD=off`); after an unload, `/reload-plugins` |
 
-| merge from the main thread | refused by the shell (no token): the user merges |
-| output filter, secret veil, blast-radius question, doubled guards | absent |
+| output filter, secret veil, doubled guards | absent |
 
 Every hard guard (git, delegation, protected paths, secrets) is shell and
 does not depend on the mod.
@@ -168,10 +129,10 @@ fails by accident blocks every shell call of the session.
 
 | Event | Script | Gate | Block | Transform | Observe |
 |-------|--------|------|-------|-----------|---------|
-| `PreToolUse` · Bash | `on-tool.sh` | no `git`/`gh`/`glab`/`curl`/`wget`/`http` on the line once unquoted (and no `$'…'`) | read by the shell reader below: the main thread producing into a repository (delegation gate) · `--no-verify`, `-n` on a commit, `-c core.hooksPath` · AI attribution or workflow leak in a commit message, AI attribution in a PR/MR title or body · credential shapes in the staged blobs · a forced push (`--force`, `-f`, `+refspec`), with the command to run instead · from a subagent: any merge, any push to the default branch · from the main thread: a merge without the mod's token or an exemption | none: the input is never rewritten | log; a main-thread merge is tagged `root_guard: merge` (refused), `merge-ok` or `merge-exempt` |
+| `PreToolUse` · Bash | `on-tool.sh` | no `git`/`gh`/`glab`/`curl`/`wget`/`http` on the line once unquoted (and no `$'…'`) | read by the shell reader below: the main thread producing into a repository (delegation gate) · `--no-verify`, `-n` on a commit, `-c core.hooksPath` · AI attribution or workflow leak in a commit message, AI attribution in a PR/MR title or body · credential shapes in the staged blobs · a forced push (`--force`, `-f`, `+refspec`), with the command to run instead · from a subagent: any merge, any push to the default branch | none: the input is never rewritten | log; a main-thread merge is tagged `root_guard: merge` |
 | `PreToolUse` · task tools | `on-tool.sh` | the mod's task tools never reach it (a call a function hook answers fires no `PreToolUse`); the old MCP names are logged and passed | built-in `TaskCreate`/`TodoWrite` while the mod beats: their chat panel duplicates the status line, the refusal points at the kodflow task tools | — | log |
 | `PreToolUse` · Write/Edit | `on-tool.sh` | main thread writing inside a git work tree (memory and Claude configuration excepted) · no file path | the main thread producing into a repository (delegation gate) · protected path (defaults or `.claude/protected-paths`) | — | log (no linter call: ktn-linter reports through its own command hooks) |
-| `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` · from the main thread: a merge without the mod's token or an exemption | — | log; a main-thread merge is tagged `root_guard: merge` (refused), `merge-ok` or `merge-exempt` |
+| `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` | — | log; a main-thread merge is tagged `root_guard: merge` |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent, markdown, `.claude/` | — | format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed · then, for a Go file (Write/Edit/MultiEdit), the ktn-linter findings of that file with the instruction to fix them now, unless ktn-linter's own PostToolUse hook is installed or `KODFLOW_LINT=off` (below) | edited-file tracker · risky construct warning once per session · log |
 | `PreToolUse` · Agent/Task | `on-tool.sh` | gated-model fallback first, every caller, no jq; then the main thread only | a gated model when the mod does not beat · from the main thread, a `general-purpose` dispatch whose description names an installed specialist's technology (routing gate, below) · from the main thread, `isolation: "worktree"` on work in another repository (isolation gate, below) | — | log, `root_guard: route-deny`, `route-override`, `route-noindex`, `isolation-deny` or `isolation-override` |
 | `PreToolUse` · Skill | `on-tool.sh` | the mod does not beat | a skill whose frontmatter names a gated model | — | — |
@@ -193,7 +154,7 @@ fails by accident blocks every shell call of the session.
 ## Main thread = reviewer, code is delegated
 
 The user's rule: the main thread triages, manages epics and tasks,
-dispatches, reviews, merges after the user's OK, and informs. Code
+dispatches, reviews, merges, and informs. Code
 production in a git repository is delegated: every epic is carried by at
 least one subagent working in its own git worktree
 beside the repository (`<repo parent>/.worktrees/<repo>-<epic-slug>`; when
@@ -819,9 +780,7 @@ task tool, the filter and the veil; the secret variables read are
 `SECRET_VARS`). `tests/mod/pipeline.test.ts` holds the pipeline's logic: the
 order of the policies and a failure injected into each, the filter on its
 corpus and on the "bytes" corpus (reads never touched), the veil and its false
-positives (git hashes, base64 of text), the merge gate step by step (subagent,
-ambiguity, the exact command, a moved head, CI, presence, yes, no, dismissal,
-a failing or slow forge, exemptions), and the blast radius.
+positives (git hashes, base64 of text), and the shell reader's details.
 
 A hundred and forty cases in a throwaway repository, plus the bash-guard
 corpus (about two hundred lines, rc and motif compared): every block, the
@@ -838,6 +797,6 @@ the guard they test. The delegation gate has its own suite,
 `tests/test_root_gate.sh` (run by `tests/run-tests.sh`): writes inside and
 outside a work tree (worktree gitdir files, relative and `..` paths), memory
 and configuration inside a repository, sysadmin commands allowed, every
-producing git/forge op refused including wrapped forms, merges refused without the mod's token and allowed with it (spent once, bound to its SHA), the
+producing git/forge op refused including wrapped forms, merges allowed and journaled, the
 forge MCP tools, the escapes, the subagent never gated, the Stop rule with and
 without a subagent on the epic, and the log tags.

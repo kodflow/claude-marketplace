@@ -181,10 +181,9 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 # One jq call reads every field a branch below may need. @sh single-quotes
 # each value, so a crafted path or command cannot escape into this shell.
-eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "") AID=\(.agent_id // "") PMODE=\(.permission_mode // "") NB=\(.tool_input.notebook_path // "") TUID=\(.tool_use_id // "")"' 2>/dev/null)" || exit 0
+eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "") AID=\(.agent_id // "") PMODE=\(.permission_mode // "") NB=\(.tool_input.notebook_path // "")"' 2>/dev/null)" || exit 0
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
-TUID=${TUID//[^A-Za-z0-9_-]/}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}   # session-scoped state; on-stop.sh reads it
 LIB=${BASH_SOURCE[0]%/*}/lib
@@ -877,7 +876,7 @@ _merge_words='mergePullRequest|enablePullRequestAutoMerge|merge_when_pipeline_su
 # gh: pr create/edit text, pr merge, and the REST/GraphQL equivalents.
 _guard_gh() {
     local y=1 na=${#A[@]} sub act v f hay="" ep=""
-    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) F_MREPO=${A[y+1]:-}; y=$((y+2)) ;; --hostname) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
+    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo|--hostname) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
     sub=${A[y]:-}; act=${A[y+1]:-}
     case "$sub/$act" in
         pr/create|pr/edit)
@@ -895,13 +894,7 @@ _guard_gh() {
                 y=$((y+1))
             done
             _scan pr "$hay" ;;
-        pr/merge)
-            F_MERGE="gh pr merge"
-            for v in "${A[@]:y+2}"; do
-                case "$v" in https://*/pull/*) v=${v#https://*/}; F_MREPO=${v%%/pull/*} ;; esac
-            done
-            y=$((y+2))
-            while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) F_MREPO=${A[y+1]:-}; y=$((y+2)) ;; *) y=$((y+1)) ;; esac; done ;;
+        pr/merge) F_MERGE="gh pr merge" ;;
         api/*)
             y=$((y+1))
             while [ $y -lt $na ]; do
@@ -919,7 +912,6 @@ _guard_gh() {
                 y=$((y+1))
             done
             if [[ $ep =~ $_merge_re ]]; then F_MERGE="gh api $ep"
-                [[ $ep =~ ^/?repos/([^/]+/[^/]+)/ ]] && F_MREPO=${BASH_REMATCH[1]}
             elif [ "$ep" = graphql ]; then
                 [[ $hay =~ $_merge_words ]] && F_MERGE="gh api graphql ${BASH_REMATCH[0]}"
                 [[ $hay =~ (create|update)PullRequest ]] && _scan pr "$hay"
@@ -931,7 +923,7 @@ _guard_gh() {
 # glab: mr create/update text, mr merge, and the API.
 _guard_glab() {
     local y=1 na=${#A[@]} sub act v hay=""
-    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) F_MREPO=${A[y+1]:-}; y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
+    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
     sub=${A[y]:-}; act=${A[y+1]:-}
     [[ ${A[*]} =~ $_merge_words ]] && F_MERGE="glab ${BASH_REMATCH[0]}"
     case "$sub/$act" in
@@ -947,10 +939,7 @@ _guard_glab() {
                 y=$((y+1))
             done
             _scan pr "$hay" ;;
-        mr/merge)
-            F_MERGE="glab mr merge"
-            y=$((y+2))
-            while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) F_MREPO=${A[y+1]:-}; y=$((y+2)) ;; *) y=$((y+1)) ;; esac; done ;;
+        mr/merge) F_MERGE="glab mr merge" ;;
         api/*)
             y=$((y+1))
             while [ $y -lt $na ]; do
@@ -1075,60 +1064,6 @@ _root_gate_edit() {
 }
 
 # ============================================================================
-# Merge gate · the main thread merges with the user's agreement (L5, D4)
-# ============================================================================
-# The mod (hooks/mod/merge.ts) agrees a merge: the head pinned in the call,
-# its CI green, the user's yes to its question. It then writes a token for
-# that very call, <config>/kodflow/sessions/<sid>/merge-ok/<tool_use_id>, the
-# head SHA on its first line, and lets the call through to this hook. Here
-# the merge passes only with that token, fresh (10 minutes), naming a SHA
-# the call carries; the token is spent. Else the repository must be listed
-# in merge-exemptions.txt (versioned, changed by pull request only, each use
-# journaled), where kodflow/claude-marketplace is never honoured.
-MERGE_EXEMPTIONS=${BASH_SOURCE[0]%/*}/../../merge-exemptions.txt
-
-# The repository a merge names: F_MREPO (-R, GH_REPO=, an API path, owner and
-# repo, project_id), else GH_REPO, else the origin remote. owner/repo, lower case.
-_merge_repo() {
-    local r=${F_MREPO:-${GH_REPO:-}}
-    [ -n "$r" ] || r=$(git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null) || r=""
-    r=${r%.git}; r=${r%/}
-    case "$r" in *://*) r=${r#*://}; r=${r#*/} ;; *@*:*) r=${r#*:} ;; esac
-    case "$r" in github.com/*|*/*/*) [[ $r =~ ([^/]+/[^/]+)$ ]] && r=${BASH_REMATCH[1]} ;; esac
-    printf '%s' "$r" | tr '[:upper:]' '[:lower:]'
-}
-
-# $1 a repository → 0 when merge-exemptions.txt lists it.
-_merge_exempt() {
-    local want=$1 line
-    [ -n "$want" ] && [ -f "$MERGE_EXEMPTIONS" ] || return 1
-    case "$want" in kodflow/claude-marketplace) return 1 ;; esac
-    while IFS= read -r line || [ -n "$line" ]; do
-        line=${line%%#*}; line=$(printf '%s' "$line" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
-        [ -n "$line" ] && [ "$line" = "$want" ] && return 0
-    done < "$MERGE_EXEMPTIONS"
-    return 1
-}
-
-# $1 what merges, $2 the text that must carry the agreed SHA.
-_merge_main() {
-    local tok=$SDIR/merge-ok/$TUID sha="" repo
-    if [ -n "$TUID" ] && [ -f "$tok" ]; then
-        read -r sha < "$tok" 2>/dev/null
-        if [[ $sha =~ ^[0-9a-f]{40}$ ]] && [[ $2 == *"$sha"* ]] && [ -n "$(find "$tok" -mmin -10 2>/dev/null)" ]; then
-            rm -f -- "$tok" 2>/dev/null
-            ROOT_GUARD=merge-ok; return 0
-        fi
-    fi
-    repo=$(_merge_repo)
-    if _merge_exempt "$repo"; then ROOT_GUARD=merge-exempt; return 0; fi
-    ROOT_GUARD=merge
-    _motif_block merge "MERGE BLOCKED — no agreement for this merge ($1)" \
-        "A merge from the main thread is agreed by the kodflow mod: its head pinned in the call, green CI, the user's yes." \
-        "Without the mod (KODFLOW_MOD=off, Claude Code older than 2.1.293), ask the user to merge it."
-}
-
-# ============================================================================
 # PreToolUse · Bash
 # ============================================================================
 # The input is never rewritten (D3): a forced push is refused with the
@@ -1136,7 +1071,7 @@ _merge_main() {
 pre_bash() {
     [ -n "$CMD" ] || exit 0
     F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
-    F_MODW=""; F_PLUG=""; GDIR=""; F_MREPO=""; F_MCPJSON=""; F_CALL=0; F_CGDIR=""
+    F_MODW=""; F_PLUG=""; GDIR=""; F_MCPJSON=""; F_CALL=0; F_CGDIR=""
     F_IDENT_T=""; F_IDENT_M=(); F_IDENT_OFF=""; ID_LINE_ENV=(); ID_CMD_ENV=()
 
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
@@ -1156,7 +1091,6 @@ pre_bash() {
             _mod_path "$r" && F_MODW=$r
         done
         _p_argv $k; F_HOOKS=0
-        case "$US${P_W[k]}" in *"${US}GH_REPO="*) r=${P_W[k]#*GH_REPO=}; F_MREPO=${r%%"$US"*} ;; esac
         _ident_env $k
         case "$NAME" in
             claude) _guard_claude ;;
@@ -1252,12 +1186,13 @@ pre_bash() {
     # --- BLOCK 5: a subagent never merges nor pushes to the default branch --
     if [ -n "$AID" ]; then
         [ -n "$F_MERGE" ] && _motif_block merge "COMMAND BLOCKED — a subagent does not merge ($F_MERGE)" \
-            "Merging is the main thread's decision, after the user's explicit OK." \
+            "Merging is the main thread's decision." \
             "Report the PR and its CI state; stop there."
         [ -n "$F_DEFPUSH" ] && _motif_block push-default "COMMAND BLOCKED — a subagent does not push to the default branch ($F_DEFPUSH)" \
             "Push your feature branch and open a PR."
     elif [ -n "$F_MERGE" ]; then
-        _merge_main "$F_MERGE" "$CMD"
+        # The main thread's merge is journaled, never asked about.
+        ROOT_GUARD=merge
     fi
     _ident_notice
     _log
@@ -1448,11 +1383,11 @@ post_edit() {
 pre_forge() {
     [ "$ROOT_MAIN" = 1 ] && ! _forge_ok "$TOOL" && _root_deny \
         "$TOOL writes into a repository (files, branches, pull requests); reads, reviews, comments, issues and merges stay allowed."
-    local FC="" FP="" FM=0 FB="" FS=""; F_MREPO=""
+    local FC="" FP="" FM=0 FB=""
     eval "$(printf '%s' "$INPUT" | jq -r '.tool_name as $t | .tool_input as $i
         | def s($k): ($i[$k] // empty | strings);
           (($t | test("pull_request|merge_request")) and ($t | test("review|comment|note|discussion|thread|reply") | not)) as $pr
-        | @sh "FC=\([s("message"), s("commit_message"), s("commit_title"), s("squash_commit_message"), s("merge_commit_message")] | join("\n")) FP=\(if $pr then [s("title"), s("body"), s("description")] | join("\n") else "" end) FM=\(if ($t | test("merge_pull_request$|merge_merge_request$")) or ($i.merge_when_pipeline_succeeds == true) or ($i.auto_merge == true) then 1 else 0 end) FB=\(($i.branch // "") | tostring) F_MREPO=\(if ($i.owner and $i.repo) then "\($i.owner)/\($i.repo)" else (($i.project_id // "") | tostring) end) FS=\(($i.sha // "") | tostring)"' 2>/dev/null)" || { _log; exit 0; }
+        | @sh "FC=\([s("message"), s("commit_message"), s("commit_title"), s("squash_commit_message"), s("merge_commit_message")] | join("\n")) FP=\(if $pr then [s("title"), s("body"), s("description")] | join("\n") else "" end) FM=\(if ($t | test("merge_pull_request$|merge_merge_request$")) or ($i.merge_when_pipeline_succeeds == true) or ($i.auto_merge == true) then 1 else 0 end) FB=\(($i.branch // "") | tostring)"' 2>/dev/null)" || { _log; exit 0; }
     F_ATTR=""; F_ATTR_KIND=""
     _scan commit "$FC"; _scan pr "$FP"
     [ -n "$F_ATTR" ] && _motif_block "${F_ATTR%% *}" "$TOOL BLOCKED — AI reference detected" \
@@ -1491,7 +1426,7 @@ pre_forge() {
     [ -n "$MJ" ] && _mcpjson_block "$TOOL: $MJ"
     if [ -n "$AID" ]; then
         [ "$FM" = 1 ] && _motif_block merge "$TOOL BLOCKED — a subagent does not merge" \
-            "Merging is the main thread's decision, after the user's explicit OK." "Report the PR and its CI state; stop there."
+            "Merging is the main thread's decision." "Report the PR and its CI state; stop there."
         case "$FB" in main|master|refs/heads/main|refs/heads/master)
             case "$TOOL" in *push_files|*create_or_update_file|*delete_file|*git_push|*git_commit)
                 _motif_block push-default "$TOOL BLOCKED — a subagent does not write to the default branch ($FB)" \
@@ -1499,7 +1434,7 @@ pre_forge() {
             esac ;;
         esac
     elif [ "$FM" = 1 ]; then
-        _merge_main "$TOOL" "$FS"
+        ROOT_GUARD=merge
     fi
     _log
     exit 0
