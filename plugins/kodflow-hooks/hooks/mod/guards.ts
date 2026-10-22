@@ -25,8 +25,6 @@ export type GuardCtx = {
   read(path: string): Promise<string | undefined>;
   /** `git -C dir …`'s stdout, undefined on failure. */
   git(dir: string, args: string[]): Promise<string | undefined>;
-  /** Main thread only: the merge holds a token (L5) or an exemption. */
-  mergeAllowed(): Promise<boolean>;
   /** The vendored §5 rules (hooks/patterns), undefined when unreadable. */
   patterns(): Promise<Rules | undefined>;
 };
@@ -890,7 +888,7 @@ export async function verdict(
         motif: "merge",
         title: `COMMAND BLOCKED — a subagent does not merge (${f.merge})`,
         lines: [
-          "Merging is the main thread's decision, after the user's explicit OK.",
+          "Merging is the main thread's decision.",
           "Report the PR and its CI state; stop there.",
         ],
       };
@@ -900,14 +898,7 @@ export async function verdict(
         title: `COMMAND BLOCKED — a subagent does not push to the default branch (${f.defaultPush})`,
         lines: ["Push your feature branch and open a PR."],
       };
-  } else if (f.merge && !(await ctx.mergeAllowed()))
-    return {
-      motif: "merge",
-      title: `COMMAND BLOCKED — merge without the user's OK (${f.merge})`,
-      lines: [
-        "A merge from the main thread needs green CI and the user's answer to the kodflow merge question.",
-      ],
-    };
+  }
   return undefined;
 }
 
