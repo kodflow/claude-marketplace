@@ -50,112 +50,11 @@ count=$((count + 1)); printf '%d' "$count" > "$STATE/stop-count" 2>/dev/null
 
 ctx=""
 
-# This session's edits, from the tracker on-tool.sh fills: an append-only
-# list, one path per edit. The CLAUDE.md nudge below reads all of it.
+# This session's edits, from the tracker on-tool.sh fills. ktn-linter runs
+# at PostToolUse on the file just edited (lib/lint.sh), not here: a report at
+# turn end came after the work and changed nothing (#75).
 edited=""
 [ -f "$STATE/edited" ] && edited=$(sort -u "$STATE/edited" 2>/dev/null)
-
-# --- TRANSFORM: ktn-linter run on the Go packages edited since the last Stop -
-# KODFLOW_LINT=off turns this section off, its state untouched.
-# The daemon is never called from here: ktn-linter delivers its verdict through
-# the command hooks `ktn-linter hook install` writes (kodflow/ktn-linter#771).
-# This is the CLI, on the packages edited since the previous Stop only: the
-# window starts at lint-cursor, the tracker's line count when the last
-# complete run began, and moves only once a run completes, so a timeout
-# leaves its edits for the next Stop. A session-wide window re-linted, at
-# every turn end, code nobody was working on any more.
-# Only a file that still exists, under the project root once symlinks are
-# resolved, and not in the scratchpad: an abandoned worktree, ~/.cache or a
-# scratch copy is not this session's code. The Go project of each is the
-# go.mod nearest it, never above the root (lib/gomod.sh): making.codes has no
-# go.mod at its root, only projects/making.codes/go.mod.
-# Per module, from its own directory, packages relative to it: a git diff
-# would pull in every other session's work on the branch, and a package path
-# from the project root means nothing to a module that does not sit there.
-# `ktn-linter run`; `project-linter lint` only when ktn-linter is not on PATH
-# (the old name, kept as a fallback). stdout only: whatever the CLI says on
-# stderr — package status, the notice that a daemon already serves the
-# directory — would land in the model's context at every turn end.
-# A module's report is given once: the same findings again stay silent
-# (lint-last/, one signature per module), a clean run clears the record so a
-# regression is reported anew.
-if [ "${KODFLOW_LINT:-}" != off ] && [ -f "$STATE/edited" ]; then
-    lint_from=0; [ -f "$STATE/lint-cursor" ] && read -r lint_from < "$STATE/lint-cursor"
-    case "$lint_from" in ''|*[!0-9]*) lint_from=0 ;; esac
-    lint_to=$(wc -l < "$STATE/edited" 2>/dev/null | tr -d ' ')
-    case "$lint_to" in ''|*[!0-9]*) lint_to=0 ;; esac
-    # A tracker shorter than the cursor was emptied or replaced: start over
-    [ "$lint_from" -gt "$lint_to" ] && lint_from=0
-    lint_edited="" lint_done=1
-    if [ "$lint_to" -gt "$lint_from" ]; then
-        lint_root=$(cd "$PROJECT_DIR" 2>/dev/null && pwd -P)
-        lint_sp=$(cd "${SCRATCH:-/nonexistent}" 2>/dev/null && pwd -P)
-        lint_st=$(cd "$STATE" 2>/dev/null && pwd -P)
-        while IFS= read -r f; do
-            case "$f" in /*.go) ;; *) continue ;; esac
-            [ -f "$f" ] && [ -n "$lint_root" ] || continue
-            c=$(cd "${f%/*}" 2>/dev/null && pwd -P) || continue
-            case "$c/" in "${lint_root%/}"/*) ;; *) continue ;; esac
-            [ -n "$lint_sp" ] && case "$c/" in "${lint_sp%/}"/*) continue ;; esac
-            [ -n "$lint_st" ] && case "$c/" in "${lint_st%/}"/*) continue ;; esac
-            lint_edited="$lint_edited$f"$'\n'
-        done < <(head -n "$lint_to" "$STATE/edited" 2>/dev/null | tail -n +"$((lint_from + 1))" | sort -u)
-    fi
-    KF_GOMODS=""
-    [ -n "$lint_edited" ] && . "$LIB/gomod.sh" 2>/dev/null && kf_gomods "$PROJECT_DIR" <<<"$lint_edited"
-    linter=()
-    if command -v ktn-linter >/dev/null 2>&1; then linter=(ktn-linter run)
-    elif command -v project-linter >/dev/null 2>&1; then linter=(project-linter lint)
-    fi
-    if [ -n "$KF_GOMODS" ] && [ ${#linter[@]} -gt 0 ]; then
-        mkdir -p "$STATE/lint-last" 2>/dev/null
-        # macOS ships no timeout(1): the run is then unbounded but still runs
-        limit=(); command -v timeout >/dev/null 2>&1 && limit=(timeout 20)
-        while IFS= read -r mod; do
-            pkgs=() seen=$'\n'
-            while IFS= read -r f; do
-                case "$f" in "$mod"/*.go) ;; *) continue ;; esac
-                kf_gomod "$f" "$PROJECT_DIR" && [ "$KF_GOMOD" = "$mod" ] || continue
-                d=${f%/*}; d=.${d#"$mod"}
-                case "$seen" in *$'\n'"$d"$'\n'*) continue ;; esac
-                seen="$seen$d"$'\n'; pkgs+=("$d")
-            done <<<"$lint_edited"
-            [ ${#pkgs[@]} -gt 0 ] || continue
-            out=$(cd "$mod" && "${limit[@]}" "${linter[@]}" "${pkgs[@]}" 2>/dev/null); rc=$?
-            out=$(printf '%s\n' "$out" | tail -50)
-            [ ${#out} -gt 2000 ] && out="${out:0:2000}…(truncated)"
-            rel=${mod#"$PROJECT_DIR"}; rel=${rel#/}
-            # 0 clean, 1 findings (on stdout), 42 a daemon already serves the
-            # module and reports through its own hooks: nothing to add. Anything
-            # else is a run that did not complete, said in one line rather than
-            # by the CLI's stderr, so silence never reads as a clean module.
-            case "$rc" in
-                0|1|42) ;;
-                124) lint_done=0; out="${out:+$out
-}(${linter[0]} did not finish within 20 s: not linted)" ;;
-                *) lint_done=0; out="${out:+$out
-}(${linter[0]} did not complete, exit $rc: run it in ${rel:-.} to see why)" ;;
-            esac
-            last=$STATE/lint-last/$(printf '%s' "$mod" | cksum | cut -d' ' -f1)
-            if [ -z "$out" ]; then
-                rm -f -- "$last" 2>/dev/null
-                continue
-            fi
-            sig=$(printf '%s' "$out" | cksum | cut -d' ' -f1)
-            prev=""; [ -f "$last" ] && read -r prev < "$last"
-            [ "$prev" = "$sig" ] && continue
-            printf '%s\n' "$sig" > "$last.$$" 2>/dev/null && mv -f "$last.$$" "$last" 2>/dev/null
-            ctx="${ctx:+$ctx
-}${linter[0]} (edited since the last Stop, ${rel:-.}):
-$out"
-        done <<<"$KF_GOMODS"
-    fi
-    # The window is spent only by a run that completed for every module, or
-    # by one with nothing to lint; then the next Stop starts where it began.
-    if [ "$lint_done" = 1 ]; then
-        printf '%s\n' "$lint_to" > "$STATE/lint-cursor.$$" 2>/dev/null && mv -f "$STATE/lint-cursor.$$" "$STATE/lint-cursor" 2>/dev/null
-    fi
-fi
 
 # The CLAUDE.md of every directory this session changed must describe what
 # changed (warmup --update convention). Once per directory per session: the

@@ -747,16 +747,23 @@ printf '%s' "$OUT" | jq -e '.terminalSequence' >/dev/null 2>&1 && ok "permission
 run Notification "" '{"notification_type":"auth_success","message":"x"}' on-user.sh
 [ -z "$OUT" ] && ok "other notifications stay silent" || bad "notification silent" "$OUT"
 
-echo "== ktn-linter · Go projects only (the nearest go.mod, never above the root)"
-# A fake ktn-linter, project-linter and curl record what reaches them; a
-# listener on the old daemon port proves the hooks no longer dial it
-# (kodflow/ktn-linter#771): ktn-linter delivers its verdict through its own
-# command hooks, so only the go.mod rule decides whether the CLI runs.
+echo "== ktn-linter · at PostToolUse, on the Go file just edited (#75)"
+# A fake ktn-linter answers --version, logs every run and prints lint.json
+# with the exit code in lint.rc (lint.sleep: that many seconds first); a fake
+# curl and a listener on the old daemon port prove no hook dials a daemon
+# (kodflow/ktn-linter#771).
 FB=$T/fakebin; mkdir -p "$FB"; LL=$T/linter.log; : > "$LL"
-printf '#!/bin/sh\necho "ktn-linter $(pwd) $*" >> "%s"\necho "lint report"\necho "stderr noise" >&2\n' "$LL" > "$FB/ktn-linter"
-printf '#!/bin/sh\necho "project-linter $(pwd) $*" >> "%s"\necho "old report"\n' "$LL" > "$FB/project-linter"
+cat > "$FB/ktn-linter" <<STUB
+#!/bin/sh
+[ "\$1" = --version ] && { echo "ktn-linter version 9.9.9"; exit 0; }
+echo "ktn-linter \$(pwd) \$*" >> "$LL"
+[ -f "$T/lint.sleep" ] && sleep "\$(cat "$T/lint.sleep")"
+echo "stderr noise" >&2
+cat "$T/lint.json" 2>/dev/null
+exit "\$(cat "$T/lint.rc" 2>/dev/null || echo 0)"
+STUB
 printf '#!/bin/sh\necho "curl $*" >> "%s"\necho "{}"\n' "$LL" > "$FB/curl"
-chmod +x "$FB/ktn-linter" "$FB/project-linter" "$FB/curl"
+chmod +x "$FB/ktn-linter" "$FB/curl"
 LP=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])' 2>/dev/null)
 python3 -c 'import socket,sys,time
 s=socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1", int(sys.argv[1]))); s.listen(64); time.sleep(60)' "$LP" &
@@ -766,119 +773,84 @@ lrun() { local ev=$1 tool=$2 frag=$3 script=$4
     OUT=$(jq -n -c --arg ev "$ev" --arg tool "$tool" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" --argjson frag "$frag" \
         '{session_id:"sess-1",hook_event_name:$ev,tool_name:$tool,cwd:$cwd,scratchpad_dir:$sp,tool_use_id:"t1"} + $frag' \
         | PATH="${LPATH:-$FB:$PATH}" KTN_LINTER_PORT=$LP "${HOOK_SHELL:-bash}" "$S/$script" 2>/dev/null); RC=$?; }
-# The Stop lint keeps a window (lint-cursor) and the last report of each
-# module (lint-last/): an independent case starts from neither.
-lfresh() { rm -rf "$T/tmp/sp/stop-count" "$T/tmp/sp/lint-cursor" "$T/tmp/sp/lint-last"; }
-lstop() { rm -f "$T/tmp/sp/stop-count"; : > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh; }
 lctx() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null; }
 # A triage gate left raised by an earlier case would refuse the edit first
 rm -f "$T/home/.claude/kodflow/sessions/sess-1/triage-pending"
 # on-tool.sh skips files under /tmp, where mktemp puts $T on Linux: the
-# pre-edit cases get a project of their own inside the checkout.
-PP=$(mktemp -d "$ROOT/.kf-gomod.XXXXXX")
-mkdir -p "$PP/projects/app/cmd/x" "$PP/tools"; printf 'module app\n' > "$PP/projects/app/go.mod"
-: > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PreToolUse Edit "$(jq -n -c --arg f "$PP/projects/app/cmd/x/main.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
-[ ! -s "$LL" ] && [ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "pre-edit: a file of a Go module reaches no daemon (ktn-linter's own hooks report)" || bad "pre-edit module" "rc=$RC out=$OUT log=$(cat "$LL")"
-rm -rf "$PP"
-GM=$T/repo/projects/app; mkdir -p "$GM/cmd/x" "$T/repo/tools"
-printf 'module app\n' > "$GM/go.mod"; printf 'package main\n' > "$GM/cmd/x/main.go"; printf 'x\n' > "$T/repo/tools/gen.go"
-rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/claudemd-nudged"
-printf '%s\n' "$T/repo/tools/gen.go" "$T/repo/a.txt" > "$T/tmp/sp/edited"
-: > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
-[ ! -s "$LL" ] && ok "stop: edits outside any Go project reach neither a daemon nor the CLI" || bad "stop outside" "$(cat "$LL")"
-lfresh
-printf '%s\n' "$T/repo/tools/gen.go" "$GM/cmd/x/main.go" "$GM/go.mod" > "$T/tmp/sp/edited"
-: > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
-! grep -q '^curl ' "$LL" && ok "stop: an edit in a module reaches no daemon" || bad "stop daemon" "$(cat "$LL")"
-grep -qx "ktn-linter $GM run ./cmd/x" "$LL" && ! grep -q '^project-linter ' "$LL" \
-    && ok "stop: ktn-linter run from the module, on its own package paths" || bad "stop cli" "$(cat "$LL")"
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("ktn-linter \\(edited since the last Stop, projects/app\\):\nlint report")' >/dev/null 2>&1 \
-    && ok "stop: the report names its module" || bad "stop report" "$OUT"
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("stderr noise") | not' >/dev/null 2>&1 \
-    && ok "stop: the CLI's stderr never reaches the context" || bad "stop stderr" "$OUT"
-# A run that does not complete says so in one line; a refusal beside a live
-# daemon (42) stays silent, its stderr included
-for case_rc in 3:"did not complete, exit 3" 42:""; do
-    code=${case_rc%%:*} want=${case_rc#*:}
-    printf '#!/bin/sh\necho "boom on stderr" >&2\nexit %s\n' "$code" > "$FB/ktn-linter"; chmod +x "$FB/ktn-linter"
-    lfresh; : > "$LL"; lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
-    ctxv=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // ""' 2>/dev/null)
-    if [ -n "$want" ]; then
-        case "$ctxv" in *"$want"*) case "$ctxv" in *boom*) bad "stop exit $code" "$OUT" ;; *) ok "stop: exit $code is reported in one line, without the stderr" ;; esac ;; *) bad "stop exit $code" "$OUT" ;; esac
-    else
-        case "$ctxv" in *ktn-linter*|*boom*) bad "stop exit $code" "$OUT" ;; *) ok "stop: exit 42 (a daemon serves the module) stays silent" ;; esac
-    fi
+# cases get a project of their own inside the checkout.
+PP=$(mktemp -d "$ROOT/.kf-gomod.XXXXXX"); GM=$PP/projects/app
+mkdir -p "$GM/cmd/x" "$PP/tools"; printf 'module app\n' > "$GM/go.mod"
+printf 'package main\n' > "$GM/cmd/x/main.go"; printf 'package main\n' > "$GM/cmd/x/other.go"; printf 'x\n' > "$PP/tools/gen.go"
+: > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PreToolUse Edit "$(jq -n -c --arg f "$GM/cmd/x/main.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
+[ ! -s "$LL" ] && [ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "pre-edit: nothing is linted before the edit" || bad "pre-edit module" "rc=$RC out=$OUT log=$(cat "$LL")"
+# lint.json: two findings of main.go (lines A, B) and one of other.go
+ljson() { jq -n -c --arg m "$GM/cmd/x/main.go" --arg o "$GM/cmd/x/other.go" --argjson a "$1" --argjson b "$2" --arg extra "${3:-}" \
+    '{results: ([{ruleId:"KTN-CONST-TYPED",level:"warning",message:"constant X needs explicit type",location:{file:$m,line:$a,column:7}},
+                 {ruleId:"KTN-FUNC-UNUSEDARG",level:"info",message:"parameter a unused",location:{file:$m,line:$b,column:8}},
+                 {ruleId:"KTN-OTHER",level:"warning",message:"elsewhere",location:{file:$o,line:1,column:1}}]
+                + (if $extra == "" then [] else [{ruleId:$extra,level:"error",message:"new one",location:{file:$m,line:9,column:1}}] end))}' > "$T/lint.json"; }
+ledit() { : > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PostToolUse "${2:-Edit}" "$(jq -n -c --arg f "$1" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh; }
+ljson 3 5; printf '1\n' > "$T/lint.rc"; rm -rf "$T/tmp/sp/lint-file" "$T/tmp/sp/lint-policy-told"
+ledit "$PP/tools/gen.go"
+[ ! -s "$LL" ] && ! lctx | grep -q ktn-linter && ok "post-edit: a file outside any Go project is not linted" || bad "post outside" "$(cat "$LL") $OUT"
+ledit "$GM/cmd/x/main.go"
+grep -qx "ktn-linter $GM run --json --no-color ./cmd/x" "$LL" && ! grep -q '^curl ' "$LL" \
+    && ok "post-edit: ktn-linter run on the file's package, from its module, no daemon dialled" || bad "post run" "$(cat "$LL")"
+C=$(lctx)
+case "$C" in *"ktn-linter 9.9.9: 2 finding(s) in projects/app/cmd/x/main.go after this edit:"*"projects/app/cmd/x/main.go:3:7 KTN-CONST-TYPED (warning) constant X needs explicit type"*"main.go:5:8 KTN-FUNC-UNUSEDARG"*)
+    ok "post-edit: the edited file's findings, with file:line, rule and version" ;; *) bad "post findings" "$C" ;; esac
+case "$C" in *KTN-OTHER*|*"stderr noise"*) bad "post filter" "$C" ;; *) ok "post-edit: another file's findings and the CLI's stderr are left out" ;; esac
+case "$C" in *"Fix each finding now, in this change."*"heavy refactor is still a fix, not a false positive and not a reason to skip it"*"never skip a finding silently"*"certain a finding is a false positive: open a complete issue on kodflow/ktn-linter (the rule ID, a minimal reproduction, file:line, the expected and the actual result, the ktn-linter version), then go on."*)
+    ok "post-edit: the instruction (fix now, heavy is not false, an issue only when certain)" ;; *) bad "post policy" "$C" ;; esac
+ledit "$GM/cmd/x/main.go"
+[ -s "$LL" ] && ! lctx | grep -q ktn-linter && ok "post-edit: the same findings again are not repeated" || bad "post dedupe" "$(cat "$LL") $OUT"
+ljson 4 6; ledit "$GM/cmd/x/main.go"
+! lctx | grep -q ktn-linter && ok "post-edit: findings only moved by the edit stay quiet" || bad "post moved" "$OUT"
+ljson 4 6 KTN-NEW-RULE; ledit "$GM/cmd/x/main.go"
+lctx | grep -q 'main.go:9:1 KTN-NEW-RULE (error) new one' && ok "post-edit: a changed set is reported" || bad "post changed" "$OUT"
+printf '0\n' > "$T/lint.rc"; printf '{"results":[]}\n' > "$T/lint.json"; ledit "$GM/cmd/x/main.go"
+[ -z "$(lctx)" ] && ok "post-edit: a clean file is silent" || bad "post clean" "$OUT"
+ljson 4 6 KTN-NEW-RULE; printf '1\n' > "$T/lint.rc"; ledit "$GM/cmd/x/main.go"
+lctx | grep -q KTN-NEW-RULE && ok "post-edit: after a clean run the same findings are a regression, reported" || bad "post regression" "$OUT"
+ljson 3 5; ledit "$GM/cmd/x/main.go" Write
+lctx | grep -q 'main.go:3:7 KTN-CONST-TYPED' && ok "post-edit: a Write is linted like an Edit" || bad "post write" "$OUT"
+for rc in 42 3; do
+    ljson 1 2 KTN-RC-$rc; printf '%s\n' "$rc" > "$T/lint.rc"; ledit "$GM/cmd/x/main.go"
+    [ -s "$LL" ] && [ "$RC" -eq 0 ] && [ -z "$(lctx)" ] && ok "post-edit: exit $rc is silent and fails open" || bad "post rc $rc" "rc=$RC $OUT"
 done
-# ktn-linter absent: project-linter, the old name, is the fallback
-lfresh; rm -f "$FB/ktn-linter"; mkdir -p "$T/nokt"
-for t in bash jq cat sort grep head tail cut awk date cksum mkdir touch rm mv wc tr sed flock timeout dirname env; do
+printf '1\n' > "$T/lint.rc"; jq -n -c --arg o "$GM/cmd/x/other.go" '{results:[{ruleId:"KTN-OTHER",level:"warning",message:"elsewhere",location:{file:$o,line:1,column:1}}]}' > "$T/lint.json"
+ledit "$GM/cmd/x/main.go"
+[ -z "$(lctx)" ] && ok "post-edit: findings of other files only: silent" || bad "post others only" "$OUT"
+# Bounded: a run past KF_LINT_TIMEOUT is cut, with timeout(1) and without
+mkdir -p "$T/nokt"
+for t in bash jq cat sort grep head tail cut awk date cksum mkdir touch rm mv wc tr sed flock dirname env sleep kill; do
     p=$(command -v "$t" 2>/dev/null) && ln -sf "$p" "$T/nokt/$t"
 done
-ln -sf "$FB/project-linter" "$T/nokt/project-linter"
-: > "$LL"; LPATH=$T/nokt lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
-grep -qx "project-linter $GM lint ./cmd/x" "$LL" && ok "stop: project-linter lint only when ktn-linter is not on PATH" || bad "stop fallback" "$(cat "$LL") out=$OUT"
-rm -rf "$T/nokt"
-
-echo "== ktn-linter · edits since the last Stop, each report once (#75)"
-# The stub says what lint.out holds and exits with lint.rc
-printf '#!/bin/sh\necho "ktn-linter $(pwd) $*" >> "%s"\ncat "%s" 2>/dev/null\nexit $(cat "%s" 2>/dev/null || echo 0)\n' "$LL" "$T/lint.out" "$T/lint.rc" > "$FB/ktn-linter"
-chmod +x "$FB/ktn-linter"; printf 'finding A\n' > "$T/lint.out"; printf '1\n' > "$T/lint.rc"
-mkdir -p "$GM/cmd/y" "$GM/cmd/z"; printf 'package main\n' > "$GM/cmd/y/main.go"
-lfresh; printf '%s\n' "$GM/cmd/x/main.go" > "$T/tmp/sp/edited"
-lstop
-grep -qx "ktn-linter $GM run ./cmd/x" "$LL" && lctx | grep -q 'finding A' && ok "lint: a first Stop lints and reports" || bad "lint first" "$(cat "$LL") $OUT"
-lstop
-[ ! -s "$LL" ] && ! lctx | grep -q ktn-linter && ok "lint: a Stop with no new edit runs nothing" || bad "lint no edit" "$(cat "$LL") $OUT"
-printf '%s\n' "$GM/cmd/y/main.go" >> "$T/tmp/sp/edited"; lstop
-grep -qx "ktn-linter $GM run ./cmd/y" "$LL" && [ "$(wc -l < "$LL" | tr -d ' ')" = 1 ] \
-    && ok "lint: only the package edited since the last Stop" || bad "lint window" "$(cat "$LL")"
-! lctx | grep -q 'finding A' && ok "lint: the same findings again stay silent" || bad "lint dedupe" "$OUT"
-printf 'finding B\n' > "$T/lint.out"; printf '%s\n' "$GM/cmd/y/main.go" >> "$T/tmp/sp/edited"; lstop
-lctx | grep -q 'finding B' && ok "lint: changed findings are reported" || bad "lint changed" "$OUT"
-: > "$T/lint.out"; printf '0\n' > "$T/lint.rc"; printf '%s\n' "$GM/cmd/y/main.go" >> "$T/tmp/sp/edited"; lstop
-printf 'finding B\n' > "$T/lint.out"; printf '1\n' > "$T/lint.rc"; printf '%s\n' "$GM/cmd/y/main.go" >> "$T/tmp/sp/edited"; lstop
-lctx | grep -q 'finding B' && ok "lint: after a clean run, the same findings are a regression, reported" || bad "lint regression" "$OUT"
-# KODFLOW_LINT=off: nothing runs, the window is left for later
-printf 'finding C\n' > "$T/lint.out"; printf '%s\n' "$GM/cmd/x/main.go" >> "$T/tmp/sp/edited"
-cur=$(cat "$T/tmp/sp/lint-cursor"); rm -f "$T/tmp/sp/stop-count"; : > "$LL"
-KODFLOW_LINT=off lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
-[ ! -s "$LL" ] && ! lctx | grep -q ktn-linter && [ "$(cat "$T/tmp/sp/lint-cursor")" = "$cur" ] \
-    && ok "lint: KODFLOW_LINT=off runs nothing and keeps the window" || bad "lint off" "$(cat "$LL") $OUT"
-lstop
-grep -qx "ktn-linter $GM run ./cmd/x" "$LL" && lctx | grep -q 'finding C' && ok "lint: switched back on, the kept edit is linted" || bad "lint back on" "$(cat "$LL")"
-# A file deleted since its edit, one reached through a symlink out of the
-# project, one in a scratchpad inside the project: none is linted
-printf 'package main\n' > "$GM/cmd/z/main.go"; printf '%s\n' "$GM/cmd/z/main.go" >> "$T/tmp/sp/edited"; rm -f "$GM/cmd/z/main.go"
-lstop
-[ ! -s "$LL" ] && ok "lint: a file deleted since its edit is not linted" || bad "lint deleted" "$(cat "$LL")"
-mkdir -p "$T/outside/cmd/w"; printf 'module out\n' > "$T/outside/go.mod"; printf 'package main\n' > "$T/outside/cmd/w/main.go"
-ln -s "$T/outside" "$T/repo/escape"; printf '%s\n' "$T/repo/escape/cmd/w/main.go" >> "$T/tmp/sp/edited"
-lstop
-[ ! -s "$LL" ] && ok "lint: a file whose real path is outside the project is not linted" || bad "lint symlink" "$(cat "$LL")"
-rm -f "$T/repo/escape"; rm -rf "$T/outside"
-mkdir -p "$T/tmp/sp/copy/cmd/v"; printf 'module copy\n' > "$T/tmp/sp/copy/go.mod"; printf 'package main\n' > "$T/tmp/sp/copy/cmd/v/main.go"
-printf '%s\n' "$T/tmp/sp/copy/cmd/v/main.go" >> "$T/tmp/sp/edited"
-rm -f "$T/tmp/sp/stop-count"; : > "$LL"; CLAUDE_PROJECT_DIR=$T lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
-[ ! -s "$LL" ] && ok "lint: a file in the scratchpad is not linted, even under the project" || bad "lint scratchpad" "$(cat "$LL")"
-rm -rf "$T/tmp/sp/copy"
-# A run that does not complete leaves its window: the next Stop lints again
-printf 'package main\n' > "$GM/cmd/z/main.go"; printf '3\n' > "$T/lint.rc"; : > "$T/lint.out"
-printf '%s\n' "$GM/cmd/z/main.go" >> "$T/tmp/sp/edited"; lstop
-lctx | grep -q 'did not complete, exit 3' && ok "lint: an incomplete run is said once" || bad "lint rc3" "$OUT"
-lstop
-grep -qx "ktn-linter $GM run ./cmd/z" "$LL" && ! lctx | grep -q 'did not complete' \
-    && ok "lint: and retried at the next Stop, the same note not repeated" || bad "lint retry" "$(cat "$LL") $OUT"
-printf '0\n' > "$T/lint.rc"; lstop
-lstop
-[ ! -s "$LL" ] && ok "lint: once a run completes, the window is spent" || bad "lint spent" "$(cat "$LL")"
-# A tracker shorter than the cursor (emptied by hand) starts over
-printf '99\n' > "$T/tmp/sp/lint-cursor"; printf 'finding D\n' > "$T/lint.out"; printf '1\n' > "$T/lint.rc"
-printf '%s\n' "$GM/cmd/x/main.go" > "$T/tmp/sp/edited"; lstop
-grep -qx "ktn-linter $GM run ./cmd/x" "$LL" && [ "$(cat "$T/tmp/sp/lint-cursor")" = 1 ] \
-    && ok "lint: a tracker shorter than the cursor is read from its start" || bad "lint reset" "$(cat "$LL") cursor=$(cat "$T/tmp/sp/lint-cursor")"
-rm -f "$T/lint.out" "$T/lint.rc"; lfresh
+ln -sf "$FB/ktn-linter" "$T/nokt/ktn-linter"; printf '5\n' > "$T/lint.sleep"; ljson 1 2 KTN-SLOW
+for lp in "$FB:$PATH" "$T/nokt"; do
+    t0=$(date +%s); LPATH=$lp KF_LINT_TIMEOUT=1 ledit "$GM/cmd/x/main.go"; t1=$(date +%s)
+    [ $((t1 - t0)) -lt 4 ] && [ "$RC" -eq 0 ] && [ -z "$(lctx)" ] && ok "post-edit: a slow run is cut and silent ($( [ "$lp" = "$T/nokt" ] && echo 'no timeout(1)' || echo 'timeout(1) if present'))" || bad "post timeout $lp" "$((t1 - t0)) s, $OUT"
+done
+rm -f "$T/lint.sleep"; rm -rf "$T/nokt"
+ljson 3 5 KTN-OFF; : > "$LL"
+KODFLOW_LINT=off CLAUDE_PROJECT_DIR=$PP lrun PostToolUse Edit "$(jq -n -c --arg f "$GM/cmd/x/main.go" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh
+[ ! -s "$LL" ] && [ -z "$(lctx)" ] && ok "post-edit: KODFLOW_LINT=off runs nothing and says nothing" || bad "post off" "$(cat "$LL") $OUT"
+# ktn-linter's own PostToolUse hook installed: nothing run here, the
+# instruction once per session for the findings that hook reports
+printf '{"hooks":{"PostToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"\\"/opt/k/ktn-hook\\" claude PostToolUse"}]}]}}' > "$CLAUDE_CONFIG_DIR/settings.json"
+ledit "$GM/cmd/x/main.go"; C=$(lctx)
+[ ! -s "$LL" ] && case "$C" in *"own PostToolUse hook reports the findings of each Go edit"*"Fix each finding now"*"kodflow/ktn-linter"*) true ;; *) false ;; esac \
+    && ok "post-edit: beside ktn-linter's own hook, no second run, the instruction instead" || bad "post owned" "$(cat "$LL") $C"
+ledit "$GM/cmd/x/main.go"
+[ ! -s "$LL" ] && [ -z "$(lctx)" ] && ok "post-edit: that instruction is given once per session" || bad "post owned once" "$OUT"
+rm -f "$CLAUDE_CONFIG_DIR/settings.json"
+# Stop runs no linter any more
+printf '%s\n' "$GM/cmd/x/main.go" > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count"; : > "$LL"
+CLAUDE_PROJECT_DIR=$PP lrun Stop "" '{"stop_hook_active":false}' on-stop.sh
+[ ! -s "$LL" ] && ! lctx | grep -q ktn-linter && ok "stop: no linter run at turn end" || bad "stop lint" "$(cat "$LL") $OUT"
 kill "$LPID" 2>/dev/null; wait "$LPID" 2>/dev/null
-rm -rf "$GM" "$T/repo/projects" "$T/repo/tools" "$FB"; : > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/claudemd-nudged"
+rm -rf "$PP" "$FB" "$T/lint.json" "$T/lint.rc" "$T/tmp/sp/lint-file" "$T/tmp/sp/lint-policy-told"
+: > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/claudemd-nudged"
 
 echo "== malformed input never blocks"
 for s in on-tool.sh on-session.sh on-user.sh on-agent.sh on-stop.sh; do

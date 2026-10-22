@@ -3,7 +3,8 @@
 #
 # A Go project is the go.mod nearest the file, never above the project root:
 # making.codes has none at its root, only projects/making.codes/go.mod. The
-# linter run at turn end (on-stop.sh, ktn-linter run) is only for such a file.
+# linter run after an edit (lib/lint.sh, ktn-linter run) is only for such a
+# file.
 # The same rule is written in hooks/mod/lint.ts (goModuleOf); both are held
 # to tests/fixtures/gomod.json.
 #
