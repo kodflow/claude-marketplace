@@ -188,7 +188,7 @@ fails by accident blocks every shell call of the session.
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR, and rule 6: end with `## Agent feedback`) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · its agent feedback in `agent-feedback.jsonl` · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | — | feedback in one document: `ktn-linter run` report (stdout only; a run that did not complete said in one line, a refusal beside a live daemon silent) on this session's Go packages · the CLAUDE.md of each directory changed this session, once per directory · the main agent's tasks still open in its **active epic** (tasks with no epic when none is active, and the open ones with no epic whatever is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · more untied tasks `in_progress` than free workers, every turn · a task `in_progress` whose `worker` has stopped, once per set · a main-agent task `in_progress` on an epic no running subagent is attributed to and not tied to a running `worker` (the main thread producing), once per set, unless `KODFLOW_ROOT=off` · a triage cause left unsettled (`triage-pending`), every turn, not on a system turn · the subagents' new agent feedback, once, to a user present in the last 10 minutes, with the instruction to ask before any issue | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | — | feedback in one document: `ktn-linter run` report (stdout only; a run that did not complete said in one line, a refusal beside a live daemon silent) on the Go packages edited since the last Stop, each module's report once, unless `KODFLOW_LINT=off` · the CLAUDE.md of each directory changed this session, once per directory · unless `KODFLOW_STOP_TASKS=off`: the main agent's tasks still open in its **active epic** (tasks with no epic when none is active, and the open ones with no epic whatever is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · more untied tasks `in_progress` than free workers, every turn · a task `in_progress` whose `worker` has stopped, once per set (end of the `KODFLOW_STOP_TASKS` rules) · a main-agent task `in_progress` on an epic no running subagent is attributed to and not tied to a running `worker` (the main thread producing), once per set, unless `KODFLOW_ROOT=off` · a triage cause left unsettled (`triage-pending`), every turn, not on a system turn · the subagents' new agent feedback, once, to a user present in the last 10 minutes, with the instruction to ask before any issue, never for an agent with no definition file | bell · log |
 
 ## Main thread = reviewer, code is delegated
 
@@ -492,7 +492,9 @@ tool_result`), else the definition's frontmatter (`source: frontmatter`); the
 effort is the payload's own, which is the subagent's effective level. At
 `Stop`, a new set of entries is proposed once, to a user present in the last
 10 minutes (`composer-at`): show the diff to each agent's definition, and ask
-before opening any issue on kodflow/claude-marketplace.
+before opening any issue on kodflow/claude-marketplace. An entry whose agent
+has no definition file (a built-in, an agent defined in the session) is kept
+but never proposed: there is no definition to show a diff of.
 
 ### Holes — what was not observed, and is not claimed
 
@@ -768,7 +770,7 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | File | Effect |
 |------|--------|
 | `.claude/protected-paths` | one glob per line; replaces the default list (`node_modules/`, `.git/`, `vendor/`, `dist/`, `build/`, `.env*`, `*.lock`, lockfiles, `go.sum`) |
-| `ktn-linter` on PATH | at turn end `ktn-linter run` runs from each module's directory on the packages this session edited, stdout only (`project-linter lint`, the old name, when ktn-linter is absent); never for a file outside a Go project: the `go.mod` nearest the changed file, never above the project root (`lib/gomod.sh`, `lint.ts`, one fixture file `tests/fixtures/gomod.json`). No hook here calls a linter daemon: ktn-linter's verdict at edit time comes from the command hooks `ktn-linter hook install` writes |
+| `ktn-linter` on PATH | at turn end `ktn-linter run` runs from each module's directory on the packages edited since the previous Stop (`lint-cursor` over the `edited` tracker, moved only once every module's run completed: a timeout or a failure is linted again at the next Stop), on files that still exist under the project root once symlinks are resolved and outside the scratchpad, stdout only; a module's report is given once, the same findings again stay silent (`lint-last/`) and a clean run clears the record (`project-linter lint`, the old name, when ktn-linter is absent); never for a file outside a Go project: the `go.mod` nearest the changed file, never above the project root (`lib/gomod.sh`, `lint.ts`, one fixture file `tests/fixtures/gomod.json`). No hook here calls a linter daemon: ktn-linter's verdict at edit time comes from the command hooks `ktn-linter hook install` writes |
 | `/lint-setup [path]` | checks, for the Go module of `path` (default the session root), the ktn-linter binary, its command hooks (`ktn-linter hook doctor --json`), the per-user daemon when `KTN_USER_DAEMON=1` (`ktn-linter daemon status`) and the module's `.ktn-linter.yaml`; proposes installing the latest release (ktn-linter and ktn-hook, checksum verified) into `~/.local/bin`, `ktn-linter hook install` and `ktn-linter daemon ensure`, each only after a yes in `$.ui.ask`; configuration problems are reported, never written |
 | `ROOT_OK=1` prefix on a command | that line is exempt from the delegation gate |
 | `KODFLOW_ROOT=off` | the delegation gate, its Stop rule and its prompt line are off for the session |
@@ -777,6 +779,8 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KODFLOW_ISOLATION=off` | the isolation gate is off for the session |
 | `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
 | `KODFLOW_FEEDBACK=off` | no rule 6, nothing kept, nothing proposed |
+| `KODFLOW_LINT=off` | no `ktn-linter run` at turn end, its window and reports left as they are; edit-time findings still come from ktn-linter's own hooks |
+| `KODFLOW_STOP_TASKS=off` | no Stop reminder of the open tasks, nor of the three task-list rules (none in progress, more in progress than workers, a stopped worker); the triage rule and the delegation rule (`KODFLOW_ROOT`) stay |
 | `KODFLOW_COMMIT_IDENTITY=<path>` · `off` | another commit-identity rules file, or the check off (default `${CLAUDE_CONFIG_DIR:-~/.claude}/kodflow/commit-identity.conf`, absent means off) |
 | `KODFLOW_CLEANUP=off` | no worktree, branch or remote branch is removed on close, no notice; `KODFLOW_CLEANUP_TIMEOUT` (seconds, default 15) bounds each `gh` and push call |
 
@@ -823,6 +827,9 @@ A hundred and forty cases in a throwaway repository, plus the bash-guard
 corpus (about two hundred lines, rc and motif compared): every block, the
 input never rewritten, the tracker fed a file name that is also a shell command, the
 redaction of every persisted string, the Stop reminder firing once, the task rules on the active epic only, the
+Stop lint window (edits since the last Stop, a deleted file, a symlink out of
+the project and a scratchpad copy left out, an incomplete run retried, each
+module's report once, `KODFLOW_LINT=off` and `KODFLOW_STOP_TASKS=off`), the
 triage and epic state injected with each prompt, and every
 script fed garbage or nothing and exiting 0.
 
