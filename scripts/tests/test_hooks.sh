@@ -843,7 +843,10 @@ ledit "$GM/cmd/x/main.go"; C=$(lctx)
     && ok "post-edit: beside ktn-linter's own hook, no second run, the instruction instead" || bad "post owned" "$(cat "$LL") $C"
 ledit "$GM/cmd/x/main.go"
 [ ! -s "$LL" ] && [ -z "$(lctx)" ] && ok "post-edit: that instruction is given once per session" || bad "post owned once" "$OUT"
-rm -f "$CLAUDE_CONFIG_DIR/settings.json"
+mkdir -p "$PP/.claude"; mv "$CLAUDE_CONFIG_DIR/settings.json" "$PP/.claude/settings.local.json"
+ledit "$GM/cmd/x/main.go"
+[ ! -s "$LL" ] && ok "post-edit: a ktn-hook in the project's settings counts as installed too" || bad "post owned project" "$(cat "$LL")"
+rm -f "$PP/.claude/settings.local.json" "$T/tmp/sp/lint-policy-told"
 # Stop runs no linter any more
 printf '%s\n' "$GM/cmd/x/main.go" > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count"; : > "$LL"
 CLAUDE_PROJECT_DIR=$PP lrun Stop "" '{"stop_hook_active":false}' on-stop.sh

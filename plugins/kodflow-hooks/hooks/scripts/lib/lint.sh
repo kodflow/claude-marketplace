@@ -7,8 +7,9 @@
 # file.
 #
 # One run per edit, never two: when ktn-linter's own PostToolUse hook is
-# installed (`ktn-linter hook install`, a ktn-hook command in the user's
-# settings), it already lints the edit through its daemon and hands the
+# installed (`ktn-linter hook install` writes a ktn-hook command in the
+# user's settings; one written by hand in the project's settings counts too),
+# it already lints the edit through its daemon and hands the
 # model its verdict. This side then runs nothing and gives the instruction
 # below once per session, for the findings that hook reports.
 #
@@ -27,10 +28,15 @@
 
 KF_LINT_POLICY='Fix each finding now, in this change. A fix that needs a heavy refactor is still a fix, not a false positive and not a reason to skip it: do it, or, if it is truly outside the task, tell the user so; never skip a finding silently. Only when you are certain a finding is a false positive: open a complete issue on kodflow/ktn-linter (the rule ID, a minimal reproduction, file:line, the expected and the actual result, the ktn-linter version), then go on.'
 
-# Whether ktn-linter's own PostToolUse hook is installed for this user
+# Whether ktn-linter's own PostToolUse hook is installed, for this user
+# ($1, the configuration directory) or in the project ($2)
 _kf_lint_owned() {
-    [ -s "$1/settings.json" ] || return 1
-    jq -e '[.hooks.PostToolUse[]?.hooks[]?.command? // empty | strings] | any(test("ktn-hook"))' "$1/settings.json" >/dev/null 2>&1
+    local s
+    for s in "$1/settings.json" "$2/.claude/settings.json" "$2/.claude/settings.local.json"; do
+        [ -s "$s" ] || continue
+        jq -e '[.hooks.PostToolUse[]?.hooks[]?.command? // empty | strings] | any(test("ktn-hook"))' "$s" >/dev/null 2>&1 && return 0
+    done
+    return 1
 }
 
 # Run "$@" with stdout in $out, bounded; macOS ships no timeout(1)
@@ -55,7 +61,7 @@ kf_lint() {
     . "${BASH_SOURCE[0]%/*}/gomod.sh" 2>/dev/null || return 0
     kf_gomod "$f" "$root" || return 0
     mod=$KF_GOMOD
-    if _kf_lint_owned "$cfg"; then
+    if _kf_lint_owned "$cfg" "$root"; then
         [ -f "$state/lint-policy-told" ] && return 0
         mkdir -p "$state" 2>/dev/null && : > "$state/lint-policy-told"
         KF_LINT="ktn-linter's own PostToolUse hook reports the findings of each Go edit. For every finding it reports: $KF_LINT_POLICY"
