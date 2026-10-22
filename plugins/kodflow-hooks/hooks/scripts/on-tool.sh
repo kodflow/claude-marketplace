@@ -1338,7 +1338,7 @@ post_edit() {
     # ktn-linter's own PostToolUse hook already lints it. KODFLOW_LINT=off.
     if [ "${KODFLOW_LINT:-}" != off ] && [ -f "$LIB/lint.sh" ] && [ "$TOOL" != NotebookEdit ]; then
         # shellcheck source=lib/lint.sh
-        . "$LIB/lint.sh" && kf_lint "$FILE" "$PROJECT_DIR" "$STATE" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+        . "$LIB/lint.sh" && kf_lint "$FILE" "$PROJECT_DIR" "$STATE" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" "$TOOL"
         [ -n "$KF_LINT" ] && ctx="${ctx:+$ctx
 }$KF_LINT"
     fi

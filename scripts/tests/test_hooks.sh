@@ -767,6 +767,10 @@ ljson() { jq -n -c --arg m "$GM/cmd/x/main.go" --arg o "$GM/cmd/x/other.go" --ar
                 + (if $extra == "" then [] else [{ruleId:$extra,level:"error",message:"new one",location:{file:$m,line:9,column:1}}] end))}' > "$T/lint.json"; }
 ledit() { : > "$LL"; CLAUDE_PROJECT_DIR=$PP lrun PostToolUse "${2:-Edit}" "$(jq -n -c --arg f "$1" '{tool_input:{file_path:$f,old_string:"x",new_string:"y"}}')" on-tool.sh; }
 ljson 3 5; printf '1\n' > "$T/lint.rc"; rm -rf "$T/tmp/sp/lint-file" "$T/tmp/sp/lint-policy-told"
+mkdir -p "$PP-out/cmd/x"; printf 'module out\n' > "$PP-out/go.mod"; printf 'package main\n' > "$PP-out/cmd/x/main.go"
+ledit "$PP/../${PP##*/}-out/cmd/x/main.go"
+[ ! -s "$LL" ] && ok "post-edit: a path whose .. leads out of the project is not linted" || bad "post dotdot" "$(cat "$LL")"
+rm -rf "$PP-out"
 ledit "$PP/tools/gen.go"
 [ ! -s "$LL" ] && ! lctx | grep -q ktn-linter && ok "post-edit: a file outside any Go project is not linted" || bad "post outside" "$(cat "$LL") $OUT"
 ledit "$GM/cmd/x/main.go"
@@ -822,6 +826,9 @@ ledit "$GM/cmd/x/main.go"
 mkdir -p "$PP/.claude"; mv "$CLAUDE_CONFIG_DIR/settings.json" "$PP/.claude/settings.local.json"
 ledit "$GM/cmd/x/main.go"
 [ ! -s "$LL" ] && ok "post-edit: a ktn-hook in the project's settings counts as installed too" || bad "post owned project" "$(cat "$LL")"
+printf '{"hooks":{"PostToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/opt/k/ktn-hook"}]}]}}' > "$PP/.claude/settings.local.json"
+rm -rf "$T/tmp/sp/lint-file"; ledit "$GM/cmd/x/main.go"
+[ -s "$LL" ] && lctx | grep -q 'KTN-CONST-TYPED' && ok "post-edit: a ktn-hook whose matcher does not take the tool lints nothing: the run happens here" || bad "post owned matcher" "$(cat "$LL") $OUT"
 rm -f "$PP/.claude/settings.local.json" "$T/tmp/sp/lint-policy-told"
 # Stop runs no linter any more
 printf '%s\n' "$GM/cmd/x/main.go" > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count"; : > "$LL"

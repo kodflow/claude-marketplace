@@ -24,17 +24,21 @@
 # clean run clears it.
 #
 #   . "$LIB/lint.sh"
-#   kf_lint FILE ROOT STATE CONFIG_DIR   → KF_LINT, the text for the model
+#   kf_lint FILE ROOT STATE CONFIG_DIR TOOL   → KF_LINT, the text for the model
 
 KF_LINT_POLICY='Fix each finding now, in this change. A fix that needs a heavy refactor is still a fix, not a false positive and not a reason to skip it: do it, or, if it is truly outside the task, tell the user so; never skip a finding silently. Only when you are certain a finding is a false positive: open a complete issue on kodflow/ktn-linter (the rule ID, a minimal reproduction, file:line, the expected and the actual result, the ktn-linter version), then go on.'
 
-# Whether ktn-linter's own PostToolUse hook is installed, for this user
-# ($1, the configuration directory) or in the project ($2)
+# Whether ktn-linter's own PostToolUse hook runs for this tool ($3), for
+# this user ($1, the configuration directory) or in the project ($2): a
+# ktn-hook under a matcher that does not take the tool lints nothing here.
+# A matcher is empty, `*` or a regular expression on the whole tool name.
 _kf_lint_owned() {
     local s
     for s in "$1/settings.json" "$2/.claude/settings.json" "$2/.claude/settings.local.json"; do
         [ -s "$s" ] || continue
-        jq -e '[.hooks.PostToolUse[]?.hooks[]?.command? // empty | strings] | any(test("ktn-hook"))' "$s" >/dev/null 2>&1 && return 0
+        jq -e --arg t "$3" '[.hooks.PostToolUse[]? | objects
+            | select((.matcher // "") as $m | $m == "" or $m == "*" or ($t | test("^(" + $m + ")$")))
+            | .hooks[]?.command? | strings] | any(test("ktn-hook"))' "$s" >/dev/null 2>&1 && return 0
     done
     return 1
 }
@@ -53,22 +57,25 @@ _kf_lint_run() {
 }
 
 kf_lint() {
-    local f=$1 root=$2 state=$3 cfg=$4 mod d pkg canon tmp rc rows sig last prev ver n rel
+    local raw=$1 root=$2 state=$3 cfg=$4 tool=${5:-Edit} f mod d pkg tmp rc rows sig last prev ver n rel
     KF_LINT=""
-    case "$f" in /*.go) ;; *) return 0 ;; esac
-    [ -f "$f" ] || return 0
+    case "$raw" in /*.go) ;; *) return 0 ;; esac
+    [ -f "$raw" ] || return 0
     command -v ktn-linter >/dev/null 2>&1 || return 0
+    # Real paths, so /root/../other/x.go or a symlink out of the root is
+    # judged where it lands, not by its spelling
+    root=$(cd "$root" 2>/dev/null && pwd -P) || return 0
+    f=$(cd "${raw%/*}" 2>/dev/null && pwd -P)/${raw##*/} || return 0
     . "${BASH_SOURCE[0]%/*}/gomod.sh" 2>/dev/null || return 0
     kf_gomod "$f" "$root" || return 0
     mod=$KF_GOMOD
-    if _kf_lint_owned "$cfg" "$root"; then
+    if _kf_lint_owned "$cfg" "$root" "$tool"; then
         [ -f "$state/lint-policy-told" ] && return 0
         mkdir -p "$state" 2>/dev/null && : > "$state/lint-policy-told"
         KF_LINT="ktn-linter's own PostToolUse hook reports the findings of each Go edit. For every finding it reports: $KF_LINT_POLICY"
         return 0
     fi
     d=${f%/*}; pkg=.${d#"$mod"}
-    canon=$(cd "$d" 2>/dev/null && pwd -P)/${f##*/}
     mkdir -p "$state/lint-file" 2>/dev/null || return 0
     tmp=$state/lint-file/.out.$$
     ( cd "$mod" && _kf_lint_run "$tmp" "${KF_LINT_TIMEOUT:-10}" ktn-linter run --json --no-color "$pkg" ); rc=$?
@@ -78,7 +85,7 @@ kf_lint() {
         1) ;;
         *) rm -f -- "$tmp"; return 0 ;;
     esac
-    rows=$(jq -r --arg f "$f" --arg c "$canon" '.results[]? | objects
+    rows=$(jq -r --arg f "$f" --arg c "$raw" '.results[]? | objects
         | select(.location.file == $f or .location.file == $c)
         | [(.location.line // 0), (.location.column // 0), (.ruleId // "?"), (.level // "?"), ((.message // "") | gsub("[\n\t]"; " "))]
         | map(tostring) | join("\t")' "$tmp" 2>/dev/null | sort -t "$(printf '\t')" -k1,1n -k2,2n)
