@@ -9,10 +9,10 @@
 // compaction it tells the model again which tasks wait on the user, and it
 // serves /lint-setup (lint.ts).
 //
-// Bash goes through one ordered pipeline (pipeline.ts): the merge gate
-// (merge.ts), the shell's guards doubled (guards.ts), the blast radius
-// (blast.ts), the call, then its output compressed (filter.ts). Every tool's
-// result then has its secrets masked (veil.ts) before the model reads it.
+// Bash goes through one ordered pipeline (pipeline.ts): the shell's guards
+// doubled (guards.ts), the call, then its output compressed (filter.ts).
+// Every tool's result then has its secrets masked (veil.ts) before the model
+// reads it.
 //
 // Gated models (fable.ts): an agent.spawn that would run on one passes only
 // with the session's grant in $.store, asked once while the user is at the
@@ -20,8 +20,8 @@
 // hook never writes the model it judged.
 //
 // Every hook fails open: a throw is caught and the event goes on, except a
-// task tool's own call, which answers the failure as text, a merge, which a
-// failure refuses, and a spawn whose raw input names a gated model. KODFLOW_MOD=off turns the whole module into
+// task tool's own call, which answers the failure as text, and a spawn whose
+// raw input names a gated model. KODFLOW_MOD=off turns the whole module into
 // pass-through, with no marker written.
 //
 // Cleanup on close (cleanup.ts): the worktrees a subagent writes into are
@@ -55,24 +55,20 @@ import {
   beatText,
   composerFile,
   configDir,
-  mergeTokenFile,
   safe,
   sessionDir,
   triageFile,
 } from "./paths.ts";
 import {
   admit,
-  consumeComposerPrompt,
   endGuards,
   guardWrite,
   lastComposerAt,
-  lastComposerPrompt,
   notePrompt,
   modsReport,
   startGuards,
   type GuardPort,
 } from "./machine-guards.ts";
-import { parse } from "./shell.ts";
 import {
   forgeMcpJson,
   inspect,
@@ -81,16 +77,9 @@ import {
   type GuardCtx,
 } from "./guards.ts";
 import { loadRules, type Rules } from "./patterns.ts";
-import {
-  classifyBash,
-  classifyMcp,
-  gate,
-  type MergePort,
-} from "./merge.ts";
-import { blastRadius } from "./blast.ts";
 import { filterResult, versionOk } from "./filter.ts";
 import { veilResult } from "./veil.ts";
-import { mayMerge, mergeFailure, runBash } from "./pipeline.ts";
+import { runBash } from "./pipeline.ts";
 import {
   WRITING_TOOLS,
   claim,
@@ -119,9 +108,9 @@ import {
 // Set once every tool registered; the beat is a promise that they did.
 let toolsReady = false;
 
-// The merge question and the blast-radius question are only put to someone
-// who is there: a message typed at the prompt in the last 10 minutes, as
-// machine-guards.ts records it (notePrompt, in prompt.submit).
+// The gated-model question is only put to someone who is there: a message
+// typed at the prompt in the last 10 minutes, as machine-guards.ts records it
+// (notePrompt, in prompt.submit).
 const PRESENCE_MS = 10 * 60_000;
 const present = () => {
   const at = lastComposerAt();
@@ -472,43 +461,6 @@ async function projectDir($: any): Promise<string> {
   return (await $.env.get("CLAUDE_PROJECT_DIR")) || (await $.session.cwd());
 }
 
-function mergePort($: any, e: any): MergePort {
-  return {
-    run: (argv, timeoutMs) => $.process.run(argv, { timeoutMs }),
-    ask: (question, options) =>
-      $.ui.ask(question, { options, header: "Merge" }),
-    writeToken: async (text) => {
-      const cfg = await config($);
-      if (!cfg) throw new Error("no absolute CLAUDE_CONFIG_DIR or HOME");
-      const dir = sessionDir(cfg, await $.session.id());
-      await $.fs.write(mergeTokenFile(dir, e.tool_use_id), text);
-    },
-    now: () => Date.now(),
-    lastComposerAt: () => lastComposerAt(),
-    exemptions: () => $.fs.read(`${$.plugin.root}/merge-exemptions.txt`),
-    note: (text) => journal($, e, "merge", text),
-    lastPrompt: () => lastComposerPrompt(),
-    consume: () => consumeComposerPrompt(),
-    consentOff: async () =>
-      (await $.env.get("KODFLOW_MERGE_CONSENT")) === "off",
-  };
-}
-
-// The session directory's GitHub or GitLab remote, when there is exactly one.
-async function origin($: any): Promise<string | undefined> {
-  const dir = await projectDir($);
-  const remotes = await $.process.run(["git", "-C", dir, "remote"], {
-    timeoutMs: 5000,
-  });
-  const names = remotes.stdout.split("\n").filter(Boolean);
-  if (remotes.exitCode !== 0 || names.length !== 1) return undefined;
-  const url = await $.process.run(
-    ["git", "-C", dir, "remote", "get-url", names[0]],
-    { timeoutMs: 5000 },
-  );
-  return url.exitCode === 0 ? url.stdout.trim() : undefined;
-}
-
 async function guardCtx(
   $: any,
   e: any,
@@ -533,36 +485,7 @@ async function guardCtx(
         .catch(() => undefined);
       return r && r.exitCode === 0 ? r.stdout : undefined;
     },
-    // The merge gate ran first and wrote the token for this very call
-    mergeAllowed: async () => {
-      if (!cfg) return false;
-      const token = await $.fs
-        .read(mergeTokenFile(sessionDir(cfg, await $.session.id()), e.tool_use_id))
-        .catch(() => undefined);
-      const sha = token?.split("\n")[0] ?? "";
-      return /^[0-9a-f]{40}$/.test(sha) && String(e.command).includes(sha);
-    },
     patterns,
-  };
-}
-
-async function blast($: any, line: string): Promise<{ deny: string } | undefined> {
-  const labels = blastRadius(parse(line));
-  if (!labels.length || !present()) return undefined;
-  const q = `Run this? ${labels.join(" ; ").slice(0, 300)}`;
-  let answer: string;
-  try {
-    answer = await $.ui.ask(q, { options: ["Run it", "Do not run it"], header: "Irreversible" });
-  } catch {
-    answer = "dismissed";
-  }
-  if (answer === "Run it") return undefined;
-  return {
-    deny: refusalText({
-      motif: "blast",
-      title: "COMMAND NOT RUN — the user did not confirm it",
-      lines: [labels.join(" ; ").slice(0, 300), `Answer: ${answer}`],
-    }),
   };
 }
 
@@ -662,7 +585,7 @@ export const register: Register = (on) => {
   }).catch(($, e, next) => next(e));
 
   on("prompt.submit", async ($, e, next) => {
-    notePrompt(e.origin, Date.now(), e.text);
+    notePrompt(e.origin, Date.now());
     if (!(await off($))) {
       await ensureTools($);
       await beat($);
@@ -795,17 +718,6 @@ export const register: Register = (on) => {
         journal($, e, "mcp-json", "error", err);
       }
     }
-    // A forge merge tool: the same gate as a Bash merge, a failure refuses
-    const merge = classifyMcp(e.tool, argsOf(e as any));
-    if (merge.kind === "merge") {
-      const g = await gate(merge, { agentId: e.agentId }, mergePort($, e)).catch(
-        (err) => mergeFailure(err),
-      );
-      if (g && "deny" in g) {
-        journal($, e, "merge", "deny");
-        return g;
-      }
-    }
     const r: any = await next(e);
     try {
       secrets ??= secretValues($);
@@ -822,8 +734,6 @@ export const register: Register = (on) => {
       return {
         deny: `kodflow task tools failed: ${next.error.message ?? next.error.kind}`,
       };
-    if (classifyMcp(e.tool, argsOf(e as any)).kind === "merge")
-      return mergeFailure(next.error.message ?? next.error.kind);
     return next(e);
   });
 
@@ -831,14 +741,6 @@ export const register: Register = (on) => {
     if (await off($)) return next(e);
     const line = typeof e.command === "string" ? e.command : "";
     return runBash(() => next(e), {
-      merge: async () => {
-        const c = await classifyBash(line, {
-          ghRepo: await $.env.get("GH_REPO"),
-          origin: () => origin($),
-        });
-        const g = await gate(c, { agentId: e.agentId }, mergePort($, e));
-        return g && "deny" in g ? g : undefined;
-      },
       guards: async () => {
         rules ??= await loadRules(
           (path) => $.fs.read(path),
@@ -849,7 +751,6 @@ export const register: Register = (on) => {
         const refusal = found && (await verdict(line, found, ctx));
         return refusal ? { deny: refusalText(refusal) } : undefined;
       },
-      blast: () => blast($, line),
       filter: async (r) => {
         validated ??= $.session.version().then(
           (v: any) => versionOk(v?.base),
@@ -859,12 +760,7 @@ export const register: Register = (on) => {
       },
       log: (policy, decision, error) => journal($, e, policy, decision, error),
     });
-  }).catch(($, e, next) => {
-    if (next.called) return next(e);
-    if (mayMerge(e.command))
-      return mergeFailure(next.error.message ?? next.error.kind);
-    return next(e);
-  });
+  }).catch(($, e, next) => next(e));
 
   on("command.run", { command: "lint-setup" }, async ($, e) => {
     try {

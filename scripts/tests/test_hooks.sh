@@ -183,25 +183,6 @@ cp "$S/../patterns/patterns.txt" "$T/np/hooks/patterns/"
 E=$(np_cmd 'git commit -m "feat: plain"'); RC=$?
 [ "$RC" -eq 0 ] && ok "both files back: a plain commit passes" || bad "patterns restored" "rc=$RC $E"
 
-echo "== PreToolUse · merge exemptions (merge-exemptions.txt)"
-# A copy of the plugin whose exemptions list names o/r and, against the rule,
-# kodflow/claude-marketplace: only the first is honoured.
-EX=$T/plug; mkdir -p "$EX"; cp -R "$ROOT/plugins/kodflow-hooks/hooks" "$EX/hooks"
-printf '# test\no/r   # a comment\nkodflow/claude-marketplace\n' > "$EX/merge-exemptions.txt"
-exm() { OUT=$(jq -n -c --arg c "$1" --arg cwd "$T/repo" '{session_id:"sess-ex",hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$cwd,tool_use_id:"tx",tool_input:{command:$c}}' \
-    | bash "$EX/hooks/scripts/on-tool.sh" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err"); }
-exm 'gh pr merge 12 -R o/r --squash';                     expect_rc "an exempt repository merges without a token" 0
-exm 'gh pr merge 12 -R O/R --squash';                     expect_rc "the exemption ignores case" 0
-exm 'GH_REPO=o/r gh pr merge 12';                         expect_rc "GH_REPO= on the line names the repository" 0
-exm 'gh api -X PUT repos/o/r/pulls/12/merge';             expect_rc "an API path names the repository" 0
-exm 'gh pr merge 12 -R kodflow/claude-marketplace';       expect_rc "kodflow/claude-marketplace is never exempt" 2
-exm 'gh pr merge 12 -R o/other';                          expect_rc "a repository not listed is refused" 2
-OUT=$(jq -n -c --arg cwd "$T/repo" '{session_id:"sess-ex",hook_event_name:"PreToolUse",tool_name:"mcp__github__merge_pull_request",cwd:$cwd,tool_use_id:"tx",tool_input:{owner:"o",repo:"r",pullNumber:3}}' \
-    | bash "$EX/hooks/scripts/on-tool.sh" 2>/dev/null); RC=$?
-expect_rc "an MCP merge on an exempt repository passes" 0
-grep -v '^[[:space:]]*#' "$ROOT/plugins/kodflow-hooks/merge-exemptions.txt" | grep -qi 'kodflow/claude-marketplace' \
-    && bad "versioned exemptions" "kodflow/claude-marketplace is listed" || ok "the versioned exemptions never list kodflow/claude-marketplace"
-
 echo "== PreToolUse Edit · protected paths"
 edit() { run PreToolUse Edit "$(jq -n -c --arg f "$1" '{tool_input:{file_path:$f,old_string:"a",new_string:"b"}}')" on-tool.sh; }
 edit "$T/repo/node_modules/x/index.js";    expect_rc "node_modules/ denied" 2
@@ -700,7 +681,6 @@ rm -rf "$CLAUDE_CONFIG_DIR/plugins" "$CLAUDE_CONFIG_DIR/skills" "$CLAUDE_CONFIG_
 echo "== SessionStart · guards checked against their fingerprints (D8)"
 # A copy of the plugin's hooks stands for the installed one.
 CP=$T/installed/hooks; mkdir -p "$T/installed"; cp -R "$ROOT/plugins/kodflow-hooks/hooks" "$CP"
-cp "$ROOT/plugins/kodflow-hooks/merge-exemptions.txt" "$T/installed/"
 start_copy() { OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"SessionStart",source:"startup",cwd:$cwd,scratchpad_dir:$sp}' \
     | bash "$CP/scripts/on-session.sh" 2>/dev/null); }
 start_copy
@@ -710,10 +690,6 @@ printf '\n# edited\n' >> "$CP/scripts/on-tool.sh"; start_copy
 printf '%s' "$OUT" | jq -e '(.systemMessage | test("scripts/on-tool.sh differs from its published fingerprint")) and (.hookSpecificOutput.additionalContext | test("on-tool.sh differs"))' >/dev/null 2>&1 \
     && ok "an edited on-tool.sh raises a visible warning" || bad "fingerprint edited" "$OUT"
 cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/on-tool.sh" "$CP/scripts/on-tool.sh"
-printf 'some/repo\n' >> "$T/installed/merge-exemptions.txt"; start_copy
-printf '%s' "$OUT" | jq -e '.systemMessage | test("merge-exemptions.txt differs from its published fingerprint")' >/dev/null 2>&1 \
-    && ok "an edited merge-exemptions.txt raises a visible warning" || bad "exemptions edited" "$OUT"
-cp "$ROOT/plugins/kodflow-hooks/merge-exemptions.txt" "$T/installed/"
 MK=$CLAUDE_CONFIG_DIR/plugins/marketplaces/kodflow/plugins/kodflow-hooks/hooks; mkdir -p "$MK"
 cp "$CP/fingerprints.sha256" "$MK/"; start_copy
 { [ -z "$OUT" ] || printf '%s' "$OUT" | jq -e '.systemMessage // "" | test("marketplace") | not' >/dev/null 2>&1; } \

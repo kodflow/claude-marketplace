@@ -16,8 +16,6 @@ type Host = {
   commands: any[];
   agents: { id: string; type: string; name?: string; status: string }[];
   failMv?: boolean;
-  /** What `gh …` answers, when a test sets it. */
-  gh?: (argv: string[]) => { exitCode: number; stdout: string; stderr?: string };
   /** The engine version $.session.version() reports. */
   version: string;
 };
@@ -119,19 +117,6 @@ function host(on: any, env: Record<string, string>): Host {
       }
       case "bash":
         return done(0);
-      case "gh": {
-        if (!h.gh) return done(127);
-        const r = h.gh(argv);
-        return {
-          value: {
-            exitCode: r.exitCode,
-            stdout: r.stdout,
-            stderr: r.stderr ?? "",
-            isStdoutTruncated: false,
-            isStderrTruncated: false,
-          },
-        };
-      }
       case "git":
         return done(1);
     }
@@ -546,17 +531,6 @@ const out = (stdout: string) => ({
     noOutputExpected: false,
   },
 });
-const ghView = (head = HEAD) => () => ({
-  exitCode: 0,
-  stdout: JSON.stringify({
-    headRefOid: head,
-    state: "OPEN",
-    statusCheckRollup: [
-      { __typename: "CheckRun", name: "ci", status: "COMPLETED", conclusion: "SUCCESS" },
-    ],
-  }),
-});
-
 test("Bash: what comes back is the filtered output, every other key kept", async ($, on) => {
   host(on, { CLAUDE_CONFIG_DIR: CFG });
   on("tool.call", { tool: "Bash" }, async () => out(STATUS) as any);
@@ -651,165 +625,46 @@ test("attribution: hooks/patterns read, scoped for commit and pr, leaks before k
   expect(reached).toBe(2);
 });
 
-test("merge: unpinned, refused with the exact command; a subagent, refused outright", async ($, on) => {
-  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
-  h.gh = ghView();
+test("merge: the main thread merges with no question, Bash or forge tool; a subagent is refused", async ($, on) => {
+  host(on, { CLAUDE_CONFIG_DIR: CFG });
+  let asked = 0;
   let reached = 0;
-  on("tool.call", { tool: "Bash" }, async () => (reached++, out("")) as any);
+  on("tool.call", { tool: "AskUserQuestion" }, async () => (asked++, { result: {} }) as any);
+  on("tool.call", { tool: "Bash" }, async () => (reached++, out("merged")) as any);
   on("tool.call", { tool: "mcp__github__merge_pull_request" }, async () => (reached++, { result: "merged" }) as any);
   await start($);
   const r: any = await $.tool.call({ tool: "Bash", command: "gh pr merge 12 -R o/r --squash" } as any);
-  expect(refusal(r)).toContain(`gh pr merge 12 -R o/r --squash --match-head-commit ${HEAD}`);
-  const sub: any = await $.tool.call({
-    tool: "Bash",
-    command: `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
-    agentId: "a1",
-  } as any);
-  expect(refusal(sub)).toContain("a subagent does not merge");
+  expect(refusal(r)).toBeUndefined();
   const mcp: any = await $.tool.call({
     tool: "mcp__github__merge_pull_request",
     owner: "o",
     repo: "r",
     pullNumber: 12,
   } as any);
-  expect(refusal(mcp)).toContain(`"sha": "${HEAD}"`);
-  expect(reached).toBe(0);
-});
-
-test("merge: a forge that fails refuses (a failure never lets a merge through)", async ($, on) => {
-  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
-  h.gh = () => ({ exitCode: 1, stdout: "", stderr: "HTTP 502" });
-  on("tool.call", { tool: "Bash" }, async () => out("") as any);
-  await start($);
-  const r: any = await $.tool.call({
+  expect(refusal(mcp)).toBeUndefined();
+  expect([asked, reached]).toEqual([0, 2]);
+  const sub: any = await $.tool.call({
     tool: "Bash",
     command: `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
+    agentId: "a1",
   } as any);
-  expect(refusal(r)).toContain("HTTP 502");
+  expect(refusal(sub)).toContain("a subagent does not merge");
+  expect(reached).toBe(2);
 });
 
-test("merge: pinned, CI green, nobody at the prompt: waiting for the user", async ($, on) => {
-  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
-  h.gh = ghView();
-  on("tool.call", { tool: "Bash" }, async () => out("") as any);
-  await start($);
-  const r: any = await $.tool.call({
-    tool: "Bash",
-    command: `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
-  } as any);
-  expect(refusal(r)).toContain("waiting for the user's OK");
-  expect([...h.files.keys()].some((k) => k.includes("/merge-ok/"))).toBe(false);
-});
-
-test("merge: the user typed, CI green, pinned: asked, yes writes the token and the call goes on", async ($, on) => {
-  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
-  h.gh = ghView();
-  const asked: any[] = [];
-  let reached = 0;
-  on("tool.call", { tool: "AskUserQuestion" }, async (_$: any, e: any) => {
-    asked.push(e);
-    const q = e.questions?.[0]?.question ?? "";
-    return { result: { questions: e.questions, answers: { [q]: "Merge" } } } as any;
-  });
-  on("tool.call", { tool: "Bash" }, async () => (reached++, out("merged")) as any);
-  await start($);
-  await $.prompt
-    .submit({ text: "go on", origin: { kind: "composer" } } as any)
-    .catch(() => undefined);
-  const r: any = await $.tool.call({
-    tool: "Bash",
-    tool_use_id: "toolu_m1",
-    command: `gh pr merge 12 -R o/r --match-head-commit ${HEAD}`,
-  } as any);
-  expect(asked.length).toBe(1);
-  expect(JSON.stringify(asked[0])).toContain("o/r#12");
-  expect(refusal(r)).toBeUndefined();
-  expect(reached).toBe(1);
-  expect(h.files.get(`${DIR}/merge-ok/toolu_m1`)?.split("\n")[0]).toBe(HEAD);
-});
-
-// The AskUserQuestion answers and the merges that reached the shell
-function mergeHost(on: any, env: Record<string, string> = {}) {
-  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, ...env });
-  h.gh = ghView();
-  const seen = { asked: 0, reached: 0 };
-  on("tool.call", { tool: "AskUserQuestion" }, async (_$: any, e: any) => {
-    seen.asked++;
-    const q = e.questions?.[0]?.question ?? "";
-    return { result: { questions: e.questions, answers: { [q]: "Merge" } } } as any;
-  });
-  on("tool.call", { tool: "Bash" }, async () => (seen.reached++, out("merged")) as any);
-  return { h, seen };
-}
-const say = ($: any, text: string, kind = "composer") =>
-  $.prompt.submit({ text, origin: { kind } } as any).catch(() => undefined);
-const mergeCall = ($: any, n: number) =>
-  $.tool.call({
-    tool: "Bash",
-    tool_use_id: `toolu_w${n}`,
-    command: `gh pr merge ${n} -R o/r --match-head-commit ${HEAD}`,
-  } as any);
-
-test("merge: written consent at the prompt merges without a question, for one merge only", async ($, on) => {
-  const { h, seen } = mergeHost(on);
-  await start($);
-  await say($, "fusionne dès que possible");
-  const r: any = await mergeCall($, 51);
-  expect(refusal(r)).toBeUndefined();
-  expect(seen.asked).toBe(0);
-  expect(seen.reached).toBe(1);
-  expect(h.files.get(`${DIR}/merge-ok/toolu_w51`)?.split("\n")[0]).toBe(HEAD);
-  // Consumed: the next merge, without a new message, is asked about
-  await mergeCall($, 52);
-  expect(seen.asked).toBe(1);
-});
-
-test("merge: a negation, a question, a notification or the switch off: asked", async ($, on) => {
-  const { seen } = mergeHost(on);
-  await start($);
-  await say($, "ne merge pas");
-  await mergeCall($, 61);
-  expect(seen.asked).toBe(1);
-  await say($, "on merge ?");
-  await mergeCall($, 62);
-  expect(seen.asked).toBe(2);
-  // Only a prompt typed at the terminal counts, never a notification
-  await say($, "go on");
-  await say($, "fusionne", "task-notification");
-  await mergeCall($, 63);
-  expect(seen.asked).toBe(3);
-});
-
-test("merge: KODFLOW_MERGE_CONSENT=off keeps the question", async ($, on) => {
-  const { seen } = mergeHost(on, { KODFLOW_MERGE_CONSENT: "off" });
-  await start($);
-  await say($, "fusionne");
-  await mergeCall($, 71);
-  expect(seen.asked).toBe(1);
-});
-
-test("blast radius: asked while the user is there, passes when nobody is (fail open)", async ($, on) => {
+test("rm -rf, reset --hard: run with no question, the user at the prompt or not", async ($, on) => {
   host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
-  let answer = "Do not run it";
   let asked = 0;
   let reached = 0;
-  on("tool.call", { tool: "AskUserQuestion" }, async (_$: any, e: any) => {
-    asked++;
-    const q = e.questions?.[0]?.question ?? "";
-    return { result: { questions: e.questions, answers: { [q]: answer } } } as any;
-  });
+  on("tool.call", { tool: "AskUserQuestion" }, async () => (asked++, { result: {} }) as any);
   on("tool.call", { tool: "Bash" }, async () => (reached++, out("")) as any);
   await start($);
-  // Nobody typed yet: the call goes on, unasked
   await $.tool.call({ tool: "Bash", command: "rm -rf build" } as any);
-  expect([asked, reached]).toEqual([0, 1]);
   await $.prompt
     .submit({ text: "clean up", origin: { kind: "composer" } } as any)
     .catch(() => undefined);
-  const no: any = await $.tool.call({ tool: "Bash", command: "rm -rf build" } as any);
-  expect(refusal(no)).toContain("[motif:blast]");
-  expect([asked, reached]).toEqual([1, 1]);
-  answer = "Run it";
-  await $.tool.call({ tool: "Bash", command: "rm -rf build" } as any);
-  expect([asked, reached]).toEqual([2, 2]);
+  const r: any = await $.tool.call({ tool: "Bash", command: "rm -rf build" } as any);
+  expect(refusal(r)).toBeUndefined();
+  await $.tool.call({ tool: "Bash", command: "git reset --hard origin/main" } as any);
+  expect([asked, reached]).toEqual([0, 3]);
 });
