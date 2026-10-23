@@ -2,6 +2,7 @@
 import { test, expect } from "claude-code/testing";
 import { call, conformance } from "./conformance.ts";
 import {
+  FLOW_NOTE_AT,
   MAIN,
   MAX_REF,
   MAX_SUBJECT,
@@ -329,6 +330,40 @@ test("blocked_by: existing tasks, not itself, no cycle however long; [] clears",
   expect(Object.hasOwn(s.task("1"), "blockedBy")).toBe(false);
   expect(s.run("task_update", { id: "3", blocked_by: [] }).error).toBe(false);
   expect(Object.hasOwn(s.task("3"), "blockedBy")).toBe(false);
+});
+
+test("flow note: said once at three pending tasks with no blocked_by, never a refusal, nothing written", () => {
+  const s = session();
+  const NOTE = "no blocked_by between them";
+  expect(FLOW_NOTE_AT).toBe(3);
+  expect(s.run("task_create", { subject: "A", epic: 1 }).text).not.toContain(NOTE);
+  expect(s.run("task_create", { subject: "B", epic: 1 }).text).not.toContain(NOTE);
+  const before = s.file();
+  const third = s.run("task_create", { subject: "C", epic: 1 });
+  expect(third.error).toBe(false);
+  expect(third.text).toContain("Task #3 created: C in epic #1 Tree. Note: epic #1 has 3 pending tasks");
+  expect(third.text).toContain("task_update(id, blocked_by=[...])");
+  expect(third.text).toContain("run in parallel");
+  // only the task is added: no flag on the epic, no other field
+  expect(s.file().epics).toEqual(before.epics);
+  expect(s.run("task_create", { subject: "D", epic: 1 }).text).not.toContain(NOTE);
+  // epic 0 and an epic with one dependency declared stay silent
+  const q = session();
+  for (const x of ["A", "B", "C"])
+    expect(q.run("task_create", { subject: x, epic: 0 }).text).not.toContain(NOTE);
+  const d = session();
+  d.run("task_create", { subject: "A", epic: 1 });
+  d.run("task_create", { subject: "B", epic: 1, blocked_by: ["1"] });
+  expect(d.run("task_create", { subject: "C", epic: 1 }).text).not.toContain(NOTE);
+});
+
+test("task_create's description asks for blocked_by on a plan and says ready tasks run in parallel", () => {
+  const create = TOOLS[0]!;
+  expect(create.description).toContain("each one declares blocked_by");
+  expect(create.description).toContain("one subagent each in its own worktree");
+  expect(create.description).toContain("rebased onto the default branch");
+  expect(create.description).not.toMatch(/\bmain\b branch|onto main/);
+  expect(create.inputSchema.properties.blocked_by.description).toContain("run in parallel");
 });
 
 test("ref: 5 characters at most, \"\" clears it", () => {
