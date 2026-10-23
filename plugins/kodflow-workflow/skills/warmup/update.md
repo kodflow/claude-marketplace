@@ -110,7 +110,10 @@ create_missing_workflow:
       otherwise lose its nearest ancestor once the hub exists). A child of a
       hub gets one line in the hub even beyond 5 files; its own file is
       created only on request. The grandparent MOVES its pointers to those
-      children into one line to the hub (a move, not a copy). A `Structure`
+      children into one line to the hub (a move, not a copy). Pointers from
+      the parent to GRANDCHILDREN of the hub (e.g. `web/templates` under
+      `internal/`) become sub-lines of their child's line in the hub; the
+      parent keeps only its one line to the hub. A `Structure`
       tree (parent on one line, `child/` on the next) does not count as a
       mention: the scan needs the path as one token. Re-run the scan after
       the creations, because a created hub changes the nearest ancestor of
@@ -125,7 +128,7 @@ create_missing_workflow:
         '*.tf' '*.hcl' '*.yml' '*.yaml' '*.j2' '*.sql' '*Dockerfile*' '*Makefile' \
         | command grep -vE '(^|/)(testdata|vendor|node_modules|__pycache__|migrations|\.[^/]+)/' \
         | sed -e 's|/[^/]*$||' -e t -e 's|.*|.|' \
-        | sed -E 's#((^|/)roles/[^/]+)/(tasks|defaults|handlers|templates|files|vars|meta)(/.*)?$#\1#' | sort | uniq -c \
+        | sed -E 's#((^|/)([a-z0-9_-]*-)?roles/[^/]+)/(tasks|defaults|handlers|templates|files|vars|meta)(/.*)?$#\1#' | sort | uniq -c \
         | while read -r n dir; do
             [ -f "$dir/CLAUDE.md" ] && continue
             anc=$dir; covered=0
@@ -486,10 +489,11 @@ apply_workflow:
       backup: |
         Before the first write to a file, copy it:
           B="$SCRATCH/warmup-backup/${RUN:=$(date -u +%Y%m%dT%H%M%SZ)}"   # one dated folder per run
-          mkdir -p "$B" && cp -pn "$f" "$B/$(printf '%s' "$f" | tr / _).bak"
+          dst="$B/$(printf '%s' "$f" | tr / _).bak"
+          mkdir -p "$B" && { [ -e "$dst" ] || cp -p "$f" "$dst"; }
         $SCRATCH is the session scratchpad directory (else ${TMPDIR:-/tmp}).
         A second run writes to its own dated folder, so it never overwrites the
-        first run's backups; `cp -n` keeps the first copy within a run.
+        first run's backups; the `[ -e ] ||` guard keeps the first copy within a run (`cp -n` returns 1 on macOS when the target exists, which breaks `&&` chains and `set -e`).
         Print the backup directory in the final output. Nothing is written
         into the repository, and the backup is never committed.
 
@@ -526,7 +530,18 @@ apply_workflow:
 
 ```yaml
 learn_workflow:
-  trigger: "Always executed with --update (after all other phases)"
+  trigger: "Executed with --update after all other phases; injects nothing when the criterion below finds nothing"
+  criterion: |
+    A convention candidate is a file name present in at least 3 sibling
+    directories (same parent) and absent from that parent's CLAUDE.md.
+    Prints: <sibling count>\t<parent>\t<file name>
+      git ls-files | awk -F/ 'NF>2 { p=$0; sub("/[^/]+/[^/]+$","",p); k=p "\t" $NF
+          if (!((k,$(NF-1)) in s)) { s[k,$(NF-1)]=1; n[k]++ } }
+        END { for (k in n) if (n[k]>=3) print n[k] "\t" k }' \
+        | while IFS="$(printf '\t')" read -r c par f; do
+            [ -f "$par/CLAUDE.md" ] || continue
+            command grep -qF -- "$f" "$par/CLAUDE.md" || printf '%s\t%s\t%s\n' "$c" "$par" "$f"
+          done
   purpose: "Auto-discover implicit patterns and inject into CLAUDE.md hierarchy"
 
   1_analyze_patterns:
