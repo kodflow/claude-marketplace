@@ -19,8 +19,9 @@
 // the agent (under 64); the tree and the age stay. On 20 rows: title,
 // headers, the epic, 11 tasks, a rule, the critical path, two lines of
 // detail on the selection and the two lines of the views' bar. Shorter, the
-// finished branches fold into « ✓ fait (n) », then the detail drops to one
-// line, then to none, then the list scrolls with the selection.
+// finished branches fold into « ✓ fait (n) », first under the epic, then
+// the detail drops to one line, then to none, then the list scrolls with the
+// selection.
 //
 // R4, the graph: three columns of 26 (FAIT · PRÊT, EN COURS · ATTENTE,
 // BLOQUÉ) and two gutters of 5, each top-level task on two rows (its title,
@@ -479,11 +480,15 @@ function epicLine(epic: TreeEpic, cols: Cols): Cell[] {
   return out;
 }
 
-function foldLine(count: number, cols: Cols): Cell[] {
+/**
+ * The finished branches, folded: first under the epic, where they mostly
+ * stood, so « └─ » is its own only when nothing is left open after it.
+ */
+function foldLine(count: number, last: boolean, cols: Cols): Cell[] {
   return [
     cell(W.margin),
     cell(cols.tree, [
-      dim("└─ "),
+      dim(last ? "└─ " : "├─ "),
       span("✓", { color: GREEN }),
       dim(` fait (${count})`),
     ]),
@@ -666,18 +671,15 @@ export function treeScreen(
     const out: Body[] = [];
     for (const e of model.epics) {
       out.push({ line: epicLine(e, cols) });
-      const rows = visible(e.nodes, ui.open);
       const finished = foldDone
         ? e.nodes.filter((n) => n.state === "done" && n.id !== sel?.top.id)
         : [];
-      const folded = new Set(finished.map((n) => n.id));
-      let foldShown = false;
-      for (const v of rows) {
-        if (folded.has(v.top.id)) {
-          if (!foldShown) out.push({ line: foldLine(finished.length, cols) });
-          foldShown = true;
-          continue;
-        }
+      // The rest drawn as siblings of their own: the corners say where each
+      // one really stands once the finished ones have left the list
+      const left = e.nodes.filter((n) => !finished.includes(n));
+      if (finished.length)
+        out.push({ line: foldLine(finished.length, !left.length, cols) });
+      for (const v of visible(left, ui.open)) {
         const id = v.node.id;
         out.push({
           line: taskLine(v, cols, id === ui.sel, ui.open.includes(id)),

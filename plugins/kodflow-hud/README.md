@@ -179,7 +179,15 @@ Narrower than 88 cells of body the links go, then the model under 76, then
 the agent under 64: below that, the tree and the age. Fewer
 than 20 rows, the finished top-level branches fold into « ✓ fait (n) »
 first, then the detail drops to one line, then to none, then the list
-scrolls with the selection.
+scrolls with the selection. The fold sits first under its epic, where the
+finished work mostly stood, the open tasks below it in their order, and
+only the last row of the epic turns `└─`:
+
+```
+  ◆ #3     Forgejo Raft  68/69      20 j
+  ├─ ✓ fait (68)
+┃ └─ ● F7     F7 observateur e…    8 min
+```
 
 ### The graph
 

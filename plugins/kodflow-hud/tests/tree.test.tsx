@@ -262,7 +262,7 @@ test("shorter than 20 rows: the finished branches fold, then the detail drops to
     return text;
   };
   const r19 = await at(19);
-  expect(r19).toContain("  └─ ✓ fait (2)");
+  expect(r19).toContain("  ├─ ✓ fait (2)");
   expect(r19).not.toContain("Événements réels");
   expect(r19).toContain("  Le mod juge, il ne réécrit jamais e.model");
   const r18 = await at(18);
@@ -790,4 +790,73 @@ test("a title of 30 characters is cut at 18 cells in the tree and in the graph, 
   const graph = capture(await drawnIn(ui));
   expect(graph).toContain("● C1    Réécrire la gesti…");
   expect(graph).not.toContain(LONG);
+});
+
+test("the finished branches fold above the open ones, and only the last row turns « └─ »", () => {
+  // The epic seen in a narrow pane: 68 tasks done, then one under way
+  const many = [
+    ...Array.from({ length: 68 }, (_, i) =>
+      task(String(i + 1), `Fait ${i + 1}`, "completed"),
+    ),
+    task("69", "F7 observateur et sondes", "in_progress", { ref: "F7" }),
+  ];
+  const modelOf = (tasks: object[]) =>
+    buildTree({
+      // With the clock: an epic done a moment ago is still shown
+      board: parseBoard(tasksJson(tasks, EPIC), NOWMS),
+      ctx,
+      ci: {},
+      models: {},
+      seen: {},
+      session: "s",
+    });
+  const model = modelOf(many);
+  // Each cell padded to its width, rows within rows: the line as drawn
+  const drawn = (line: Cell[]): string =>
+    line
+      .map((c) => {
+        const text = c.row
+          ? drawn(c.row)
+          : (c.spans ?? []).map((s) => s.text).join("");
+        const pad = " ".repeat(Math.max(0, c.w - cells(text)));
+        return c.right ? pad + text : text + pad;
+      })
+      .join("");
+  const rows = (w: number) =>
+    treeScreen(model, initialUi(model), w, 12).lines.map(drawn);
+  for (const w of [58, 88]) {
+    const lines = rows(w);
+    const fold = lines.findIndex((l) => l.includes("✓ fait (68)"));
+    const f7 = lines.findIndex((l) => l.includes("F7 "));
+    expect(lines[fold]).toContain("├─ ✓ fait (68)");
+    expect(f7).toBe(fold + 1);
+    expect(lines[f7]).toMatch(/└─ ● F7/);
+  }
+  // Interleaved: the open ones keep their order, under the fold
+  const mixed = modelOf([
+    task("1", "Un", "completed"),
+    task("2", "Deux", "in_progress"),
+    task("3", "Trois", "completed"),
+    ...Array.from({ length: 20 }, (_, i) =>
+      task(String(i + 4), `Fait ${i + 4}`, "completed"),
+    ),
+    task("30", "Trente", "pending"),
+  ]);
+  const m = treeScreen(mixed, initialUi(mixed), 88, 12).lines.map(drawn);
+  const at = (s: string) => m.findIndex((l) => l.includes(s));
+  expect(m[at("fait (22)")]).toContain("├─ ✓ fait (22)");
+  expect(at("Deux")).toBe(at("fait (22)") + 1);
+  expect(m[at("Deux")]).toMatch(/├─ ● \S*\s*Deux/);
+  expect(m[at("Trente")]).toMatch(/└─ \S \S*\s*Trente/);
+  // Nothing left open: the fold closes the epic
+  const all = modelOf(
+    Array.from({ length: 30 }, (_, i) =>
+      task(String(i + 1), `Fait ${i + 1}`, "completed"),
+    ),
+  );
+  const a = treeScreen(all, { view: "tree", open: [] }, 88, 12).lines.map(
+    drawn,
+  );
+  expect(a.join("\n")).toContain("  └─ ✓ fait (30)");
+  expect(a.join("\n")).not.toContain("├─");
 });
