@@ -72,7 +72,7 @@ Resolution order:
   neither ................... CREATE it, then clone
 
 Constraints live in  CLAUDE.md  (spilling to .claude/constraints.md
-past 250 lines, per the /warmup thresholds).
+past 250 lines, the /project spill point).
 
 Workflow:
   /project → /warmup → /search → /plan → /refine → /goal → /git
