@@ -13,7 +13,7 @@ peek_workflow:
     command: |
       git ls-files --cached --others --exclude-standard \
         '*CLAUDE.md' '*CLAUDE.local.md' '.claude/rules/*.md' '.claude/rules/**/*.md' \
-        | xargs wc -lc 2>/dev/null
+        | xargs wc -lcm 2>/dev/null
     fallback: "Glob '**/CLAUDE.md' outside a git work tree"
     output: [claude_files with lines and bytes]
 
@@ -102,11 +102,12 @@ edit anything: they feed the briefing's **Drift** section and point to
 ```yaml
 health_checks:
   size:
-    input: "lines and bytes from Phase 1.0"
+    input: "lines, bytes and characters from Phase 1.0"
     rule: "Level = worse of the line and byte levels (SKILL.md, Size thresholds)"
     report: |
       Every file at WARNING or above, with its level, and the launch cost of
-      the loaded ones (bytes / 4 ≈ tokens). FORBIDDEN or CRITICAL →
+      the loaded ones (bytes / 4 ≈ tokens). A subdirectory file over 40 000
+      characters (`wc -m`) is also reported: Claude receives only its start. FORBIDDEN or CRITICAL →
       "split with /warmup --update" (update.md, Phase 3.5).
 
   dated_state:
