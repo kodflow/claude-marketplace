@@ -7,6 +7,9 @@
 //               who works each task, on what model, how long since it moved,
 //               the silent ones and the ones waiting on the person; the
 //               only pane, its tab counting the tasks left.
+//               Two more views in its bar: « Refus », what kodflow-hooks
+//               refused (blocks.jsonl), and « Documents », the project's
+//               documents (docs.json), panels.ts.
 // The subagents themselves are the engine's to show, under the prompt.
 // And a few words of each reply in colour (colors.ts): the transcript draws
 // `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
@@ -19,6 +22,13 @@
 // colour convention's system prompt section (off with KODFLOW_COLORS=off,
 // which also turns off the drawing). Every hook fails open.
 //
+// Three writes, each only on the person's own click or key in the pane
+// (`ui.message`, posted by the surface module and checked again here), never
+// on the model's word nor a hook's: a document ignored or brought back in
+// the project's docs/manifest.json; a permission rule, shown first and then
+// confirmed, added to the project's .claude/settings.local.json; the docs
+// prompt drafted in an EMPTY prompt box, never sent.
+//
 // The logic lives in the pure modules beside this file (board.ts, tree.ts,
 // layout.tsx, models.ts, alerts.ts, ci.ts); the
 // « Tâches » pane's selection and folding live in its surface module,
@@ -29,7 +39,10 @@ import type { Register } from "claude-code";
 import type {
   HudActivity,
   HudAgent,
+  HudBlock,
   HudBoard,
+  HudDoc,
+  HudDocs,
   HudCi,
   HudModel,
   HudSeen,
@@ -40,7 +53,18 @@ import { alertsFor, trimKeys } from "./alerts.ts";
 import { CI_EVERY_MS, ciState, prsToCheck } from "./ci.ts";
 import { configDir, sessionDir, tasksFile } from "./paths.ts";
 import { buildTree } from "./tree.ts";
-import { draw, initialUi, screenOf } from "./layout.tsx";
+import { draw, initialUi } from "./layout.tsx";
+import { SETTINGS_LOCAL, viewScreen, type Extra } from "./panels.ts";
+import {
+  MODES,
+  NO_DOCS,
+  createPrompt,
+  manifestPath,
+  parseDocs,
+  toggleManifest,
+  type DocMode,
+} from "./docs.ts";
+import { addRule, parseBlocks, safeRule } from "./refusals.ts";
 import {
   PROMPT_SECTION,
   SECTION_ID,
@@ -88,6 +112,14 @@ const modelsAtom = atom(
 const seenAtom = atom(
   { plugin: "kodflow-hud", key: "seen" } as const,
   {} as Record<string, HudSeen>,
+);
+const docsAtom = atom(
+  { plugin: "kodflow-hud", key: "docs" } as const,
+  NO_DOCS as HudDocs,
+);
+const blocksAtom = atom(
+  { plugin: "kodflow-hud", key: "blocks" } as const,
+  [] as HudBlock[],
 );
 const primedAtom = atom({ plugin: "kodflow-hud", key: "primed" } as const, "");
 const tickAtom = atom({ plugin: "kodflow-hud", key: "tick" } as const, 0);
@@ -137,6 +169,8 @@ let allTasks: HudTask[] = [];
 // epic done 30 minutes ago leaves it without the file changing
 let lastText: string | undefined;
 let lastCi = 0;
+// docs.json and blocks.jsonl: re-read when their time moves
+const seenMtime: Record<string, number | undefined> = {};
 let home: string | undefined;
 
 // Atoms are written only when their value changed: every write redraws
@@ -208,6 +242,180 @@ function ctxOf(
   return { now, agents, activity, silentMs };
 }
 
+/** A file of the session's folder, when its time moved: its text, or null. */
+async function changed(
+  $: any,
+  path: string,
+): Promise<string | undefined | null> {
+  const mtime = await $.fs.stat(path).then(
+    (s: { mtimeMs: number }) => s.mtimeMs,
+    () => undefined,
+  );
+  if (path in seenMtime && seenMtime[path] === mtime) return null;
+  const text =
+    mtime === undefined ? undefined : await $.fs.read(path).catch(() => null);
+  if (text === null) return null;
+  seenMtime[path] = mtime;
+  return text;
+}
+
+/** docs.json and blocks.jsonl, beside tasks.json, kodflow-hooks' too. */
+async function pollSide($: any, tasks: string): Promise<void> {
+  const dir = tasks.replace(/\/tasks\.json$/, "");
+  const docs = await changed($, `${dir}/docs.json`);
+  if (docs !== null) {
+    const parsed = parseDocs(docs);
+    if (!same(await read($, docsAtom), parsed))
+      await update($, docsAtom, () => parsed);
+  }
+  const blocks = await changed($, `${dir}/blocks.jsonl`);
+  if (blocks !== null) {
+    const parsed = parseBlocks(blocks);
+    if (!same(await read($, blocksAtom), parsed))
+      await update($, blocksAtom, () => parsed);
+  }
+}
+
+/**
+ * Writes `text` to `path` whole or not at all: a file beside it, then `mv`
+ * over it (a rename, atomic on one file system).
+ */
+async function writeWhole($: any, path: string, text: string): Promise<void> {
+  const tmp = `${path}.kodflow-hud.tmp`;
+  await $.fs.write(tmp, text);
+  const r = await $.process.run(["mv", "-f", tmp, path], { timeoutMs: 5_000 });
+  if (r.exitCode !== 0) throw new Error(r.stderr || `mv: ${r.exitCode}`);
+}
+
+/** Whether a document's path is there: a folder needs one .md in it. */
+async function present($: any, root: string, path: string): Promise<boolean> {
+  const abs = `${root.replace(/\/+$/, "")}/${path}`;
+  if (!path.endsWith("/")) return $.fs.exists(abs).catch(() => false);
+  const list: any[] = await $.fs.list(abs).catch(() => []);
+  return list.some((f) => f.kind === "file" && /\.md$/i.test(f.name));
+}
+
+/** A document ignored or brought back, in the project's manifest. */
+async function setIgnored($: any, id: string, ignore: boolean): Promise<void> {
+  const docs = await read($, docsAtom);
+  const doc = docs.docs.find((d) => d.id === id);
+  const path = manifestPath(docs);
+  if (!doc || !path) {
+    $.ui.toast("kodflow-hud : pas de manifeste à réécrire pour ce document.");
+    return;
+  }
+  const before: string | undefined = await $.fs
+    .read(path)
+    .catch(() => undefined);
+  const after = toggleManifest(before, id, ignore);
+  if (after === undefined) {
+    $.ui.toast(
+      `kodflow-hud : ${docs.manifest ?? "docs/manifest.json"} n'est pas un objet JSON, laissé tel quel.`,
+    );
+    return;
+  }
+  await writeWhole($, path, after);
+  // kodflow-hooks recomputes docs.json on its own clock: the line changes now
+  const state: HudDoc["state"] = ignore
+    ? "ignored"
+    : (await present($, docs.root!, doc.path))
+      ? "ok"
+      : "missing";
+  await update($, docsAtom, (d) => ({
+    ...d,
+    docs: d.docs.map((x): HudDoc => {
+      if (x.id !== id) return x;
+      const { reason: _r, ...rest } = x;
+      return ignore ? { ...rest, state, reason: "" } : { ...rest, state };
+    }),
+  }));
+}
+
+/** The docs prompt in the prompt box, as a draft: only where the box is empty. */
+async function draftCreate(
+  $: any,
+  ids: string[],
+  mode: DocMode,
+): Promise<void> {
+  const box = await $.prompt.read().catch(() => ({ text: "" }));
+  if (box.text.trim()) {
+    $.ui.toast(
+      "kodflow-hud : la zone de saisie a déjà un brouillon, vide-la puis reclique.",
+    );
+    return;
+  }
+  const r = await $.prompt.fill({ text: createPrompt(ids, mode) });
+  $.ui.toast(
+    r.isFilled
+      ? "kodflow-hud : brouillon prêt dans la zone de saisie (Échap, relis, puis ⏎)."
+      : "kodflow-hud : la zone de saisie n'a pas pris le brouillon.",
+  );
+}
+
+/**
+ * A rule the person confirmed, in the project's .claude/settings.local.json:
+ * only one a refusal of this session carries, and only one `safeRule` lets
+ * through.
+ */
+async function allowRule($: any, rule: string): Promise<void> {
+  const blocks = await read($, blocksAtom);
+  if (!safeRule(rule) || !blocks.some((b) => b.rule === rule)) {
+    $.ui.toast(
+      "kodflow-hud : règle refusée (trop large, ou d'aucun refus de la session).",
+    );
+    return;
+  }
+  const root = await $.session.root();
+  const path = `${String(root).replace(/\/+$/, "")}/${SETTINGS_LOCAL}`;
+  const before: string | undefined = await $.fs
+    .read(path)
+    .catch(() => undefined);
+  const after = addRule(before, rule);
+  if (after === undefined) {
+    $.ui.toast(
+      `kodflow-hud : ${SETTINGS_LOCAL} n'est pas un objet JSON, laissé tel quel.`,
+    );
+    return;
+  }
+  if (after !== before) await writeWhole($, path, after);
+  $.ui.toast(`kodflow-hud : ${rule} autorisé dans ${SETTINGS_LOCAL}.`);
+}
+
+/** What the pane's surface module posted, checked as input from code. */
+async function onMessage($: any, data: unknown): Promise<void> {
+  const d = data as Record<string, unknown> | null;
+  if (!d || typeof d !== "object") return;
+  const ids = (await read($, docsAtom)).docs.map((x) => x.id);
+  if (d.op === "ignore" && typeof d.id === "string" && ids.includes(d.id))
+    return setIgnored($, d.id, d.ignore === true);
+  if (d.op === "create" && Array.isArray(d.ids)) {
+    const mode = (MODES as readonly unknown[]).includes(d.mode)
+      ? (d.mode as DocMode)
+      : "both";
+    const missing = new Set(
+      (await read($, docsAtom)).docs
+        .filter((x) => x.state === "missing")
+        .map((x) => x.id),
+    );
+    const asked = d.ids.filter(
+      (x): x is string => typeof x === "string" && missing.has(x),
+    );
+    if (asked.length !== d.ids.length || (!asked.length && !missing.size))
+      return;
+    return draftCreate($, asked, mode);
+  }
+  if (d.op === "allow" && typeof d.rule === "string")
+    return allowRule($, d.rule);
+  if (d.op === "copy" && typeof d.rule === "string") {
+    const r = await $.ui.copy({ text: d.rule });
+    $.ui.toast(
+      r.isCopied
+        ? `kodflow-hud : ${d.rule} copié (/permissions, Ajouter une règle).`
+        : `kodflow-hud : copie impossible, la règle est ${d.rule}.`,
+    );
+  }
+}
+
 /** One look at the world: tasks.json, the agents, the TTLs, the toasts. */
 async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
   if (polling) return;
@@ -243,6 +451,7 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
       if (!same(await read($, boardAtom), board))
         await update($, boardAtom, () => board);
       await pollModels($, path);
+      await pollSide($, path);
     }
     const listed = await $.agent.list().catch(() => []);
     const agents: HudAgent[] = listed.map((a: any) => ({
@@ -472,6 +681,11 @@ export const register: Register = (on, options) => {
       });
       const width = e.props.bodyColumns;
       const rows = e.props.scroll.bodyRows;
+      const extra: Extra = {
+        docs: await read($, docsAtom),
+        blocks: await read($, blocksAtom),
+        now: await $.clock.now(),
+      };
       // Where the surface runs modules (terminal, desktop) the tree takes
       // keys and clicks; elsewhere it is drawn still, at its first state
       // (the table may name Client where the surface then drops it)
@@ -481,14 +695,27 @@ export const register: Register = (on, options) => {
           <Client
             key="tree"
             module="./client.tsx"
-            props={{ model, width, rows }}
+            props={{ model, width, rows, extra }}
             width={width}
             height={rows}
           />
         );
-      return draw(els, screenOf(model, initialUi(model), width, rows), width);
+      return draw(
+        els,
+        viewScreen(model, initialUi(model), width, rows, extra),
+        width,
+      );
     },
   );
+
+  // A click or a key in the pane: the only road to the three writes
+  on("ui.message", async ($, e, next) => {
+    if (e.requestId === TASKS_PANE && e.module.endsWith("client.tsx"))
+      await onMessage($, e.data).catch(() =>
+        $.ui.toast("kodflow-hud : l'écriture a échoué, rien n'a changé."),
+      );
+    return next(e);
+  }).catch(($, e, next) => next(e));
 
   // The colour convention, on the session's side of the cache boundary: a
   // section composed afresh for every prompt, so a compaction keeps it. Only
