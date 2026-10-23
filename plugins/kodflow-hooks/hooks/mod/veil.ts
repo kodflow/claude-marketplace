@@ -9,6 +9,7 @@
 //   - a token of 20 characters or more, letters and digits mixed, whose
 //     entropy passes 4.3 bits per character, unless it is a hash (hex), a
 //     UUID, a path, an integrity digest, or base64 of plain text.
+// An image block ({type:"image"}) is left whole: its data is base64 pixels.
 // A masked value cannot be revealed: nothing keeps it. Past the size or the
 // time budget the result is returned as it came (fail open).
 
@@ -225,6 +226,10 @@ export function veil(
     }
     if (depth > 8 || v === null || typeof v !== "object") return v;
     if (Array.isArray(v)) return v.map((x) => walk(x, depth + 1));
+    // An image block carries base64 pixels, not text: its data field passes
+    // the entropy test and would be replaced, breaking the picture. Every
+    // text block of the same result is still read.
+    if ((v as { type?: unknown }).type === "image") return v;
     const o: Record<string, unknown> = {};
     for (const [k, x] of Object.entries(v))
       o[k] = SKIP.has(k) ? x : walk(x, depth + 1);

@@ -6,30 +6,13 @@
 // one simple command of a known kind is touched (git status, log and diff,
 // ls -l, find, grep -rn), never a read whose bytes count (cat, head, tail,
 // sed, diff, git show, git cat-file, …), never a failed, interrupted,
-// persisted, image, background or structured result, and only on an engine
-// version the CI has validated. Anything unexpected leaves the result as it
-// came: the caller wraps it, and a throw returns `r` untouched.
+// persisted, image, background or structured result, and only when the result
+// has the shape a Bash call gives (an object whose stdout is a string): the
+// shape is checked on every call, on whatever engine version, since a
+// version window goes stale with each release. Anything unexpected leaves
+// the result as it came: the caller wraps it, and a throw returns `r`
+// untouched.
 import { argvOf, parse, type Command } from "./shell.ts";
-
-/** The engine versions whose Bash result shape CI has checked. */
-export const FILTER_VERSIONS = { min: "2.1.293", max: "2.1.296" } as const;
-
-const num = (v: string) => v.split(".").map(Number);
-function cmp(a: string, b: string): number {
-  const x = num(a);
-  const y = num(b);
-  for (let i = 0; i < 3; i++)
-    if (x[i] !== y[i]) return (x[i] ?? 0) - (y[i] ?? 0);
-  return 0;
-}
-
-/** Whether `base` (`$.session.version().base`) is a validated release. */
-export function versionOk(base: unknown): boolean {
-  if (typeof base !== "string" || !/^\d+\.\d+\.\d+$/.test(base)) return false;
-  return (
-    cmp(base, FILTER_VERSIONS.min) >= 0 && cmp(base, FILTER_VERSIONS.max) <= 0
-  );
-}
 
 /** Reads whose bytes count: their output is never touched. */
 export const BYTE_READS = new Set([
@@ -345,12 +328,8 @@ type AnyResult = Record<string, any>;
  * `r` with its stdout compressed, or `r` itself. `r` is what `next(e)`
  * resolved to for a Bash call; every key but `result.stdout` is kept.
  */
-export function filterResult(
-  line: string,
-  r: AnyResult,
-  validated: boolean,
-): AnyResult {
-  if (!validated || !r || typeof r !== "object") return r;
+export function filterResult(line: string, r: AnyResult): AnyResult {
+  if (!r || typeof r !== "object") return r;
   if (r.deny !== undefined || r.isError) return r;
   const res = r.result;
   if (!res || typeof res !== "object" || typeof res.stdout !== "string")

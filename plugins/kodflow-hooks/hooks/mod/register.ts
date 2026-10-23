@@ -12,7 +12,8 @@
 // Bash goes through one ordered pipeline (pipeline.ts): the shell's guards
 // doubled (guards.ts), the call, then its output compressed (filter.ts).
 // Every tool's result then has its secrets masked (veil.ts) before the model
-// reads it.
+// reads it, and an MCP tool's leaves one line of shape and size, no value, in
+// the session directory (mcp-probe.ts).
 //
 // Gated models (fable.ts): an agent.spawn that would run on one passes only
 // with the session's grant in $.store, asked once while the user is at the
@@ -42,6 +43,7 @@ import { LINT_SETUP, lintSetup, type LintPort } from "./lint.ts";
 import {
   argsOf,
   attributionText,
+  isMcpTool,
   isOff,
   logPayload,
   mainLoop,
@@ -77,8 +79,9 @@ import {
   type GuardCtx,
 } from "./guards.ts";
 import { loadRules, type Rules } from "./patterns.ts";
-import { filterResult, versionOk } from "./filter.ts";
+import { filterResult } from "./filter.ts";
 import { veilResult } from "./veil.ts";
+import { appendArgv, shapeLine, shapeOf, shapesFile } from "./mcp-probe.ts";
 import { blockOf, type Block } from "./blocks.ts";
 import { runBash } from "./pipeline.ts";
 import {
@@ -118,8 +121,7 @@ const present = () => {
   return at !== undefined && Date.now() - at <= PRESENCE_MS;
 };
 
-// Read once a session: the engine's version, the credential variables' values.
-let validated: Promise<boolean> | undefined;
+// Read once a session: the credential variables' values.
 let secrets: Promise<string[]> | undefined;
 // The vendored §5 rules; a failed read stays undefined and is tried again.
 let rules: Rules | undefined;
@@ -281,6 +283,25 @@ async function serve(
     })
     .catch(() => undefined);
   return answer;
+}
+
+// One line of structure and size for an MCP tool's result, in the session's
+// mcp-shapes.jsonl (mcp-probe.ts); KODFLOW_MCP_PROBE=off: nothing. The line
+// is built from the answer's shape only, and every failure is swallowed:
+// the result goes to the model as it is.
+async function probeMcp($: any, tool: string, answer: unknown): Promise<void> {
+  try {
+    if (isOff(await $.env.get("KODFLOW_MCP_PROBE"))) return;
+    const cfg = await config($);
+    if (!cfg) return;
+    const dir = sessionDir(cfg, await $.session.id());
+    await $.process.run(appendArgv(shapesFile(dir)), {
+      stdin: shapeLine(shapeOf(tool, answer, Date.now())),
+      timeoutMs: 3000,
+    });
+  } catch {
+    // fail open
+  }
 }
 
 // The worktrees of the workers a completion closes, to cleanup.sh, which
@@ -728,15 +749,17 @@ export const register: Register = (on) => {
       }
     }
     const r: any = await next(e);
+    let out = r;
     try {
       secrets ??= secretValues($);
       const veiled = veilResult(r, { envValues: await secrets, now: Date.now });
       if (veiled !== r) journal($, e, "veil", "masked");
-      return veiled;
+      out = veiled;
     } catch (err) {
       journal($, e, "veil", "error", err);
-      return r;
     }
+    if (isMcpTool(e.tool)) await probeMcp($, e.tool, out);
+    return out;
   }).catch(($, e, next) => {
     if (next.called) return next(e);
     if (taskTool(e.tool))
@@ -763,13 +786,7 @@ export const register: Register = (on) => {
         refused = { motif: refusal.motif, title: refusal.title };
         return { deny: refusalText(refusal) };
       },
-      filter: async (r) => {
-        validated ??= $.session.version().then(
-          (v: any) => versionOk(v?.base),
-          () => false,
-        );
-        return filterResult(line, r, await validated!);
-      },
+      filter: async (r) => filterResult(line, r),
       log: (policy, decision, error) =>
         journal($, e, policy, decision, error, decision === "deny" ? refused : undefined),
     });

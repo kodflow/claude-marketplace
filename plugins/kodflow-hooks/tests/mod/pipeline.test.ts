@@ -6,11 +6,9 @@ import { test, expect } from "claude-code/testing";
 import { runBash, type Policies } from "../../hooks/mod/pipeline.ts";
 import {
   BYTE_READS,
-  FILTER_VERSIONS,
   compress,
   filterResult,
   readsBytes,
-  versionOk,
 } from "../../hooks/mod/filter.ts";
 import {
   entropy,
@@ -129,7 +127,7 @@ const bash = (stdout: string, extra: Record<string, unknown> = {}) => ({
 
 test("git status: the hints go, every path stays, every other key is kept", () => {
   const r = bash(STATUS);
-  const out: any = filterResult("git status", r, true);
+  const out: any = filterResult("git status", r);
   expect(out).not.toBe(r);
   expect(out.result.stdout).not.toContain("(use ");
   expect(out.result.stdout).toContain("modified:   a.txt");
@@ -212,16 +210,15 @@ test("the bytes corpus: a read whose bytes count is never touched", () => {
     expect(readsBytes(line)).toBe(true);
     for (const stdout of [STATUS, "x\n".repeat(50)]) {
       const r = bash(stdout);
-      expect(filterResult(line, r, true)).toBe(r);
+      expect(filterResult(line, r)).toBe(r);
     }
   }
   for (const name of ["cat", "head", "tail", "sed", "diff"])
     expect(BYTE_READS.has(name)).toBe(true);
 });
 
-test("the filter's conditions: string stdout, success, plain result, one command, a validated engine", () => {
+test("the filter's conditions: string stdout, success, plain result, one command", () => {
   const r = bash(STATUS);
-  expect(filterResult("git status", r, false)).toBe(r);
   for (const extra of [
     { persistedOutputPath: "/tmp/out.txt" },
     { isImage: true },
@@ -230,16 +227,16 @@ test("the filter's conditions: string stdout, success, plain result, one command
     { interrupted: true },
   ]) {
     const x = bash(STATUS, extra);
-    expect(filterResult("git status", x, true)).toBe(x);
+    expect(filterResult("git status", x)).toBe(x);
   }
   const err = { isError: true, result: STATUS, text: STATUS };
-  expect(filterResult("git status", err, true)).toBe(err);
+  expect(filterResult("git status", err)).toBe(err);
   const deny = { deny: "no" };
-  expect(filterResult("git status", deny, true)).toBe(deny);
+  expect(filterResult("git status", deny)).toBe(deny);
   const notString = { result: { stdout: 3 } };
-  expect(filterResult("git status", notString, true)).toBe(notString);
+  expect(filterResult("git status", notString)).toBe(notString);
   const blocks = { result: [{ type: "text", text: STATUS }] };
-  expect(filterResult("git status", blocks, true)).toBe(blocks);
+  expect(filterResult("git status", blocks)).toBe(blocks);
   // Mixed output: more than one command, a pipe, a redirection
   for (const line of [
     "git status && git log",
@@ -247,16 +244,26 @@ test("the filter's conditions: string stdout, success, plain result, one command
     "git status > f",
     "git status; ls -l",
   ])
-    expect(filterResult(line, r, true)).toBe(r);
+    expect(filterResult(line, r)).toBe(r);
 });
 
-test("the engine versions: inside the validated range only", () => {
-  expect(versionOk(FILTER_VERSIONS.min)).toBe(true);
-  expect(versionOk(FILTER_VERSIONS.max)).toBe(true);
-  expect(versionOk("2.1.292")).toBe(false);
-  expect(versionOk("2.1.297")).toBe(false);
-  expect(versionOk("2.1.296-dev")).toBe(false);
-  expect(versionOk(undefined)).toBe(false);
+test("the filter keys on the result's shape, not on an engine version", () => {
+  // A valid Bash shape is compressed whatever the engine says it is
+  const r = bash(STATUS);
+  const out: any = filterResult("git status", r);
+  expect(out).not.toBe(r);
+  expect(out.result.stdout).not.toContain("(use ");
+  // An unknown shape comes back as the very same object
+  for (const x of [
+    { result: { output: STATUS } },
+    { result: { stdout: ["a"] } },
+    { result: STATUS },
+    { result: null },
+    { result: [{ type: "text", text: STATUS }] },
+    {},
+  ])
+    expect(filterResult("git status", x)).toBe(x);
+  expect(filterResult("git status", undefined as any)).toBe(undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -336,6 +343,53 @@ test("veil: a Bash result keeps its shape; an errored one is withheld masked; no
   expect(JSON.stringify(veilResult(blocks, ctx()))).not.toContain(AWS);
 });
 
+// A picture's base64: long, mixed, high entropy, so the entropy rule takes it
+// for a secret when it is read as text
+function pixels(n: number): string {
+  const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let x = 12345;
+  let out = "";
+  for (let i = 0; i < n; i++) {
+    x = (x * 1103515245 + 12345) & 0x7fffffff;
+    out += abc[(x >> 16) % 64];
+  }
+  return out;
+}
+
+test("veil: an image block crosses whole, the text beside it is still masked", () => {
+  const data = pixels(400);
+  // The control: read as text, this very string is masked
+  expect(veil(data, ctx())!.masked).toBeGreaterThan(0);
+  const image = { type: "image", data, mimeType: "image/png" };
+  const nested = {
+    type: "image",
+    source: { type: "base64", media_type: "image/png", data },
+  };
+  const only = { result: [image, nested] };
+  expect(veilResult(only, ctx())).toBe(only);
+  const mixed = {
+    result: {
+      content: [
+        { type: "text", text: `token ${GH}` },
+        image,
+        nested,
+        { type: "text", text: `key ${AWS}` },
+      ],
+    },
+  };
+  const out: any = veilResult(mixed, ctx());
+  expect(out).not.toBe(mixed);
+  expect(out.result.content[1]).toEqual(image);
+  expect(out.result.content[2]).toEqual(nested);
+  expect(out.result.content[0].text).not.toContain(GH);
+  expect(out.result.content[3].text).not.toContain(AWS);
+  expect(out.result.content[0].text).toContain("[masked:");
+  // Only a block that says it is an image is spared: the same data in a
+  // text block is masked
+  const text = { result: [{ type: "text", text: data }] };
+  expect(JSON.stringify(veilResult(text, ctx()))).not.toContain(data);
+});
+
 test("veil: past the size budget the result comes back as it was (fail open)", () => {
   const big = bash(`${GH}\n${"x".repeat(2_000_001)}`);
   expect(veilResult(big, ctx())).toBe(big);
@@ -376,7 +430,7 @@ test("invariant: whatever the policies, the pipeline answers r, a filtered r wit
         filter:
           fail === "filter"
             ? boom
-            : async (r: any) => filterResult(line, r, true),
+            : async (r: any) => filterResult(line, r),
       } as any);
       const r = bash(STATUS);
       const out: any = await runBash(async () => r, p);
