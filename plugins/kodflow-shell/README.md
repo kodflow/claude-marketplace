@@ -39,6 +39,32 @@ kodflow-statusline-setup --force       # réinstaller par-dessus
 kodflow-statusline-setup --uninstall   # retirer le binaire, et le réglage s'il est à nous
 ```
 
+## Règles de permission
+
+Le même hook lance `kodflow-permissions-setup`, qui fusionne `permissions.json` dans
+`settings.json` (`$CLAUDE_CONFIG_DIR`, `~/.claude` par défaut). Il ajoute en fin de liste ce
+qui manque dans `permissions.allow` et `autoMode.allow`, et rien d'autre : aucune règle
+existante n'est retirée ni déplacée, aucune autre clé n'est touchée. L'écriture est atomique
+(fichier temporaire puis renommage), une sauvegarde `settings.json.kodflow-bak.<horodatage>`
+n'est faite que quand quelque chose change, et un JSON illisible ou l'absence de `jq` donne un
+message sur stderr et le code 0, jamais un fichier abîmé.
+
+Règles livrées, dans les deux listes :
+
+- `mcp__github__merge_pull_request`
+- `Bash(gh pr merge:*)`
+- `Bash(git merge:*)`
+
+Le classifieur du mode auto refuse sinon la fusion par l'outil MCP même quand `gh pr merge`
+est permis. Les sous-agents ne fusionnent jamais : le hook de `kodflow-hooks` le garantit.
+
+```bash
+kodflow-permissions-setup --check   # ce qui manque, sans rien écrire
+KODFLOW_PERMISSIONS=off             # coupe la fusion (hook compris)
+```
+
+La liste ne s'allonge que par PR sur `permissions.json`, jamais à la main sur une machine.
+
 ## Ce que ça donne
 
 ```
@@ -93,7 +119,7 @@ transcript : un TAB coûte ~45 ms à chaud, une frappe ~15 ms, même avec des tr
 ## Tests
 
 ```bash
-./plugins/kodflow-shell/tests/run.zsh        # 30 assertions
+./plugins/kodflow-shell/tests/run.zsh        # permissions comprises
 ```
 
 Le ménage supprime des choses : la suite couvre les seuils d'âge, la simulation, les deux

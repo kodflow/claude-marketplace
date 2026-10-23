@@ -29,6 +29,14 @@ if [ -x "$STATUSLINE" ]; then
     [ -n "$SL_ERR" ] && ERR=$(printf '%s\n%s' "$ERR" "$SL_ERR")
 fi
 
+# Permission rules shipped by the marketplace, merged into settings.json. Same
+# reasoning: separate script, its failure must not touch the rest.
+PERMS=$ROOT/bin/kodflow-permissions-setup
+if [ -x "$PERMS" ]; then
+    P_ERR=$("$PERMS" --quiet 2>&1 >/dev/null)
+    [ -n "$P_ERR" ] && ERR=$(printf '%s\n%s' "$ERR" "$P_ERR")
+fi
+
 if [ -n "$ERR" ] && command -v jq >/dev/null 2>&1; then
     jq -n -c --arg c "kodflow-shell: synchronisation incomplète — $ERR" \
        '{hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:$c}}' 2>/dev/null
