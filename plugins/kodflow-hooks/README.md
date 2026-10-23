@@ -18,7 +18,7 @@ need **Claude Code 2.1.293 or later**.
 `hooks/mod/register.ts` is wiring only, one `on(...)` per event; the logic
 sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
 `paths.ts`, `lint.ts`, `shell.ts`, `patterns.ts`, `guards.ts`,
-`filter.ts`, `veil.ts`, `pipeline.ts`, `fable.ts`, `cleanup.ts`, and for the three machine
+`filter.ts`, `veil.ts`, `mcp-probe.ts`, `pipeline.ts`, `fable.ts`, `cleanup.ts`, and for the three machine
 guards `machine-guards.ts` over a port, with `modwall.ts`, `collision.ts`,
 `zsh.ts`), which never touch `$`: the engine follows `$` and `on` only inside
 register.ts.
@@ -32,6 +32,7 @@ register.ts.
 | `tool.call` on a task tool | answers it (below); a refusal is `{ deny }` with the text the model reads, an internal failure a text error, never a crash |
 | `tool.call` on Bash | one pipeline of ordered policies (`pipeline.ts`), below |
 | every `tool.call`, after the tool ran | secrets masked in the result (`veil.ts`), below |
+| `tool.call` on an `mcp__*` tool, after the veil | one line of shape and size in `mcp-shapes.jsonl` (`mcp-probe.ts`), below |
 | `prompt.submit` | remembers when the user last pressed Enter (`origin.kind` `composer`, `notePrompt` of machine-guards.ts, read through `lastComposerAt()`): the collision and gated-model questions are put only to someone who typed in the last 10 minutes |
 | `attribution.text` | `""` for `commit` and `pr`; `exemption` and `remedy` untouched |
 | `plugin.register` | **modwall**: refuses every user-tier hooks module whose provenance is not `*@kodflow` (the list is in `modwall.ts`, nothing the model writes widens it); built-in and managed tiers are not judged. Each decision goes to `$.store` (`modwall`, last 100) and the debug log; a refusal is toasted once the session binds |
@@ -56,7 +57,7 @@ with its own failure rule. No policy ever answers `allow`, and none answers
 |---|--------|--------------|-----------|
 | 1 | guards (`guards.ts`) | the shell's Bash guards doubled, refusal only: same reader (`shell.ts`, a port of on-tool.sh's), same order of blocks, same motifs; the bash-guard corpus is replayed against both. The staged-secret scan stays the shell's alone; the mcp.json refusal is doubled (the index read by name only), and the generic `tool.call` hook holds the forge tools to it | is logged, the call goes on |
 | 2 | the call | the shell's `PreToolUse` runs beneath, as ever | — |
-| 3 | output filter (`filter.ts`, L3) | a line that is exactly one `git status`, `git log`, `git diff`, `ls -l`, `find` or `grep -rn` gets its stdout shortened (hints, index lines, columns, repeated prefixes); never a read whose bytes count (`cat`, `head`, `tail`, `sed`, `diff`, `git show`, `git cat-file`, …), never a failed, interrupted, persisted, image, background or structured result, only when `stdout` is a string and the engine version is inside `FILTER_VERSIONS` (CI checks the pinned one is). Every other key of the result is kept | returns the result untouched |
+| 3 | output filter (`filter.ts`, L3) | a line that is exactly one `git status`, `git log`, `git diff`, `ls -l`, `find` or `grep -rn` gets its stdout shortened (hints, index lines, columns, repeated prefixes); never a read whose bytes count (`cat`, `head`, `tail`, `sed`, `diff`, `git show`, `git cat-file`, …), never a failed, interrupted, persisted, image, background or structured result, only when the result has the shape a Bash call gives, an object whose `stdout` is a string, checked on every call and on any engine version (no version window to go stale). Every other key of the result is kept | returns the result untouched |
 
 Each decision and failure is one `ModPolicy` line in the session log.
 
@@ -74,7 +75,35 @@ token of 20 characters or more, letters and digits mixed, above 4.3 bits per
 character, unless it is a hash, a UUID, a path, an integrity digest or base64
 of plain text. A masked value is gone, nothing keeps it. An errored result
 with a secret is withheld with the masked text. Past 2 000 000 characters or
-1.5 s, the result comes back as it was (fail open).
+1.5 s, the result comes back as it was (fail open). A `{type:"image"}`
+block is left whole, not read as text: its `data` is base64 pixels, which the
+entropy rule would take for a token. The text blocks of the same result are
+still masked.
+
+### The MCP shape probe: `mcp-shapes.jsonl`
+
+`<config>/kodflow/sessions/<session>/mcp-shapes.jsonl` (`mcp-probe.ts`): after
+an `mcp__*` tool ran and its result was veiled, one JSON line. It measures
+how large MCP results are, and what shape, before anything is built on them;
+the result itself is never changed, cut or cached.
+
+| Field | Content |
+|-------|---------|
+| `at` | time, whole seconds |
+| `tool` | the tool's name |
+| `keys` | the keys of the answer (`result`, `isError`, `deny`, …) |
+| `form` | what `result` is: `string`, `array`, `object`, `null`, … |
+| `resultKeys` | the keys of `result` when it is an object |
+| `blocks` | the `type` of each content block (`result` or `result.content`), in order |
+| `chars` | the length of the result serialised, in characters |
+
+No value of the result is read into the line: a key or a block type is kept
+only when it reads like an identifier (letters, digits, `_`, `-`, 32 at most),
+else it is written `?`; lists stop at 20. The file is created `0600`
+(`umask 077`, then `chmod 600`, in one `sh` run with the line on stdin), one
+append per call, no rotation: it is read, then deleted, by the user.
+`KODFLOW_MCP_PROBE=off` turns it off; a failed append is swallowed and the
+result goes to the model as it is.
 
 Every hook fails open. `KODFLOW_MOD=off` (environment or the `env` block of
 the settings) makes the module pass-through: no tool, no beat, no marker.
@@ -788,6 +817,7 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `ROOT_OK=1` prefix on a command | that line is exempt from the delegation gate |
 | `KODFLOW_ROOT=off` | the delegation gate, its Stop rule and its prompt line are off for the session |
 | `KODFLOW_MOD=off` | the mod hooks nothing: no task tools, no beat, attribution left to Claude Code |
+| `KODFLOW_MCP_PROBE=off` | no `mcp-shapes.jsonl` line after an MCP tool's result |
 | `KODFLOW_ROUTE=off` | the routing gate is off for the session |
 | `KODFLOW_ISOLATION=off` | the isolation gate is off for the session |
 | `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
@@ -879,10 +909,13 @@ bash-guard corpus against the mod's guards in a real repository (every Bash
 row decided as on-tool.sh decides it, known gaps reported), and the module's
 invariants read from its sources (never `allow`; `{ result }` built only by a
 task tool, the filter and the veil; the secret variables read are
-`SECRET_VARS`). `tests/mod/pipeline.test.ts` holds the pipeline's logic: the
+`SECRET_VARS`; the MCP probe imports `paths.ts` alone and reads no text or
+data field), and the probe's append on a real file system (0600, also on a
+file that was 0644, no value written). `tests/mod/mcp-probe.test.ts` holds the
+probe's line. `tests/mod/pipeline.test.ts` holds the pipeline's logic: the
 order of the policies and a failure injected into each, the filter on its
 corpus and on the "bytes" corpus (reads never touched), the veil and its false
-positives (git hashes, base64 of text), and the shell reader's details.
+positives (git hashes, base64 of text) and its image blocks left whole, and the shell reader's details.
 
 A hundred and forty cases in a throwaway repository, plus the bash-guard
 corpus (about two hundred lines, rc and motif compared): every block, the

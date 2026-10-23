@@ -8,7 +8,7 @@
 //                               DIR, each waiting up to WAIT_MS for the lock
 //
 // Node 22.18 or later runs the TypeScript as it is (type stripping).
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -32,6 +32,7 @@ import { decide, replay, type Row } from "./corpus.ts";
 import { forgeMcpJson } from "../../hooks/mod/guards.ts";
 import { loadRules } from "../../hooks/mod/patterns.ts";
 import { invariants } from "./invariants.ts";
+import { appendArgv, shapeLine, shapeOf } from "../../hooks/mod/mcp-probe.ts";
 import { judgeSpawn, judgeSwitch, parseGated, type SpawnPort } from "../../hooks/mod/fable.ts";
 import {
   claim,
@@ -571,12 +572,39 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
   }
 }
 
+console.log("== the MCP probe's append, on a real file system");
+{
+  const root = mkdtempSync(join(tmpdir(), "mcp-probe-"));
+  const file = join(root, "mcp-shapes.jsonl");
+  const append = (text: string) =>
+    new Promise<number | null>((resolve) => {
+      const [cmd, ...args] = appendArgv(file);
+      const p = spawn(cmd!, args, { stdio: ["pipe", "ignore", "ignore"] });
+      p.on("close", resolve);
+      p.stdin.end(text);
+    });
+  try {
+    const line = shapeLine(shapeOf("mcp__s__t", { result: "body-of-the-result" }, Date.now()));
+    check((await append(line)) === 0, "a new file is created");
+    check((statSync(file).mode & 0o777) === 0o600, "a new file is 0600");
+    writeFileSync(file, readFileSync(file, "utf8"), { mode: 0o644 });
+    await run("chmod", ["644", file]);
+    check((await append(line)) === 0, "a second line is appended");
+    check((statSync(file).mode & 0o777) === 0o600, "a file that was 0644 comes out 0600");
+    const rows = readFileSync(file, "utf8").split("\n").filter(Boolean);
+    check(rows.length === 2 && rows.every((r) => JSON.parse(r).form === "string"), "two lines, each a JSON object");
+    check(!readFileSync(file, "utf8").includes("body-of-the-result"), "no value of the result is in the file");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 console.log("== invariants over the hooks module");
 {
   const bad = invariants(join(dirname(HERE), "..", "..", "hooks", "mod"));
   check(
     bad.length === 0,
-    "never allow; { result } only from the task tools, the filter and the veil; the secret variables read are SECRET_VARS",
+    "never allow; { result } only from the task tools, the filter and the veil; the probe pure and valueless; the secret variables read are SECRET_VARS",
     bad.join("\n       "),
   );
 }

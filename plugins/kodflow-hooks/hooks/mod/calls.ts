@@ -132,3 +132,7 @@ export function logPayload(
   else base.tool_response = { ok: true };
   return base;
 }
+
+/** An MCP tool's call (mcp__<server>__<tool>): what the shape probe watches. */
+export const isMcpTool = (tool: unknown): tool is string =>
+  typeof tool === "string" && /^mcp__/.test(tool);

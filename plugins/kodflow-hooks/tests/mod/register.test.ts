@@ -18,6 +18,8 @@ type Host = {
   commands: any[];
   agents: { id: string; type: string; name?: string; status: string }[];
   failMv?: boolean;
+  /** The probe's append fails (exit 1). */
+  failSh?: boolean;
   /** The engine version $.session.version() reports. */
   version: string;
 };
@@ -122,6 +124,14 @@ function host(on: any, env: Record<string, string>): Host {
       }
       case "bash":
         return done(0);
+      case "sh": {
+        // mcp-probe's append: stdin to the file named last
+        if (argv[3] !== "mcp-probe" || typeof stdin !== "string") return done(127);
+        if (h.failSh) return done(1);
+        const file = argv[4]!;
+        h.files.set(file, (h.files.get(file) ?? "") + stdin);
+        return done(0);
+      }
       case "git":
         return done(1);
     }
@@ -550,13 +560,26 @@ test("Bash: what comes back is the filtered output, every other key kept", async
   expect(raw.result.stdout).toBe(STATUS);
 });
 
-test("Bash: an engine version CI has not validated gets the output whole", async ($, on) => {
-  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
-  h.version = "2.1.297";
-  on("tool.call", { tool: "Bash" }, async () => out(STATUS) as any);
+// One test per version: a test registers its hooks (host, on) before its
+// first call to $, so the loop is over tests, not inside one
+for (const version of ["2.1.292", "2.1.309"])
+  test(`Bash: the output is compressed on engine ${version}, outside the range once validated`, async ($, on) => {
+    const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+    h.version = version;
+    on("tool.call", { tool: "Bash" }, async () => out(STATUS) as any);
+    await start($);
+    const r: any = await $.tool.call({ tool: "Bash", command: "git status" } as any);
+    expect(r.result.stdout).not.toContain("(use ");
+    expect(r.result.stdout).toContain("modified:   a.txt");
+  });
+
+test("Bash: a result of a shape the filter does not know comes back whole", async ($, on) => {
+  host(on, { CLAUDE_CONFIG_DIR: CFG });
+  const odd = { result: { output: STATUS } };
+  on("tool.call", { tool: "Bash" }, async () => odd as any);
   await start($);
   const r: any = await $.tool.call({ tool: "Bash", command: "git status" } as any);
-  expect(r.result.stdout).toBe(STATUS);
+  expect(r).toEqual(odd);
 });
 
 test("veil: a credential in any tool's result is masked before the model reads it", async ($, on) => {
@@ -571,6 +594,69 @@ test("veil: a credential in any tool's result is masked before the model reads i
   expect(r.result.stdout).toContain("[masked:");
   const m: any = await $.tool.call({ tool: "mcp__srv__read" } as any);
   expect(JSON.stringify(m)).not.toContain(gh);
+});
+
+const SHAPES = `${DIR}/mcp-shapes.jsonl`;
+const PIXELS = "Zm9v".repeat(120) + "Q2xhdWRl9Xy7";
+
+test("mcp probe: one line of shape and size per MCP result, no value of it", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  const secretText = "very-private-body-text-" + "x".repeat(50);
+  on("tool.call", { tool: "mcp__srv__read" }, async () =>
+    ({
+      result: {
+        content: [
+          { type: "text", text: secretText },
+          { type: "image", data: PIXELS, mimeType: "image/png" },
+        ],
+        isError: false,
+      },
+    }) as any,
+  );
+  on("tool.call", { tool: "mcp__srv__plain" }, async () => ({ result: secretText }) as any);
+  on("tool.call", { tool: "Bash" }, async () => out("hello\n") as any);
+  await start($);
+  const a: any = await $.tool.call({ tool: "mcp__srv__read" } as any);
+  expect(a.result.content[1].data).toBe(PIXELS);
+  await $.tool.call({ tool: "mcp__srv__plain" } as any);
+  await $.tool.call({ tool: "Bash", command: "echo hello" } as any);
+  const lines = (h.files.get(SHAPES) ?? "").split("\n").filter(Boolean);
+  expect(lines.length).toBe(2);
+  const first = JSON.parse(lines[0]!);
+  expect(first.tool).toBe("mcp__srv__read");
+  expect(first.form).toBe("object");
+  expect(first.resultKeys).toEqual(["content", "isError"]);
+  expect(first.blocks).toEqual(["text", "image"]);
+  expect(first.chars).toBeGreaterThan(PIXELS.length);
+  expect(JSON.parse(lines[1]!).form).toBe("string");
+  const file = h.files.get(SHAPES)!;
+  expect(file).not.toContain(secretText);
+  expect(file).not.toContain(PIXELS);
+  expect(file).not.toContain("very-private");
+  // The append is the one 0600 command, built from argv
+  const run = h.runs.find((r) => r[0] === "sh")!;
+  expect(run[2]).toContain("umask 077");
+  expect(run[2]).toContain("chmod 600");
+  expect(run[4]).toBe(SHAPES);
+});
+
+test("mcp probe: KODFLOW_MCP_PROBE=off writes nothing, and the result is untouched", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_MCP_PROBE: "off" });
+  on("tool.call", { tool: "mcp__srv__read" }, async () => ({ result: "body" }) as any);
+  await start($);
+  const r: any = await $.tool.call({ tool: "mcp__srv__read" } as any);
+  expect(r.result).toBe("body");
+  expect(h.files.has(SHAPES)).toBe(false);
+});
+
+test("mcp probe: a failed append lets the result through", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  on("tool.call", { tool: "mcp__srv__read" }, async () => ({ result: "body" }) as any);
+  h.failSh = true;
+  await start($);
+  const r: any = await $.tool.call({ tool: "mcp__srv__read" } as any);
+  expect(r.result).toBe("body");
+  expect(h.files.has(SHAPES)).toBe(false);
 });
 
 test("guards: the mod refuses what the shell refuses, with its motif", async ($, on) => {

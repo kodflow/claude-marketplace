@@ -300,17 +300,6 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
-      # The output filter (hooks/mod/filter.ts) rewrites a Bash result only on
-      # an engine version whose result shape CI has checked: the pinned one
-      # must sit inside FILTER_VERSIONS, or the filter is off where it runs.
-      - name: The pinned engine is inside the filter's validated range
-        run: |
-          node --input-type=module -e '
-            const { versionOk, FILTER_VERSIONS } = await import("./plugins/kodflow-hooks/hooks/mod/filter.ts");
-            const v = process.env.CLAUDE_CODE_VERSION;
-            if (!versionOk(v)) { console.log(`::error::${v} is outside ${JSON.stringify(FILTER_VERSIONS)}`); process.exit(1); }
-            console.log(`${v} inside ${JSON.stringify(FILTER_VERSIONS)}`);'
-
       - name: The mod's tests, in the engine (claude plugin test)
         run: claude plugin test plugins/kodflow-hooks
 
