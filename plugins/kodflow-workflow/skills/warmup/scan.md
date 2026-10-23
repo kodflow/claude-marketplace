@@ -15,7 +15,7 @@ peek_workflow:
         '*CLAUDE.md' '*CLAUDE.local.md' '.claude/rules/*.md' '.claude/rules/**/*.md' \
         | while IFS= read -r f; do
             [ -f "$f" ] || continue
-            printf '%s\t%s\t%s\t%s\t%s\n' \
+            printf '%s\t%s\t%s\t%s\n' \
               "$(wc -l < "$f" | tr -d ' ')" "$(wc -c < "$f" | tr -d ' ')" "$(wc -m < "$f" | tr -d ' ')" "$f"
           done
     note: |
@@ -32,7 +32,7 @@ peek_workflow:
         depth = path.count('/') - base.count('/')
         loaded = file is in the working directory or an ancestor of it
                  (CLAUDE.md, .claude/CLAUDE.md, CLAUDE.local.md),
-                 or is imported by one of those (grep -n '^@\|[[:space:]]@[^[:space:]`]' on it),
+                 or is imported by one of those (command grep -n '^@\|[[:space:]]@[^[:space:]`]' on it),
                  or is a .claude/rules file without 'paths:' frontmatter
         on_demand = every other CLAUDE.md (subdirectories) and path-scoped rules
       Sort by ascending depth
@@ -52,6 +52,12 @@ peek_workflow:
       [ -f "$D/detect-project.sh" ] && bash "$D/detect-project.sh"
       # the allowed-tools rule is Bash(bash *detect-project.sh): the literal tail matters
     returns: "languages, build_system.targets, test_frameworks, ci — JSON"
+    caution: |
+      Some facets come from binaries installed on the workstation, not from the
+      repository (`wrangler: true` from `command -v wrangler`). Report them as
+      "tools installed on this machine", never as a fact about the project:
+      only marker files (`*.tf` providers, `wrangler.toml`, `.aws/`) say what
+      the project uses.
     fallback: |
       When no candidate path exists, the script is absent, jq is missing, or `languages` comes back empty
       (manifests below the root, as in a monorepo), Glob the manifests below,
@@ -86,7 +92,7 @@ peek_workflow:
   5_locate_ledger:
     action: "Find the constraint ledger written by /project"
     check:
-      - "CLAUDE.md            -> grep -n '^### C-[0-9]'"
+      - "CLAUDE.md            -> command grep -n '^### C-[0-9]'"
       - ".claude/constraints.md"
     output: [ledger_path, active_constraint_count, superseded_count]
     absent: "Report 'no ledger' and suggest /project. Never synthesise one."
@@ -140,7 +146,7 @@ health_checks:
           { l[NR]=$0 }
           END { for (i=1;i<=NR;i++) {
                   w = l[i] (i<NR ? " " l[i+1] : "")
-                  if (tolower(l[i]) ~ /(as of|status:|(état|etat) (au|du|:)|en service|en ligne|deployed|déployé|rien (n.est )?(déployé|deploye|converg|appliqué|applique)|pas (déployé|deploye)|wip)/ \
+                  if (tolower(l[i]) ~ /(as of|status:|(état|etat) (au|du|:)|en service|en production|est en ligne|en ligne depuis|deployed|déployé|rien (n.est )?(déployé|deploye|converg|appliqué|applique)|pas (déployé|deploye)|wip)/ \
                       && w ~ /(20[0-9][0-9]-[01][0-9]-[0-3][0-9]|[0-3][0-9]\/[01][0-9]\/20[0-9][0-9])/)
                     printf "%s:%d:%s\n", F, i, substr(l[i],1,160) } }' "$f"
       done | head -50
