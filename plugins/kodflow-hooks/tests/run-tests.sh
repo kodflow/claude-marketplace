@@ -4,7 +4,8 @@
 # test_root_gate.sh here, the routing gate, the gated-model fallback and the
 # agent feedback by test_agents.sh, the Go-project rule by test_gomod.sh, the
 # cleanup of a subagent's worktree on close by test_cleanup.sh, the commit
-# identity by test_identity.sh, the mod by tests/mod: run-node.ts under node, the
+# identity by test_identity.sh, the project's documents by test_docs.sh, the
+# journal of refusals by test_blocks.sh, the mod by tests/mod: run-node.ts under node, the
 # *.test.ts files under `claude plugin test`).
 set -e
 cd "$(dirname "$0")"
@@ -22,3 +23,5 @@ bash test_zsh_safe.sh
 bash test_gomod.sh
 bash test_cleanup.sh
 bash test_identity.sh
+bash test_docs.sh
+bash test_blocks.sh

@@ -202,6 +202,14 @@ if [ -s "$mcp_tasks" ]; then
         sig=$(printf '%s' "$dead" | cksum | cut -d' ' -f1)
         if ! grep -qxF "$sig" "$STATE/workers-nudged" 2>/dev/null; then
             printf '%s\n' "$sig" >> "$STATE/workers-nudged"
+            # One line per orphaned task in the journal of refusals (kind agent)
+            if . "$LIB/blocks.sh" 2>/dev/null; then
+                re='^ +- #([^ ]+) (.*): worker (.*) is stopped$'
+                printf '%s\n' "$dead" | while IFS= read -r d; do
+                    [[ $d =~ $re ]] || continue
+                    kf_block "${mcp_tasks%/*}" agent "" "${BASH_REMATCH[3]} arrêté, tâche #${BASH_REMATCH[1]} en cours (${BASH_REMATCH[2]})" "" "${BASH_REMATCH[3]}"
+                done
+            fi
             ctx="${ctx:+$ctx
 }These tasks are in progress on a subagent that has stopped, so nobody is on them. Set each to completed if its work is done, pending or waiting otherwise, or resume its subagent:
 $dead"
