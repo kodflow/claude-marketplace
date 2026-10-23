@@ -46,10 +46,11 @@ peek_workflow:
       # CLAUDE_PLUGIN_ROOT is not set in the Bash tool and ~/.codex/skills/_shared
       # does not exist for a plugin install: start from the skill's base directory
       # (given when the skill loaded; the script is its sibling _shared/).
-      S="<base directory of this skill>/../_shared/scripts/detect-project.sh"
-      [ -f "$S" ] || S="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/skills/_shared/scripts/detect-project.sh}"
-      [ -f "$S" ] || S=$(find "$HOME/.claude/plugins" -path '*kodflow-workflow*/skills/_shared/scripts/detect-project.sh' 2>/dev/null | head -1)
-      [ -f "$S" ] && bash "$S"
+      D="<base directory of this skill>/../_shared/scripts"
+      [ -f "$D/detect-project.sh" ] || D="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/skills/_shared/scripts}"
+      [ -f "$D/detect-project.sh" ] || D=$(dirname "$(find "$HOME/.claude/plugins" -path '*kodflow-workflow*/skills/_shared/scripts/detect-project.sh' 2>/dev/null | head -1)")
+      [ -f "$D/detect-project.sh" ] && bash "$D/detect-project.sh"
+      # the allowed-tools rule is Bash(bash *detect-project.sh): the literal tail matters
     returns: "languages, build_system.targets, test_frameworks, ci — JSON"
     fallback: |
       When no candidate path exists, the script is absent, jq is missing, or `languages` comes back empty
