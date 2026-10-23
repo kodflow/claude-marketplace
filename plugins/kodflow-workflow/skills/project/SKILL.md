@@ -191,6 +191,17 @@ Create only what is missing; never overwrite a file that already exists.
     └── goals/             # /refine output   (gitignored)
 ```
 
+Then, on every case including ADOPT, the documents manifest (`docs/manifest.json`,
+the list of the project's documents, which ones live elsewhere or are ignored):
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh init
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute
+```
+
+`init` never touches an existing manifest. Keep the `missing` ids of `compute`
+for Phase 6.
+
 ## Phase 4 — Capture the constraints
 
 This is the phase that must never be skipped, including on an ADOPT of a mature
@@ -228,6 +239,11 @@ Print the resolved workspace, the case taken, and the constraint count, then:
 Invoke `Skill(skill="warmup")` when the workspace was ADOPTed or CLONEd (there
 is existing context to load). Skip it on CREATE — an empty repository has
 nothing to warm up.
+
+When Phase 3 found missing documents, name them and propose
+`/kodflow-workflow:docs <id>,… --mode both` with `AskUserQuestion`:
+*Les rédiger maintenant (recommandé)* · *Plus tard*. On CREATE, `--mode ask`
+instead: there is nothing in the repository to read yet.
 
 ---
 

@@ -155,6 +155,18 @@ The AI documents its reasoning in the plan file under a "## Reasoning" section s
 
 ---
 
+## Project documents
+
+Before Phase 2, read the documents of `docs/manifest.json` (state:
+`bash "${CODEX_HOME:-$HOME/.codex}"/skills/docs/scripts/docs.sh compute`,
+the `ok` ones) that concern the subject, as well as the ADRs: requirements
+for a feature, data schema for storage, threat model for auth or secrets,
+quality and testing for the acceptance criteria. A plan that contradicts one
+says so under `## Contradictions`, citing `fichier:ligne`, and proposes
+either amending the document or changing the plan; it never silently wins.
+
+---
+
 ## Architecture decisions → `/adr`
 
 When the plan settles a non-obvious architectural trade-off (a new dependency or

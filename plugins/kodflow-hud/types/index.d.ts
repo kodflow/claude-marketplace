@@ -88,6 +88,44 @@ export type HudCiState = "pass" | "fail" | "pending" | "none" | "error";
 
 export type HudCi = { state: HudCiState; at: number };
 
+/** One document of docs.json (kodflow-hooks' catalogue), as the view reads it. */
+export type HudDoc = {
+  id: string;
+  name: string;
+  /** Relative to the project's root; a folder ends with "/". */
+  path: string;
+  state: "ok" | "missing" | "ignored";
+  /** Why it is ignored, as the manifest says (may be empty). */
+  reason?: string;
+  /** What the document is for, one line. */
+  why?: string;
+};
+
+/** docs.json: `found` false when the session has none (outside git). */
+export type HudDocs = {
+  found: boolean;
+  /** The project's git root, absolute. */
+  root?: string;
+  /** The manifest's path under the root (docs/manifest.json). */
+  manifest?: string;
+  docs: HudDoc[];
+};
+
+/** One line of blocks.jsonl: a call or a run something refused. */
+export type HudBlock = {
+  ts: string;
+  /** `ts` in milliseconds since the epoch. */
+  at: number;
+  kind: "hook" | "classifier" | "permission" | "ci" | "agent";
+  summary: string;
+  tool?: string;
+  motif?: string;
+  agent?: string;
+  ref?: string;
+  /** The permission rule that would have allowed the call, settings.json's form. */
+  rule?: string;
+};
+
 declare module "claude-code" {
   interface PluginState {
     "kodflow-hud": {
@@ -108,6 +146,10 @@ declare module "claude-code" {
       primed: string;
       /** Advances every few seconds, so the elapsed times redraw. */
       tick: number;
+      /** docs.json of the session, for the « Documents » view. */
+      docs: HudDocs;
+      /** blocks.jsonl of the session, newest first, for the « Refus » view. */
+      blocks: HudBlock[];
     };
   }
 }

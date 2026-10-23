@@ -26,7 +26,7 @@ The whole thing. Default view.
 
 ```text
 ╔════════════════════════════════════════════════════════════════════════════════╗
-║  kodflow — the work loop        22 skills · 4 plugins · 29 agents · 5 hooks     ║
+║  kodflow — the work loop        23 skills · 4 plugins · 29 agents · 5 hooks     ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 
   THE SPINE                         LEAVES BEHIND                    THEN TYPE
@@ -105,6 +105,9 @@ The whole thing. Default view.
   ──────────────────────────────────────────────────────────────────────────────
   /adr <decision>    docs/adr/NNNN-*.md   ◀── /plan  /git  /debug
                      a leaf: three arrows in, none out
+  /docs [id,…]       docs/<the catalogue>  ◀── /project
+                     ──▶ read back by /plan  /challenge  /refine
+  ◆ a draft is shown before it is written; a document is ignored only on your word
   /learn             ~/.claude/docs/learned/
   ◆ nothing is written without your yes
 
@@ -128,7 +131,7 @@ The whole thing. Default view.
 
 ```text
 +==============================================================================+
-|  kodflow -- the work loop   22 skills . 4 plugins . 29 agents . 5 hooks     |
+|  kodflow -- the work loop   23 skills . 4 plugins . 29 agents . 5 hooks     |
 +==============================================================================+
 
   THE SPINE                        LEAVES BEHIND                   THEN TYPE
@@ -207,6 +210,9 @@ The whole thing. Default view.
   ------------------------------------------------------------------------------
   /adr <decision>   docs/adr/NNNN-*.md   <-- /plan  /git  /debug
                     a leaf: three arrows in, none out
+  /docs [id,...]    docs/<the catalogue>  <-- /project
+                    --> read back by /plan  /challenge  /refine
+  <> a draft is shown before it is written; a document is ignored only on your word
   /learn            ~/.claude/docs/learned/
   <> nothing is written without your yes
 

@@ -24,6 +24,7 @@ allowed-tools:
 - ExitPlanMode(*)
 - Skill(*)
 - Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh:*)
 - Bash(jq:*)
 ---
 
@@ -168,6 +169,18 @@ When `--auto` is passed, ALL interactive checkpoints are skipped:
 The AI documents its reasoning in the plan file under a "## Reasoning" section so the user can review why choices were made.
 
 **When to use `--auto`:** When you trust the AI's judgment and want speed over interaction. You always review the final plan before `/refine → /goal`.
+
+---
+
+## Project documents
+
+Before Phase 2, read the documents of `docs/manifest.json` (state:
+`bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute`,
+the `ok` ones) that concern the subject, as well as the ADRs: requirements
+for a feature, data schema for storage, threat model for auth or secrets,
+quality and testing for the acceptance criteria. A plan that contradicts one
+says so under `## Contradictions`, citing `fichier:ligne`, and proposes
+either amending the document or changing the plan; it never silently wins.
 
 ---
 

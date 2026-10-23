@@ -62,7 +62,7 @@ kf_lang "$PROJECT_DIR"; kf_msg_color 1
 _add() { [ -n "$1" ] && ctx="${ctx:+$ctx$NL}$1"; }
 
 # _say CAUSE STATE KEY [name=value...]: one line per cause, said once per
-# state. stop-said holds, per cause, the fingerprint of the state last
+# state; returns 0 when it said it. stop-said holds, per cause, the fingerprint of the state last
 # reported: the same state is not reported twice in a row, a changed one
 # is, and a cause that clears (STATE empty) drops its record, so the same
 # state coming back later is reported again.
@@ -70,12 +70,13 @@ _say() {
     local cause=$1 st=$2 f=$STATE/stop-said sig; shift 2
     if [ -z "$st" ]; then
         [ -f "$f" ] && { grep -v "^$cause	" "$f" > "$f.$$" 2>/dev/null; mv -f "$f.$$" "$f" 2>/dev/null; }
-        return 0
+        return 1
     fi
     sig=$(printf '%s' "$st" | cksum | cut -d' ' -f1)
-    grep -qxF "$cause	$sig" "$f" 2>/dev/null && return 0
+    grep -qxF "$cause	$sig" "$f" 2>/dev/null && return 1
     { grep -v "^$cause	" "$f" 2>/dev/null; printf '%s\t%s\n' "$cause" "$sig"; } > "$f.$$" 2>/dev/null && mv -f "$f.$$" "$f" 2>/dev/null
     _add "$(kf_msg "$@")"
+    return 0
 }
 
 # This session's edits, from the tracker on-tool.sh fills. ktn-linter runs
@@ -181,8 +182,9 @@ if [ -s "$mcp_tasks" ]; then
            then [$act[] | select(.status == "pending")] else [] end) as $idle
         | ([$main[] | select((.epic // 0) == 0 and .status == "pending")] | minus($idle)) as $loose
         | ["stopped", ($stopped | ids)], ["unattended", ($unatt | ids)],
-          ["overcount", ($over | ids), $nb, $w], ["idle", ($idle | ids)], ["loose", ($loose | ids)]
-        | map(tostring) | join("\u001f")' "$mcp_tasks" 2>/dev/null)
+          ["overcount", ($over | ids), $nb, $w], ["idle", ($idle | ids)], ["loose", ($loose | ids)],
+          ($stopped[] | ["orphan", .id, (.subject // ""), .worker])
+        | map(tostring | gsub("[\u0000-\u001f]"; " ")) | join("\u001f")' "$mcp_tasks" 2>/dev/null)
 fi
 builtin=""
 case "${CLAUDE_CODE_ENABLE_TODO_TOOLS:-}" in 0|false|no|off) ;; *)
@@ -197,7 +199,13 @@ for c in stopped unattended overcount idle loose; do
     IFS=$'\x1f' read -r _ ids n w <<<"$line"
     if [ "$c" = unattended ]; then [ "$root_on" = 1 ] || continue
     else [ "$tasks_on" = 1 ] || continue; fi
-    _say "$c" "$ids" "stop.$c" ids="$ids" n="$n" w="$w"
+    _say "$c" "$ids" "stop.$c" ids="$ids" n="$n" w="$w" || continue
+    # Said: one line per orphaned task in the journal of refusals (kind agent)
+    if [ "$c" = stopped ] && . "$LIB/blocks.sh" 2>/dev/null; then
+        printf '%s\n' "$causes" | grep "^orphan"$'\x1f' | while IFS=$'\x1f' read -r _ id subj worker; do
+            kf_block "${mcp_tasks%/*}" agent "" "$worker arrêté, tâche #$id en cours ($subj)" "" "$worker"
+        done
+    fi
 done
 [ "$tasks_on" = 1 ] && _say builtin "$builtin" stop.builtin ids="$builtin"
 
