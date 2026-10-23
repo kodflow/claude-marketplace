@@ -305,6 +305,62 @@ test("keys: ↑↓ choose, ⏎ folds, one top-level branch open at a time; a cli
   expect(await line(16)).toContain("✓ T0  Événements réels");
 });
 
+// The cause of the clicks that missed: a click moved the row it hit. The
+// list re-centred on the task chosen, or a branch above it closed, so the
+// next click at the same place landed on another task
+test("a click never moves the row it hit: the next click at the same place is on the same task", async ($, on) => {
+  await seeded($, on);
+  const click = (ui: any, y: number) =>
+    ui.pointer({ type: "down", x: 10, y, button: "left" });
+  const lines = async (ui: any) => capture(await drawnIn(ui)).split("\n");
+  // A short pane, where the list scrolls: fold C6, then C8 (line 6) opens
+  // where it stands, and a second click there folds it again
+  const short = await mount($, 88, 12);
+  await click(short, 4);
+  expect((await lines(short))[6]).toContain("▶ C8     Spécialistes ×5");
+  await click(short, 6);
+  let text = await lines(short);
+  expect(text[6]).toContain("├▾ ▶ C8     Spécialistes ×5");
+  expect(text[7]).toContain("└─ ○ ansible");
+  await click(short, 6);
+  text = await lines(short);
+  expect(text[6]).toContain("├▸ ▶ C8     Spécialistes ×5");
+  expect(text.join("\n")).not.toContain("ansible");
+  await short.unmount();
+  // A full pane: C8 (line 12) opens below the open C6 and stays on line 12;
+  // folding it again leaves it there too
+  const full = await mount($, 88, 20);
+  expect((await lines(full))[12]).toContain("├▸ ▶ C8     Spécialistes ×5");
+  await click(full, 12);
+  text = await lines(full);
+  expect(text[12]).toContain("├▾ ▶ C8     Spécialistes ×5");
+  expect(text[13]).toContain("└─ ○ ansible");
+  await click(full, 12);
+  text = await lines(full);
+  expect(text[12]).toContain("├▸ ▶ C8     Spécialistes ×5");
+  await full.unmount();
+});
+
+test("↑↓ scroll the list only as far as the selection needs", async ($, on) => {
+  await seeded($, on);
+  const ui = await mount($, 88, 12);
+  const lines = async () => capture(await drawnIn(ui)).split("\n");
+  // C6 starts selected, open, on line 4; ↓ walks its subtasks without
+  // moving the list until the selection reaches its last line
+  expect((await lines())[4]).toContain("● C6     Porte Fable");
+  await ui.key({ key: "down" });
+  await ui.key({ key: "down" });
+  let text = await lines();
+  expect(text[4]).toContain("● C6     Porte Fable");
+  expect(text[6]).toContain("● Grant de session");
+  // Past the last line, the list moves by one
+  await ui.key({ key: "down" });
+  await ui.key({ key: "down" });
+  text = await lines();
+  expect(text[7]).toContain("⊘ Test parallèle");
+  expect(text[3]).toContain("├▾ ● C6     Porte Fable");
+});
+
 test("a surface with no Client draws the same tree, still", async ($, on) => {
   await seeded($, on);
   for (const surface of ["vscode", "mobile"] as const) {
