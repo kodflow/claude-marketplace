@@ -8,10 +8,8 @@ import {
   prsOf,
   type Ctx,
 } from "../hooks/mod/board.ts";
-import { fold, observe, prune } from "../hooks/mod/activity.ts";
 import { alertsFor } from "../hooks/mod/alerts.ts";
 import { ciState, prsToCheck } from "../hooks/mod/ci.ts";
-import { resolvePath, shortFile, tilde } from "../hooks/mod/paths.ts";
 
 const HOME = "/u/dev";
 const NOW = 1_800_000_000_000; // ms
@@ -138,7 +136,7 @@ test("an in-progress task is silent when its worker stopped, or after the quiet 
   // ... unless the worker's tool calls say it is busy
   const busy = ctx({
     now: NOW + 11 * 60_000,
-    activity: { a1: { agentId: "a1", files: [], last: NOW + 10 * 60_000 } },
+    activity: { a1: { agentId: "a1", last: NOW + 10 * 60_000 } },
   });
   expect(judge(task, busy).silent).toBe(false);
 });
@@ -149,7 +147,7 @@ test("a task of the main loop follows the main loop's activity", () => {
   expect(judge(started, ctx({ now: NOW + 20 * 60_000 })).silent).toBe(true);
   const busy = ctx({
     now: NOW + 20 * 60_000,
-    activity: { main: { agentId: "main", files: [], last: NOW + 19 * 60_000 } },
+    activity: { main: { agentId: "main", last: NOW + 19 * 60_000 } },
   });
   expect(judge(started, busy)).toMatchObject({ silent: false, state: "main" });
 });
@@ -184,120 +182,6 @@ test("a silent task is toasted once, with its reason", () => {
   expect(out.alerts.map((a) => a.text)).toEqual([
     "#3 Wire the pane : silencieuse, son worker est arrêté",
   ]);
-});
-
-test("activity: file tools name their file, shell commands their folder", () => {
-  expect(observe("Read", { file_path: "src/a.ts" }, "/w/repo", HOME)).toEqual({
-    dir: "/w/repo/src",
-    files: [{ path: "/w/repo/src/a.ts", op: "read" }],
-  });
-  expect(observe("Edit", { file_path: "~/x/b.go" }, "/w", HOME).files).toEqual([
-    { path: "/u/dev/x/b.go", op: "write" },
-  ]);
-  expect(
-    observe("NotebookEdit", { notebook_path: "/n/c.ipynb" }, "/w", HOME)
-      .files[0]!.op,
-  ).toBe("write");
-  expect(observe("Grep", { path: "/w/lib" }, "/w", HOME)).toEqual({
-    dir: "/w/lib",
-    files: [],
-  });
-  expect(
-    observe("Bash", { command: "cd /w/other && make" }, "/w", HOME),
-  ).toEqual({
-    dir: "/w/other",
-    files: [],
-  });
-  expect(
-    observe("Bash", { command: 'git -C "/w/my repo" status' }, "/w", HOME).dir,
-  ).toBe("/w/my repo");
-  expect(observe("Bash", { command: "ls -la" }, "/w", HOME)).toEqual({
-    files: [],
-  });
-  expect(observe("WebFetch", { url: "https://x" }, "/w", HOME)).toEqual({
-    files: [],
-  });
-});
-
-test("a commit is seen in every git spelling, in the folder git was pointed at", () => {
-  for (const command of [
-    'git commit -m "x"',
-    "cd /w/r && git add . && git commit -m x",
-    "git -C /w/r commit -m x",
-    "git -c user.name=k --no-pager commit --amend",
-  ])
-    expect(observe("Bash", { command }, "/w/r", HOME).commit).toBe("/w/r");
-  expect(
-    observe("Bash", { command: "git log --grep=commit" }, "/w/r", HOME).commit,
-  ).toBeUndefined();
-  expect(
-    observe("Bash", { command: "echo git commit" }, "/w/r", HOME).commit,
-  ).toBeDefined(); // known gap: no shell parser
-});
-
-test("fold keeps the newest first, once each, and a commit turns writes green", () => {
-  let a = fold(
-    undefined,
-    "main",
-    observe("Read", { file_path: "/w/r/a.ts" }, "/", HOME),
-    1,
-    "/w/r",
-    undefined,
-  );
-  a = fold(
-    a,
-    "main",
-    observe("Write", { file_path: "/w/r/b.ts" }, "/", HOME),
-    2,
-    "/w/r",
-    undefined,
-  );
-  a = fold(
-    a,
-    "main",
-    observe("Edit", { file_path: "/w/r/a.ts" }, "/", HOME),
-    3,
-    "/w/r",
-    undefined,
-  );
-  expect(a.files.map((f) => [f.path, f.op])).toEqual([
-    ["/w/r/a.ts", "write"],
-    ["/w/r/b.ts", "write"],
-  ]);
-  a = fold(
-    a,
-    "main",
-    observe("Bash", { command: "git commit -m x" }, "/w/r", HOME),
-    4,
-    undefined,
-    "/w/r",
-  );
-  expect(a.files.map((f) => f.op)).toEqual(["commit", "commit"]);
-  expect(a).toMatchObject({ dir: "/w/r", last: 4 });
-});
-
-test("files leave after the TTL, and an unchanged record is not rewritten", () => {
-  const act = {
-    main: {
-      agentId: "main",
-      last: 0,
-      files: [
-        { path: "/a", op: "read" as const, at: 0 },
-        { path: "/b", op: "write" as const, at: 40_000 },
-      ],
-    },
-  };
-  expect(prune(act, 30_000)).toBeUndefined();
-  expect(prune(act, 50_000)!.main!.files.map((f) => f.path)).toEqual(["/b"]);
-});
-
-test("paths: ~ and relative paths placed, shown short", () => {
-  expect(resolvePath("../x/./y", "/w/r", HOME)).toBe("/w/x/y");
-  expect(resolvePath("rel", undefined, HOME)).toBeUndefined();
-  expect(tilde("/u/dev/p", HOME)).toBe("~/p");
-  expect(tilde("/u/devx/p", HOME)).toBe("/u/devx/p");
-  expect(shortFile("/w/r/src/a.ts", "/w/r")).toBe("src/a.ts");
-  expect(shortFile("/elsewhere/a.ts", "/w/r")).toBe("/elsewhere/a.ts");
 });
 
 test("ages in the fewest cells", () => {

@@ -6,10 +6,10 @@
 //
 // Keys reach it once a click has given its region the focus (Escape hands
 // the focus back): ↑ ↓ choose a task, ⏎ (or space) folds or unfolds it, tab
-// switches between the tree and the graph, `a` shows the « Agents » tab. A
-// click on a task chooses it, a second click (or one on a task with
-// subtasks) folds it; a click on « Arbre » or « Graphe » switches the view. A click never moves the row it hit (the
-// pin, layout.tsx), so a second click lands where the first one did.
+// switches between the tree and the graph. A click on a task chooses it, a
+// second click (or one on a task with subtasks) folds it; a click on
+// « Arbre » or « Graphe » switches the view. A click never moves the row it
+// hit (the pin, layout.tsx), so a second click lands where the first one did.
 
 import type { TreeModel } from "./tree.ts";
 import {
@@ -47,8 +47,6 @@ export default function TaskTree(raw: unknown, surface: any) {
     const { cur, scr } = now();
     if (k.key === "tab")
       return set({ ...cur, view: cur.view === "tree" ? "graph" : "tree" }, cur);
-    // The tab beside this one: the hooks module opens it (register.tsx)
-    if (k.key === "a" && !k.ctrl && !k.meta) return surface.post({ show: "agents" });
     if (typeof scr === "string" || cur.view !== "tree") return;
     if (k.key === "down") set(step(scr, cur, 1), cur);
     else if (k.key === "up") set(step(scr, cur, -1), cur);

@@ -6,18 +6,15 @@ import { test, expect } from "claude-code/testing";
 import { NOW, PANE, PR, SEC, T, host, start, writeTasks } from "./host.ts";
 import { capture, widths } from "./capture.ts";
 import { colorOf } from "../hooks/mod/who.ts";
-import { agentsTitle, tasksTitle } from "../hooks/mod/register.tsx";
+import { tasksTitle } from "../hooks/mod/register.tsx";
 
-test("session start registers /hud, opens « Agents » then « Tâches », in front, counted, and reads tasks.json", async ($, on) => {
+test("session start registers /hud, opens « Tâches » alone, in front, counted, and reads tasks.json", async ($, on) => {
   const { h, clock } = host(on);
   writeTasks(h, [T("1", "in_progress"), T("2", "completed")], 1);
   await start($, clock);
   expect(h.commands).toEqual(["hud"]);
-  // The main loop alone: « Agents (0) » behind, « Tâches » the view shown
-  expect(h.panes).toEqual([
-    { id: "hud-agents", title: "Agents (0)\u2007" },
-    { id: "hud-tasks", title: "Tâches (1)\u2007" },
-  ]);
+  // The only pane: the first tab and the one shown
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (1)\u2007" }]);
   expect(h.shown).toBe("hud-tasks");
   const ui = await $.ui.mount({
     plugin: "kodflow-hud",
@@ -35,8 +32,15 @@ test("session start registers /hud, opens « Agents » then « Tâches », in fr
   await ui.unmount();
 });
 
-test("a tool call goes back untouched, and is filed under its loop", async ($, on) => {
-  const { clock } = host(on);
+// What the module recorded, as KODFLOW_HUD_TRACE writes it at the end
+const TRACE = "/tmp/hud-trace.json";
+const lastOf = async ($: any, h: any) => {
+  await $.session.end({ reason: "other" } as any);
+  return JSON.parse(h.files.get(TRACE)!.text).activity;
+};
+
+test("a tool call goes back untouched, and dates its loop's last call", async ($, on) => {
+  const { h, clock } = host(on, { env: { KODFLOW_HUD_TRACE: TRACE } });
   await start($, clock);
   const r: any = await $.tool.call({
     tool: "Read",
@@ -48,43 +52,17 @@ test("a tool call goes back untouched, and is filed under its loop", async ($, o
     interrupted: false,
   });
   expect(r.context).toBeUndefined();
-  await $.tool.call({
-    tool: "Edit",
-    file_path: "src/b.ts",
-    old_string: "a",
-    new_string: "b",
-  } as any);
-  for (const surface of ["terminal", "desktop"] as const) {
-    const ui = await $.ui.mount({
-      plugin: "kodflow-hud",
-      surface,
-      component: "Pane",
-      requestId: "hud-agents",
-      props: { ...PANE(80), title: "Agents" },
-    });
-    // The folder is the work tree's root, the files relative to it
-    expect(await ui.find({ text: /principal/ })).toBeDefined();
-    expect(await ui.find({ text: "/w/repo" })).toBeDefined();
-    expect(await ui.find({ text: "src/b.ts" })).toBeDefined();
-    expect(await ui.find({ text: "src/a.ts" })).toBeDefined();
-    await ui.unmount();
-  }
-  // Past the TTL the files go, the folder stays
-  await clock.advance(48_000);
-  const ui = await $.ui.mount({
-    plugin: "kodflow-hud",
-    surface: "terminal",
-    component: "Pane",
-    requestId: "hud-agents",
-    props: { ...PANE(80), title: "Agents" },
+  await clock.advance(5_000);
+  await $.tool.call({ tool: "Read", file_path: "x", agentId: "a1" } as any);
+  expect(await lastOf($, h)).toEqual({
+    main: { agentId: "main", last: NOW },
+    a1: { agentId: "a1", last: NOW + 5_000 },
   });
-  expect(await ui.find({ text: "src/a.ts" })).toBeUndefined();
-  expect(await ui.find({ text: "/w/repo" })).toBeDefined();
 });
 
 test("a refused call is not recorded", async ($, on) => {
   on("tool.call", { tool: "Write" }, async () => ({ deny: "no" }));
-  const { clock } = host(on);
+  const { h, clock } = host(on, { env: { KODFLOW_HUD_TRACE: TRACE } });
   await start($, clock);
   const r: any = await $.tool.call({
     tool: "Write",
@@ -92,20 +70,10 @@ test("a refused call is not recorded", async ($, on) => {
     content: "",
   } as any);
   expect(r.deny ?? r.text).toContain("no");
-  const ui = await $.ui.mount({
-    plugin: "kodflow-hud",
-    surface: "terminal",
-    component: "Pane",
-    requestId: "hud-agents",
-    props: PANE(80),
-  });
-  // The main loop is listed, with no folder and no file
-  expect(await ui.find({ text: /principal/ })).toBeDefined();
-  expect(await ui.find({ text: "/w/repo" })).toBeUndefined();
-  expect(await ui.find({ text: "x" })).toBeUndefined();
+  expect(await lastOf($, h)).toEqual({});
 });
 
-test("the tabs keep their width as the counts move, so the tab beside does not shift", () => {
+test("the tab keeps its width as the count moves, so the tabs beside do not shift", () => {
   const board = (n: number) => ({
     found: true,
     epics: [
@@ -124,14 +92,6 @@ test("the tabs keep their width as the counts move, so the tab beside does not s
     (n) => tasksTitle(board(n) as any).length,
   );
   expect(new Set(widths).size).toBe(1);
-  const agents = (n: number) =>
-    Array.from({ length: n }, (_, i) => ({
-      id: `a${i}`,
-      label: "x",
-      status: "running",
-    }));
-  const aw = [1, 9, 10, 99].map((n) => agentsTitle(agents(n) as any).length);
-  expect(new Set(aw).size).toBe(1);
 });
 
 test("the worker, the age, the silent flag, the person's task and CI, in the tree", async ($, on) => {
@@ -281,39 +241,6 @@ test("CI is asked at most every five minutes, and only for cited pull requests",
   expect(h.runs.every((a) => a.join(" ") === `gh pr checks ${PR}`)).toBe(true);
 });
 
-test("/hud opens the panes asked, /hud off closes them", async ($, on) => {
-  const { h, clock } = host(on);
-  await start($, clock);
-  // No subagent, the tab up since the start: /hud agents shows it, and
-  // gives it the keyboard, the engine's only way to show a pane already up
-  let r: any = await $.command.run({ command: "hud", args: "agents" } as any);
-  expect(h.shown).toBe("hud-agents");
-  expect(r.text).toContain("Agents (0)");
-  // Back at the prompt (Esc), /hud tasks brings « Tâches » back
-  h.focused = undefined;
-  r = await $.command.run({ command: "hud", args: "tasks" } as any);
-  expect(h.shown).toBe("hud-tasks");
-  // Shut by /hud off, reopened by /hud tasks: with no subagent, /hud agents
-  // says why
-  await $.command.run({ command: "hud", args: "off" } as any);
-  await $.command.run({ command: "hud", args: "tasks" } as any);
-  h.opened = [];
-  r = await $.command.run({ command: "hud", args: "agents" } as any);
-  expect(h.opened).toEqual([]);
-  expect(r.text).toContain("no subagent is running");
-  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
-  await clock.advance(3_000);
-  h.opened = [];
-  h.focused = undefined;
-  r = await $.command.run({ command: "hud", args: "agents" } as any);
-  expect(h.opened).toEqual(["hud-agents"]);
-  expect(r.text).toContain("Agents (1)");
-  expect(h.shown).toBe("hud-agents");
-  h.closed = [];
-  await $.command.run({ command: "hud", args: "off" } as any);
-  expect(h.closed.sort()).toEqual(["hud-agents", "hud-tasks"]);
-});
-
 test("no tasks.json: the board says so", async ($, on) => {
   const { clock } = host(on);
   await start($, clock);
@@ -327,33 +254,6 @@ test("no tasks.json: the board says so", async ($, on) => {
   expect(
     await ui.find({ in: "tree", text: /Aucune liste de tâches/ }),
   ).toBeDefined();
-});
-
-test("a commit turns the loop's writes green, with no process run and no scan", async ($, on) => {
-  const { h, clock } = host(on);
-  on("fs.list", async () => {
-    throw new Error("the mod must not list folders");
-  });
-  await start($, clock);
-  await $.tool.call({
-    tool: "Write",
-    file_path: "/w/repo/a.ts",
-    content: "x",
-  } as any);
-  await $.tool.call({
-    tool: "Bash",
-    command: "git -C /w/repo commit -am x",
-  } as any);
-  expect(h.runs).toEqual([]);
-  const ui = await $.ui.mount({
-    plugin: "kodflow-hud",
-    surface: "terminal",
-    component: "Pane",
-    requestId: "hud-agents",
-    props: PANE(80),
-  });
-  const marks = await ui.findAll({ type: "Text", text: "C" });
-  expect(marks.map((m: any) => m.props.color)).toContain("#5faf5f");
 });
 
 test("an epic whose last task was just done stays 20 minutes, in the tree, then goes with no change to tasks.json", async ($, on) => {
@@ -375,10 +275,7 @@ test("an epic whose last task was just done stays 20 minutes, in the tree, then 
   const first = await drawn();
   expect(first).toContain("◆ #2     SDK status-line");
   console.log(first);
-  expect(h.panes).toEqual([
-    { id: "hud-agents", title: "Agents (0)\u2007" },
-    { id: "hud-tasks", title: "Tâches (0)\u2007" },
-  ]);
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (0)\u2007" }]);
   await clock.advance(20 * 60_000);
   expect(await drawn()).toContain("◆ #2     SDK status-line");
   // Past 30 minutes since the last one was done: today's board, the file untouched

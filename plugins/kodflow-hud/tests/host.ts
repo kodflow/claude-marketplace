@@ -41,7 +41,7 @@ export type Host = {
 
 export function host(
   on: any,
-  opts: { session?: () => string } = {},
+  opts: { session?: () => string; env?: Record<string, string> } = {},
 ): {
   h: Host;
   clock: ReturnType<typeof mock.clock>;
@@ -63,11 +63,12 @@ export function host(
     checks: { exitCode: 0, stdout: "build\tpass\t1m\turl" },
   };
   const clock = mock.clock(on, { now: NOW });
-  mock.env(on, { CLAUDE_CONFIG_DIR: CFG, HOME: "/u/dev" });
+  mock.env(on, { CLAUDE_CONFIG_DIR: CFG, HOME: "/u/dev", ...opts.env });
   on("session.id", async () => ({ value: opts.session?.() ?? SID }));
   on("session.root", async () => ({ value: "/w/repo" }));
   on("session.model", async () => ({ value: "claude-opus-5-5" }));
   on("session.start", async (_$: any, e: any) => ({ cwd: e.cwd ?? "/w/repo" }));
+  on("session.end", async () => ({ sessionId: SID }));
   on("command.register", async (_$: any, e: any) => {
     h.commands.push(e.name);
     return { value: undefined };
@@ -125,6 +126,10 @@ export function host(
   on("fs.read", async (_$: any, e: any) => {
     const f = h.files.get(e.path);
     return f ? { value: f.text } : { deny: "ENOENT" };
+  });
+  on("fs.write", async (_$: any, e: any) => {
+    h.files.set(e.path, { text: String(e.content ?? e.text ?? ""), mtimeMs: 0 });
+    return { value: undefined };
   });
   on("process.run", async (_$: any, e: any) => {
     h.runs.push(e.argv);

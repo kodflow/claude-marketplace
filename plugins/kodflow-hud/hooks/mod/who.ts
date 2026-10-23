@@ -1,9 +1,9 @@
-// who.ts — how a loop is named and coloured, the same in both panes. Pure.
+// who.ts — how a loop is named and coloured in the « Tâches » tree. Pure.
 //
 // The main loop is « principal », drawn in the theme's own `claude` colour
 // (the engine picks its shade for a light or a dark theme). Each subagent
-// keeps one colour for the session, picked from its id: the same agent is
-// the same colour in the « Tâches » column and in the « Agents » pane. The
+// keeps one colour for the session, picked from its id, on every row it
+// works. The
 // palette stays clear of the colours the tree gives to states (amber under
 // way, teal ready, mauve the person and the epics, green done, red blocked)
 // and of the model's blue, and every shade is a mid tone, legible on a light
@@ -14,7 +14,6 @@
 // « <area>-specialist-<topic> » read « area · topic ». A type nobody gave is
 // left empty, never guessed.
 
-import type { HudAgent } from "../../types";
 import { MAIN } from "./board.ts";
 import { safe } from "./paths.ts";
 
@@ -34,9 +33,6 @@ export const AGENT_PALETTE = [
   "#5fafd7", // sky
 ] as const;
 
-/** Statuses of a subagent whose loop is at work, as `$.agent.list()` says. */
-export const RUNNING = new Set(["pending", "running", "waiting"]);
-
 /** A loop's colour: the theme's for the main one, the palette's otherwise. */
 export function colorOf(loop: string): string {
   if (loop === MAIN) return MAIN_COLOR;
@@ -55,7 +51,3 @@ export function roleOf(type: string | undefined): string {
   const m = /^([a-z]+)-(?:specialist|executor)-(.+)$/.exec(bare);
   return m ? `${m[1]} · ${m[2]}` : bare;
 }
-
-/** The subagents whose loop is at work: what the « Agents » tab counts. */
-export const running = (agents: readonly HudAgent[]): HudAgent[] =>
-  agents.filter((a) => RUNNING.has(a.status));
