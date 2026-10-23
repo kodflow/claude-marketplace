@@ -1,6 +1,6 @@
 # kodflow-hud
 
-An optional heads-up display beside the status line. One pane and a few
+An optional heads-up display beside the status line. Two panes and a few
 toasts, nothing else: the status line keeps the context gauge, the epics'
 pills and everything it already draws, and this mod shows only what it does
 not.
@@ -10,8 +10,13 @@ not.
   principal » or « ↳ name · role » in that subagent's own colour), the
   model and effort it runs on, how long since it moved, what it waits on or
   unblocks, the critical path in the margin, and the tasks waiting on the
-  person. Tab turns it into a graph by state (R4). Its title counts the
-  tasks left to do: « Tâches (2) ».
+  person. Tab turns it into a graph by state (R4). The tab counts the tasks
+  left to do: « Tâches (2) ». It is the view a session starts on.
+- **Agents** — only while a subagent runs, its tab counting them (« Agents
+  (1) »): the main loop on one line, then each subagent with its name, its
+  role (its type, short), its model, its state (a frozen one in red), the
+  task it holds, the folder it works in and the files it last read, wrote or
+  committed.
 - **Toasts** — a task done, a task blocked (`waiting`), a task gone silent:
   at most one per task and per state.
 - **Coloured words** — a few words of a reply drawn in colour in the
@@ -22,11 +27,7 @@ It is a mod: a hooks module (`hooks/mod/register.tsx`) the engine loads from
 `hooks/hooks.json` → `modules`. It needs **Claude Code 2.1.293 or later**
 (tested on 2.1.296, the version the CI pins) and reads the task list that
 **kodflow-hooks** keeps; without kodflow-hooks the Tasks pane says there is no
-list.
-
-There is no pane for the subagents: Claude Code lists them under the prompt
-already. Earlier versions had an « Agents » tab; a session that still shows
-it after an update sees it closed at the next poll.
+list and the Agents pane works on its own.
 
 ## Install, open, close
 
@@ -40,13 +41,17 @@ rest.
 
 | Command | Effect |
 |---------|--------|
-| `/hud` (any argument but `off`) | opens the Tasks pane |
-| `/hud off` (`close`) | closes it |
+| `/hud` | opens the Tasks pane, and the Agents pane while a subagent runs |
+| `/hud tasks` (`tâches`) | opens the Tasks pane |
+| `/hud agents` | opens the Agents pane while a subagent runs; with none, says so and opens it with the first |
+| `/hud off` (`close`) | closes both; the Agents tab no longer opens by itself until `/hud` |
 
-With `autoOpen` on (the default) the Tasks pane opens when a session starts.
-Every poll (3 s) it is retitled when the count moved. A retitle may raise
-the pane; when another plugin's pane was shown, it is opened again after,
-so the view does not jump. The engine seats a pane nobody asked for
+With `autoOpen` on (the default) the Tasks pane opens when a session starts,
+alone, so it is the one shown. The Agents tab opens with the first subagent
+and closes with the last: the main loop alone never gets a tab. Every poll
+(3 s) the two tabs are retitled when their count moved. An open or a retitle
+may raise the pane it names; the pane shown before is opened again after, so
+the view does not jump to Agents. The engine seats a pane nobody asked for
 only where it has room — from 144 columns, docked beside the transcript in
 the fullscreen layout — and keeps it waiting below that; `/hud` seats it at
 any width.
@@ -61,7 +66,7 @@ critical path, `warning` (amber) the task under way, `success` (green) done,
 `planMode` (teal) ready, `permission` the tasks waiting on the person,
 `error` (red) blocked or frozen, `ide` (blue) the model, `claude` the main
 loop. Each subagent has one mid-tone colour of its own for the session
-(eight, picked from its id, none a state's). No cell
+(eight, picked from its id, none a state's), the same in both panes. No cell
 paints a background, so a transparent terminal shows through.
 
 **R12, the tree** (the view a pane opens on):
@@ -151,7 +156,7 @@ Rows, at 20: the title, the headers, the epic (done/total, its age), 11
 tasks, a rule, the critical path, two lines on the selection (its glyph,
 ref, title, agent and role, model, age, links, CI, « figé » when silent,
 then its description) and the views' bar. One top-level task is open at a
-time from the keys; a click opens one without folding those above it.
+time.
 
 Narrower than 88 cells of body the links go, then the model under 76, then
 the agent under 64: below that, the tree and the age. Fewer
@@ -181,7 +186,7 @@ of its lanes.
 | `↑` `↓` | choose a task |
 | `⏎` (or space) | fold or unfold it; opening a top-level task folds the other |
 | `tab` | tree ↔ graph |
-| click on a task | choose it; on a task with subtasks, or a second click, fold it; opening a top-level task folds the ones below it, never one above |
+| click on a task | choose it; on a task with subtasks, or a second click, fold it |
 | click on « Arbre » / « Graphe » | that view |
 
 The tree is a `Client` region (`hooks/mod/client.tsx`, a surface module):
@@ -193,13 +198,33 @@ in that instance's state, across redraws. The terminal and the desktop draw
 a `Client`; VS Code and the mobile app do not, and get the same tree drawn
 still, at its first state.
 
-A click never moves the row it hit. The task chosen is pinned to the line
-it was clicked on (`Ui.pin`, `hooks/mod/layout.tsx`): the next screen
-scrolls, and picks the finished branches folded or not, so that it stays
-there. ↑ ↓ pin the task on its line too, so the list moves only when the
-selection leaves it, by one line. Before this, the list re-centred on the
-task chosen and opening a branch closed the one above it: the row moved
-from under the pointer, and a second click landed on another task.
+**Agents**, 88 columns by 10 rows (`tests/agents.test.tsx`), its tab
+« Agents (3) »:
+
+```
+─ 3 sous-agents en cours ───────────────────────────────────────────────────────────────
+  AGENT               RÔLE                    MODÈLE      ÉTAT
+◉ principal           fil principal           opus        ● actif · 15 s
+    /w/repo
+↳ hud-agents          general-purpose                     ● actif · 15 s
+    ● #2 Rendu des agents  ·  /w/repo
+↳ vault-audit         devops · hashicorp                  ⏸ figé · 11 min
+    /w/repo
+↳ sans-type           type inconnu                        ◇ attend
+```
+
+The main loop heads the list in the theme's `claude` colour; each subagent
+follows in its own colour (the same as in the Tâches pane), the ones at work
+first, then for half an hour, dimmed, the ones that stopped. The role is the
+agent's type (`subagent_type`) short: the plugin prefix dropped, a
+specialist's `<area>-specialist-<topic>` read `area · topic`; a type nobody
+gave reads « type inconnu », never a guess. The state: `● actif` (green, a
+call in the last minute), `● en cours` (amber), `◇ attend` (waiting),
+`⏸ figé` (red, bold: no call for `silentMinutes`), `◌ au repos`, `✓ terminé`,
+`✗ échec`. Under each, the task it holds and its folder, then, as rows
+allow, the files it last read (`R`, violet), wrote (`W`, orange) or
+committed (`C`, green), as filetree colours them. Under 76 columns the role
+moves under the name; under 56 the model goes.
 
 ## Where each thing comes from
 
@@ -210,12 +235,14 @@ from under the pointer, and a second click landed on another task.
 | subtasks, links, ref | the task's `parent`, `blockedBy`, `ref` (kodflow-hooks' `task_create` / `task_update`) |
 | ready, blocked, critical path | derived from those links, nothing typed |
 | model · effort | a subagent's: the Agent call's `effort` and its result's `resolvedModel`, the model `agent.spawn` resolved, and kodflow-hooks' `agent-models.tsv` (its PostToolUse record); the main loop's: `$.session.model()`, no effort (none is said to a mod). A loop no source names has an empty cell, never a guess |
-| time since it moved | the later of the task's `updated` and the last tool call of its loop (worker, else the agent that owns it), the only thing kept of a tool call |
+| time since it moved | the later of the task's `updated` and the last tool call of its loop (worker, else the agent that owns it) |
 | silent | in progress, and its loop stopped, gone from the list, or quiet for `silentMinutes` |
 | `toi` | tasks with `assignee: "human"`, when tasks.json carries the field |
+| folder of a loop | the last call that names one: a file tool's file, Grep/Glob/LS's `path`, a leading `cd X` or `git -C X` in a shell command (the status line's `activity/dir.go`), taken to the root of its git work tree |
+| files of a loop | Read (read); Write, Edit, MultiEdit, NotebookEdit (write); a `git commit` turns the loop's writes under that repository to commit. Kept 45 s, eight per loop, five shown at most |
 | CI | `gh pr checks <url>` for the GitHub pull request URLs an open task cites, every 5 minutes at most |
 
-Nothing is a second source of truth: the pane draws from `$.state`, which
+Nothing is a second source of truth: the panes draw from `$.state`, which
 holds what was last read from tasks.json, `$.agent.list()` and the tool
 calls; a reload of the module reads them again.
 
@@ -227,9 +254,9 @@ calls; a reload of the module reads them again.
 - Add anything else to what the model reads: no tool, no `context`; one
   system prompt section, the colour convention, and none with
   `KODFLOW_COLORS=off`. `/hud` answers one short line, as any command does.
-- Look at the disk beyond its own files. No `find`, no `fs.list`, no
-  `exists`: a tool call stamps its loop as alive, nothing more. The only
-  process it runs is `gh pr checks`, and only for cited pull requests.
+- Scan the disk. No `find`, no `fs.list`; finding a work tree's root costs one
+  `exists` per parent folder the first time a folder is seen, none after. The
+  only process it runs is `gh pr checks`, and only for cited pull requests.
 
 ## Coloured words
 
@@ -282,10 +309,10 @@ Set them in `/config` or under `pluginConfigs["kodflow-hud"].options`.
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `silentMinutes` | `10` | quiet time after which a task in progress is flagged silent |
-| `autoOpen` | `true` | open the Tasks pane when a session starts |
+| `autoOpen` | `true` | open the Tasks pane when a session starts, and the Agents tab while a subagent runs |
 | `ci` | `true` | ask `gh pr checks` about cited pull requests |
 
-`KODFLOW_HUD_TRACE=/absolute/path.json` writes what the pane would draw to
+`KODFLOW_HUD_TRACE=/absolute/path.json` writes what the panes would draw to
 that file when the session ends: how a run with no pane (`claude -p`, a
 bench) shows what was collected.
 
@@ -294,12 +321,12 @@ bench) shows what was collected.
 - `claude -p`: there is no screen; the hooks run (collection, trace), no
   pane is drawn and toasts go nowhere. Expected.
 - VS Code: the extension does not show a mod's panes. Expected.
-- A terminal narrower than 144 columns: the pane opened at start waits until
+- A terminal narrower than 144 columns: the panes opened at start wait until
   `/hud` or a wider window.
 
 ## Grey panel on a transparent terminal
 
-The pane sits on an opaque grey block even when the terminal background is
+The panes sit on an opaque grey block even when the terminal background is
 transparent. The mod is not the cause and cannot remove it: it draws no
 background of its own (`grep backgroundColor hooks/mod` finds nothing).
 
@@ -330,19 +357,20 @@ this stays one of its limits.
 
 ## Known limits
 
+- A commit is recognised from the command, not from git: `git commit` written
+  inside an `echo` counts, and files committed that the loop did not write
+  through a file tool are not listed.
+- Files written by a shell command are not seen: only the folder it points
+  at. Seeing them would mean a scan after every command.
 - `$.agent.list()` drops a subagent some time after it ends; its worker then
   reads `absent`, which counts as stopped.
 - A toast is raised once per task and state for the session: a task that goes
   silent, moves, then goes silent again is toasted once.
-- Whether retitling a pane raises it is the engine's to decide, and its
-  typings do not say. The mod assumes the worst (every open raises) and
-  opens the pane shown before again after; the tests prove that against a
-  host that raises, not against the terminal itself.
-- The engine may still draw the pane's title as a tab above it, even alone:
-  that strip is the engine's, not the mod's.
-- The pin keeps a clicked row in place whenever the list can scroll or
-  nothing above it changes. Where the whole list fits and a change above it
-  is forced (a task finished elsewhere, tasks.json rewritten), the rows move.
+- Whether opening or retitling a pane raises it is the engine's to decide,
+  and its typings do not say. The mod assumes the worst (every open raises)
+  and opens the pane shown before again after its own opens; the tests prove
+  that against a host that raises, not against the terminal itself. With a
+  focused pane the person holds, re-raising it does not take the keyboard.
 
 ## Tests
 
@@ -357,34 +385,37 @@ paragraphs and runs (code blocks, inline code, bold, unknown marks), the
 `KODFLOW_COLORS=off`, under `-p` and `--bare`, and a marked reply drawn on
 the terminal through the engine, the markup gone, the code block left to
 the engine's markdown. `tests/pure.test.ts` holds the pure modules (board, silence, toasts,
-paths, CI). `tests/tree.test.tsx` draws the « Tâches » pane through
+activity, paths, CI). `tests/tree.test.tsx` draws the « Tâches » pane through
 the engine and reads it back as text (`tests/capture.ts`, which cuts every
 Box to its width as the terminal lays it out): both views at 90 by 20, line
 for line, every line 88 cells and no background; the columns dropping at 86,
 70 and 58; the folds, then the detail, under 20 rows; ↑ ↓ ⏎ tab and clicks on
 a task and on the views' bar, through the `Client`'s own key and pointer
-listeners; a second click at the same place on the same task, in a pane
-that scrolls and in one that does not, and ↑ ↓ moving the list by one line
-only once the selection leaves it; the same tree on the surfaces with no `Client`; the derived
+listeners; the same tree on the surfaces with no `Client`; the derived
 states, the critical path, the cells (model·effort, links, ages, wide
 glyphs) and a model column filled only from what the session said.
 `tests/wiring.test.tsx` loads the module in the engine
-with the host in memory and a mocked clock: « Tâches » alone at start,
-shown and counted, no tab for the subagents and an earlier version's Agents
-tab closed, `/hud` and `/hud off`, panes mounted at several widths on the
+with the host in memory and a mocked clock: « Tâches » alone at start and
+shown, the Agents tab opened and counted with the subagents and closed with
+the last while « Tâches » stays in front (the host raising every pane it
+opens), `/hud off` keeping it shut, panes mounted at several widths on the
 terminal and desktop surfaces, each loop in its colour, results returned
-untouched, refused calls returned refused, toasts once per task and state,
-CI at most every five minutes, no process and no look at the disk on a tool
-call.
+untouched, refused calls not recorded, toasts once per task and state, CI
+at most every five minutes, no process and no folder listing on a tool call.
+`tests/agents.test.tsx` draws the reported case: one epic and one loose
+task, the main loop alone (no Agents tab, the word « Tâches » only on the
+tab), then three subagents (a general-purpose one, a specialist, one of
+unknown type, one frozen), both panes line for line, the colours, and the
+Agents pane at 60 columns.
 
 A real run, for the attribution by agent (the kit's `$.tool.call` carries no
 `agentId`):
 
 ```
 KODFLOW_HUD_TRACE=$PWD/trace.json claude -p --plugin-dir plugins/kodflow-hud \
-  --allowedTools Read Agent -- \
-  "Read a.txt, then launch one general-purpose subagent that reads b/c.txt"
+  --allowedTools Read Agent "Bash(ls:*)" "Bash(cd:*)" -- \
+  "Read a.txt, then launch one general-purpose subagent that reads b/c.txt and runs: cd b && ls"
 ```
 
-`trace.json` then holds two loops under `activity`, `main` and the
-subagent's id, each with the time of its last call.
+`trace.json` then holds two loops under `activity`: `main` with `a.txt`, and
+the subagent's id with `b/c.txt` and the folder `b`.

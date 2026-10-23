@@ -13,8 +13,6 @@ export const PR = "https://github.com/kodflow/claude-marketplace/pull/42";
 export type Host = {
   files: Map<string, { text: string; mtimeMs: number }>;
   dirs: Set<string>;
-  /** Every path the module asked fs.exists about. */
-  looked: string[];
   agents: { id: string; type: string; name?: string; status: string }[];
   toasts: string[];
   opened: string[];
@@ -43,7 +41,6 @@ export function host(
   const h: Host = {
     files: new Map(),
     dirs: new Set(["/w/repo/.git"]),
-    looked: [],
     agents: [],
     toasts: [],
     opened: [],
@@ -94,10 +91,9 @@ export function host(
     return { value: undefined };
   });
   on("agent.list", async () => ({ value: h.agents }));
-  on("fs.exists", async (_$: any, e: any) => {
-    h.looked.push(e.path);
-    return { value: h.dirs.has(e.path) || h.files.has(e.path) };
-  });
+  on("fs.exists", async (_$: any, e: any) => ({
+    value: h.dirs.has(e.path) || h.files.has(e.path),
+  }));
   on("fs.stat", async (_$: any, e: any) => {
     const f = h.files.get(e.path);
     if (!f) return { deny: "ENOENT" };
