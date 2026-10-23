@@ -186,7 +186,7 @@ UserPromptSubmit)
 - subject (create, update): 30 characters max, refused beyond; detail goes in description"
     # Code in a repository is delegated to subagents (the PreToolUse gate of
     # on-tool.sh and the Stop rule enforce it); off with KODFLOW_ROOT=off.
-    [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it. A PR green and reviewed is merged at once, without asking the user; every ready task (no blocked_by left) goes to its own subagent in parallel; a task waiting on an unmerged PR starts from that PR's branch and rebases on the default branch once it is merged."
+    [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it."
     [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}Keep statuses true: in_progress while worked on, waiting when blocked on the user, completed once verified."
     jq -n -c --arg c "$ctx" --arg m "$msg" '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$c}}
         + (if $m == "" then {} else {systemMessage:$m} end)' 2>/dev/null
