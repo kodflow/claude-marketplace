@@ -622,9 +622,35 @@ function taskCreate(agent: string, args: Obj): Step {
       } else if (epicId) {
         note = ` in epic #${epicId} ${findEpic(data, agent, epicId)!.title}`;
       }
-      return `Task #${task.id} created: ${subject}${note}`;
+      return `Task #${task.id} created: ${subject}${note}${flowNote(data, agent, epicId)}`;
     },
   };
+}
+
+/** Pending tasks in one epic before the flow note speaks. */
+export const FLOW_NOTE_AT = 3;
+
+/**
+ * A plan filed as a flat list says nothing of what waits on what, so nobody
+ * can tell which tasks may run side by side. Not a refusal: a list of truly
+ * independent tasks is legitimate, and they are then all ready at once. The
+ * note is said once, the moment the epic reaches FLOW_NOTE_AT pending tasks
+ * with no blocked_by anywhere in it; it writes nothing to the file.
+ */
+function flowNote(data: Data, agent: string, epicId: number): string {
+  if (!epicId) return "";
+  const mine = data.tasks.filter(
+    (t) => get(t, "agent", MAIN) === agent && get(t, "epic", 0) === epicId,
+  );
+  if (mine.some((t) => Array.isArray(t.blockedBy) && t.blockedBy.length))
+    return "";
+  const pending = mine.filter((t) => t.status === "pending").length;
+  if (pending !== FLOW_NOTE_AT) return "";
+  return (
+    `. Note: epic #${epicId} has ${pending} pending tasks and no blocked_by between them. ` +
+    "If some wait on others, declare it (task_update(id, blocked_by=[...])) so the order of " +
+    "implementation is in the list; tasks left with no blocker are all ready and run in parallel."
+  );
 }
 
 function taskUpdate(agent: string, args: Obj): Step {
@@ -1004,7 +1030,11 @@ const TREE =
   " Optional, for the user's task tree: parent=<id> files it as a subtask (three levels at most, in its " +
   "parent's epic), blocked_by=[<id>, ...] names the tasks it waits on (no cycle), ref names a short handle " +
   "of 5 characters at most (T0, C6). A pending task whose blockers are all completed shows as ready, one " +
-  "with a blocker left as blocked; the longest blocked_by chain is the epic's critical path.";
+  "with a blocker left as blocked; the longest blocked_by chain is the epic's critical path. When a plan " +
+  "files several tasks, each one declares blocked_by: the tasks it really waits on, so the list codes the " +
+  "order of implementation. Every ready task (no blocker left) can start at once, one subagent each in its " +
+  "own worktree; a task waiting on an unmerged PR may start early on a branch cut from that PR's branch, " +
+  "rebased onto the default branch once the PR is merged.";
 
 /** The tree's arguments, the same on task_create and task_update. */
 const TREE_PROPS: Obj = {
@@ -1017,7 +1047,8 @@ const TREE_PROPS: Obj = {
     type: "array",
     items: { type: "string" },
     description:
-      "Ids of the tasks this one waits on; [] for none. A cycle is refused.",
+      "Ids of the tasks this one waits on; [] for none. A cycle is refused. Declare it whenever the task " +
+      "needs another one done first: it is what tells which tasks can run in parallel.",
   },
   ref: {
     type: "string",
