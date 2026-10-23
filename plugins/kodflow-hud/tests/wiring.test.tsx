@@ -32,7 +32,7 @@ test("session start registers /hud, opens « Tâches » alone, in front, counted
   await ui.unmount();
 });
 
-test("a tool call goes back untouched, and is filed under its loop", async ($, on) => {
+test("a tool call goes back untouched", async ($, on) => {
   const { clock } = host(on);
   await start($, clock);
   const r: any = await $.tool.call({
@@ -45,41 +45,9 @@ test("a tool call goes back untouched, and is filed under its loop", async ($, o
     interrupted: false,
   });
   expect(r.context).toBeUndefined();
-  await $.tool.call({
-    tool: "Edit",
-    file_path: "src/b.ts",
-    old_string: "a",
-    new_string: "b",
-  } as any);
-  for (const surface of ["terminal", "desktop"] as const) {
-    const ui = await $.ui.mount({
-      plugin: "kodflow-hud",
-      surface,
-      component: "Pane",
-      requestId: "hud-agents",
-      props: { ...PANE(80), title: "Agents" },
-    });
-    // The folder is the work tree's root, the files relative to it
-    expect(await ui.find({ text: /principal/ })).toBeDefined();
-    expect(await ui.find({ text: "/w/repo" })).toBeDefined();
-    expect(await ui.find({ text: "src/b.ts" })).toBeDefined();
-    expect(await ui.find({ text: "src/a.ts" })).toBeDefined();
-    await ui.unmount();
-  }
-  // Past the TTL the files go, the folder stays
-  await clock.advance(48_000);
-  const ui = await $.ui.mount({
-    plugin: "kodflow-hud",
-    surface: "terminal",
-    component: "Pane",
-    requestId: "hud-agents",
-    props: { ...PANE(80), title: "Agents" },
-  });
-  expect(await ui.find({ text: "src/a.ts" })).toBeUndefined();
-  expect(await ui.find({ text: "/w/repo" })).toBeDefined();
 });
 
-test("a refused call is not recorded", async ($, on) => {
+test("a refused call goes back refused", async ($, on) => {
   on("tool.call", { tool: "Write" }, async () => ({ deny: "no" }));
   const { clock } = host(on);
   await start($, clock);
@@ -89,72 +57,41 @@ test("a refused call is not recorded", async ($, on) => {
     content: "",
   } as any);
   expect(r.deny ?? r.text).toContain("no");
-  const ui = await $.ui.mount({
-    plugin: "kodflow-hud",
-    surface: "terminal",
-    component: "Pane",
-    requestId: "hud-agents",
-    props: PANE(80),
-  });
-  // The main loop is listed, with no folder and no file
-  expect(await ui.find({ text: /principal/ })).toBeDefined();
-  expect(await ui.find({ text: "/w/repo" })).toBeUndefined();
-  expect(await ui.find({ text: "x" })).toBeUndefined();
 });
 
-test("the Agents tab: none for the main loop, opened and counted with the subagents, gone with the last; « Tâches » stays in front", async ($, on) => {
+test("one pane only: subagents open no tab, an Agents tab left by an earlier version is closed, « Tâches » counts and stays in front", async ($, on) => {
   const { h, clock } = host(on);
   writeTasks(h, [T("1", "in_progress"), T("2", "pending")], 1);
+  // An earlier version's Agents tab, still open when this one loads
+  h.panes.push({ id: "hud-agents", title: "Agents (1)" });
   await start($, clock);
-  expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks"]);
-  // A subagent starts: the tab opens, counted, and « Tâches » is shown again
-  // (the host raises every pane it opens, the worst case)
   h.agents = [
     { id: "a1", type: "general-purpose", name: "hud", status: "running" },
-    { id: "a2", type: "Explore", status: "completed" },
   ];
   await clock.advance(3_000);
-  expect(h.panes).toEqual([
-    { id: "hud-tasks", title: "Tâches (2)" },
-    { id: "hud-agents", title: "Agents (1)" },
-  ]);
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (2)" }]);
   expect(h.shown).toBe("hud-tasks");
-  // A second one: the count follows, still behind « Tâches »
-  h.agents = [
-    ...h.agents,
-    {
-      id: "a3",
-      type: "kodflow-specialists:devops-specialist-hashicorp",
-      status: "waiting",
-    },
-  ];
-  await clock.advance(3_000);
-  expect(h.panes[1]).toEqual({ id: "hud-agents", title: "Agents (2)" });
-  expect(h.shown).toBe("hud-tasks");
-  // A task done: the Tâches count follows too
+  expect(h.closed).toContain("hud-agents");
+  expect(h.opened).not.toContain("hud-agents");
+  // A task done: the count follows
   writeTasks(h, [T("1", "completed"), T("2", "pending")], 2);
   await clock.advance(3_000);
-  expect(h.panes[0]).toEqual({ id: "hud-tasks", title: "Tâches (1)" });
-  // The last subagent ends: the tab goes
-  h.agents = h.agents.map((a) => ({ ...a, status: "completed" }));
-  await clock.advance(3_000);
-  expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks"]);
-  expect(h.shown).toBe("hud-tasks");
-});
-
-test("/hud off keeps the Agents tab shut while subagents run, until /hud agents", async ($, on) => {
-  const { h, clock } = host(on);
-  h.agents = [{ id: "a1", type: "Plan", name: "p", status: "running" }];
-  await start($, clock);
-  await clock.advance(3_000);
-  expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks", "hud-agents"]);
-  expect(h.shown).toBe("hud-tasks");
-  await $.command.run({ command: "hud", args: "off" } as any);
-  await clock.advance(3_000);
-  expect(h.panes).toEqual([]);
-  const r: any = await $.command.run({ command: "hud", args: "agents" } as any);
-  expect(r.text).toContain("Agents (1)");
-  expect(h.panes.map((p) => p.id)).toEqual(["hud-agents"]);
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (1)" }]);
+  // Nothing draws the old pane any more
+  let drew = true;
+  try {
+    const ui = await $.ui.mount({
+      plugin: "kodflow-hud",
+      surface: "terminal",
+      component: "Pane",
+      requestId: "hud-agents",
+      props: PANE(80),
+    });
+    drew = (await ui.find({ text: /principal/ })) !== undefined;
+  } catch {
+    drew = false;
+  }
+  expect(drew).toBe(false);
 });
 
 test("the worker, the age, the silent flag, the person's task and CI, in the tree", async ($, on) => {
@@ -304,22 +241,22 @@ test("CI is asked at most every five minutes, and only for cited pull requests",
   expect(h.runs.every((a) => a.join(" ") === `gh pr checks ${PR}`)).toBe(true);
 });
 
-test("/hud opens the panes asked, /hud off closes them", async ($, on) => {
+test("/hud opens « Tâches », whatever follows it, /hud off closes it", async ($, on) => {
   const { h, clock } = host(on);
   await start($, clock);
-  h.opened = [];
-  // No subagent: nothing to show in Agents, so no tab, and it says why
-  let r: any = await $.command.run({ command: "hud", args: "agents" } as any);
-  expect(h.opened).toEqual([]);
-  expect(r.text).toContain("no subagent is running");
-  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
-  await clock.advance(3_000);
-  h.opened = [];
-  r = await $.command.run({ command: "hud", args: "agents" } as any);
-  expect(h.opened).toEqual(["hud-agents"]);
-  expect(r.text).toContain("Agents (1)");
   await $.command.run({ command: "hud", args: "off" } as any);
-  expect(h.closed.sort()).toEqual(["hud-agents", "hud-tasks"]);
+  expect(h.closed).toEqual(["hud-tasks"]);
+  expect(h.panes).toEqual([]);
+  h.opened = [];
+  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
+  let r: any = await $.command.run({ command: "hud", args: "" } as any);
+  expect(h.opened).toEqual(["hud-tasks"]);
+  expect(r.text).toContain("Tâches");
+  // The old « /hud agents » opens the tasks too, never an Agents tab
+  r = await $.command.run({ command: "hud", args: "agents" } as any);
+  expect(h.opened).toEqual(["hud-tasks", "hud-tasks"]);
+  await clock.advance(3_000);
+  expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks"]);
 });
 
 test("no tasks.json: the board says so", async ($, on) => {
@@ -337,12 +274,13 @@ test("no tasks.json: the board says so", async ($, on) => {
   ).toBeDefined();
 });
 
-test("a commit turns the loop's writes green, with no process run and no scan", async ($, on) => {
+test("a tool call runs no process and looks at no folder: the loop is stamped alive, nothing more", async ($, on) => {
   const { h, clock } = host(on);
   on("fs.list", async () => {
     throw new Error("the mod must not list folders");
   });
   await start($, clock);
+  h.looked = [];
   await $.tool.call({
     tool: "Write",
     file_path: "/w/repo/a.ts",
@@ -353,15 +291,7 @@ test("a commit turns the loop's writes green, with no process run and no scan", 
     command: "git -C /w/repo commit -am x",
   } as any);
   expect(h.runs).toEqual([]);
-  const ui = await $.ui.mount({
-    plugin: "kodflow-hud",
-    surface: "terminal",
-    component: "Pane",
-    requestId: "hud-agents",
-    props: PANE(80),
-  });
-  const marks = await ui.findAll({ type: "Text", text: "C" });
-  expect(marks.map((m: any) => m.props.color)).toContain("#5faf5f");
+  expect(h.looked).toEqual([]);
 });
 
 test("an epic whose last task was just done stays 20 minutes, in the tree, then goes with no change to tasks.json", async ($, on) => {
