@@ -47,9 +47,10 @@ kf_msg() {
     local key=$1; shift
     [ -n "$KF_LANG" ] || kf_lang
     jq -r --arg k "$key" --arg l "$KF_LANG" --arg c "$KF_MSG_COLOR" '
-        (if $c == "1" then {R:"\u001b[31m", O:"\u001b[38;5;208m", G:"\u001b[32m", X:"\u001b[39m"}
-         else {R:"", O:"", G:"", X:""} end)
-        + ([$ARGS.positional[] | capture("^(?<k>[^=]*)=(?<v>.*)$"; "s") | {(.k): .v}] | add // {}) as $v
+        # Parenthesised whole: jq 1.7 binds `A + B as $v | …` as `A + (B as $v | …)`
+        ((if $c == "1" then {R:"\u001b[31m", O:"\u001b[38;5;208m", G:"\u001b[32m", X:"\u001b[39m"}
+          else {R:"", O:"", G:"", X:""} end)
+         + ([$ARGS.positional[] | capture("^(?<k>[^=]*)=(?<v>.*)$"; "s") | {(.k): .v}] | add // {})) as $v
         | (.[$k] // {}) as $e | ($e[$l] // $e.en // "")
         | reduce ($v | to_entries[]) as $p (.; split("{" + $p.key + "}") | join($p.value))' \
         "$KF_MSG_FILE" --args "$@" 2>/dev/null

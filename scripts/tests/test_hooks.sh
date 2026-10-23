@@ -384,6 +384,22 @@ printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test(": #43 
     && ok "a tied task takes its worker's slot: two untied tasks for the main thread are flagged" || bad "untied cap" "$OUT"
 rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-said"
 
+echo "== lib/msg.sh · every message of the table renders, in both languages"
+# jq 1.7 read `A + B as $v | ...` otherwise than 1.8 and every message came
+# out empty on Linux: each known key must render non-empty, with and without
+# colour, through the jq on this machine.
+empty=$( . "$S/lib/msg.sh"
+    for l in en fr; do KF_LANG=$l
+        for c in 0 1; do kf_msg_color "$c"
+            jq -r 'keys[] | select(startswith("_") | not)' "$KF_MSG_FILE" | while IFS= read -r k; do
+                [ -n "$(kf_msg "$k" ids="#1" n=2 w=1 dirs=x file=y branch=b)" ] || printf '%s/%s/%s ' "$l" "$c" "$k"
+            done
+        done
+    done )
+[ -z "$empty" ] && ok "kf_msg renders every key ($(jq --version))" || bad "kf_msg empty" "$empty"
+( . "$S/lib/msg.sh"; KF_LANG=fr; kf_msg stop.idle ids="#3" ) | grep -qF '#3 à faire' \
+    && ok "the values reach their placeholders" || bad "kf_msg values" "$( . "$S/lib/msg.sh"; KF_LANG=fr; kf_msg stop.idle ids="#3")"
+
 echo "== Stop · one line per cause, said once, in the user's language"
 mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
 CTXS() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
