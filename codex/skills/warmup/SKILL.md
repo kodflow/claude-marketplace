@@ -149,7 +149,7 @@ misses, because it is a *contract* rather than documentation.
 
 ```bash
 ls .claude/constraints.md 2>/dev/null
-grep -n "^### C-[0-9]" CLAUDE.md .claude/constraints.md 2>/dev/null
+command grep -n "^### C-[0-9]" CLAUDE.md .claude/constraints.md 2>/dev/null
 ```
 
 `/project` writes this ledger: numbered `C-NNN` entries, each a MUST / MUST NOT /
@@ -164,9 +164,9 @@ SHOULD rule with a verifier and an origin. When it exists:
    run them.
 
 Where to read it: a ledger inside the root `CLAUDE.md` is already in context —
-use the `grep -n` line numbers, do not re-read the file. A
+use the `command grep -n` line numbers, do not re-read the file. A
 `.claude/constraints.md` is not auto-loaded (no `@` import of it, checked by
-`grep -n "@.claude/constraints.md" CLAUDE.md`): read the entries the grep
+`command grep -n "@.claude/constraints.md" CLAUDE.md`): read the entries the grep
 located, by `offset`/`limit`, never the whole file twice.
 
 Per entry, extract: id, category, rule, verifier, and the `~/.claude/docs/`

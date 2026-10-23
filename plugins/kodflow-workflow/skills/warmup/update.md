@@ -106,6 +106,16 @@ create_missing_workflow:
       Hubs: when at least 3 sibling directories would be created and their
       parent has no CLAUDE.md, the parent is listed as `hub`: propose the
       parent first, then its children one line each, instead of N files.
+      A hub names ALL its children, covered or not (a covered sibling would
+      otherwise lose its nearest ancestor once the hub exists). A child of a
+      hub gets one line in the hub even beyond 5 files; its own file is
+      created only on request. The grandparent MOVES its pointers to those
+      children into one line to the hub (a move, not a copy). A `Structure`
+      tree (parent on one line, `child/` on the next) does not count as a
+      mention: the scan needs the path as one token. Re-run the scan after
+      the creations, because a created hub changes the nearest ancestor of
+      its siblings.
+      Directories made only of .sql (migrations) are excluded as assets.
       Siblings that would only get a line are grouped in one row
       (`line-in-ancestor(group)`): one line for the group, not one per folder.
     command: |
@@ -113,9 +123,9 @@ create_missing_workflow:
       git ls-files --cached --others --exclude-standard \
         '*.go' '*.ts' '*.tsx' '*.js' '*.mjs' '*.py' '*.rs' '*.java' '*.sh' \
         '*.tf' '*.hcl' '*.yml' '*.yaml' '*.j2' '*.sql' '*Dockerfile*' '*Makefile' \
-        | grep -vE '(^|/)(testdata|vendor|node_modules|__pycache__|\.[^/]+)/' \
+        | command grep -vE '(^|/)(testdata|vendor|node_modules|__pycache__|migrations|\.[^/]+)/' \
         | sed -e 's|/[^/]*$||' -e t -e 's|.*|.|' \
-        | sed -E 's#/(tasks|defaults|handlers|templates|files|vars|meta)$##' | sort | uniq -c \
+        | sed -E 's#((^|/)roles/[^/]+)/(tasks|defaults|handlers|templates|files|vars|meta)(/.*)?$#\1#' | sort | uniq -c \
         | while read -r n dir; do
             [ -f "$dir/CLAUDE.md" ] && continue
             anc=$dir; covered=0
@@ -124,13 +134,13 @@ create_missing_workflow:
               if [ -f "$anc/CLAUDE.md" ]; then
                 rel=${dir#"$anc"/}; [ "$anc" = "." ] && rel=$dir
                 esc=$(printf '%s' "$rel" | sed 's/[][\.*^$/]/\\&/g')
-                grep -qE -- "(^|[^A-Za-z0-9_./-])$esc(/|[^A-Za-z0-9_./-]|\$)" "$anc/CLAUDE.md" && covered=1
+                command grep -qE -- "(^|[^A-Za-z0-9_./-])$esc(/|[^A-Za-z0-9_./-]|\$)" "$anc/CLAUDE.md" && covered=1
                 break
               fi
             done
             entry=0
             git ls-files --cached --others --exclude-standard -- "$dir" \
-              | grep -qE "^$dir/(main\.(go|py|rs|ts|js|mjs|java|sh)|site\.ya?ml|playbook[^/]*\.ya?ml|[^/]*\.nomad\.hcl|tasks/main\.ya?ml)$" && entry=1
+              | command grep -qE "^$dir/(main\.(go|py|rs|ts|js|mjs|java|sh)|site\.ya?ml|playbook[^/]*\.ya?ml|[^/]*\.nomad\.hcl|tasks/main\.ya?ml)$" && entry=1
             if [ "$covered" = 1 ]; then v=covered
             elif [ "$n" -gt 5 ]; then v=create
             elif [ "$entry" = 1 ] && [ "$n" -ge 3 ]; then v=create
@@ -162,11 +172,13 @@ create_missing_workflow:
       line-in-ancestor(group) | k | dir/  one line for k sibling folders
       covered | n | dir                   nothing to do
     measured: |
-      making.codes (read-only run, 2026-10-23, working tree with other
-      branches' edits): 26 covered, 19 create, 1 create(small), 3 hub, 15
-      line-in-ancestor and 3 groups of siblings, in 2.5 s. The previous form
-      matched the basename as a substring and proposed a file for every
-      directory holding a lone main.go.
+      making.codes (read-only run, 2026-10-23, 45 CLAUDE.md in the working
+      tree, Bash of the harness under zsh where `grep` is a function to
+      ugrep): 79 covered, 0 create, 1 create(small), 3 line-in-ancestor, in
+      about 1 s. The same command with a bare `grep` gave 72 covered, 3
+      create and 7 line-in-ancestor, because `(^|[^X])pattern` then matches
+      only at the start of a line (`printf 'x jobs\n' | grep -cE '(^|[^a])jobs'`
+      prints 0, `command grep` prints 1): hence `command grep` everywhere.
 
   create_template:
     format: |
@@ -185,7 +197,7 @@ create_missing_workflow:
       |------|-------------|
       | <files> | TODO |
 
-    max_lines: 30  # Minimal template, enriched later; a created file starts short
+    max_lines: 30  # Minimal template, enriched later; a created file starts short. Exempt: a hub (one line per child, outside the cap)
 ```
 
 **ABSOLUTE RULE: .gitignore is the source of truth for exclusions.**
@@ -212,7 +224,7 @@ repository.
 # CLAUDE.md older than the code it covers, or with code changed since.
 # Prints: <commits since>\t<modified, uncommitted>\t<untracked code files>\t<CLAUDE.md>
 CODE=(':(exclude)*.md' ':(exclude)*/testdata/*' ':(exclude)*/vendor/*' ':(exclude)*/node_modules/*')
-ALL=$(git ls-files --cached --others --exclude-standard '*CLAUDE.md' | grep -E '(^|/)CLAUDE.md$')
+ALL=$(git ls-files --cached --others --exclude-standard '*CLAUDE.md' | command grep -E '(^|/)CLAUDE.md$')
 printf '%s\n' "$ALL" | while IFS= read -r f; do
   d=$(dirname "$f")
   # code owned by a deeper CLAUDE.md does not count against this one
@@ -222,14 +234,18 @@ printf '%s\n' "$ALL" | while IFS= read -r f; do
     [ "$gd" != "$d" ] || continue
     case "$d" in .) EXCL+=(":(exclude)$gd") ;; *) case "$gd" in "$d"/*) EXCL+=(":(exclude)$gd") ;; esac ;; esac
   done <<< "$ALL"
-  doc=$(git log -1 --format=%ct -- "$f"); [ -n "$doc" ] || doc=0   # never committed: everything is newer
+  doc=$(git log -1 --format=%ct -- "$f"); [ -n "$doc" ] || doc=0   # never committed: everything is newer, no --since
   code=$(git log -1 --format=%ct -- "$d" "${CODE[@]}" "${EXCL[@]}")
-  n=0; [ -n "$code" ] && [ "$code" -gt "$doc" ] && n=$(git rev-list --count --since="@$doc" HEAD -- "$d" "${CODE[@]}" "${EXCL[@]}")
+  n=0
+  if [ -n "$code" ] && [ "$code" -gt "$doc" ]; then
+    if [ "$doc" = 0 ]; then n=$(git rev-list --count HEAD -- "$d" "${CODE[@]}" "${EXCL[@]}")
+    else n=$(git rev-list --count --since="@$doc" HEAD -- "$d" "${CODE[@]}" "${EXCL[@]}"); fi
+  fi
   m=$(git diff --name-only HEAD -- "$d" "${CODE[@]}" "${EXCL[@]}" | wc -l | tr -d ' ')
   u=$(git ls-files --others --exclude-standard -- "$d" "${CODE[@]}" "${EXCL[@]}" | wc -l | tr -d ' ')
   [ "$n" -gt 0 ] || [ "$m" -gt 0 ] || [ "$u" -gt 0 ] || continue
   printf '%s\t%s\t%s\t%s\n' "$n" "$m" "$u" "$f"
-done | sort -rn
+done | sort -t"$(printf '\t')" -k1,1nr -k2,2nr -k3,3nr
 ```
 
 Report `commits | modified | untracked | file`, worst first. Drift is a candidate for
@@ -248,13 +264,13 @@ obsolete_detection:
       # Usage: refs.sh <path/to/CLAUDE.md>   Prints the references that match no file.
       f=$1; d=$(dirname "$f")
       LIST=$(mktemp); git ls-files --cached --others --exclude-standard > "$LIST"
-      grep -oE '`[A-Za-z0-9_./-]+(\.(sh|md|go|ts|tsx|js|mjs|py|rs|tf|hcl|yml|yaml|j2|json|toml|sql|html|css|env|txt|conf|cfg|service|timer|mod|sum)|/)`' "$f" \
+      command grep -oE '`[A-Za-z0-9_./-]+(\.(sh|md|go|ts|tsx|js|mjs|py|rs|tf|hcl|yml|yaml|j2|json|toml|sql|html|css|env|txt|conf|cfg|service|timer|mod|sum)|/)`' "$f" \
         | tr -d '`' | sort -u | while IFS= read -r t; do
             case "$t" in /*|~*|*://*) continue ;; esac
             p=${t%/}
             [ -e "$d/$p" ] || [ -e "$p" ] && continue
             esc=$(printf '%s' "$p" | sed 's/[][\.*^$/]/\\&/g')
-            grep -qE "(^|/)$esc(/|\$)" "$LIST" || echo "$t"
+            command grep -qE "(^|/)$esc(/|\$)" "$LIST" || echo "$t"
           done
       rm -f "$LIST"
     action: |
@@ -287,9 +303,9 @@ obsolete_detection:
   orphan:
     description: "A directory with a CLAUDE.md and no tracked file other than .md"
     command: |
-      git ls-files --cached --others --exclude-standard '*CLAUDE.md' | grep -E '(^|/)CLAUDE.md$' \
+      git ls-files --cached --others --exclude-standard '*CLAUDE.md' | command grep -E '(^|/)CLAUDE.md$' \
         | while IFS= read -r f; do d=$(dirname "$f")
-            [ -n "$(git ls-files --cached --others --exclude-standard -- "$d" | grep -v '\.md$' | head -1)" ] \
+            [ -n "$(git ls-files --cached --others --exclude-standard -- "$d" | command grep -v '\.md$' | head -1)" ] \
               || echo "$f"; done
     action: "Report the orphan with its last commit. Never delete: the user decides"
 
@@ -299,13 +315,18 @@ obsolete_detection:
       # Renames since this CLAUDE.md was last written, whose old name it still cites.
       f=<dir>/CLAUDE.md; d=$(dirname "$f"); [ "$d" = . ] && pre="" || pre="$d/"
       base=$(git log -1 --format=%H -- "$f")
-      [ -n "$base" ] && git diff -M --name-status --diff-filter=R "$base" HEAD \
+      if [ -z "$base" ]; then echo "SKIPPED (not tracked, no history): $f"   # say it, do not skip silently
+      else git diff -M --name-status --diff-filter=R "$base" HEAD \
         | awk -F'\t' -v p="$pre" 'index($2,p)==1 || index($3,p)==1 {print $2 "\t" $3}' \
         | while IFS=$'\t' read -r old new; do
             rel=${old#"$pre"}
-            grep -qF -- "$rel" "$f" && printf '%s -> %s\n' "$old" "$new"
+            command grep -qF -- "$rel" "$f" && printf '%s -> %s\n' "$old" "$new"
           done | head -20
+      fi
     note: |
+      An untracked CLAUDE.md has no commit to measure from: the command prints
+      `SKIPPED (not tracked, ...)` and the final output must list those files
+      as "rename check skipped", never as "no rename".
       Bounded to `<commit of the CLAUDE.md>..HEAD`, filtered on the directory,
       then only the old names the file still cites: the unbounded
       `git log -M --diff-filter=R` listed the whole history.
@@ -356,6 +377,7 @@ split_workflow:
     action: "Show the plan: section → destination, bytes moved, launch cost before/after"
     dry_run: "--dry-run prints the plan and stops"
     tool: AskUserQuestion
+    no_ask_tool: "In a subagent AskUserQuestion is absent: apply the (Recommended) option and list every choice made in the output"
     options:
       - "Apply the whole split (Recommended)"
       - "Apply section by section"
@@ -451,8 +473,9 @@ apply_workflow:
     for_each_file:
       action: "Display diff and ask for confirmation"
       tool: AskUserQuestion
+      no_ask_tool: "Without AskUserQuestion (a subagent), apply the (Recommended) option and list every choice made in the output"
       options:
-        - "Apply this change"
+        - "Apply this change (Recommended)"
         - "Skip this file"
         - "Edit manually"
         - "Apply all remaining"
@@ -462,8 +485,11 @@ apply_workflow:
       tool: Edit or Write
       backup: |
         Before the first write to a file, copy it:
-          mkdir -p "$SCRATCH/warmup-backup" && cp -p "$f" "$SCRATCH/warmup-backup/$(printf '%s' "$f" | tr / _).bak"
+          B="$SCRATCH/warmup-backup/${RUN:=$(date -u +%Y%m%dT%H%M%SZ)}"   # one dated folder per run
+          mkdir -p "$B" && cp -pn "$f" "$B/$(printf '%s' "$f" | tr / _).bak"
         $SCRATCH is the session scratchpad directory (else ${TMPDIR:-/tmp}).
+        A second run writes to its own dated folder, so it never overwrites the
+        first run's backups; `cp -n` keeps the first copy within a run.
         Print the backup directory in the final output. Nothing is written
         into the repository, and the backup is never committed.
 
