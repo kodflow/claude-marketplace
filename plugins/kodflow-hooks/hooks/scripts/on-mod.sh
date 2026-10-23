@@ -26,6 +26,15 @@ _branch() {
     BRANCH_SAFE=${BRANCH//\//_}; BRANCH_SAFE=${BRANCH_SAFE// /_}
 }
 
+# A refusal of the mod's guards (`block`: its motif and title) also goes to
+# the session's journal of refusals, beside tasks.json (lib/blocks.sh).
+if printf '%s' "$INPUT" | jq -e '.block | type == "object"' >/dev/null 2>&1; then
+    eval "$(printf '%s' "$INPUT" | jq -r '@sh "B_SID=\(.session_id // "") B_TOOL=\(.tool_name // "") B_AGENT=\(.agent_id // "main") B_MOTIF=\(.block.motif // "guard") B_TITLE=\(.block.title // "") B_ID=\(.tool_use_id // "")"' 2>/dev/null)"
+    B_SID=${B_SID//[^A-Za-z0-9_-]/}
+    . "$LIB/blocks.sh" 2>/dev/null \
+        && kf_block "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/${B_SID:-default}" hook "$B_TOOL" "$B_TITLE" "$B_MOTIF" "${B_AGENT:-main}" "" "" "$B_ID"
+fi
+
 _branch
 dir=$PROJECT_DIR/.claude/logs/$BRANCH_SAFE
 mkdir -p "$dir" 2>/dev/null || exit 0

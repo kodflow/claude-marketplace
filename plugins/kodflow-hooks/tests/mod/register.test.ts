@@ -12,6 +12,8 @@ type Host = {
   files: Map<string, string>;
   dirs: Set<string>;
   runs: string[][];
+  /** What each `bash` the mod ran read on stdin (on-mod.sh's payload). */
+  stdins: string[];
   registered: any[];
   commands: any[];
   agents: { id: string; type: string; name?: string; status: string }[];
@@ -27,6 +29,7 @@ function host(on: any, env: Record<string, string>): Host {
     files: new Map(),
     dirs: new Set(["/", CFG]),
     runs: [],
+    stdins: [],
     registered: [],
     commands: [],
     agents: [],
@@ -85,6 +88,8 @@ function host(on: any, env: Record<string, string>): Host {
   on("process.run", async (_$: any, e: any) => {
     const argv: string[] = e.argv;
     h.runs.push(argv);
+    const stdin = e.init?.stdin ?? e.stdin;
+    if (argv[0] === "bash" && typeof stdin === "string") h.stdins.push(stdin);
     const done = (exitCode: number) => ({
       value: {
         exitCode,
@@ -579,6 +584,24 @@ test("guards: the mod refuses what the shell refuses, with its motif", async ($,
   } as any);
   expect(refusal(r)).toContain("[motif:no-verify]");
   expect(reached).toBe(0);
+});
+
+test("blocks: a refusal of the mod hands its motif and title to on-mod.sh", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  on("tool.call", { tool: "Bash" }, async () => out("") as any);
+  await start($);
+  await $.tool.call({ tool: "Bash", command: "git commit -n -m x" } as any);
+  await $.tool.call({ tool: "Bash", command: "git status" } as any);
+  // journal() is fire-and-forget: let its process.run land
+  for (let i = 0; i < 50 && !h.stdins.some((t) => t.includes('"block"')); i++)
+    await new Promise((r) => setTimeout(r, 10));
+  const sent = h.stdins.map((t) => JSON.parse(t));
+  const denied = sent.filter((p) => p.reason === "guards:deny");
+  expect(denied.length).toBe(1);
+  expect(denied[0].block.motif).toBe("no-verify");
+  expect(denied[0].block.title).toContain("skipping git hooks");
+  expect(Object.keys(denied[0].block).sort()).toEqual(["motif", "title"]);
+  expect(sent.filter((p) => p.block && p.reason !== "guards:deny")).toEqual([]);
 });
 
 // The vendored rules' shape (hooks/patterns), in miniature: a plugin test
