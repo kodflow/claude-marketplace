@@ -29,6 +29,9 @@
     "PostToolUseFailure": [
       { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 5 } ] }
     ],
+    "PermissionDenied": [
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 5 } ] }
+    ],
     "SubagentStart": [
       { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] }
     ],

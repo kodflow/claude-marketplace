@@ -79,6 +79,7 @@ import {
 import { loadRules, type Rules } from "./patterns.ts";
 import { filterResult, versionOk } from "./filter.ts";
 import { veilResult } from "./veil.ts";
+import { blockOf, type Block } from "./blocks.ts";
 import { runBash } from "./pipeline.ts";
 import {
   WRITING_TOOLS,
@@ -392,13 +393,15 @@ function guardPort($: any): GuardPort {
   };
 }
 
-// One line in .claude/logs/<branch>/session.jsonl for a policy's decision.
+// One line in .claude/logs/<branch>/session.jsonl for a policy's decision;
+// with `block` (a refusal), one more in the session's blocks.jsonl.
 function journal(
   $: any,
   e: any,
   policy: string,
   decision: string,
   error?: unknown,
+  block?: Block,
 ): void {
   void (async () => {
     const payload: Record<string, unknown> = {
@@ -413,6 +416,7 @@ function journal(
     if (e.agentId) payload.agent_id = e.agentId;
     if (error !== undefined)
       payload.error = String((error as Error)?.message ?? error);
+    if (block) payload.block = block;
     await $.process.run(
       ["bash", `${$.plugin.root}/hooks/scripts/on-mod.sh`],
       { stdin: JSON.stringify(payload), timeoutMs: 3000 },
@@ -617,8 +621,9 @@ export const register: Register = (on) => {
       const tokens = failClosedTokens(await gatedText($));
       const named = raw.find((r) => typeof r === "string" && isGated(r, tokens));
       if (anyGated(raw, tokens)) {
-        journal($, at, "fable", "error-refused", err);
-        return { deny: fableRefusal(String(named), "the check failed") };
+        const deny = fableRefusal(String(named), "the check failed");
+        journal($, at, "fable", "error-refused", err, blockOf(deny));
+        return { deny };
       }
       journal($, at, "fable", "error-passed", err);
       await $.ui
@@ -628,8 +633,10 @@ export const register: Register = (on) => {
         .catch(() => undefined);
       return next(e);
     }
-    journal($, at, "fable", `${verdict.kind}: ${verdict.why}`);
-    if (verdict.kind === "refuse") return { deny: fableRefusal(verdict.model, verdict.why) };
+    const denied =
+      verdict.kind === "refuse" ? fableRefusal(verdict.model, verdict.why) : undefined;
+    journal($, at, "fable", `${verdict.kind}: ${verdict.why}`, undefined, blockOf(denied));
+    if (denied) return { deny: denied };
     return next(e);
   }).catch(($, e, next) => next(e));
 
@@ -646,15 +653,17 @@ export const register: Register = (on) => {
       verdict = await run;
     } catch (err) {
       if (anyGated(raw, failClosedTokens(await gatedText($)))) {
-        journal($, at, "fable", "error-refused", err);
-        return { deny: fableRefusal(skill, "the check failed") };
+        const deny = fableRefusal(skill, "the check failed");
+        journal($, at, "fable", "error-refused", err, blockOf(deny));
+        return { deny };
       }
       journal($, at, "fable", "error-passed", err);
       return next(e);
     }
     if (verdict.kind === "refuse") {
-      journal($, at, "fable", `refuse: ${verdict.why}`);
-      return { deny: fableRefusal(verdict.model, verdict.why) };
+      const deny = fableRefusal(verdict.model, verdict.why);
+      journal($, at, "fable", `refuse: ${verdict.why}`, undefined, blockOf(deny));
+      return { deny };
     }
     return next(e);
   }).catch(($, e, next) => next(e));
@@ -683,7 +692,7 @@ export const register: Register = (on) => {
         if (answer === "Switch") await grantSession($, session, `asked at a ${v.why}`);
         else deny = fableRefusal(String(e.to_model), `${v.why}; ${answer}`);
       }
-      journal($, at, "fable", deny ? `refuse: ${v.why}` : `${v.kind}: ${v.why}`);
+      journal($, at, "fable", deny ? `refuse: ${v.why}` : `${v.kind}: ${v.why}`, undefined, blockOf(deny));
       return deny ? { ...r, permissionDecision: "deny", permissionDecisionReason: deny } : r;
     } catch (err) {
       // After next(e): answer from r, never call next again. A gated target
@@ -711,7 +720,7 @@ export const register: Register = (on) => {
           await guardCtx($, e, async () => rules),
         );
         if (mj) {
-          journal($, e, "mcp-json", "deny");
+          journal($, e, "mcp-json", "deny", undefined, { motif: mj.motif, title: mj.title });
           return { deny: refusalText(mj) };
         }
       } catch (err) {
@@ -740,6 +749,7 @@ export const register: Register = (on) => {
   on("tool.call", { tool: "Bash" }, async ($, e, next) => {
     if (await off($)) return next(e);
     const line = typeof e.command === "string" ? e.command : "";
+    let refused: Block | undefined;
     return runBash(() => next(e), {
       guards: async () => {
         rules ??= await loadRules(
@@ -749,7 +759,9 @@ export const register: Register = (on) => {
         const ctx = await guardCtx($, e, async () => rules);
         const found = await inspect(line, ctx);
         const refusal = found && (await verdict(line, found, ctx));
-        return refusal ? { deny: refusalText(refusal) } : undefined;
+        if (!refusal) return undefined;
+        refused = { motif: refusal.motif, title: refusal.title };
+        return { deny: refusalText(refusal) };
       },
       filter: async (r) => {
         validated ??= $.session.version().then(
@@ -758,7 +770,8 @@ export const register: Register = (on) => {
         );
         return filterResult(line, r, await validated!);
       },
-      log: (policy, decision, error) => journal($, e, policy, decision, error),
+      log: (policy, decision, error) =>
+        journal($, e, policy, decision, error, decision === "deny" ? refused : undefined),
     });
   }).catch(($, e, next) => next(e));
 

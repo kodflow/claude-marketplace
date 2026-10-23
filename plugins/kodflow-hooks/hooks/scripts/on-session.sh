@@ -135,6 +135,21 @@ Context was compacted: verify the task state before continuing.'
 
     cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 
+    # The project's documents (lib/docs.sh): docs.json beside tasks.json for
+    # the panels, and for Claude a short index, one document per line, never
+    # their text. Outside a git repository there is no file.
+    if [ "${KODFLOW_DOCS:-}" != off ] && . "$LIB/docs.sh" 2>/dev/null; then
+        if kf_docs_top "$PROJECT_DIR"; then
+            kf_docs_write "$KF_DOCS_TOP" "$sdir"
+            idx=$(kf_docs_index "$sdir")
+            [ -n "$idx" ] && ctx="${ctx:+$ctx
+
+}$idx"
+        else
+            rm -f "$sdir/docs.json" 2>/dev/null
+        fi
+    fi
+
     # The routing gate's index for this session (on-tool.sh, pre_agent): the
     # shipped one, filtered to the plugins installed here.
     if [ "${KODFLOW_ROUTE:-}" != off ] && . "$LIB/route.sh" 2>/dev/null; then

@@ -71,13 +71,33 @@ export type Screen = {
   /** The line of the views' bar, and where each view's name sits. */
   tabsLine: number;
   tabs: { x: number; w: number; view: View }[];
+  /** What a click on a line does beyond choosing it (« Refus », « Documents »). */
+  buttons?: { y: number; x: number; w: number; act: Act }[];
   /** The tasks ↑ and ↓ walk, in the order shown. */
   order: string[];
   /** The lines the task list takes: the first, and how many. */
   list: { top: number; rows: number };
 };
 
-export type View = "tree" | "graph";
+export type View = "tree" | "graph" | "blocks" | "docs";
+export const VIEWS: readonly View[] = ["tree", "graph", "blocks", "docs"];
+
+/** The counts the views' bar shows beside « Refus » and « Documents ». */
+export type BarCounts = { blocks: number; docs: number };
+const NO_COUNTS: BarCounts = { blocks: 0, docs: 0 };
+
+/**
+ * A button of the « Refus » and « Documents » views. `allow`, `copy`,
+ * `create` and `ignore` go to the hooks module (`surface.post`); `pick`,
+ * `cancel` and `mode` stay in the surface module's state.
+ */
+export type Act =
+  | { op: "allow" | "copy"; rule: string }
+  | { op: "pick"; rule: string }
+  | { op: "cancel" }
+  | { op: "create"; ids: string[] }
+  | { op: "mode"; mode: "ask" | "context" | "both" }
+  | { op: "ignore"; id: string; ignore: boolean };
 
 /**
  * What the person moved: kept by the surface module, across redraws. `pin`
@@ -90,6 +110,14 @@ export type Ui = {
   sel?: string;
   open: string[];
   pin?: { id: string; y: number };
+  /** « Refus »: the refusal chosen, and the rule shown for confirmation. */
+  bsel?: string;
+  pick?: string;
+  /** « Documents »: the document chosen, and the mode « Créer » drafts. */
+  dsel?: string;
+  mode?: "ask" | "context" | "both";
+  /** The line the chosen refusal or document stays on, as `pin`. */
+  ppin?: { id: string; y: number };
 };
 
 export const FULL = { links: 88, model: 76, agent: 64 } as const;
@@ -120,16 +148,21 @@ export const GLYPH: Record<
   todo: { glyph: "○", dim: true },
 };
 
-const HINT = "↑↓ choisir · ⏎ plier/déplier · tab changer de vue";
+const HINTS: Record<View, string> = {
+  tree: "↑↓ choisir · ⏎ plier · tab vue",
+  graph: "↑↓ choisir · ⏎ plier · tab vue",
+  blocks: "↑↓ choisir · ⏎ règle · tab vue",
+  docs: "⏎ ignorer · c créer · m mode · tab",
+};
 const HINT_SHORT = "↑↓ ⏎ tab";
 
 // --- cells ------------------------------------------------------------------------
 
-const span = (text: string, style: Omit<Span, "text"> = {}): Span => ({
+export const span = (text: string, style: Omit<Span, "text"> = {}): Span => ({
   text,
   ...style,
 });
-const dim = (text: string): Span => ({ text, dim: true });
+export const dim = (text: string): Span => ({ text, dim: true });
 
 /** Spans cut to `w` cells as one text: the cut falls in the span it reaches. */
 export function cut(spans: Span[], w: number): Span[] {
@@ -148,11 +181,13 @@ export function cut(spans: Span[], w: number): Span[] {
   return out;
 }
 
-const cell = (w: number, spans: Span[] = [], right = false): Cell =>
+export const cell = (w: number, spans: Span[] = [], right = false): Cell =>
   right ? { w, spans: cut(spans, w), right } : { w, spans: cut(spans, w) };
-const row = (w: number, inner: Cell[]): Cell => ({ w, row: inner });
+export const row = (w: number, inner: Cell[]): Cell => ({ w, row: inner });
 const gap = (): Cell => ({ w: W.gap });
-const rule = (w: number, ch: string): Cell[] => [cell(w, [dim(ch.repeat(w))])];
+export const rule = (w: number, ch: string): Cell[] => [
+  cell(w, [dim(ch.repeat(w))]),
+];
 
 /** Which of the optional columns a body of `width` cells keeps. */
 export function columnsFor(width: number) {
@@ -627,29 +662,58 @@ function detailLines(
   return lines.slice(0, count);
 }
 
-function tabsLines(
+/**
+ * The views' bar: « Arbre », « Graphe », « Refus (n) », « Documents (n) »,
+ * each count of one width up to 99 (a figure space after a single digit) so
+ * no name moves from under the pointer when a count does; the hint of the
+ * view shown on the right, where it fits. Narrower than 46 cells the counts
+ * go and « Documents » is « Docs ».
+ */
+export function tabsLines(
   view: View,
   width: number,
+  counts: BarCounts = NO_COUNTS,
 ): { lines: Cell[][]; tabs: Screen["tabs"] } {
   const on = (v: View): Omit<Span, "text"> =>
     v === view ? { color: MAUVE, bold: true, underline: true } : { dim: true };
-  const hint = width >= 64 ? HINT : HINT_SHORT;
-  const hintW = Math.min(cells(hint), Math.max(0, width - 15));
-  const line: Cell[] = [
-    cell(5, [span("Arbre", on("tree"))]),
-    cell(3),
-    cell(6, [span("Graphe", on("graph"))]),
-  ];
-  const rest = Math.max(0, width - 14 - hintW);
+  const n = (k: number) => {
+    const c = Math.min(99, Math.max(0, k));
+    return ` (${c})${"\u2007".repeat(2 - String(c).length)}`;
+  };
+  const wide = width >= 46;
+  const names: [View, string][] = wide
+    ? [
+        ["tree", "Arbre"],
+        ["graph", "Graphe"],
+        ["blocks", `Refus${n(counts.blocks)}`],
+        ["docs", `Documents${n(counts.docs)}`],
+      ]
+    : [
+        ["tree", "Arbre"],
+        ["graph", "Graphe"],
+        ["blocks", "Refus"],
+        ["docs", "Docs"],
+      ];
+  const sep = wide ? 3 : 1;
+  const line: Cell[] = [];
+  const tabs: Screen["tabs"] = [];
+  let x = 0;
+  names.forEach(([v, label], i) => {
+    if (i) {
+      line.push(cell(sep));
+      x += sep;
+    }
+    const w = cells(label);
+    line.push(cell(w, [span(label, on(v))]));
+    tabs.push({ x, w, view: v });
+    x += w;
+  });
+  const hint = width - x >= cells(HINTS[view]) + 2 ? HINTS[view] : HINT_SHORT;
+  const hintW = width - x >= cells(hint) + 1 ? cells(hint) : 0;
+  const rest = Math.max(0, width - x - hintW);
   if (rest) line.push(cell(rest));
   if (hintW) line.push(cell(hintW, [dim(hint)]));
-  return {
-    lines: [rule(width, "─"), line],
-    tabs: [
-      { x: 0, w: 5, view: "tree" },
-      { x: 8, w: 6, view: "graph" },
-    ],
-  };
+  return { lines: [rule(width, "─"), line], tabs };
 }
 
 // --- R12 ---------------------------------------------------------------------------------
@@ -662,6 +726,7 @@ export function treeScreen(
   ui: Ui,
   width: number,
   rows: number,
+  counts: BarCounts = NO_COUNTS,
 ): Screen {
   const cols = columnsFor(width);
   const sel = findNode(model, ui.sel);
@@ -731,7 +796,11 @@ export function treeScreen(
   let body = whole.length > roomAtFirst ? folded : whole;
   // A pinned task keeps its line: with the finished branches folded or
   // not, whichever keeps it there
-  if (ui.pin && ui.pin.id === ui.sel && lineOf(body, fitFor(body.length)) !== ui.pin.y) {
+  if (
+    ui.pin &&
+    ui.pin.id === ui.sel &&
+    lineOf(body, fitFor(body.length)) !== ui.pin.y
+  ) {
     const other = body === whole ? folded : whole;
     if (lineOf(other, fitFor(other.length)) === ui.pin.y) body = other;
   }
@@ -757,7 +826,7 @@ export function treeScreen(
   let tabsLine = -1;
   let tabs: Screen["tabs"] = [];
   if (bar) {
-    const t = tabsLines("tree", width);
+    const t = tabsLines("tree", width, counts);
     push(t.lines[0]!);
     tabsLine = lines.length;
     push(t.lines[1]!);
@@ -1003,6 +1072,7 @@ export function graphScreen(
   ui: Ui,
   width: number,
   rows: number,
+  counts: BarCounts = NO_COUNTS,
 ): Screen {
   const sel = findNode(model, ui.sel);
   const epic = sel?.epic ?? model.epics[0];
@@ -1116,7 +1186,7 @@ export function graphScreen(
     );
   } else goal.push(dim("aucun"));
   push([cell(width, goal)]);
-  const t = tabsLines("graph", width);
+  const t = tabsLines("graph", width, counts);
   push(t.lines[0]!);
   const tabsLine = lines.length;
   push(t.lines[1]!);
@@ -1136,13 +1206,14 @@ export function screenOf(
   ui: Ui,
   width: number,
   rows: number,
+  counts: BarCounts = NO_COUNTS,
 ): Screen | string {
   if (!model.found)
     return "Aucune liste de tâches pour cette session (kodflow-hooks la tient).";
   if (!model.epics.length) return "Aucune épopée ouverte.";
   return ui.view === "graph"
-    ? graphScreen(model, ui, width, rows)
-    : treeScreen(model, ui, width, rows);
+    ? graphScreen(model, ui, width, rows, counts)
+    : treeScreen(model, ui, width, rows, counts);
 }
 
 // --- drawing --------------------------------------------------------------------------------

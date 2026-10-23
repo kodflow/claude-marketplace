@@ -117,7 +117,7 @@ const TASKS_MAIN_ONLY = [
   "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
   "┃ chemin critique  aucun lien",
   "────────────────────────────────────────────────────────────────────────────────────────",
-  "Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue",
+  "Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue",
 ].join("\n");
 
 test("the reported case, the main loop alone: « Tâches » the only tab, no word said three times", async ($, on) => {
