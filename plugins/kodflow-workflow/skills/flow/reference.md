@@ -14,7 +14,7 @@ Index, by lane:
 | design | `/plan` `/challenge` `/refine` |
 | verify | `/review` `/debug` `/lint` |
 | ship | `/git` `/adr` |
-| keep | `/learn` |
+| keep | `/learn` `/docs` |
 | observe | `/recap` |
 | machine | `/audit` `/update` `/ktn` `/infra` |
 
@@ -367,6 +367,22 @@ signals a process itself.
 | reads | `diagrams.md` · `reference.md` · the live inventory script |
 | writes | nothing |
 | gate | `--check` reports drift and never edits the map to resolve it |
+
+---
+
+## /docs
+
+`kodflow-workflow` · inherit · **Write the project's missing documents**
+
+**Type** `/docs [<id>[,<id>…]] [--mode ask|context|both]`
+
+| | |
+|---|---|
+| reads | `docs/manifest.json` and kodflow-hooks' `docs.json` (else computed from its own catalogue) · the repository for `context` and `both` · `CLAUDE.md` and the ledger |
+| writes | each document at its manifest path · `docs/manifest.json` through `docs.sh` only (ignored, moved) · on a yes, the epic's tasks from `impl` |
+| after | `/project` (proposes it for the missing ones) · the documents panel's « Créer » button |
+| then | `/plan` · `/challenge` · `/refine`, which read the documents back · `/adr` per decision |
+| gate | **every claim cites `fichier:ligne`, or is marked deduced or uncertain**; the draft is shown before it is written; a document is ignored only on the user's answer |
 
 ---
 

@@ -26,6 +26,7 @@ allowed-tools:
 - Write(.claude/goals/*.md)
 - mcp__context7__*
 - Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh:*)
 - Bash(jq:*)
 ---
 
@@ -117,6 +118,13 @@ resolve_mode_and_slug() {
   fi
 }
 ```
+
+### Project documents (all modes)
+
+Read the project's documents that concern the slug (the `ok` entries of
+`bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute`)
+and its ADRs. A directive that contradicts one carries the contradiction in
+`# CONSTRAINTS`, with `fichier:ligne`, and the user is told before `/goal`.
 
 ## Phase 1: AUTO lens depth — FULL mode only
 
