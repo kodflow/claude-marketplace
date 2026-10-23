@@ -418,7 +418,7 @@ macro:                                 # impacted PROJECT documentation (stale v
   - "Record impacted docs in manifest.doc_sync.docs[] as {path, status}."
 micro:                                 # CLAUDE.md re-sync — touched folders + ALL ancestors
   - "Compute the required set = EVERY directory touched by the change AND all its ANCESTOR directories up to the repo root (the repo root maps to the bare top-level CLAUDE.md). Scope is touched-folders+ancestors ONLY — NOT the whole repo."
-  - "For each required directory, re-synchronize <dir>/CLAUDE.md following /warmup:update refresh mechanics (../warmup/update.md): keep < 200 lines, reflect new/removed files, structure, and decisions so it stays iso for future iterations."
+  - "For each required directory, re-synchronize <dir>/CLAUDE.md following /warmup:update refresh mechanics (../warmup/update.md): keep within the /warmup size table, reflect new/removed files, structure, and decisions so it stays iso for future iterations."
   - "If a touched folder has NO CLAUDE.md, one is CREATED (status: created). An existing-and-already-accurate CLAUDE.md is status: current; an edited one is status: updated."
   - "Emit each required CLAUDE.md into manifest.doc_sync.claude_md[] as {path, status: updated|created|current}. The verifier FAILS the run if any required path is missing or carries any other status."
 emit: |

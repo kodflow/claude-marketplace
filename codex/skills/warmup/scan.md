@@ -13,9 +13,17 @@ peek_workflow:
     command: |
       git ls-files --cached --others --exclude-standard \
         '*CLAUDE.md' '*CLAUDE.local.md' '.claude/rules/*.md' '.claude/rules/**/*.md' \
-        | xargs wc -lcm 2>/dev/null
+        | while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            printf '%s\t%s\t%s\t%s\t%s\n' \
+              "$(wc -l < "$f" | tr -d ' ')" "$(wc -c < "$f" | tr -d ' ')" "$(wc -m < "$f" | tr -d ' ')" "$f"
+          done
+    note: |
+      Prints <lines>\t<bytes>\t<chars>\t<path>. Three separate `wc` calls:
+      on macOS `wc -lcm` does not print the byte count (-c and -m exclude each
+      other). `[ -f "$f" ] || continue` skips an indexed file deleted on disk.
     fallback: "Glob '**/CLAUDE.md' outside a git work tree"
-    output: [claude_files with lines and bytes]
+    output: [claude_files with lines, bytes and characters]
 
   2_build_tree:
     action: "Build the context tree by depth and mark what is already loaded"
@@ -34,10 +42,17 @@ peek_workflow:
 
   3_detect_project:
     action: "Identify the project type in ONE call"
-    command: 'bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/detect-project.sh'
+    command: |
+      # CLAUDE_PLUGIN_ROOT is not set in the Bash tool and ~/.codex/skills/_shared
+      # does not exist for a plugin install: start from the skill's base directory
+      # (given when the skill loaded; the script is its sibling _shared/).
+      S="<base directory of this skill>/../_shared/scripts/detect-project.sh"
+      [ -f "$S" ] || S="${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/skills/_shared/scripts/detect-project.sh}"
+      [ -f "$S" ] || S=$(find "$HOME/.claude/plugins" -path '*kodflow-workflow*/skills/_shared/scripts/detect-project.sh' 2>/dev/null | head -1)
+      [ -f "$S" ] && bash "$S"
     returns: "languages, build_system.targets, test_frameworks, ci — JSON"
     fallback: |
-      When the script is absent, jq is missing, or `languages` comes back empty
+      When no candidate path exists, the script is absent, jq is missing, or `languages` comes back empty
       (manifests below the root, as in a monorepo), Glob the manifests below,
       at most three levels deep, and read the table as the key.
     patterns:
@@ -84,7 +99,7 @@ the briefing):
   Branch  : <branch>      Dirty: <n>     Tracked files: <n>
 
   CLAUDE.md hierarchy (<n> files)
-    depth 0 : /CLAUDE.md               871 l  56 KB  loaded     FORBIDDEN
+    depth 0 : /CLAUDE.md               871 l  56 KB  loaded     CRITICAL
     depth 1 : /src/CLAUDE.md           120 l   5 KB  on demand  IDEAL
     ...
   Rules     : <n> always loaded, <n> path-scoped
@@ -103,11 +118,12 @@ edit anything: they feed the briefing's **Drift** section and point to
 health_checks:
   size:
     input: "lines, bytes and characters from Phase 1.0"
-    rule: "Level = worse of the line and byte levels (SKILL.md, Size thresholds)"
+    rule: "Level = the line table (SKILL.md, Size thresholds), plus the character check below"
     report: |
       Every file at WARNING or above, with its level, and the launch cost of
-      the loaded ones (bytes / 4 ≈ tokens). A subdirectory file over 40 000
-      characters (`wc -m`) is also reported: Claude receives only its start. FORBIDDEN or CRITICAL →
+      the loaded ones (bytes / 4 ≈ tokens). A file loaded on demand over
+      40 000 characters (`wc -m`) is reported "truncated on a 200K window",
+      over 150 000 "truncated everywhere" (FORBIDDEN). CRITICAL or FORBIDDEN →
       "split with /warmup --update" (update.md, Phase 3.5).
 
   dated_state:
@@ -115,8 +131,18 @@ health_checks:
       Status prose ("as of 2026-10-07: deployed", "nothing converged yet")
       ages faster than rules, and a stale one is read as current.
     command: |
-      grep -niE '(as of|status|state|état|etat|en service|deployed|déployé|not deployed|rien|pending|WIP)[^|]{0,80}(20[0-9]{2}-[01][0-9]-[0-3][0-9]|[0-3][0-9]/[01][0-9]/20[0-9]{2})' \
-        <each CLAUDE.md> | head -50
+      # A status phrase and a date on the same line OR the next one (the date
+      # often sits on the following line). A bare "rien" or "etat" is not a
+      # status: "rien (n'est) deploye|converge|applique" and "etat au|:" are.
+      for f in <each CLAUDE.md>; do
+        awk -v F="$f" '
+          { l[NR]=$0 }
+          END { for (i=1;i<=NR;i++) {
+                  w = l[i] (i<NR ? " " l[i+1] : "")
+                  if (tolower(l[i]) ~ /(as of|status:|(état|etat) (au|du|:)|en service|en ligne|deployed|déployé|rien (n.est )?(déployé|deploye|converg|appliqué|applique)|pas (déployé|deploye)|wip)/ \
+                      && w ~ /(20[0-9][0-9]-[01][0-9]-[0-3][0-9]|[0-3][0-9]\/[01][0-9]\/20[0-9][0-9])/)
+                    printf "%s:%d:%s\n", F, i, substr(l[i],1,160) } }' "$f"
+      done | head -50
     rule: |
       A match older than 30 days is a CANDIDATE, never a verdict: report the
       count, the oldest three by file:line, and let the user or --update

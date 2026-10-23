@@ -202,7 +202,7 @@ synthesize_workflow:
 
   Drift detected
     ⚠ C-004 says Postgres sessions; internal/session/ imports go-redis
-    ⚠ CLAUDE.md 871 l / 56 KB — FORBIDDEN, split with /warmup --update
+    ⚠ CLAUDE.md 871 l / 56 KB — CRITICAL, condense or split with /warmup --update
     ⚠ 4 dated state lines older than 30 days (CLAUDE.md:572, :818, …)
 
   Attention

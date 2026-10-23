@@ -141,7 +141,7 @@ done | sort -u
 ```
 
 For each required CLAUDE.md: if it exists, re-synchronize it (`/warmup:update` refresh
-mechanics — keep < 200 lines, reflect new files/structure/decisions); **if a touched folder
+mechanics — keep within the /warmup size table, reflect new files/structure/decisions); **if a touched folder
 has no CLAUDE.md, one is CREATED**. Route every CLAUDE.md/doc edit to the docs/commentator
 specialist (`developer-commentator`) — see `dimensions.md`
 dimension "Documentation & CLAUDE.md sync".
