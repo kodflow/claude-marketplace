@@ -29,6 +29,11 @@ allowed-tools:
   - "Bash(find:*)"
   - "Bash(cat:*)"
   - "Bash(grep:*)"
+  - "Bash(sed:*)"
+  - "Bash(sort:*)"
+  - "Bash(uniq:*)"
+  - "Bash(dirname:*)"
+  - "Bash(basename:*)"
   - "Agent(*)"
   - "mcp__context7__*"
 ---
@@ -55,9 +60,13 @@ Before the first tool call, the session already holds (Claude Code memory docs,
 | `~/.claude/CLAUDE.md`, `~/.claude/rules/`, auto memory (`~/.claude/projects/<project>/memory/MEMORY.md`, first 200 lines or 25 KB) | |
 
 Reading a loaded file again pays for it twice (a 56 KB root CLAUDE.md is
-~14 000 tokens). Measure it (`wc -lc`), cite it by `file:line`, extract from
+~14 000 tokens). Measure it (`wc -lcm`), cite it by `file:line`, extract from
 context; `Read` it only when it is not there (a nested file dropped by a
-compaction, a `--update` edit).
+compaction). **Never write from the context copy**: Claude Code strips
+block-level HTML comments (the `<!-- updated: -->` timestamp, maintainer notes)
+before injection, so an edit built from it silently drops them. `--update`
+`Read`s from disk every CLAUDE.md it judges or modifies (`update.md`, Phase
+1.0).
 
 ## Method
 
@@ -102,9 +111,13 @@ CLAUDE.md size thresholds (the worse of lines and bytes wins):
   WARNING     701-850         ≤ 42 KB   review at the next pass
   CRITICAL    851-1000        ≤ 50 KB   condensation mandatory
   FORBIDDEN   1001+           > 50 KB   must be split
+  A subdirectory CLAUDE.md over 40 000 characters (wc -m) is truncated at
+  load: Claude keeps only its start (Claude Code memory docs).
   A file warmup creates targets < 200 lines (Claude Code docs).
+  --update proposes a new CLAUDE.md only where no ancestor covers the
+  directory and it has > 5 code files or an entry point.
 
-Exclusions: .gitignore is authoritative, plus vendor/, node_modules/,
+Exclusions: .gitignore is authoritative, plus testdata/, vendor/, node_modules/,
 .git/, bin/, dist/, build/, target/, zig-out/, zig-cache/.
 
 Workflow:
@@ -133,10 +146,12 @@ Workflow:
 
 | Phase | Action | Module |
 |-------|--------|--------|
-| 1.0 | Full scan, honouring `.gitignore` | `update.md` |
-| 2.0 | Create the missing CLAUDE.md files | `update.md` |
-| 3.0 | Detect stale content, dated state included | `update.md` |
+| 1.0 | Peek, then full scan, honouring `.gitignore` | `scan.md`, `update.md` |
+| 2.0 | Create the CLAUDE.md files no ancestor covers | `update.md` |
+| 2.5 | Drift — CLAUDE.md older than its directory's code | `update.md` |
+| 3.0 | Detect stale content, dated state, orphans, renames | `update.md` |
 | 3.5 | Split the oversized CLAUDE.md files | `update.md` |
+| 3.7 | Parent/child coherence, deepest first | `update.md` |
 | 4.0 | Generate the updates | `update.md` |
 | 5.0 | Apply (interactive) or print (`--dry-run`) | `update.md` |
 | 7.0 | Learn — extract recurring conventions | `update.md` |

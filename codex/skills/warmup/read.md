@@ -58,8 +58,9 @@ FOR depth FROM 0 TO max_depth:
 ```
 
 A file under 150 lines may be read whole — the outline would cost as much.
-Reading an on-demand CLAUDE.md also makes Claude Code attach it to the
-session, so read only those the next task is likely to need.
+A subdirectory CLAUDE.md is attached to the session when Claude reads, writes
+or edits *another* file in that directory (memory docs). Read only the ones
+the next task is likely to need; reading a sibling file is what loads the rest.
 
 ---
 
