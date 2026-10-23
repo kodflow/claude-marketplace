@@ -200,6 +200,12 @@ jobs:
       - name: The recap reads the session as the table needs it
         run: bash scripts/tests/test_recap.sh
 
+      # /docs writes what docs.sh says is missing, and the documents panel
+      # reads the manifest it rewrites: the state per document, unknown keys
+      # kept, the catalogue's order, and its refusals.
+      - name: The documents state and manifest are what /docs relies on
+        run: bash scripts/tests/test_docs.sh
+
       # /project creates every new checkout under the CODE_HOME this prints.
       # A wrong pick scatters code into a folder macOS may lock the shell out
       # of, so the ranking is asserted against fake homes on both platforms.
@@ -242,6 +248,8 @@ jobs:
         run: HOOK_SHELL=/bin/bash /bin/bash plugins/kodflow-hooks/tests/test_identity.sh
       - name: Recap reader under /bin/bash 3.2
         run: RECAP_BASH=/bin/bash /bin/bash scripts/tests/test_recap.sh
+      - name: Documents state under /bin/bash 3.2
+        run: DOCS_BASH=/bin/bash /bin/bash scripts/tests/test_docs.sh
 
   # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
   # are checked by the engine itself, at the version the README names as
