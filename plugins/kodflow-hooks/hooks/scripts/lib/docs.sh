@@ -5,8 +5,9 @@
 # The catalogue (hooks/docs-catalog.json) names fifteen documents and their
 # default paths. A project moves or drops one in docs/manifest.json at its git
 # root ({"version":1,"documents":{"<id>":{"path":…}|{"ignored":"reason"}}});
-# no manifest means every default path, nothing ignored. A path ending in /
-# is a directory, present when it holds at least one .md file.
+# no manifest means every default path, nothing ignored. A file is present
+# when it exists and is not empty; a path ending in / is a directory, present
+# when a non-empty .md lies anywhere below it.
 #
 #   . "$LIB/docs.sh"
 #   kf_docs_top DIR             → KF_DOCS_TOP, the git root above DIR (no fork)
@@ -53,8 +54,8 @@ _kf_docs_present() {
     local p=$2
     case "$p" in /*) ;; *) p=$1/$p ;; esac
     case "$p" in
-        */) [ -d "$p" ] && [ -n "$(find "$p" -maxdepth 4 -type f -name '*.md' -print 2>/dev/null | head -n 1)" ] ;;
-        *)  [ -f "$p" ] ;;
+        */) [ -d "$p" ] && [ -n "$(find "$p" -type f -name '*.md' -size +0 -print 2>/dev/null | head -n 1)" ] ;;
+        *)  [ -f "$p" ] && [ -s "$p" ] ;;
     esac
 }
 

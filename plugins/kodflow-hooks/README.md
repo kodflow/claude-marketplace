@@ -692,8 +692,9 @@ quality, testing, threat model, GDPR register, operations, README. A project
 moves one (`path`) or greys one (`ignored`, a reason, possibly empty) in
 `docs/manifest.json` at its git root; no manifest means every default path,
 nothing ignored; a manifest that does not parse reads as absent; unknown ids
-are skipped. The hooks only read the manifest. A path ending in `/` is a
-directory, present when it holds a `.md`.
+are skipped. The hooks only read the manifest. A file is present when it
+exists and is not empty; a path ending in `/` is a directory, present when a
+non-empty `.md` lies anywhere below it.
 
 - **`docs.json`**, at `<config>/kodflow/sessions/<session>/docs.json`
   beside `tasks.json` (`lib/docs.sh`, replaced whole by `mv`): version, git
