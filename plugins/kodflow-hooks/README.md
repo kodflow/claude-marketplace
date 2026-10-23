@@ -152,7 +152,7 @@ fails by accident blocks every shell call of the session.
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR, and rule 6: end with `## Agent feedback`) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · its agent feedback in `agent-feedback.jsonl` · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | — | feedback in one document (no linter run: ktn-linter runs at `PostToolUse`) · the CLAUDE.md of each directory changed this session, once per directory · unless `KODFLOW_STOP_TASKS=off`: the main agent's tasks still open in its **active epic** (tasks with no epic when none is active, and the open ones with no epic whatever is active; tasks MCP, and the built-in list unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is off), once per open set · an active epic with tasks to do but none `in_progress` or `waiting`, every turn until corrected · more untied tasks `in_progress` than free workers, every turn · a task `in_progress` whose `worker` has stopped, once per set (end of the `KODFLOW_STOP_TASKS` rules) · a main-agent task `in_progress` on an epic no running subagent is attributed to and not tied to a running `worker` (the main thread producing), once per set, unless `KODFLOW_ROOT=off` · a triage cause left unsettled (`triage-pending`), every turn, not on a system turn · the subagents' new agent feedback, once, to a user present in the last 10 minutes, with the instruction to ask before any issue, never for an agent with no definition file | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | — | feedback in one document, one line per cause, each task named once, each cause said once per state (below, « The Stop feedback ») · the CLAUDE.md of each directory changed this session, once per directory · a triage cause left unsettled (`triage-pending`), not on a system turn · the subagents' new agent feedback, once, to a user present in the last 10 minutes, never for an agent with no definition file | bell · log |
 
 ## Main thread = reviewer, code is delegated
 
@@ -329,10 +329,10 @@ The Stop rule closes the other side: a main-agent task `in_progress` on an
 epic with no running subagent attributed to it (`agents.json` `epic`, not
 stopped, started less than 12 h ago) means the main thread is doing the
 epic's work itself, or work that is no code in a repository; it is flagged
-once per set of such tasks and of covered epics (`producing-nudged` in the
-scratchpad, cleared when the set is empty, so a subagent that stops asks
-once more) — dispatch a subagent for the epic, carry on when the work is not
-code in a repository, or set the task back to `pending`/`waiting`.
+once per state (the `unattended` cause of « The Stop feedback ») — dispatch
+a subagent for the epic, carry on when the work is not code in a
+repository, or set the task back to `pending`/`waiting`. A task tied to a
+subagent that stopped is the `stopped` cause instead, never both.
 
 Ways out: `ROOT_OK=1` leading a Bash line, `KODFLOW_ROOT=off` in the
 environment for the session (gate, Stop rule and prompt line all off), and
@@ -541,13 +541,13 @@ files, proven by a corpus recorded from it (Tests, below).
   starting), context on the task in progress (`task_update(id,
   description)`), a change to a completed task (`Rework #N: …` in its epic),
   a new subject (`task_epic`), or a question (`task_create(epic=0)`,
-  completed once answered). At Stop, the main agent's open tasks with no
-  epic are reminded whatever epic is active.
+  completed once answered). At Stop, the main agent's pending tasks with no
+  epic are said whatever epic is active (the `loose` cause).
 - **One task in progress per worker.** The main agent may have one task
   `in_progress` plus one per subagent that is `running`, `waiting` or `idle`
   in `$.agent.list()` (`agents.json` when the list cannot be read); a
   subagent has one. `task_update` refuses an extra start, and the Stop hook flags more
-  tasks in progress than workers, across every epic, on every turn.
+  tasks in progress than workers, across every epic, once per state.
 - **A task tied to its worker.** `task_update(status=in_progress,
   worker=<type, name or agent id>)` hands a task to a subagent as
   `$.agent.list()` names it (its id, its `SendMessage` name or its type). The
@@ -793,11 +793,59 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
 | `KODFLOW_FEEDBACK=off` | no rule 6, nothing kept, nothing proposed |
 | `KODFLOW_LINT=off` | no ktn-linter run after an edit and no instruction; ktn-linter's own hooks, when installed, are not affected. For every project: `"env": {"KODFLOW_LINT": "off"}` in `~/.claude/settings.json`. For one project: the same `env` block in that project's `.claude/settings.json` (applied once the workspace is trusted, and in `-p` runs; a hook inherits it) |
-| `KODFLOW_STOP_TASKS=off` | no Stop reminder of the open tasks, nor of the three task-list rules (none in progress, more in progress than workers, a stopped worker); the triage rule and the delegation rule (`KODFLOW_ROOT`) stay |
+| `KODFLOW_STOP_TASKS=off` | no Stop line about the task list (`stopped`, `overcount`, `idle`, `loose`, `builtin`); the triage line and the delegation line (`unattended`, `KODFLOW_ROOT`) stay |
+| `KODFLOW_LANG=en` · `fr` | the language of the texts, over Claude Code's `language` setting |
+| `NO_COLOR` · `KODFLOW_COLOR=off` | the Stop feedback without colour |
 | `KODFLOW_COMMIT_IDENTITY=<path>` · `off` | another commit-identity rules file, or the check off (default `${CLAUDE_CONFIG_DIR:-~/.claude}/kodflow/commit-identity.conf`, absent means off) |
 | `KODFLOW_DOCS=off` | no `docs.json`, no index at SessionStart, no `document concerné` line; `blocks.jsonl` is not affected |
 | `docs/manifest.json` | moves (`path`) or ignores (`ignored`) a document of the catalogue for this project |
 | `KODFLOW_CLEANUP=off` | no worktree, branch or remote branch is removed on close, no notice; `KODFLOW_CLEANUP_TIMEOUT` (seconds, default 15) bounds each `gh` and push call |
+
+## The Stop feedback
+
+What `on-stop.sh` returns as `additionalContext` is shown on screen as
+« Stop hook feedback » and read by Claude. It speaks only when the task list
+says something false, one line per cause, each task named once (by the
+first cause that claims it, in this order), and each cause once per state:
+`stop-said` in the scratchpad keeps, per cause, the fingerprint of the
+state last said; the same state is not said twice in a row, a changed one
+is, and a cause that clears drops its record.
+
+| Cause | Colour | When |
+|-------|--------|------|
+| `stopped` | red | `in_progress`, tied to a subagent that has stopped |
+| `unattended` | orange | `in_progress`, tied to nobody, on an epic no running subagent covers (`KODFLOW_ROOT`) |
+| `overcount` | orange | more untied tasks `in_progress` than workers |
+| `idle` | orange | the active epic has work to do, nothing `in_progress` or `waiting` |
+| `loose` | orange | requests with no epic left `pending` |
+| `builtin` | orange | open tasks of Claude Code's own list (`TaskUpdate`) |
+| triage, resume | orange | a message with no task, tasks left open at the session start |
+| CLAUDE.md | orange | a changed directory whose CLAUDE.md was not updated |
+| agent feedback | green | subagent feedback that waits on the user's decision |
+
+A task `in_progress` on a running subagent and a `waiting` task are true
+and never said. The reported case, three tasks on stopped subagents, was
+three sections and nine lines; it is now one:
+
+```
+Tâches à remettre d'aplomb : #99 #100 #101 (sous-agent arrêté : terminer, remettre en pending ou waiting, ou relancer l'agent)
+```
+
+**Colour.** Claude Code 2.1.309 renders the ANSI colours of a Stop hook's
+`additionalContext` and `systemMessage` (measured in a pty: the escape
+reaches the screen as sent, `\e[31m` before the text). Only the label of
+each line is coloured, so the model pays a few tokens on a turn the hook
+speaks. Nothing the screen does not show is coloured: the
+`UserPromptSubmit` context is not displayed, it stays plain.
+
+**Language.** Every text of the shell scripts that the user or the model
+reads at Stop and at each prompt lives in one table, `hooks/messages.json`
+(`en` and `fr`), read by `lib/msg.sh`. The language is Claude Code's
+`language` setting (free text, read from the user settings, then the
+project's `settings.json` and `settings.local.json`, the last one that sets
+it winning): French when it names French (`fr`, `french`, `Français`...),
+English otherwise. The guards' refusals (`on-tool.sh` and their double in
+the mod) and the task tools' answers are still in English.
 
 ## Tests
 

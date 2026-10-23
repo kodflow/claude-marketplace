@@ -316,7 +316,7 @@ run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium 
 [ "$(wc -l < "$SD/agent-feedback.jsonl" | tr -d ' ')" = "$n" ] && ok "KODFLOW_FEEDBACK=off keeps nothing" || bad "feedback off" ""
 
 stop() { run on-stop.sh "$(jq -n -c --arg sid "$SID" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:$sid,hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}')" "$@"; rm -f "$T/tmp/sp/stop-count"; }
-proposes() { printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext // "" | test("Subagents reported problems")' >/dev/null 2>&1; }
+proposes() { printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext // "" | test("Subagent feedback to put to the user")' >/dev/null 2>&1; }
 printf '%s\n' "$(( $(date +%s) - 3600 ))" > "$SD/composer-at"
 stop; proposes && bad "absent user" "$OUT" || ok "nobody typed in 10 minutes: kept, not proposed"
 date +%s > "$SD/composer-at"
