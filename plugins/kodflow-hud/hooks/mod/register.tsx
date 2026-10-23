@@ -10,6 +10,8 @@
 //   « Agents »  only while a subagent runs, its tab counting them: the main
 //               loop, then each subagent with its role, model, state, task,
 //               folder and last files (syncPanes opens, retitles, closes).
+// « Tâches » is the one shown at start; with a pane focused, `a` shows
+// « Agents » and `t` « Tâches » (SWITCH_KEYS), beside the engine's tabs.
 // And a few words of each reply in colour (colors.ts): the transcript draws
 // `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
 //
@@ -103,6 +105,14 @@ const PANES = [
   { id: TASKS_PANE, title: "Tâches" },
   { id: AGENTS_PANE, title: "Agents" },
 ] as const;
+
+/**
+ * The keys that switch the tabs while a pane has the keyboard (a click in
+ * it, or ctrl+x tab): a mod is handed keys only there. From the prompt the
+ * engine's own `pane:next` / `pane:previous` actions do it, once the person
+ * binds them (README).
+ */
+export const SWITCH_KEYS = { agents: "a", tasks: "t" } as const;
 
 /** « Tâches (2) »: the tasks left to do across the open epics. */
 export const tasksTitle = (board: HudBoard): string => {
@@ -413,6 +423,25 @@ async function openPanes(
   return placed;
 }
 
+/** Show « Tâches », the tab every session starts on. */
+async function showTasks($: any): Promise<void> {
+  await $.ui.open({
+    id: TASKS_PANE,
+    title: tasksTitle(await read($, boardAtom)),
+  });
+}
+
+/** Show « Agents », which stands only while a subagent runs. */
+async function showAgents($: any): Promise<void> {
+  const agents = await read($, agentsAtom);
+  if (running(agents).length === 0) {
+    $.ui.toast("kodflow-hud : aucun sous-agent en cours, pas d'onglet Agents.");
+    return;
+  }
+  agentsWanted = true;
+  await $.ui.open({ id: AGENTS_PANE, title: agentsTitle(agents) });
+}
+
 /** Write what the panes would draw to KODFLOW_HUD_TRACE, when it is set. */
 async function trace($: any): Promise<void> {
   const path = await $.env.get("KODFLOW_HUD_TRACE");
@@ -451,8 +480,11 @@ export const register: Register = (on, options) => {
     // Unasked, the engine seats a pane only where it has room (144 columns);
     // below that it waits, and /hud seats it at any width. Only « Tâches »
     // opens here, so it is the view the session starts on: the Agents tab
-    // comes with the first subagent (syncPanes)
-    if (autoOpen) await $.ui.open(PANES[0]).catch(() => undefined);
+    // comes with the first subagent (syncPanes). A session that starts with
+    // the panes still up (a reload) is brought back to « Tâches » too
+    const up: any[] = await $.ui.panes().catch(() => []);
+    const kept = Array.isArray(up) && up.some((p) => p.id === TASKS_PANE);
+    if (autoOpen || kept) await $.ui.open(PANES[0]).catch(() => undefined);
     $.clock.every(POLL_MS, () => kick($));
     kick($);
     return next(e);
@@ -579,7 +611,9 @@ export const register: Register = (on, options) => {
         read($, modelsAtom),
         read($, boardAtom),
       ]);
-      return agentsView(
+      const width = e.props.bodyColumns;
+      const rows = e.props.scroll.bodyRows;
+      const view = agentsView(
         els,
         {
           agents,
@@ -591,11 +625,40 @@ export const register: Register = (on, options) => {
           session: await $.session.id(),
           silentMs: settings.silentMs,
         },
-        e.props.bodyColumns,
-        e.props.scroll.bodyRows,
+        width,
+        Math.max(0, rows - 1),
+      );
+      // The way back, on the last row: `t` while the pane has the keyboard,
+      // or a click on it
+      const { Box, Button } = els as any;
+      if (!Button || rows < 2) return view;
+      return (
+        <Box key="agents-pane" flexDirection="column" width={width}>
+          {view}
+          <Button
+            key="show-tasks"
+            hotkey={SWITCH_KEYS.tasks}
+            plain
+            dimColor
+            onPress={() => showTasks($)}
+          >
+            Tâches
+          </Button>
+        </Box>
       );
     },
   );
+
+  // A key typed in the « Tâches » tree (client.tsx): `a` shows « Agents »
+  on(
+    "ui.message",
+    { component: "Pane", requestId: TASKS_PANE },
+    async ($, e, next) => {
+      const data = e.data as { show?: unknown } | undefined;
+      if (data?.show === "agents") await showAgents($);
+      return next(e);
+    },
+  ).catch(($, e, next) => next(e));
 
   // The colour convention, on the session's side of the cache boundary: a
   // section composed afresh for every prompt, so a compaction keeps it. Only

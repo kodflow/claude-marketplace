@@ -142,6 +142,86 @@ test("the Agents tab: none for the main loop, opened and counted with the subage
   expect(h.shown).toBe("hud-tasks");
 });
 
+test("the keyboard switches the tabs: `a` in « Tâches » shows « Agents », `t` in « Agents » shows « Tâches »", async ($, on) => {
+  const { h, clock } = host(on);
+  writeTasks(h, [T("1", "in_progress")], 1);
+  h.agents = [{ id: "a1", type: "Explore", name: "e", status: "running" }];
+  await start($, clock);
+  await clock.advance(3_000);
+  expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks", "hud-agents"]);
+  expect(h.shown).toBe("hud-tasks");
+  const tasks = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-tasks",
+    props: PANE(88, 20),
+  });
+  // The tree's own key listener: `a` posts, the hooks module opens Agents
+  await tasks.key({ key: "a", in: "tree" });
+  expect(h.shown).toBe("hud-agents");
+  // A modified `a` is not the switch
+  h.shown = "hud-tasks";
+  await tasks.key({ key: "a", ctrl: true, in: "tree" });
+  expect(h.shown).toBe("hud-tasks");
+  await tasks.unmount();
+  // The Agents pane's way back: a Button on its last row, hotkey `t`
+  const agents = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-agents",
+    props: { ...PANE(88, 12), title: "Agents (1)" },
+  });
+  const back = await agents.find({ type: "Button", key: "show-tasks" });
+  expect(back?.props.hotkey).toBe("t");
+  h.shown = "hud-agents";
+  await agents.press({ key: "show-tasks" });
+  expect(h.shown).toBe("hud-tasks");
+  await agents.unmount();
+  // No subagent: `a` opens nothing and says why
+  h.agents = [];
+  await clock.advance(3_000);
+  expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks"]);
+  const again = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-tasks",
+    props: PANE(88, 20),
+  });
+  h.opened = [];
+  await again.key({ key: "a", in: "tree" });
+  expect(h.opened).toEqual([]);
+  expect(h.toasts.at(-1)).toContain("aucun sous-agent");
+});
+
+test("a session that starts with both tabs up, « Agents » in front, starts on « Tâches »", async ($, on) => {
+  const { h, clock } = host(on);
+  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
+  h.panes = [
+    { id: "hud-tasks", title: "Tâches" },
+    { id: "hud-agents", title: "Agents (1)" },
+  ];
+  h.shown = "hud-agents";
+  await start($, clock);
+  expect(h.shown).toBe("hud-tasks");
+  await clock.advance(3_000);
+  expect(h.shown).toBe("hud-tasks");
+});
+
+test("autoOpen off, a session start with « Tâches » still up brings it to the front", { options: { autoOpen: false } }, async ($, on) => {
+  const { h, clock } = host(on);
+  h.panes = [
+    { id: "hud-tasks", title: "Tâches" },
+    { id: "hud-agents", title: "Agents (1)" },
+  ];
+  h.shown = "hud-agents";
+  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
+  await start($, clock);
+  expect(h.shown).toBe("hud-tasks");
+});
+
 test("/hud off keeps the Agents tab shut while subagents run, until /hud agents", async ($, on) => {
   const { h, clock } = host(on);
   h.agents = [{ id: "a1", type: "Plan", name: "p", status: "running" }];
