@@ -63,17 +63,13 @@ export type HudAgent = {
   type?: string;
 };
 
-export type HudOp = "read" | "write" | "commit";
-
-export type HudFile = { path: string; op: HudOp; at: number };
-
-/** Where one loop works: its directory, its recent files, its last call. */
+/**
+ * When a loop last called a tool, which says it is alive. A session kept
+ * from an older version may still hold `dir` and `files`: nothing reads them.
+ */
 export type HudActivity = {
   /** "main", or the subagent's agent id. */
   agentId: string;
-  dir?: string;
-  /** Newest first. */
-  files: HudFile[];
   /** Milliseconds since the epoch. */
   last: number;
 };

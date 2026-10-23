@@ -1,30 +1,26 @@
 // register.tsx — kodflow-hud's function hooks: wiring only.
 //
-// Two panes and a few toasts, beside the status line and never in its place
+// One pane and a few toasts, beside the status line and never in its place
 // (the context segment, the epics' pills and the rest stay there):
 //   « Tâches »  the open epics of tasks.json as a tree (subtasks, what each
 //               task waits on, the critical path) or as a graph by state,
 //               who works each task, on what model, how long since it moved,
 //               the silent ones and the ones waiting on the person; the
-//               view a session starts on, its tab counting the tasks left;
-//   « Agents »  only while a subagent runs, its tab counting them: the main
-//               loop, then each subagent with its role, model, state, task,
-//               folder and last files (syncPanes opens, retitles, closes).
-// « Tâches » is the one shown at start; with a pane focused, `a` shows
-// « Agents » and `t` « Tâches » (SWITCH_KEYS), beside the engine's tabs.
+//               only pane, its tab counting the tasks left.
+// The subagents themselves are the engine's to show, under the prompt.
 // And a few words of each reply in colour (colors.ts): the transcript draws
 // `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
 //
 // Everything is read, nothing is decided: tasks.json is kodflow-hooks' file,
 // re-read whenever its modification time moves; the agents come from
-// `$.agent.list()`; the activity from `tool.call`, observed after `next`
-// and handed back untouched. No tool, no context line, no refusal: this mod
+// `$.agent.list()`; each loop's last call from `tool.call`, observed after
+// `next` and handed back untouched. No tool, no context line, no refusal: this mod
 // can stop nothing, and adds one thing only to what the model reads, the
 // colour convention's system prompt section (off with KODFLOW_COLORS=off,
 // which also turns off the drawing). Every hook fails open.
 //
 // The logic lives in the pure modules beside this file (board.ts, tree.ts,
-// layout.tsx, models.ts, activity.ts, alerts.ts, ci.ts, view.tsx); the
+// layout.tsx, models.ts, alerts.ts, ci.ts); the
 // « Tâches » pane's selection and folding live in its surface module,
 // client.tsx; what is here reads `$`.
 
@@ -40,12 +36,9 @@ import type {
   HudTask,
 } from "../../types";
 import { MAIN, parseBoard, parseTasks, type Ctx } from "./board.ts";
-import { fold, observe, prune } from "./activity.ts";
 import { alertsFor, trimKeys } from "./alerts.ts";
 import { CI_EVERY_MS, ciState, prsToCheck } from "./ci.ts";
-import { configDir, dirname, sessionDir, tasksFile } from "./paths.ts";
-import { agentsView } from "./view.tsx";
-import { running } from "./who.ts";
+import { configDir, sessionDir, tasksFile } from "./paths.ts";
 import { buildTree } from "./tree.ts";
 import { draw, initialUi, screenOf } from "./layout.tsx";
 import {
@@ -100,19 +93,12 @@ const primedAtom = atom({ plugin: "kodflow-hud", key: "primed" } as const, "");
 const tickAtom = atom({ plugin: "kodflow-hud", key: "tick" } as const, 0);
 
 export const TASKS_PANE = "hud-tasks";
-export const AGENTS_PANE = "hud-agents";
-const PANES = [
-  { id: TASKS_PANE, title: "Tâches" },
-  { id: AGENTS_PANE, title: "Agents" },
-] as const;
-
 /**
- * The keys that switch the tabs while a pane has the keyboard (a click in
- * it, or ctrl+x tab): a mod is handed keys only there. From the prompt the
- * engine's own `pane:next` / `pane:previous` actions do it, once the person
- * binds them (README).
+ * The pane an older version opened beside « Tâches »: the engine's own
+ * list of subagents under the prompt says the same. Closed once when a
+ * session starts, which leaves « Tâches » the tab shown.
  */
-export const SWITCH_KEYS = { agents: "a", tasks: "t" } as const;
+export const AGENTS_PANE = "hud-agents";
 
 /**
  * « Tâches (2) »: a name and its count, always of one width up to 99 (a
@@ -131,11 +117,7 @@ export const tasksTitle = (board: HudBoard): string =>
       .length,
   );
 
-/** « Agents (1) »: the subagents at work, the main loop not counted. */
-export const agentsTitle = (agents: readonly HudAgent[]): string =>
-  tabTitle("Agents", running(agents).length);
-
-/** How often tasks.json's time, the agents and the TTLs are looked at. */
+/** How often tasks.json's time and the agents are looked at. */
 export const POLL_MS = 3_000;
 /** The elapsed times redraw on this step, not on every poll. */
 const TICK_MS = 10_000;
@@ -146,10 +128,6 @@ const TASK_TOOL = /^mcp__kodflow-hooks__task_(create|update|epic|focus)$/;
 let polling = false;
 let checking = false;
 let syncing = false;
-// Whether the Agents tab opens by itself when a subagent starts: autoOpen at
-// first; off once the person closes that tab or runs /hud off, on again with
-// /hud or /hud agents
-let agentsWanted = true;
 let lastSession = "";
 let lastMtime: number | undefined = -1;
 let modelsMtime: number | undefined = -1;
@@ -159,33 +137,11 @@ let allTasks: HudTask[] = [];
 // epic done 30 minutes ago leaves it without the file changing
 let lastText: string | undefined;
 let lastCi = 0;
-let root: string | undefined;
 let home: string | undefined;
-const gitRoots = new Map<string, string>();
 
 // Atoms are written only when their value changed: every write redraws
 const same = (a: unknown, b: unknown): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
-
-/**
- * The root of the git work tree a folder lies in, else the folder: so the
- * view does not jump between the sub-folders of one project. One stat per
- * level the first time a folder is seen, none after.
- */
-async function gitRoot($: any, dir: string): Promise<string> {
-  const known = gitRoots.get(dir);
-  if (known) return known;
-  let found = dir;
-  for (let d = dir, i = 0; i < 40; d = dirname(d), i++) {
-    if (await $.fs.exists(`${d}/.git`).catch(() => false)) {
-      found = d;
-      break;
-    }
-    if (d === "/") break;
-  }
-  gitRoots.set(dir, found);
-  return found;
-}
 
 async function tasksPath($: any, session: string): Promise<string | undefined> {
   const cfg = configDir(await $.env.get("CLAUDE_CONFIG_DIR"), home);
@@ -301,8 +257,6 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
     if (!same(await read($, agentsAtom), agents))
       await update($, agentsAtom, () => agents);
     await syncPanes($).catch(() => undefined);
-    const pruned = prune(await read($, activityAtom), now);
-    if (pruned) await update($, activityAtom, () => pruned);
 
     const ctx = ctxOf(now, agents, await read($, activityAtom), silentMs);
     const baseline = (await read($, primedAtom)) !== session;
@@ -350,108 +304,47 @@ async function checkCi($: any): Promise<void> {
   }
 }
 
-/** Fold one finished tool call into its loop's activity. */
-async function record($: any, e: any, r: any): Promise<void> {
+/** A finished tool call: its loop is alive now, whatever the call did. */
+async function record($: any, e: any): Promise<void> {
   const loop: string = e.agentId ?? MAIN;
-  const obs = observe(String(e.tool), e, root, home);
-  // A call that failed still says the loop is alive, not that it touched files
-  if (r?.isError) {
-    obs.files = [];
-    delete obs.commit;
-  }
-  const dir = obs.dir ? await gitRoot($, obs.dir) : undefined;
-  const commit = obs.commit ? await gitRoot($, obs.commit) : undefined;
   const now = await $.clock.now();
   await update($, activityAtom, (m) => ({
     ...m,
-    [loop]: fold(m[loop], loop, obs, now, dir, commit),
+    [loop]: { agentId: loop, last: now },
   }));
 }
 
-/**
- * The panes as the counts want them, every poll. « Tâches » carries the
- * tasks left, « Agents » the subagents at work, retitled only when the count
- * moved; the Agents tab opens when a subagent starts (unless the person
- * closed it, or turned autoOpen off and never asked) and closes when none is
- * left, so the main loop alone never gets a tab. An open or a retitle may
- * raise the pane it names: the pane shown before is shown again after, so
- * the « Tâches » view the session starts on stays in front.
- */
+/** « Tâches » retitled when its count moved: a retitle never moves a tab. */
 async function syncPanes($: any): Promise<void> {
   if (syncing) return;
   syncing = true;
   try {
     const panes: any[] = await $.ui.panes().catch(() => []);
     if (!Array.isArray(panes)) return;
-    const find = (id: string) => panes.find((p) => p.id === id);
-    const shown = panes.find((p) => p.isShown);
-    const tTitle = tasksTitle(await read($, boardAtom));
-    const agents = await read($, agentsAtom);
-    const aTitle = agentsTitle(agents);
-    const opened: string[] = [];
-    const tasks = find(TASKS_PANE);
-    if (tasks && tasks.title !== tTitle) {
-      await $.ui.open({ id: TASKS_PANE, title: tTitle });
-      opened.push(TASKS_PANE);
-    }
-    const pane = find(AGENTS_PANE);
-    if (running(agents).length === 0) {
-      if (pane) await $.ui.close({ id: AGENTS_PANE });
-    } else if (pane ? pane.title !== aTitle : agentsWanted) {
-      await $.ui.open({ id: AGENTS_PANE, title: aTitle });
-      opened.push(AGENTS_PANE);
-    }
-    if (!opened.length || !shown) return;
-    // Undo only what these opens raised: a pane in front that they did not
-    // open is the person's click, landed meanwhile, and it stands
-    const after: any[] = await $.ui.panes().catch(() => []);
-    const front = after.find((p) => p.isShown);
-    const back = after.find((p) => p.id === shown.id);
-    if (back && front && front.id !== shown.id && opened.includes(front.id))
-      await $.ui.open({ id: back.id, title: back.title });
+    const title = tasksTitle(await read($, boardAtom));
+    const tasks = panes.find((p) => p.id === TASKS_PANE);
+    if (tasks && tasks.title !== title)
+      await $.ui.open({ id: TASKS_PANE, title });
   } finally {
     syncing = false;
   }
 }
 
-async function openPanes(
-  $: any,
-  which: readonly { id: string; title: string }[],
-) {
-  const placed: string[] = [];
-  const board = await read($, boardAtom);
-  const agents = await read($, agentsAtom);
-  for (const p of which) {
-    const title = p.id === TASKS_PANE ? tasksTitle(board) : agentsTitle(agents);
-    // The Agents tab stands only while a subagent runs: asked for now, it
-    // opens with the first one
-    if (p.id === AGENTS_PANE && running(agents).length === 0) continue;
-    const r = await $.ui.open({ id: p.id, title });
-    if (r.isPlaced) placed.push(title);
-  }
-  return placed;
-}
-
-/** Show « Tâches », the tab every session starts on. */
-async function showTasks($: any): Promise<void> {
-  await $.ui.open({
+/**
+ * Open « Tâches », or show it when it is up: `focus` is the engine's only
+ * way to show a pane already open, granted while no pane holds the
+ * keyboard (as after a command), and it hands the pane the keyboard.
+ */
+async function openTasks($: any): Promise<boolean> {
+  const r = await $.ui.open({
     id: TASKS_PANE,
     title: tasksTitle(await read($, boardAtom)),
+    focus: true,
   });
+  return r.isPlaced;
 }
 
-/** Show « Agents », which stands only while a subagent runs. */
-async function showAgents($: any): Promise<void> {
-  const agents = await read($, agentsAtom);
-  if (running(agents).length === 0) {
-    $.ui.toast("kodflow-hud : aucun sous-agent en cours, pas d'onglet Agents.");
-    return;
-  }
-  agentsWanted = true;
-  await $.ui.open({ id: AGENTS_PANE, title: agentsTitle(agents) });
-}
-
-/** Write what the panes would draw to KODFLOW_HUD_TRACE, when it is set. */
+/** Write what the pane would draw to KODFLOW_HUD_TRACE, when it is set. */
 async function trace($: any): Promise<void> {
   const path = await $.env.get("KODFLOW_HUD_TRACE");
   if (!path || !path.startsWith("/")) return;
@@ -478,22 +371,24 @@ export const register: Register = (on, options) => {
   const autoOpen = options.autoOpen !== false;
 
   on("session.start", async ($, e, next) => {
-    root = await $.session.root().catch(() => undefined);
     home = await $.env.get("HOME");
     await $.command.register({
       name: "hud",
-      description:
-        "kodflow-hud: open the Tasks and Agents panes (/hud tasks, /hud agents, /hud off)",
+      description: "kodflow-hud: open the Tasks pane (/hud off closes it)",
     });
-    agentsWanted = autoOpen;
     // Unasked, the engine seats a pane only where it has room (144 columns);
-    // below that it waits, and /hud seats it at any width. Only « Tâches »
-    // opens here, so it is the view the session starts on: the Agents tab
-    // comes with the first subagent (syncPanes). A session that starts with
-    // the panes still up (a reload) is brought back to « Tâches » too
+    // below that it waits, and /hud seats it at any width. « Tâches » is the
+    // only pane, so the first tab and the one shown. An Agents tab an older
+    // version left up is closed: a close shows the pane left, never a new one
     const up: any[] = await $.ui.panes().catch(() => []);
-    const kept = Array.isArray(up) && up.some((p) => p.id === TASKS_PANE);
-    if (autoOpen || kept) await $.ui.open(PANES[0]).catch(() => undefined);
+    const has = (id: string) =>
+      Array.isArray(up) && up.some((p) => p.id === id);
+    if (has(AGENTS_PANE))
+      await $.ui.close({ id: AGENTS_PANE }).catch(() => undefined);
+    if (autoOpen || has(TASKS_PANE))
+      await $.ui
+        .open({ id: TASKS_PANE, title: tasksTitle(await read($, boardAtom)) })
+        .catch(() => undefined);
     $.clock.every(POLL_MS, () => kick($));
     kick($);
     return next(e);
@@ -509,43 +404,30 @@ export const register: Register = (on, options) => {
   on("command.run", { command: "hud" }, async ($, e) => {
     const arg = e.args.trim().toLowerCase();
     if (arg === "off" || arg === "close") {
-      agentsWanted = false;
-      for (const p of PANES)
-        await $.ui.close({ id: p.id }).catch(() => undefined);
-      return { text: "kodflow-hud: panes closed." };
+      await $.ui.close({ id: TASKS_PANE }).catch(() => undefined);
+      return { text: "kodflow-hud: pane closed." };
     }
-    const tasksOnly = arg === "tasks" || arg === "tâches" || arg === "taches";
-    const agentsOnly = arg === "agents";
-    if (!tasksOnly) agentsWanted = true;
-    const which = tasksOnly
-      ? PANES.filter((p) => p.id === TASKS_PANE)
-      : agentsOnly
-        ? PANES.filter((p) => p.id === AGENTS_PANE)
-        : PANES;
-    kick($);
-    const placed = await openPanes($, which);
-    if (agentsOnly && !placed.length)
+    if (arg === "agents") {
+      $.ui.toast(
+        "kodflow-hud : l'onglet Agents est retiré, les sous-agents sont sous le prompt.",
+      );
       return {
-        text: "kodflow-hud: no subagent is running; the Agents tab opens with the first one.",
+        text: "kodflow-hud: the Agents tab is gone; Claude Code lists the subagents under the prompt.",
       };
+    }
+    kick($);
     return {
-      text: placed.length
-        ? `kodflow-hud: ${placed.map((t) => t.trim()).join(", ")} open.`
+      text: (await openTasks($))
+        ? `kodflow-hud: ${tasksTitle(await read($, boardAtom)).trim()} open.`
         : "kodflow-hud: no room to seat a pane here (a -p run or a host without panes).",
     };
   });
-
-  // The person closing the Agents tab means it: it stays closed until /hud
-  on("ui.close", async ($, e, next) => {
-    if (e.origin === "person" && e.id === AGENTS_PANE) agentsWanted = false;
-    return next(e);
-  }).catch(($, e, next) => next(e));
 
   // Observation only: the call runs first, its result goes back as it came
   on("tool.call", async ($, e, next) => {
     const r: any = await next(e);
     if (r?.deny === undefined) {
-      await record($, e, r).catch(() => undefined);
+      await record($, e).catch(() => undefined);
       if (TASK_TOOL.test(String(e.tool))) kick($);
       if (e.tool === "Agent" && !r?.isError) {
         const said = fromAgentCall(e as { effort?: unknown }, r?.result);
@@ -607,67 +489,6 @@ export const register: Register = (on, options) => {
       return draw(els, screenOf(model, initialUi(model), width, rows), width);
     },
   );
-
-  on(
-    "ui.render",
-    { component: "Pane", requestId: AGENTS_PANE },
-    async ($, e) => {
-      const els = $.ui.resolve(e);
-      await read($, tickAtom);
-      const [agents, activity, models, board] = await Promise.all([
-        read($, agentsAtom),
-        read($, activityAtom),
-        read($, modelsAtom),
-        read($, boardAtom),
-      ]);
-      const width = e.props.bodyColumns;
-      const rows = e.props.scroll.bodyRows;
-      const view = agentsView(
-        els,
-        {
-          agents,
-          activity,
-          now: await $.clock.now(),
-          home,
-          models,
-          board,
-          session: await $.session.id(),
-          silentMs: settings.silentMs,
-        },
-        width,
-        Math.max(0, rows - 1),
-      );
-      // The way back, on the last row: `t` while the pane has the keyboard,
-      // or a click on it
-      const { Box, Button } = els as any;
-      if (!Button || rows < 2) return view;
-      return (
-        <Box key="agents-pane" flexDirection="column" width={width}>
-          {view}
-          <Button
-            key="show-tasks"
-            hotkey={SWITCH_KEYS.tasks}
-            plain
-            dimColor
-            onPress={() => showTasks($)}
-          >
-            Tâches
-          </Button>
-        </Box>
-      );
-    },
-  );
-
-  // A key typed in the « Tâches » tree (client.tsx): `a` shows « Agents »
-  on(
-    "ui.message",
-    { component: "Pane", requestId: TASKS_PANE },
-    async ($, e, next) => {
-      const data = e.data as { show?: unknown } | undefined;
-      if (data?.show === "agents") await showAgents($);
-      return next(e);
-    },
-  ).catch(($, e, next) => next(e));
 
   // The colour convention, on the session's side of the cache boundary: a
   // section composed afresh for every prompt, so a compaction keeps it. Only

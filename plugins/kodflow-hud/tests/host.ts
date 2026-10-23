@@ -18,13 +18,19 @@ export type Host = {
   opened: string[];
   /** Every open, with the title it carried, in order. */
   titles: string[];
+  /** The ids opened with `focus`, granted or not. */
+  focusAsked: string[];
   /**
-   * The open panes, oldest first, and the one shown. An open, a retitle
-   * included, raises its pane here: the worst case the engine leaves open,
-   * which the module must undo to keep « Tâches » in front.
+   * The open panes, oldest first, the one shown and the one holding the
+   * keyboard, as the engine (2.1.309) keeps them: an open of a pane already
+   * up retitles it and never changes the one shown; a new pane is shown
+   * unless a pane holds the keyboard, which stays shown; `focus` is granted
+   * only while no pane holds it (the prompt's keys), and then shows its pane.
+   * A close shows the last pane left when it took the one shown.
    */
   panes: { id: string; title: string }[];
   shown: string | undefined;
+  focused: string | undefined;
   closed: string[];
   commands: string[];
   runs: string[][];
@@ -35,7 +41,7 @@ export type Host = {
 
 export function host(
   on: any,
-  opts: { session?: () => string } = {},
+  opts: { session?: () => string; env?: Record<string, string> } = {},
 ): {
   h: Host;
   clock: ReturnType<typeof mock.clock>;
@@ -47,19 +53,22 @@ export function host(
     toasts: [],
     opened: [],
     titles: [],
+    focusAsked: [],
     panes: [],
     shown: undefined,
+    focused: undefined,
     closed: [],
     commands: [],
     runs: [],
     checks: { exitCode: 0, stdout: "build\tpass\t1m\turl" },
   };
   const clock = mock.clock(on, { now: NOW });
-  mock.env(on, { CLAUDE_CONFIG_DIR: CFG, HOME: "/u/dev" });
+  mock.env(on, { CLAUDE_CONFIG_DIR: CFG, HOME: "/u/dev", ...opts.env });
   on("session.id", async () => ({ value: opts.session?.() ?? SID }));
   on("session.root", async () => ({ value: "/w/repo" }));
   on("session.model", async () => ({ value: "claude-opus-5-5" }));
   on("session.start", async (_$: any, e: any) => ({ cwd: e.cwd ?? "/w/repo" }));
+  on("session.end", async () => ({ sessionId: SID }));
   on("command.register", async (_$: any, e: any) => {
     h.commands.push(e.name);
     return { value: undefined };
@@ -70,14 +79,19 @@ export function host(
     const title = e.title ?? e.id;
     const at = h.panes.find((p) => p.id === e.id);
     if (at) at.title = title;
-    else h.panes.push({ id: e.id, title });
-    h.shown = e.id;
+    else {
+      h.panes.push({ id: e.id, title });
+      h.shown = h.focused ?? e.id;
+    }
+    if (e.focus) h.focusAsked.push(e.id);
+    if (e.focus && h.focused === undefined) h.shown = h.focused = e.id;
     h.afterOpen?.(e.id);
     return { value: { isPlaced: true } };
   });
   on("ui.close", async (_$: any, e: any) => {
     h.closed.push(e.id);
     h.panes = h.panes.filter((p) => p.id !== e.id);
+    if (h.focused === e.id) h.focused = undefined;
     if (h.shown === e.id) h.shown = h.panes[h.panes.length - 1]?.id;
     return { value: undefined };
   });
@@ -85,7 +99,7 @@ export function host(
     value: h.panes.map((p) => ({
       ...p,
       isShown: p.id === h.shown,
-      isFocused: false,
+      isFocused: p.id === h.focused,
       isPlaced: true,
     })),
   }));
@@ -112,6 +126,10 @@ export function host(
   on("fs.read", async (_$: any, e: any) => {
     const f = h.files.get(e.path);
     return f ? { value: f.text } : { deny: "ENOENT" };
+  });
+  on("fs.write", async (_$: any, e: any) => {
+    h.files.set(e.path, { text: String(e.content ?? e.text ?? ""), mtimeMs: 0 });
+    return { value: undefined };
   });
   on("process.run", async (_$: any, e: any) => {
     h.runs.push(e.argv);
