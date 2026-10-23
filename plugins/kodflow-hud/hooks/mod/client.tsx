@@ -6,53 +6,134 @@
 //
 // Keys reach it once a click has given its region the focus (Escape hands
 // the focus back): ↑ ↓ choose a task, ⏎ (or space) folds or unfolds it, tab
-// switches between the tree and the graph. A click on a task chooses it, a
-// second click (or one on a task with subtasks) folds it; a click on
-// « Arbre » or « Graphe » switches the view. A click never moves the row it
+// goes to the next view (Arbre, Graphe, Refus, Documents). A click on a task
+// chooses it, a second click (or one on a task with subtasks) folds it; a
+// click on a view's name in the bar shows it. A click never moves the row it
 // hit (the pin, layout.tsx), so a second click lands where the first one did.
+//
+// « Refus » and « Documents » (panels.ts): ↑ ↓ choose, ⏎ shows a refusal's
+// rule for confirmation or ignores and brings back a document; a click does
+// the same. What writes a file or the prompt box is posted to the hooks
+// module (`surface.post`), which checks it again: « ajouter » (a), « copier »
+// (c), a document ignored or brought back, « créer » (c) and « Créer les
+// manquants » (t). The mode the drafts carry (m) stays here.
 
 import type { TreeModel } from "./tree.ts";
 import {
+  VIEWS,
   draw,
   initialUi,
   pinAt,
-  screenOf,
   step,
   toggle,
+  type Act,
+  type Screen,
   type Ui,
 } from "./layout.tsx";
+import { MODES } from "./docs.ts";
+import { blockKey, viewScreen, type Extra } from "./panels.ts";
 
-type Props = { model: TreeModel; width: number; rows: number };
+type Props = { model: TreeModel; width: number; rows: number; extra?: Extra };
 
 export default function TaskTree(raw: unknown, surface: any) {
   const props = raw as Props;
   const ui: Ui = surface.state ?? initialUi(props.model);
-  const screen = screenOf(props.model, ui, props.width, props.rows);
+  const screenFor = (u: Ui) =>
+    viewScreen(props.model, u, props.width, props.rows, props.extra);
+  const screen = screenFor(ui);
   // An event reads the state as it is now, not as this call drew it: two
   // events before the next frame each start from the one before
   const now = () => {
     const cur: Ui = surface.state ?? ui;
     return {
       cur,
-      scr:
-        cur === ui
-          ? screen
-          : screenOf(props.model, cur, props.width, props.rows),
+      scr: cur === ui ? screen : screenFor(cur),
     };
   };
   const set = (next: Ui, cur: Ui) => {
     if (next !== cur) surface.setState(next);
   };
-  surface.onKey((k: { key: string; shift?: true; ctrl?: true; meta?: true }) => {
-    const { cur, scr } = now();
-    if (k.key === "tab")
-      return set({ ...cur, view: cur.view === "tree" ? "graph" : "tree" }, cur);
-    if (typeof scr === "string" || cur.view !== "tree") return;
-    if (k.key === "down") set(step(scr, cur, 1), cur);
-    else if (k.key === "up") set(step(scr, cur, -1), cur);
-    else if ((k.key === "return" || k.key === " ") && cur.sel !== undefined)
-      set(toggle(props.model, pinAt(scr, cur, cur.sel), cur.sel), cur);
-  });
+  // A button's act: the hooks module's to do, or this state's
+  const act = (a: Act, cur: Ui) => {
+    if (a.op === "cancel") return set({ ...cur, pick: undefined }, cur);
+    if (a.op === "pick") return set({ ...cur, pick: a.rule }, cur);
+    if (a.op === "mode") return set({ ...cur, mode: a.mode }, cur);
+    if (a.op === "create")
+      return surface.post({
+        op: "create",
+        ids: a.ids,
+        mode: cur.mode ?? "both",
+      });
+    surface.post(a);
+    if (a.op === "allow") set({ ...cur, pick: undefined }, cur);
+  };
+  // ↑ ↓ in « Refus » and « Documents »: the next one, kept on its line
+  const walk = (scr: Screen, cur: Ui, by: number) => {
+    const key = cur.view === "blocks" ? cur.bsel : cur.dsel;
+    const i = key === undefined ? -1 : scr.order.indexOf(key);
+    const next = scr.order[Math.max(0, Math.min(scr.order.length - 1, i + by))];
+    if (next === undefined) return;
+    const shown = scr.rowIds.indexOf(next);
+    const { top, rows } = scr.list;
+    const y = shown >= 0 ? shown : by > 0 ? top + Math.max(0, rows - 1) : top;
+    const pick =
+      cur.view === "blocks" ? { bsel: next, pick: undefined } : { dsel: next };
+    set({ ...cur, ...pick, ppin: { id: next, y } }, cur);
+  };
+  // ⏎ or a click on a refusal or a document
+  const choose = (cur: Ui, id: string, y?: number) => {
+    const ppin = y === undefined ? cur.ppin : { id, y };
+    if (cur.view === "blocks") {
+      const b = props.extra?.blocks.find((x) => blockKey(x) === id);
+      return set({ ...cur, bsel: id, pick: b?.rule, ppin }, cur);
+    }
+    const d = props.extra?.docs.docs.find((x) => x.id === id);
+    set({ ...cur, dsel: id, ppin }, cur);
+    if (d) surface.post({ op: "ignore", id, ignore: d.state !== "ignored" });
+  };
+  surface.onKey(
+    (k: { key: string; shift?: true; ctrl?: true; meta?: true }) => {
+      const { cur, scr } = now();
+      if (k.key === "tab") {
+        const next = VIEWS[(VIEWS.indexOf(cur.view) + 1) % VIEWS.length]!;
+        return set({ ...cur, view: next }, cur);
+      }
+      if (typeof scr === "string") return;
+      if (cur.view === "blocks" || cur.view === "docs") {
+        const sel = cur.view === "blocks" ? cur.bsel : cur.dsel;
+        if (k.key === "down") return walk(scr, cur, 1);
+        if (k.key === "up") return walk(scr, cur, -1);
+        if ((k.key === "return" || k.key === " ") && sel !== undefined)
+          return choose(cur, sel);
+        if (cur.view === "blocks" && cur.pick) {
+          if (k.key === "a") return act({ op: "allow", rule: cur.pick }, cur);
+          if (k.key === "c") return act({ op: "copy", rule: cur.pick }, cur);
+          if (k.key === "n") return act({ op: "cancel" }, cur);
+        }
+        if (cur.view === "docs") {
+          const m = cur.mode ?? "both";
+          if (k.key === "m")
+            return act(
+              {
+                op: "mode",
+                mode: MODES[(MODES.indexOf(m) + 1) % MODES.length]!,
+              },
+              cur,
+            );
+          if (k.key === "t") return act({ op: "create", ids: [] }, cur);
+          const d = props.extra?.docs.docs.find((x) => x.id === sel);
+          if (k.key === "c" && d?.state === "missing")
+            return act({ op: "create", ids: [d.id] }, cur);
+        }
+        return;
+      }
+      if (cur.view !== "tree") return;
+      if (k.key === "down") set(step(scr, cur, 1), cur);
+      else if (k.key === "up") set(step(scr, cur, -1), cur);
+      else if ((k.key === "return" || k.key === " ") && cur.sel !== undefined)
+        set(toggle(props.model, pinAt(scr, cur, cur.sel), cur.sel), cur);
+    },
+  );
   surface.onPointer(
     (e: { type: string; x: number; y: number; button?: string }) => {
       if (e.type !== "down" || (e.button && e.button !== "left")) return;
@@ -63,8 +144,14 @@ export default function TaskTree(raw: unknown, surface: any) {
         if (tab) set({ ...cur, view: tab.view }, cur);
         return;
       }
+      const button = scr.buttons?.find(
+        (b) => b.y === e.y && e.x >= b.x && e.x < b.x + b.w,
+      );
+      if (button) return act(button.act, cur);
       const id = scr.rowIds[e.y];
       if (id === undefined) return;
+      if (cur.view === "blocks" || cur.view === "docs")
+        return choose(cur, id, e.y);
       // The task stays on the line clicked, whatever opens or closes
       const chosen: Ui = { ...cur, sel: id, pin: { id, y: e.y } };
       set(

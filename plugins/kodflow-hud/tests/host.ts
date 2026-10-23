@@ -133,6 +133,24 @@ export function host(
   });
   on("process.run", async (_$: any, e: any) => {
     h.runs.push(e.argv);
+    // `mv -f from to`, the rename a whole write ends with, on the files here
+    if (e.argv[0] === "mv") {
+      const [from, to] = e.argv.slice(-2);
+      const f = h.files.get(from);
+      if (f) {
+        h.files.set(to, f);
+        h.files.delete(from);
+      }
+      return {
+        value: {
+          exitCode: f ? 0 : 1,
+          stdout: "",
+          stderr: f ? "" : "ENOENT",
+          isStdoutTruncated: false,
+          isStderrTruncated: false,
+        },
+      };
+    }
     return {
       value: {
         exitCode: h.checks.exitCode,

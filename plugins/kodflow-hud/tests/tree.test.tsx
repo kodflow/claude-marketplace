@@ -174,7 +174,7 @@ const R12 = [
   "● C6  Porte Fable   mkt-routing-pr · general-purpose · opus·xhigh · 12 min · ⇢ C9 · figé",
   "  Le mod juge, il ne réécrit jamais e.model",
   "────────────────────────────────────────────────────────────────────────────────────────",
-  "Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue",
+  "Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue",
 ].join("\n");
 
 const R4 = [
@@ -197,7 +197,7 @@ const R4 = [
   "┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10",
   "livrable  ⊘ C9 CI et PR · attend C6 C7 C8",
   "────────────────────────────────────────────────────────────────────────────────────────",
-  "Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue",
+  "Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue",
 ].join("\n");
 
 const drawnIn = async (ui: any) => ui.drawn({ in: "tree" });
@@ -220,7 +220,12 @@ test("R4 at 90 by 20: the graph by state, junctions and no crossing", async ($, 
   expect(capture(graph)).toBe(R4);
   expect(widths(graph)).toEqual(Array(20).fill(88));
   expect(JSON.stringify(graph)).not.toContain("backgroundColor");
-  // tab again, or a click on « Arbre », is the tree
+  // tab goes on to « Refus », « Documents », then back to the tree; a click
+  // on « Arbre » is the tree too
+  await ui.key({ key: "tab" });
+  expect(await ui.find({ in: "tree", text: /Aucun refus dans cette session/ })).toBeTruthy();
+  await ui.key({ key: "tab" });
+  expect(await ui.find({ in: "tree", text: /Pas de docs\.json/ })).toBeTruthy();
   await ui.key({ key: "tab" });
   expect(capture(await drawnIn(ui))).toBe(R12);
   await ui.key({ key: "tab" });

@@ -13,6 +13,11 @@ not.
   person. Tab turns it into a graph by state (R4). The tab counts the tasks
   left to do: « Tâches (2) ». It is the mod's only pane, so always its
   first tab and the one shown.
+- **Refus** and **Documents** — two more views in the bar under the tree
+  (see [Refus](#refus) and [Documents](#documents)): what kodflow-hooks
+  refused in the session, and the project's documents (present, missing,
+  ignored). « Refus (n) » counts the refusals of the last hour,
+  « Documents (n) » the documents missing.
 - **Toasts** — a task done, a task blocked (`waiting`), a task gone silent:
   at most one per task and per state.
 - **Coloured words** — a few words of a reply drawn in colour in the
@@ -108,7 +113,7 @@ paints a background, so a transparent terminal shows through.
 ● C6  Porte Fable   mkt-routing-pr · general-purpose · opus·xhigh · 12 min · ⇢ C9 · figé
   Le mod juge, il ne réécrit jamais e.model
 ────────────────────────────────────────────────────────────────────────────────────────
-Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue
+Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue
 ```
 
 **R4, the graph** (tab, or a click on « Graphe »):
@@ -133,7 +138,7 @@ prochaine action  ▶ C8 prête, personne dessus                     t'attend  �
 ┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10
 livrable  ⊘ C9 CI et PR · attend C6 C7 C8
 ────────────────────────────────────────────────────────────────────────────────────────
-Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue
+Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue
 ```
 
 ### The tree, column by column
@@ -210,9 +215,9 @@ of its lanes.
 |--------------|--------|
 | `↑` `↓` | choose a task |
 | `⏎` (or space) | fold or unfold it; opening a top-level task folds the other |
-| `tab` | tree ↔ graph |
+| `tab` | the next view: Arbre, Graphe, Refus, Documents, then Arbre again |
 | click on a task | choose it; on a task with subtasks, or a second click, fold it |
-| click on « Arbre » / « Graphe » | that view |
+| click on « Arbre » / « Graphe » / « Refus » / « Documents » | that view |
 
 The tree is a `Client` region (`hooks/mod/client.tsx`, a surface module):
 the engine hands it keys once a click has given it the focus (Escape gives
@@ -231,6 +236,69 @@ one above. ↑ ↓ pin the task on its line too, so the list moves only when
 the selection leaves it, by one line. Before this, the list re-centred on
 the task chosen and opening a branch closed the one above it: the row moved
 from under the pointer, and a second click landed on another task.
+
+### Refus
+
+What kodflow-hooks refused in this session, read from `blocks.jsonl` (the
+session's folder, beside `tasks.json`; one JSON line a blocking, 500 kept),
+newest first: the time, the kind (`hook`, `classifier`, `permission`, `ci`,
+`agent`), the tool, the summary and, when kodflow-hooks could deduce it, the
+permission rule that would have allowed the call. Above the list, what has
+piled up: the count of each kind in the last hour and since the session
+began, and the reason seen most often (a hook's motif, else the summary).
+The count in the bar is the last hour's.
+
+The unlock. A click on a refusal that carries a rule (or `⏎` on it) shows
+that exact rule on the confirmation line, and where it would go:
+
+```
+Autoriser  Bash(git push:*)  dans .claude/settings.local.json ?
+[ajouter]  [copier]  [annuler]   a · c · n
+```
+
+Only « ajouter » (or `a`) writes: the rule joins `permissions.allow` of the
+project's `.claude/settings.local.json` (the session's root), every other
+key kept, written whole (a file beside it, then `mv`) or not at all, never
+over a file that is not a JSON object. « copier » puts the rule on the
+clipboard for `/permissions`; « annuler » closes the line. Why this road:
+
+- The engine gives a mod no way to add a permission rule (`$.settings` is
+  read only) nor to open `/permissions` on a given rule: `$.command.run`
+  would open the dialog, where the rule is still picked by hand, which is
+  what the button is meant to spare.
+- Only the person's own click or key reaches the write: the surface module
+  posts it (`ui.message`), and no tool, no hook and nothing the model says
+  goes that way. The hooks module checks it again: the rule must be one a
+  refusal of this session carries, in settings.json's shape, one line, at
+  most 200 characters, and never one that hands over a whole shell or every
+  write (`Bash`, `Edit`, `Write`, `Bash(*)`, `Edit(**)`...).
+- `settings.local.json` is the narrowest place a rule can live: this
+  project, this machine, not committed. A broader one is still the
+  person's to add with `/permissions`.
+
+A refusal with no rule (a classifier's, a CI run's) shows its detail and its
+link, nothing to add.
+
+### Documents
+
+The project's documents as kodflow-hooks computes them (`docs.json`, the
+session's folder): one line each, `●` green present, `●` red missing, `○`
+grey ignored (with the manifest's reason), and its path. The count in the
+bar is the missing ones.
+
+- A click on a line (or `⏎`) ignores the document, or brings it back: the
+  project's `docs/manifest.json` (at the git root, the path docs.json names)
+  is rewritten whole, its unknown keys kept, the documents in the
+  catalogue's order, two spaces, a final newline; never over a file that is
+  not a JSON object. The line changes at once, without waiting for
+  kodflow-hooks to recompute docs.json.
+- « [créer] » on a missing line (or `c`), « Créer les manquants » (or `t`)
+  put the docs prompt in the prompt box as a DRAFT, never sent:
+  `/kodflow-workflow:docs trd,flow --mode both`, with no id for every
+  missing one. The mode is chosen on the same line, `ask`, `context` or
+  `both` (the default; `m` turns it). A box that already holds a draft is
+  never overwritten: a toast says so. The draft is posed by `$.prompt.fill`;
+  Escape gives the keyboard back to the prompt, ⏎ sends it.
 
 ### Switching panes
 
