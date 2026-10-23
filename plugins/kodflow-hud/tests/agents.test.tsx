@@ -122,7 +122,7 @@ const TASKS_MAIN_ONLY = [
 
 test("the reported case, the main loop alone: « Tâches » only, no tab for Agents, no word said three times", async ($, on) => {
   const { h } = await seeded($, on, false);
-  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (2)" }]);
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (2)\u2007" }]);
   expect(h.shown).toBe("hud-tasks");
   const ui = await mount($, "hud-tasks", "Tâches (2)");
   const tree = await ui.drawn({ in: "tree" });
@@ -160,8 +160,8 @@ test("the reported case with subagents: each named, its role, its colour, the fr
   const { h } = await seeded($, on, true);
   // Three at work, counted on the tab; « Tâches » stays the one shown
   expect(h.panes).toEqual([
-    { id: "hud-tasks", title: "Tâches (3)" },
-    { id: "hud-agents", title: "Agents (3)" },
+    { id: "hud-tasks", title: "Tâches (3)\u2007" },
+    { id: "hud-agents", title: "Agents (3)\u2007" },
   ]);
   expect(h.shown).toBe("hud-tasks");
 
@@ -203,7 +203,7 @@ test("narrow, the Agents pane drops the role column and says it under the name",
     surface: "terminal",
     component: "Pane",
     requestId: "hud-agents",
-    props: { ...PANE(60, 12), title: "Agents (3)" },
+    props: { ...PANE(60, 12), title: "Agents (3)\u2007" },
   });
   const drawn = await ui.drawn();
   const text = capture(drawn);

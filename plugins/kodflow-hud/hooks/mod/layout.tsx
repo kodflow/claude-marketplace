@@ -72,12 +72,24 @@ export type Screen = {
   tabs: { x: number; w: number; view: View }[];
   /** The tasks ↑ and ↓ walk, in the order shown. */
   order: string[];
+  /** The lines the task list takes: the first, and how many. */
+  list: { top: number; rows: number };
 };
 
 export type View = "tree" | "graph";
 
-/** What the person moved: kept by the surface module, across redraws. */
-export type Ui = { view: View; sel?: string; open: string[] };
+/**
+ * What the person moved: kept by the surface module, across redraws. `pin`
+ * is the line the chosen task was on when the person last acted on it: the
+ * next screen keeps it there whenever it can, so a click never moves the
+ * row it hit and ↑↓ scroll only as far as they must.
+ */
+export type Ui = {
+  view: View;
+  sel?: string;
+  open: string[];
+  pin?: { id: string; y: number };
+};
 
 export const FULL = { links: 88, model: 76, agent: 64 } as const;
 export const W = {
@@ -219,23 +231,51 @@ export function initialUi(model: TreeModel): Ui {
     : { view: "tree", open: [] };
 }
 
-/** ⏎ on a task: fold or unfold it; one top-level branch open at a time. */
-export function toggle(model: TreeModel, ui: Ui, id: string): Ui {
+/**
+ * ⏎ on a task: fold or unfold it; one top-level branch open at a time. A
+ * click (`keepAbove`) closes only the branches below the one it opens: one
+ * above closing would pull the clicked row up from under the pointer.
+ */
+export function toggle(
+  model: TreeModel,
+  ui: Ui,
+  id: string,
+  keepAbove = false,
+): Ui {
   const hit = findNode(model, id);
   if (!hit || !hit.node.kids.length) return ui;
   if (ui.open.includes(id))
     return { ...ui, open: ui.open.filter((o) => o !== id) };
-  const tops = new Set(model.epics.flatMap((e) => e.nodes.map((n) => n.id)));
-  const open = tops.has(id) ? ui.open.filter((o) => !tops.has(o)) : ui.open;
+  const order = model.epics.flatMap((e) => e.nodes.map((n) => n.id));
+  const at = order.indexOf(id);
+  const closes = (o: string) => {
+    const i = order.indexOf(o);
+    return i >= 0 && !(keepAbove && i < at);
+  };
+  const open = at >= 0 ? ui.open.filter((o) => !closes(o)) : ui.open;
   return { ...ui, open: [...open, id] };
 }
 
-/** ↑ or ↓: the previous or next task shown, at the ends it stays. */
+/** The task `id` pinned to the line it is shown on now, else to `y`. */
+export function pinAt(screen: Screen, ui: Ui, id: string, y?: number): Ui {
+  const shown = screen.rowIds.indexOf(id);
+  const line = shown >= 0 ? shown : y;
+  return line === undefined ? ui : { ...ui, pin: { id, y: line } };
+}
+
+/**
+ * ↑ or ↓: the previous or next task shown, at the ends it stays. It keeps
+ * its line when it is in view; out of it, it lands on the list's edge, so
+ * the list moves by one.
+ */
 export function step(screen: Screen, ui: Ui, by: number): Ui {
   const i = ui.sel === undefined ? -1 : screen.order.indexOf(ui.sel);
   const next =
     screen.order[Math.max(0, Math.min(screen.order.length - 1, i + by))];
-  return next === undefined ? ui : { ...ui, sel: next };
+  if (next === undefined) return ui;
+  const { top, rows } = screen.list;
+  const edge = by > 0 ? top + Math.max(0, rows - 1) : top;
+  return pinAt(screen, { ...ui, sel: next }, next, edge);
 }
 
 function treeCell(
@@ -651,33 +691,51 @@ export function treeScreen(
 
   // What the rows hold, most kept first: the folds, then the detail, then
   // the bar, the path and the headers give way, and the list scrolls
-  let detail = 2;
-  let bar = 2;
-  let foot = 2; // the rule and the critical path
-  let header = 1;
-  let title = 1;
-  const room = () => rows - title - header - foot - detail - bar;
-  let body = bodyOf(false);
-  if (body.length > room()) body = bodyOf(true);
-  while (body.length > room() && detail > 0) detail--;
-  while (room() < 1 + model.epics.length && bar > 0) bar = 0;
-  while (room() < 1 + model.epics.length && foot > 0) foot = 0;
-  if (room() < 2 && header) header = 0;
-  if (room() < 2 && title) title = 0;
-
-  const space = Math.max(0, room());
-  let shown = body;
-  if (body.length > space) {
+  const fitFor = (length: number) => {
+    let detail = 2;
+    let bar = 2;
+    let foot = 2; // the rule and the critical path
+    let header = 1;
+    let title = 1;
+    const room = () => rows - title - header - foot - detail - bar;
+    while (length > room() && detail > 0) detail--;
+    while (room() < 1 + model.epics.length && bar > 0) bar = 0;
+    while (room() < 1 + model.epics.length && foot > 0) foot = 0;
+    if (room() < 2 && header) header = 0;
+    if (room() < 2 && title) title = 0;
+    return { detail, bar, foot, header, title, space: Math.max(0, room()) };
+  };
+  // Where the list starts in `body`: centred on the selection, or so that
+  // the pinned task stays on its line
+  const startOf = (body: Body[], fit: ReturnType<typeof fitFor>) => {
+    if (body.length <= fit.space) return 0;
     const at = Math.max(
       0,
       body.findIndex((b) => b.id === ui.sel),
     );
-    const start = Math.max(
-      0,
-      Math.min(body.length - space, at - Math.floor(space / 2)),
-    );
-    shown = body.slice(start, start + space);
+    const want =
+      ui.pin?.id === ui.sel
+        ? at - (ui.pin!.y - fit.title - fit.header)
+        : at - Math.floor(fit.space / 2);
+    return Math.max(0, Math.min(body.length - fit.space, want));
+  };
+  const lineOf = (body: Body[], fit: ReturnType<typeof fitFor>) => {
+    const at = body.findIndex((b) => b.id === ui.sel);
+    return at < 0 ? -1 : fit.title + fit.header + at - startOf(body, fit);
+  };
+  const whole = bodyOf(false);
+  const folded = bodyOf(true);
+  const roomAtFirst = rows - 1 - 1 - 2 - 2 - 2;
+  let body = whole.length > roomAtFirst ? folded : whole;
+  // A pinned task keeps its line: with the finished branches folded or
+  // not, whichever keeps it there
+  if (ui.pin && ui.pin.id === ui.sel && lineOf(body, fitFor(body.length)) !== ui.pin.y) {
+    const other = body === whole ? folded : whole;
+    if (lineOf(other, fitFor(other.length)) === ui.pin.y) body = other;
   }
+  const { detail, bar, foot, header, title, space } = fitFor(body.length);
+  const start = startOf(body, { detail, bar, foot, header, title, space });
+  const shown = body.slice(start, start + space);
 
   const lines: Cell[][] = [];
   const rowIds: (string | undefined)[] = [];
@@ -709,6 +767,7 @@ export function treeScreen(
     tabsLine,
     tabs,
     order: body.filter((b) => b.selectable).map((b) => b.selectable!),
+    list: { top: title + header, rows: space },
   };
 }
 
@@ -1065,6 +1124,7 @@ export function graphScreen(
     tabsLine: tabsLine < rows ? tabsLine : -1,
     tabs: t.tabs,
     order: [],
+    list: { top: 0, rows: 0 },
   };
 }
 

@@ -41,17 +41,34 @@ rest.
 
 | Command | Effect |
 |---------|--------|
+| `a` (in « Tâches ») | shows the Agents tab, while a subagent runs |
+| `t` (in « Agents ») | shows the Tâches tab |
+| a click on a tab | shows it (the engine's tab strip) |
 | `/hud` | opens the Tasks pane, and the Agents pane while a subagent runs |
 | `/hud tasks` (`tâches`) | opens the Tasks pane |
 | `/hud agents` | opens the Agents pane while a subagent runs; with none, says so and opens it with the first |
 | `/hud off` (`close`) | closes both; the Agents tab no longer opens by itself until `/hud` |
 
 With `autoOpen` on (the default) the Tasks pane opens when a session starts,
-alone, so it is the one shown. The Agents tab opens with the first subagent
-and closes with the last: the main loop alone never gets a tab. Every poll
-(3 s) the two tabs are retitled when their count moved. An open or a retitle
-may raise the pane it names; the pane shown before is opened again after, so
-the view does not jump to Agents. The engine seats a pane nobody asked for
+alone, so it is the one shown; a session that starts with the panes still
+up (a reload, a restart) is brought back to « Tâches » as well. The Agents
+tab opens with the first subagent and closes with the last: the main loop
+alone never gets a tab. Every poll (3 s) the two tabs are retitled when
+their count moved. An open or a retitle may raise the pane it names; the
+pane shown before is opened again after, so the view does not jump to
+Agents.
+
+The tabs hold still under a click, as the tree's rows do:
+
+- A title is always its name and its count, one width from 0 to 99
+  (« Tâches (0) », a figure space after a single digit). A tab that grew or
+  shrank with its count (« Tâches » becoming « Tâches (1) ») moved the
+  Agents tab beside it from under the pointer.
+- A retitle puts back only what its own open raised. Before, a click on a
+  tab that landed while the poll retitled was undone: the pane shown before
+  the retitle was raised again over the person's choice.
+
+The engine seats a pane nobody asked for
 only where it has room — from 144 columns, docked beside the transcript in
 the fullscreen layout — and keeps it waiting below that; `/hud` seats it at
 any width.
@@ -186,6 +203,7 @@ of its lanes.
 | `↑` `↓` | choose a task |
 | `⏎` (or space) | fold or unfold it; opening a top-level task folds the other |
 | `tab` | tree ↔ graph |
+| `a` | the Agents tab |
 | click on a task | choose it; on a task with subtasks, or a second click, fold it |
 | click on « Arbre » / « Graphe » | that view |
 
@@ -198,7 +216,40 @@ in that instance's state, across redraws. The terminal and the desktop draw
 a `Client`; VS Code and the mobile app do not, and get the same tree drawn
 still, at its first state.
 
-**Agents**, 88 columns by 10 rows (`tests/agents.test.tsx`), its tab
+A click never moves the row it hit. The task chosen is pinned to the line
+it was clicked on (`Ui.pin`, `hooks/mod/layout.tsx`): the next screen
+scrolls, and picks the finished branches folded or not, so that it stays
+there. A click that opens a top-level task folds the ones below it, never
+one above. ↑ ↓ pin the task on its line too, so the list moves only when
+the selection leaves it, by one line. Before this, the list re-centred on
+the task chosen and opening a branch closed the one above it: the row moved
+from under the pointer, and a second click landed on another task.
+
+### Switching tabs from the keyboard
+
+A mod is handed keys only where it draws and only while that place has the
+keyboard: the tree's `Client` after a click in it, a pane's Buttons after a
+click or ctrl+x tab (`ClientSurface.onKey`, `ButtonProps.hotkey` in the
+engine's typings). It cannot claim a chord of its own at the prompt: a
+Button's `action` only borrows one of the engine's existing actions. So the
+switch is a plain letter while a pane has the keyboard:
+
+- `a` in « Tâches » (the tree posts it, `register.tsx` opens Agents); with no
+  subagent at work it opens nothing and a toast says why;
+- `t` in « Agents », a Button on its last row (`t: Tâches`), also clickable.
+
+Neither ctrl+t (the engine's task list) nor ctrl+a (start of line) is
+touched. From the prompt, the engine itself has `pane:next` and
+`pane:previous` ("show next/previous plugin pane"), bound to no key by
+default; binding one in `~/.claude/keybindings.json` switches the tabs
+without the mod, for example (`ctrl+x n` is free in 2.1.309):
+
+```json
+{ "bindings": [{ "context": "Global", "bindings": { "ctrl+x n": "pane:next" } }] }
+```
+
+**Agents**, 88 columns by 10 rows (`tests/agents.test.tsx`, the last row the
+Button back to « Tâches »), its tab
 « Agents (3) »:
 
 ```
@@ -211,6 +262,7 @@ still, at its first state.
 ↳ vault-audit         devops · hashicorp                  ⏸ figé · 11 min
     /w/repo
 ↳ sans-type           type inconnu                        ◇ attend
+t: Tâches
 ```
 
 The main loop heads the list in the theme's `claude` colour; each subagent
@@ -391,14 +443,19 @@ Box to its width as the terminal lays it out): both views at 90 by 20, line
 for line, every line 88 cells and no background; the columns dropping at 86,
 70 and 58; the folds, then the detail, under 20 rows; ↑ ↓ ⏎ tab and clicks on
 a task and on the views' bar, through the `Client`'s own key and pointer
-listeners; the same tree on the surfaces with no `Client`; the derived
+listeners; a second click at the same place on the same task, in a pane
+that scrolls and in one that does not, and ↑ ↓ moving the list by one line
+only once the selection leaves it; the same tree on the surfaces with no `Client`; the derived
 states, the critical path, the cells (model·effort, links, ages, wide
 glyphs) and a model column filled only from what the session said.
 `tests/wiring.test.tsx` loads the module in the engine
 with the host in memory and a mocked clock: « Tâches » alone at start and
 shown, the Agents tab opened and counted with the subagents and closed with
 the last while « Tâches » stays in front (the host raising every pane it
-opens), `/hud off` keeping it shut, panes mounted at several widths on the
+opens), a click on a tab standing through a retitle, the titles keeping one
+width, `a` and `t` switching the tabs (and `a` with no subagent opening
+nothing), a session starting on « Tâches » even with both tabs up and
+`autoOpen` off, `/hud off` keeping it shut, panes mounted at several widths on the
 terminal and desktop surfaces, each loop in its colour, results returned
 untouched, refused calls not recorded, toasts once per task and state, CI
 at most every five minutes, no process and no folder listing on a tool call.

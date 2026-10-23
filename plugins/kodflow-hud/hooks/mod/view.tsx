@@ -343,6 +343,7 @@ export function agentsView(
       tabsLine: -1,
       tabs: [],
       order: [],
+      list: { top: 0, rows: 0 },
     },
     width,
   );

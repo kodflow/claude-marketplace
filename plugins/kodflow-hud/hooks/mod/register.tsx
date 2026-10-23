@@ -10,6 +10,8 @@
 //   « Agents »  only while a subagent runs, its tab counting them: the main
 //               loop, then each subagent with its role, model, state, task,
 //               folder and last files (syncPanes opens, retitles, closes).
+// « Tâches » is the one shown at start; with a pane focused, `a` shows
+// « Agents » and `t` « Tâches » (SWITCH_KEYS), beside the engine's tabs.
 // And a few words of each reply in colour (colors.ts): the transcript draws
 // `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
 //
@@ -104,19 +106,34 @@ const PANES = [
   { id: AGENTS_PANE, title: "Agents" },
 ] as const;
 
+/**
+ * The keys that switch the tabs while a pane has the keyboard (a click in
+ * it, or ctrl+x tab): a mod is handed keys only there. From the prompt the
+ * engine's own `pane:next` / `pane:previous` actions do it, once the person
+ * binds them (README).
+ */
+export const SWITCH_KEYS = { agents: "a", tasks: "t" } as const;
+
+/**
+ * « Tâches (2) »: a name and its count, always of one width up to 99 (a
+ * figure space after a single digit, the count even at 0). A tab that grew
+ * or shrank with its count would move the tab beside it from under the
+ * pointer.
+ */
+export const tabTitle = (name: string, n: number): string =>
+  `${name} (${n})${"\u2007".repeat(Math.max(0, 2 - String(n).length))}`;
+
 /** « Tâches (2) »: the tasks left to do across the open epics. */
-export const tasksTitle = (board: HudBoard): string => {
-  const n = board.epics
-    .flatMap((e) => e.tasks)
-    .filter((t) => t.status !== "completed").length;
-  return n ? `Tâches (${n})` : "Tâches";
-};
+export const tasksTitle = (board: HudBoard): string =>
+  tabTitle(
+    "Tâches",
+    board.epics.flatMap((e) => e.tasks).filter((t) => t.status !== "completed")
+      .length,
+  );
 
 /** « Agents (1) »: the subagents at work, the main loop not counted. */
-export const agentsTitle = (agents: readonly HudAgent[]): string => {
-  const n = running(agents).length;
-  return n ? `Agents (${n})` : "Agents";
-};
+export const agentsTitle = (agents: readonly HudAgent[]): string =>
+  tabTitle("Agents", running(agents).length);
 
 /** How often tasks.json's time, the agents and the TTLs are looked at. */
 export const POLL_MS = 3_000;
@@ -371,24 +388,26 @@ async function syncPanes($: any): Promise<void> {
     const tTitle = tasksTitle(await read($, boardAtom));
     const agents = await read($, agentsAtom);
     const aTitle = agentsTitle(agents);
-    let moved = false;
+    const opened: string[] = [];
     const tasks = find(TASKS_PANE);
     if (tasks && tasks.title !== tTitle) {
       await $.ui.open({ id: TASKS_PANE, title: tTitle });
-      moved = true;
+      opened.push(TASKS_PANE);
     }
     const pane = find(AGENTS_PANE);
     if (running(agents).length === 0) {
       if (pane) await $.ui.close({ id: AGENTS_PANE });
     } else if (pane ? pane.title !== aTitle : agentsWanted) {
       await $.ui.open({ id: AGENTS_PANE, title: aTitle });
-      moved = true;
+      opened.push(AGENTS_PANE);
     }
-    if (!moved || !shown) return;
+    if (!opened.length || !shown) return;
+    // Undo only what these opens raised: a pane in front that they did not
+    // open is the person's click, landed meanwhile, and it stands
     const after: any[] = await $.ui.panes().catch(() => []);
     const front = after.find((p) => p.isShown);
     const back = after.find((p) => p.id === shown.id);
-    if (back && front?.id !== shown.id)
+    if (back && front && front.id !== shown.id && opened.includes(front.id))
       await $.ui.open({ id: back.id, title: back.title });
   } finally {
     syncing = false;
@@ -411,6 +430,25 @@ async function openPanes(
     if (r.isPlaced) placed.push(title);
   }
   return placed;
+}
+
+/** Show « Tâches », the tab every session starts on. */
+async function showTasks($: any): Promise<void> {
+  await $.ui.open({
+    id: TASKS_PANE,
+    title: tasksTitle(await read($, boardAtom)),
+  });
+}
+
+/** Show « Agents », which stands only while a subagent runs. */
+async function showAgents($: any): Promise<void> {
+  const agents = await read($, agentsAtom);
+  if (running(agents).length === 0) {
+    $.ui.toast("kodflow-hud : aucun sous-agent en cours, pas d'onglet Agents.");
+    return;
+  }
+  agentsWanted = true;
+  await $.ui.open({ id: AGENTS_PANE, title: agentsTitle(agents) });
 }
 
 /** Write what the panes would draw to KODFLOW_HUD_TRACE, when it is set. */
@@ -451,8 +489,11 @@ export const register: Register = (on, options) => {
     // Unasked, the engine seats a pane only where it has room (144 columns);
     // below that it waits, and /hud seats it at any width. Only « Tâches »
     // opens here, so it is the view the session starts on: the Agents tab
-    // comes with the first subagent (syncPanes)
-    if (autoOpen) await $.ui.open(PANES[0]).catch(() => undefined);
+    // comes with the first subagent (syncPanes). A session that starts with
+    // the panes still up (a reload) is brought back to « Tâches » too
+    const up: any[] = await $.ui.panes().catch(() => []);
+    const kept = Array.isArray(up) && up.some((p) => p.id === TASKS_PANE);
+    if (autoOpen || kept) await $.ui.open(PANES[0]).catch(() => undefined);
     $.clock.every(POLL_MS, () => kick($));
     kick($);
     return next(e);
@@ -489,7 +530,7 @@ export const register: Register = (on, options) => {
       };
     return {
       text: placed.length
-        ? `kodflow-hud: ${placed.join(", ")} open.`
+        ? `kodflow-hud: ${placed.map((t) => t.trim()).join(", ")} open.`
         : "kodflow-hud: no room to seat a pane here (a -p run or a host without panes).",
     };
   });
@@ -579,7 +620,9 @@ export const register: Register = (on, options) => {
         read($, modelsAtom),
         read($, boardAtom),
       ]);
-      return agentsView(
+      const width = e.props.bodyColumns;
+      const rows = e.props.scroll.bodyRows;
+      const view = agentsView(
         els,
         {
           agents,
@@ -591,11 +634,40 @@ export const register: Register = (on, options) => {
           session: await $.session.id(),
           silentMs: settings.silentMs,
         },
-        e.props.bodyColumns,
-        e.props.scroll.bodyRows,
+        width,
+        Math.max(0, rows - 1),
+      );
+      // The way back, on the last row: `t` while the pane has the keyboard,
+      // or a click on it
+      const { Box, Button } = els as any;
+      if (!Button || rows < 2) return view;
+      return (
+        <Box key="agents-pane" flexDirection="column" width={width}>
+          {view}
+          <Button
+            key="show-tasks"
+            hotkey={SWITCH_KEYS.tasks}
+            plain
+            dimColor
+            onPress={() => showTasks($)}
+          >
+            Tâches
+          </Button>
+        </Box>
       );
     },
   );
+
+  // A key typed in the « Tâches » tree (client.tsx): `a` shows « Agents »
+  on(
+    "ui.message",
+    { component: "Pane", requestId: TASKS_PANE },
+    async ($, e, next) => {
+      const data = e.data as { show?: unknown } | undefined;
+      if (data?.show === "agents") await showAgents($);
+      return next(e);
+    },
+  ).catch(($, e, next) => next(e));
 
   // The colour convention, on the session's side of the cache boundary: a
   // section composed afresh for every prompt, so a compaction keeps it. Only

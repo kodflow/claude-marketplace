@@ -6,6 +6,7 @@ import { test, expect } from "claude-code/testing";
 import { NOW, PANE, PR, SEC, T, host, start, writeTasks } from "./host.ts";
 import { capture, widths } from "./capture.ts";
 import { colorOf } from "../hooks/mod/who.ts";
+import { agentsTitle, tasksTitle } from "../hooks/mod/register.tsx";
 
 test("session start registers /hud, opens « Tâches » alone, in front, counted, and reads tasks.json", async ($, on) => {
   const { h, clock } = host(on);
@@ -13,7 +14,7 @@ test("session start registers /hud, opens « Tâches » alone, in front, counted
   await start($, clock);
   expect(h.commands).toEqual(["hud"]);
   // The main loop alone: no Agents tab, and « Tâches » is the view shown
-  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (1)" }]);
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (1)\u2007" }]);
   expect(h.shown).toBe("hud-tasks");
   expect(h.opened).not.toContain("hud-agents");
   const ui = await $.ui.mount({
@@ -115,8 +116,8 @@ test("the Agents tab: none for the main loop, opened and counted with the subage
   ];
   await clock.advance(3_000);
   expect(h.panes).toEqual([
-    { id: "hud-tasks", title: "Tâches (2)" },
-    { id: "hud-agents", title: "Agents (1)" },
+    { id: "hud-tasks", title: "Tâches (2)\u2007" },
+    { id: "hud-agents", title: "Agents (1)\u2007" },
   ]);
   expect(h.shown).toBe("hud-tasks");
   // A second one: the count follows, still behind « Tâches »
@@ -129,17 +130,151 @@ test("the Agents tab: none for the main loop, opened and counted with the subage
     },
   ];
   await clock.advance(3_000);
-  expect(h.panes[1]).toEqual({ id: "hud-agents", title: "Agents (2)" });
+  expect(h.panes[1]).toEqual({ id: "hud-agents", title: "Agents (2)\u2007" });
   expect(h.shown).toBe("hud-tasks");
   // A task done: the Tâches count follows too
   writeTasks(h, [T("1", "completed"), T("2", "pending")], 2);
   await clock.advance(3_000);
-  expect(h.panes[0]).toEqual({ id: "hud-tasks", title: "Tâches (1)" });
+  expect(h.panes[0]).toEqual({ id: "hud-tasks", title: "Tâches (1)\u2007" });
   // The last subagent ends: the tab goes
   h.agents = h.agents.map((a) => ({ ...a, status: "completed" }));
   await clock.advance(3_000);
   expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks"]);
   expect(h.shown).toBe("hud-tasks");
+});
+
+test("the keyboard switches the tabs: `a` in « Tâches » shows « Agents », `t` in « Agents » shows « Tâches »", async ($, on) => {
+  const { h, clock } = host(on);
+  writeTasks(h, [T("1", "in_progress")], 1);
+  h.agents = [{ id: "a1", type: "Explore", name: "e", status: "running" }];
+  await start($, clock);
+  await clock.advance(3_000);
+  expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks", "hud-agents"]);
+  expect(h.shown).toBe("hud-tasks");
+  const tasks = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-tasks",
+    props: PANE(88, 20),
+  });
+  // The tree's own key listener: `a` posts, the hooks module opens Agents
+  await tasks.key({ key: "a", in: "tree" });
+  expect(h.shown).toBe("hud-agents");
+  // A modified `a` is not the switch
+  h.shown = "hud-tasks";
+  await tasks.key({ key: "a", ctrl: true, in: "tree" });
+  expect(h.shown).toBe("hud-tasks");
+  await tasks.unmount();
+  // The Agents pane's way back: a Button on its last row, hotkey `t`
+  const agents = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-agents",
+    props: { ...PANE(88, 12), title: "Agents (1)\u2007" },
+  });
+  const back = await agents.find({ type: "Button", key: "show-tasks" });
+  expect(back?.props.hotkey).toBe("t");
+  h.shown = "hud-agents";
+  await agents.press({ key: "show-tasks" });
+  expect(h.shown).toBe("hud-tasks");
+  await agents.unmount();
+  // No subagent: `a` opens nothing and says why
+  h.agents = [];
+  await clock.advance(3_000);
+  expect(h.panes.map((p) => p.id)).toEqual(["hud-tasks"]);
+  const again = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-tasks",
+    props: PANE(88, 20),
+  });
+  h.opened = [];
+  await again.key({ key: "a", in: "tree" });
+  expect(h.opened).toEqual([]);
+  expect(h.toasts.at(-1)).toContain("aucun sous-agent");
+});
+
+test("a session that starts with both tabs up, « Agents » in front, starts on « Tâches »", async ($, on) => {
+  const { h, clock } = host(on);
+  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
+  h.panes = [
+    { id: "hud-tasks", title: "Tâches" },
+    { id: "hud-agents", title: "Agents (1)\u2007" },
+  ];
+  h.shown = "hud-agents";
+  await start($, clock);
+  expect(h.shown).toBe("hud-tasks");
+  await clock.advance(3_000);
+  expect(h.shown).toBe("hud-tasks");
+});
+
+test("autoOpen off, a session start with « Tâches » still up brings it to the front", { options: { autoOpen: false } }, async ($, on) => {
+  const { h, clock } = host(on);
+  h.panes = [
+    { id: "hud-tasks", title: "Tâches" },
+    { id: "hud-agents", title: "Agents (1)\u2007" },
+  ];
+  h.shown = "hud-agents";
+  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
+  await start($, clock);
+  expect(h.shown).toBe("hud-tasks");
+});
+
+test("a click on a tab stands: a retitle running at that moment does not take the person back", async ($, on) => {
+  const { h, clock } = host(on);
+  writeTasks(h, [T("1", "in_progress"), T("2", "pending")], 1);
+  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
+  await start($, clock);
+  await clock.advance(3_000);
+  expect(h.shown).toBe("hud-tasks");
+  // A task is done, so the poll retitles « Tâches »; while it does, the
+  // person clicks the Agents tab
+  writeTasks(h, [T("1", "completed"), T("2", "pending")], 2);
+  h.afterOpen = (id) => {
+    if (id !== "hud-tasks") return;
+    h.shown = "hud-agents";
+    h.afterOpen = undefined;
+  };
+  await clock.advance(3_000);
+  h.afterOpen = undefined;
+  expect(h.shown).toBe("hud-agents");
+  // Still, an open of the module's own that raised its pane is undone
+  h.shown = "hud-agents";
+  writeTasks(h, [T("1", "completed"), T("2", "completed")], 3);
+  await clock.advance(3_000);
+  expect(h.shown).toBe("hud-agents");
+});
+
+test("the tabs keep their width as the counts move, so the tab beside does not shift", () => {
+  const board = (n: number) => ({
+    found: true,
+    epics: [
+      {
+        id: 1,
+        title: "e",
+        tasks: Array.from({ length: n }, (_, i) => ({
+          id: String(i + 1),
+          subject: "t",
+          status: "pending",
+        })),
+      },
+    ],
+  });
+  const widths = [0, 1, 9, 10, 42, 99].map(
+    (n) => tasksTitle(board(n) as any).length,
+  );
+  expect(new Set(widths).size).toBe(1);
+  const agents = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `a${i}`,
+      label: "x",
+      status: "running",
+    }));
+  const aw = [1, 9, 10, 99].map((n) => agentsTitle(agents(n) as any).length);
+  expect(new Set(aw).size).toBe(1);
 });
 
 test("/hud off keeps the Agents tab shut while subagents run, until /hud agents", async ($, on) => {
@@ -383,7 +518,7 @@ test("an epic whose last task was just done stays 20 minutes, in the tree, then 
   const first = await drawn();
   expect(first).toContain("◆ #2     SDK status-line");
   console.log(first);
-  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches" }]);
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (0)\u2007" }]);
   await clock.advance(20 * 60_000);
   expect(await drawn()).toContain("◆ #2     SDK status-line");
   // Past 30 minutes since the last one was done: today's board, the file untouched
