@@ -1,7 +1,7 @@
 # Update Mode (--update) for CLAUDE.md Refresh
 
-Sizes are judged by the one table in `SKILL.md` (*Size thresholds*): the worse
-of lines and bytes. Paths below are relative to the repository root
+Sizes are judged by the one table in `SKILL.md` (*Size thresholds*): lines,
+plus the character check for what loads on demand. Paths below are relative to the repository root
 (`git rev-parse --show-toplevel`), never a hardcoded `/workspace`.
 
 ## Phase 1.0: Peek, then Full Code Scan
@@ -92,49 +92,81 @@ create_missing_workflow:
     tool: Bash
     rule: |
       Coverage by the ancestor (the user's choice): a directory is COVERED when
-      the nearest ancestor that has a CLAUDE.md names it. A directory is
-      proposed for creation only when it is not covered AND holds more than 5
-      code files (a role counts its tasks/, defaults/, handlers/, templates/,
-      files/, vars/ and meta/) OR an entry point (main.<ext>, site.yml,
-      playbook*.yml, *.nomad.hcl, tasks/main.yml). Otherwise it gets ONE line in
-      the ancestor (Phase 3.7), never a file.
+      the nearest ancestor that has a CLAUDE.md names it BY ITS PATH relative to
+      that ancestor, as a whole word (`roles/vault`, not the substring `vault`
+      of `lab-vault-from-zero.sh`, nor `ci` of `ci-1`). A directory that is not
+      covered is proposed for creation when it holds more than 5 code files (a
+      role counts its tasks/, defaults/, handlers/, templates/, files/, vars/
+      and meta/), OR an entry point (main.<ext>, site.yml, playbook*.yml,
+      *.nomad.hcl, tasks/main.yml) AND at least 3 code files. An entry point
+      with 1 or 2 files is `create(small)`: listed, never proposed by default.
+      Everything else gets ONE line in the ancestor (Phase 3.7), never a file.
+      Directories without code (only .html, .css, .gohtml, .tpl: static assets,
+      templates) are not counted at all; their code parent covers them.
+      Hubs: when at least 3 sibling directories would be created and their
+      parent has no CLAUDE.md, the parent is listed as `hub`: propose the
+      parent first, then its children one line each, instead of N files.
+      Siblings that would only get a line are grouped in one row
+      (`line-in-ancestor(group)`): one line for the group, not one per folder.
     command: |
-      # Directories that hold code, have no CLAUDE.md, and are not covered by an ancestor.
-      # Prints: <verdict>\t<direct code files>\t<dir>   (create | line-in-ancestor | covered)
+      # Prints: <verdict>\t<direct code files>\t<dir>
       git ls-files --cached --others --exclude-standard \
-        '*.go' '*.ts' '*.tsx' '*.js' '*.mjs' '*.py' '*.rs' '*.java' '*.sh' '*.html' '*.gohtml' '*.css' \
-        '*.tf' '*.hcl' '*.yml' '*.yaml' '*.j2' '*.tpl' '*.sql' '*Dockerfile*' '*Makefile' \
+        '*.go' '*.ts' '*.tsx' '*.js' '*.mjs' '*.py' '*.rs' '*.java' '*.sh' \
+        '*.tf' '*.hcl' '*.yml' '*.yaml' '*.j2' '*.sql' '*Dockerfile*' '*Makefile' \
         | grep -vE '(^|/)(testdata|vendor|node_modules|__pycache__|\.[^/]+)/' \
         | sed -e 's|/[^/]*$||' -e t -e 's|.*|.|' \
         | sed -E 's#/(tasks|defaults|handlers|templates|files|vars|meta)$##' | sort | uniq -c \
         | while read -r n dir; do
             [ -f "$dir/CLAUDE.md" ] && continue
-            # nearest ancestor with a CLAUDE.md, and does it name this directory?
             anc=$dir; covered=0
             while [ "$anc" != "." ]; do
               anc=$(dirname "$anc")
               if [ -f "$anc/CLAUDE.md" ]; then
-                grep -qF -- "$(basename "$dir")" "$anc/CLAUDE.md" && covered=1
+                rel=${dir#"$anc"/}; [ "$anc" = "." ] && rel=$dir
+                esc=$(printf '%s' "$rel" | sed 's/[][\.*^$/]/\\&/g')
+                grep -qE -- "(^|[^A-Za-z0-9_./-])$esc(/|[^A-Za-z0-9_./-]|\$)" "$anc/CLAUDE.md" && covered=1
                 break
               fi
             done
-            # entry point: main.*, site/playbook yml, *.nomad.hcl, a role's tasks/main.yml
             entry=0
             git ls-files --cached --others --exclude-standard -- "$dir" \
-              | grep -E "^$dir/(main\.(go|py|rs|ts|js|mjs|java|sh)|site\.ya?ml|playbook[^/]*\.ya?ml|[^/]*\.nomad\.hcl|tasks/main\.ya?ml)$" -q && entry=1
+              | grep -qE "^$dir/(main\.(go|py|rs|ts|js|mjs|java|sh)|site\.ya?ml|playbook[^/]*\.ya?ml|[^/]*\.nomad\.hcl|tasks/main\.ya?ml)$" && entry=1
             if [ "$covered" = 1 ]; then v=covered
-            elif [ "$n" -gt 5 ] || [ "$entry" = 1 ]; then v=create
+            elif [ "$n" -gt 5 ]; then v=create
+            elif [ "$entry" = 1 ] && [ "$n" -ge 3 ]; then v=create
+            elif [ "$entry" = 1 ]; then v='create(small)'
             else v=line-in-ancestor; fi
             printf '%s\t%s\t%s\n' "$v" "$n" "$dir"
-          done
+          done \
+        | awk -F'\t' '
+            { v[NR]=$1; n[NR]=$2; d[NR]=$3; p=$3; if (!sub(/\/[^\/]*$/,"",p)) p="."
+              par[NR]=p
+              if ($1 ~ /^create/) cc[p]++
+              if ($1 == "line-in-ancestor") lc[p]++ }
+            END {
+              for (i=1;i<=NR;i++) {
+                if (v[i]=="line-in-ancestor" && lc[par[i]]>=3) {
+                  if (!(par[i] in done)) { done[par[i]]=1
+                    printf "line-in-ancestor(group)\t%d\t%s/{%d dirs}\n", lc[par[i]], par[i], lc[par[i]] }
+                  continue }
+                print v[i] "\t" n[i] "\t" d[i]
+              }
+              for (p in cc) if (cc[p]>=3 && p!="." && system("[ -f \"" p "/CLAUDE.md\" ]")!=0)
+                printf "hub\t%d\t%s\n", cc[p], p
+            }'
     output: |
-      create | n | dir           propose a CLAUDE.md
-      line-in-ancestor | n | dir  one line in the nearest ancestor (Phase 3.7)
-      covered | n | dir           nothing to do
+      create | n | dir                    propose a CLAUDE.md
+      create(small) | n | dir             entry point, under 3 files: only on request
+      hub | k | parent                    parent of k directories to create: propose it first
+      line-in-ancestor | n | dir          one line in the nearest ancestor (Phase 3.7)
+      line-in-ancestor(group) | k | dir/  one line for k sibling folders
+      covered | n | dir                   nothing to do
     measured: |
-      making.codes (read-only run, 2026-10-23): the former command listed 162
-      directories; this one proposes 15, adds 86 one-line pointers and finds 68
-      already covered.
+      making.codes (read-only run, 2026-10-23, working tree with other
+      branches' edits): 26 covered, 19 create, 1 create(small), 3 hub, 15
+      line-in-ancestor and 3 groups of siblings, in 2.5 s. The previous form
+      matched the basename as a substring and proposed a file for every
+      directory holding a lone main.go.
 
   create_template:
     format: |
@@ -153,7 +185,7 @@ create_missing_workflow:
       |------|-------------|
       | <files> | TODO |
 
-    max_lines: 30  # Minimal template, enriched later; never past 200 (SKILL.md)
+    max_lines: 30  # Minimal template, enriched later; a created file starts short
 ```
 
 **ABSOLUTE RULE: .gitignore is the source of truth for exclusions.**
@@ -170,28 +202,37 @@ create_missing_workflow:
 A CLAUDE.md is judged stale from the history, not from its `<!-- updated: -->`
 comment: that timestamp is inert (`skills/git/commit.md`, "No staleness
 check"). The one command below lists each CLAUDE.md older than the last commit
-of code in its directory, with the number of commits since and the code files
-not yet tracked (a directory can drift before its first commit).
+of code in its directory, with the number of commits since, the tracked files
+modified but not yet committed (`git diff --name-only HEAD`) and the code files
+not yet tracked (a directory can drift before its first commit). Code owned by
+a deeper CLAUDE.md is excluded, so the root is not charged for the whole
+repository.
 
 ```bash
-# CLAUDE.md older than the last code commit of its directory.
-# Prints: <commits since>\t<untracked code files>\t<CLAUDE.md>
+# CLAUDE.md older than the code it covers, or with code changed since.
+# Prints: <commits since>\t<modified, uncommitted>\t<untracked code files>\t<CLAUDE.md>
 CODE=(':(exclude)*.md' ':(exclude)*/testdata/*' ':(exclude)*/vendor/*' ':(exclude)*/node_modules/*')
-git ls-files --cached --others --exclude-standard '*CLAUDE.md' | grep -E '(^|/)CLAUDE.md$' \
-  | while IFS= read -r f; do
-      d=$(dirname "$f")
-      doc=$(git log -1 --format=%ct -- "$f")
-      [ -n "$doc" ] || doc=0                       # never committed: everything is newer
-      code=$(git log -1 --format=%ct -- "$d" "${CODE[@]}")
-      [ -n "$code" ] || continue
-      [ "$code" -gt "$doc" ] || continue
-      n=$(git rev-list --count --since="@$doc" HEAD -- "$d" "${CODE[@]}")
-      u=$(git ls-files --others --exclude-standard -- "$d" | grep -vE '\.md$' | wc -l | tr -d ' ')
-      printf '%s\t%s\t%s\n' "$n" "$u" "$f"
-    done | sort -rn
+ALL=$(git ls-files --cached --others --exclude-standard '*CLAUDE.md' | grep -E '(^|/)CLAUDE.md$')
+printf '%s\n' "$ALL" | while IFS= read -r f; do
+  d=$(dirname "$f")
+  # code owned by a deeper CLAUDE.md does not count against this one
+  EXCL=()
+  while IFS= read -r g; do
+    gd=$(dirname "$g")
+    [ "$gd" != "$d" ] || continue
+    case "$d" in .) EXCL+=(":(exclude)$gd") ;; *) case "$gd" in "$d"/*) EXCL+=(":(exclude)$gd") ;; esac ;; esac
+  done <<< "$ALL"
+  doc=$(git log -1 --format=%ct -- "$f"); [ -n "$doc" ] || doc=0   # never committed: everything is newer
+  code=$(git log -1 --format=%ct -- "$d" "${CODE[@]}" "${EXCL[@]}")
+  n=0; [ -n "$code" ] && [ "$code" -gt "$doc" ] && n=$(git rev-list --count --since="@$doc" HEAD -- "$d" "${CODE[@]}" "${EXCL[@]}")
+  m=$(git diff --name-only HEAD -- "$d" "${CODE[@]}" "${EXCL[@]}" | wc -l | tr -d ' ')
+  u=$(git ls-files --others --exclude-standard -- "$d" "${CODE[@]}" "${EXCL[@]}" | wc -l | tr -d ' ')
+  [ "$n" -gt 0 ] || [ "$m" -gt 0 ] || [ "$u" -gt 0 ] || continue
+  printf '%s\t%s\t%s\t%s\n' "$n" "$m" "$u" "$f"
+done | sort -rn
 ```
 
-Report `commits | untracked | file`, worst first. Drift is a candidate for
+Report `commits | modified | untracked | file`, worst first. Drift is a candidate for
 Phase 3.0, never a verdict: a refactor may leave a CLAUDE.md exactly right.
 
 ---
@@ -202,11 +243,27 @@ Phase 3.0, never a verdict: a refactor may leave a CLAUDE.md exactly right.
 obsolete_detection:
   file_references:
     description: "Files mentioned in CLAUDE.md but deleted"
+    command: |
+      # Broken file references of one CLAUDE.md, by suffix match on the tracked files.
+      # Usage: refs.sh <path/to/CLAUDE.md>   Prints the references that match no file.
+      f=$1; d=$(dirname "$f")
+      LIST=$(mktemp); git ls-files --cached --others --exclude-standard > "$LIST"
+      grep -oE '`[A-Za-z0-9_./-]+(\.(sh|md|go|ts|tsx|js|mjs|py|rs|tf|hcl|yml|yaml|j2|json|toml|sql|html|css|env|txt|conf|cfg|service|timer|mod|sum)|/)`' "$f" \
+        | tr -d '`' | sort -u | while IFS= read -r t; do
+            case "$t" in /*|~*|*://*) continue ;; esac
+            p=${t%/}
+            [ -e "$d/$p" ] || [ -e "$p" ] && continue
+            esc=$(printf '%s' "$p" | sed 's/[][\.*^$/]/\\&/g')
+            grep -qE "(^|/)$esc(/|\$)" "$LIST" || echo "$t"
+          done
+      rm -f "$LIST"
     action: |
-      FOR each CLAUDE.md:
-        extract referenced file paths
-        verify each file exists
-        mark as obsolete if not found
+      FOR each CLAUDE.md, run the command above. A reference resolves when it
+      exists from the CLAUDE.md's directory, from the root, or as a path SUFFIX
+      of a tracked or untracked file (docs often write `x.sh` for `scripts/x.sh`).
+      What remains is a CANDIDATE, never a verdict: runtime files (STATUS.txt),
+      ignored local files (terraform.tfvars) and paths cited as removed show up.
+    measured: "making.codes root CLAUDE.md at HEAD: 65 'broken' with plain existence, 15 with suffix resolution"
 
   structure_changes:
     description: "Directory structure changed"
@@ -238,7 +295,20 @@ obsolete_detection:
 
   renamed:
     description: "A directory renamed since its CLAUDE.md was last written"
-    command: "git log -M --diff-filter=R --name-status --format= -- <dir> | head -20"
+    command: |
+      # Renames since this CLAUDE.md was last written, whose old name it still cites.
+      f=<dir>/CLAUDE.md; d=$(dirname "$f"); [ "$d" = . ] && pre="" || pre="$d/"
+      base=$(git log -1 --format=%H -- "$f")
+      [ -n "$base" ] && git diff -M --name-status --diff-filter=R "$base" HEAD \
+        | awk -F'\t' -v p="$pre" 'index($2,p)==1 || index($3,p)==1 {print $2 "\t" $3}' \
+        | while IFS=$'\t' read -r old new; do
+            rel=${old#"$pre"}
+            grep -qF -- "$rel" "$f" && printf '%s -> %s\n' "$old" "$new"
+          done | head -20
+    note: |
+      Bounded to `<commit of the CLAUDE.md>..HEAD`, filtered on the directory,
+      then only the old names the file still cites: the unbounded
+      `git log -M --diff-filter=R` listed the whole history.
     action: |
       Propose `git mv <old>/CLAUDE.md <new>/CLAUDE.md` when the old path still
       holds one, and fix its path references. Never a deletion.
@@ -266,12 +336,19 @@ load on demand; `@imports` load with their parent and save nothing).
 ```yaml
 split_workflow:
   1_outline:
-    action: "grep -n '^#{1,3} ' <file> — sections with their line spans and bytes"
+    action: |
+      Sections with their start line and bytes, ignoring `#` lines inside fenced
+      code blocks (a shell comment is not a heading):
+        awk '/^[ \t]*(```|~~~)/ { fence = !fence }
+             !fence && /^#(#?#?) / { if (h) printf "%d\t%d\t%s\n", start, bytes, h
+                                     h = $0; start = NR; bytes = 0 }
+             { bytes += length($0) + 1 }
+             END { if (h) printf "%d\t%d\t%s\n", start, bytes, h }' <file>
 
   2_classify_each_section:
     always_needed: "rules for every task (guardrails, workflow, commit rules) → stays"
     one_subtree:   "concerns one directory → that directory's CLAUDE.md (on demand)"
-    file_types:    "concerns a file pattern → .claude/rules/<topic>.md with paths: (on demand)"
+    file_types:    "concerns a file pattern → .claude/rules/<topic>.md with paths: (on demand); run `git check-ignore -q .claude/rules/<topic>.md` first: when the path is gitignored the rule would never be committed, so propose docs/ or a subdirectory CLAUDE.md instead"
     history_state: "dated status, decision logs, runbook steps → docs/ (ADR, runbook), one-line pointer left"
     reference:     "long tables, inventories → a doc the section links to, read when needed"
 
@@ -289,7 +366,7 @@ split_workflow:
       - "MOVE, never delete: every moved section leaves a one-line pointer"
       - "Keep the project's language and wording; no rewrite while moving"
       - "A moved ledger goes to .claude/constraints.md (SKILL.md, Phase 1.5)"
-      - "Re-measure: the source file must land at ACCEPTABLE or better"
+      - "Re-measure: the source file must land at ACCEPTABLE or better (500 lines is the target, not a rewrite budget: moving never shortens text)"
 ```
 
 ---
@@ -307,7 +384,11 @@ parent_child:
   order: "deepest first, then each parent in turn"
   rules:
     pointer: "The nearest ancestor names each child in ONE line: `<dir>/CLAUDE.md: <purpose>`"
-    repetition: "A rule a child repeats from an ancestor is replaced by a pointer to that ancestor"
+    repetition: |
+      A rule a child repeats from an ancestor in IDENTICAL or WEAKER words is
+      replaced by a pointer to that ancestor. A child that is MORE detailed than
+      its parent keeps its text (the detail is why the child exists); the
+      parent is then the one to point down, or to be left alone.
     contradiction: "Reported to the user with both file:line; never resolved alone"
     created_child: "A CLAUDE.md created in Phase 2.0 adds its line to the nearest ancestor in the same change"
     line_in_ancestor: "A `line-in-ancestor` directory of Phase 2.0 gets its one line here, no file"
@@ -346,8 +427,9 @@ update_generation:
     - <attention point detected in code>
 
   constraints:
-    target_lines: 200  # a generated or rewritten file (Claude Code docs)
-    subdirectory_limit: "over 40 000 characters (wc -m), a subdirectory CLAUDE.md is cut: Claude keeps only its start (memory docs, 200K context window; 150 000 on the 1M window of later models)"
+    new_file: "a created file starts from the short template (Phase 2.0), no line target"
+    advice: "the docs advise under 200 lines for adherence; quote it, do not enforce it. A file warmup moves or keeps is bounded by the SKILL.md table only"
+    subdirectory_limit: "over 40 000 characters (wc -m), a subdirectory CLAUDE.md is cut on a 200K window; over 150 000 everywhere (memory docs)"
     ceiling: "the SKILL.md size table — CRITICAL means condense or split (Phase 3.5)"
     no_implementation_details: true
     no_obsolete_info: true
@@ -378,18 +460,24 @@ apply_workflow:
     on_apply:
       action: "Write the updated file"
       tool: Edit or Write
-      backup: true
+      backup: |
+        Before the first write to a file, copy it:
+          mkdir -p "$SCRATCH/warmup-backup" && cp -p "$f" "$SCRATCH/warmup-backup/$(printf '%s' "$f" | tr / _).bak"
+        $SCRATCH is the session scratchpad directory (else ${TMPDIR:-/tmp}).
+        Print the backup directory in the final output. Nothing is written
+        into the repository, and the backup is never committed.
 
   timestamp_injection:
-    action: "Add/update ISO timestamp on first line"
+    action: "Add/update the timestamp on first line, in the file's own format"
     algorithm: |
       FOR each updated CLAUDE.md:
-        timestamp = "<!-- updated: " + now().toISO8601() + "Z -->"
-        IF first_line matches '<!-- updated: .* -->':
-          replace first_line with timestamp
+        IF first_line matches '<!-- updated: YYYY-MM-DD -->' (date only):
+          replace it with today's date, same shape
+        ELSE IF first_line matches '<!-- updated: .* -->' (with time):
+          replace it with the ISO 8601 UTC time
         ELSE:
-          insert timestamp as first line
-    format: "<!-- updated: YYYY-MM-DDTHH:MM:SSZ -->"
+          insert the ISO 8601 UTC time as first line
+    format: "<!-- updated: YYYY-MM-DD --> or <!-- updated: YYYY-MM-DDTHH:MM:SSZ -->, whichever the file already uses"
     purpose: |
       A note for human maintainers. It is inert: nothing compares it to
       anything, and Claude Code strips it from context. Drift is read from
@@ -397,7 +485,7 @@ apply_workflow:
 
   validation:
     post_apply:
-      - "Measure lines, bytes and characters (wc -lcm) against the SKILL.md size table"
+      - "Measure lines (wc -l), bytes (wc -c) and characters (wc -m) separately (macOS wc cannot combine -c and -m) against the SKILL.md size table"
       - "Flag FORBIDDEN files (must split, Phase 3.5)"
       - "Verify no obsolete references"
       - "Verify structure section matches reality"

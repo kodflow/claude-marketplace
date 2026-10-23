@@ -35,9 +35,13 @@ Before the first tool call, the session already holds (Claude Code memory docs,
 | `~/.claude/CLAUDE.md`, `~/.claude/rules/`, auto memory (`~/.claude/projects/<project>/memory/MEMORY.md`, first 200 lines or 25 KB) | |
 
 Reading a loaded file again pays for it twice (a 56 KB root CLAUDE.md is
-~14 000 tokens). Measure it (`wc -lcm`), cite it by `file:line`, extract from
-context; `Read` it only when it is not there (a nested file dropped by a
-compaction). **Never write from the context copy**: Claude Code strips
+~14 000 tokens). Measure it (`wc -l`, `wc -c`, `wc -m`, three separate calls: on macOS `-c` and
+`-m` exclude each other, so `wc -lcm` drops the bytes), cite it by `file:line`,
+extract from context; `Read` it only when it is not there (a nested file
+dropped by a compaction) **or when it changed since launch**: the copy in
+context is the one injected at launch, so a file that `git status --porcelain
+-- <file>` lists as modified, or whose mtime is later than the session start,
+is `Read` again before it is cited. **Never write from the context copy**: Claude Code strips
 block-level HTML comments (the `<!-- updated: -->` timestamp, maintainer notes)
 before injection, so an edit built from it silently drops them. `--update`
 `Read`s from disk every CLAUDE.md it judges or modifies (`update.md`, Phase
@@ -80,15 +84,17 @@ Usage: /warmup [options]
   --update --dry-run Preview the changes, write nothing
   --help             This help
 
-CLAUDE.md size thresholds (the worse of lines and bytes wins):
-  IDEAL       0-500 lines     ≤ 25 KB   no action
-  ACCEPTABLE  501-700         ≤ 35 KB   fine for a busy directory
-  WARNING     701-850         ≤ 42 KB   review at the next pass
-  CRITICAL    851-1000        ≤ 50 KB   condensation mandatory
-  FORBIDDEN   1001+           > 50 KB   must be split
-  A subdirectory CLAUDE.md over 40 000 characters (wc -m) is truncated at
-  load: Claude keeps only its start (Claude Code memory docs).
-  A file warmup creates targets < 200 lines (Claude Code docs).
+CLAUDE.md size thresholds (lines; ceiling decided by Florent, 2026-10-23):
+  IDEAL       0-500 lines     no action
+  ACCEPTABLE  501-700         fine for a busy directory
+  WARNING     701-850         review at the next pass
+  CRITICAL    851-1000        condensation mandatory
+  FORBIDDEN   1001+           must be split
+  Plus a character check (wc -m) for what loads on demand (a subdirectory
+  CLAUDE.md, a path-scoped rule): over 40 000 = "truncated on a 200K window",
+  over 150 000 = "truncated everywhere" (FORBIDDEN). Claude Code memory docs.
+  A file warmup creates starts from the short template; a file it moves is
+  bounded by this table only.
   --update proposes a new CLAUDE.md only where no ancestor covers the
   directory and it has > 5 code files or an entry point.
 
@@ -204,11 +210,20 @@ actually touches that pattern.
 ### Size thresholds — the single source
 
 The table in `--help` above is the only one; `update.md` and the briefing use
-it. A level is the **worse** of the line level and the byte level: 870 long
-lines can weigh 56 KB, and bytes are what the context pays. A file warmup
-**creates or rewrites** targets under 200 lines ("Longer files consume more
-context and reduce adherence", Claude Code docs); the table bounds what exists,
-it is not a budget to fill. How to split so the launch cost actually drops:
+it. Source: Claude Code memory docs, <https://code.claude.com/docs/en/memory>.
+
+| Fact from the docs | Consequence here |
+|--------------------|------------------|
+| "target under 200 lines per CLAUDE.md file. Longer files consume more context and reduce adherence" | advice only, quoted to the user; not a rule warmup enforces |
+| a subdirectory CLAUDE.md or a path-scoped rule is truncated past 40 000 characters (200K window) or 150 000 characters (1M window, later models; 200 000 on Opus 4.6 and Sonnet 4.6) | the character check of the table; 150 000 is the safe common bound |
+| a file over 4 MiB is skipped entirely | far above any threshold |
+| files loaded at launch (root, ancestors) are never truncated but cost tokens every turn | reported as launch cost (bytes / 4 ≈ tokens), not as truncation |
+
+The line table is a ceiling Florent chose (2026-10-23), above the doc's
+advice: it bounds what exists, it is not a budget to fill. Warmup does not
+shorten a file to reach 200 lines. A file it **creates** starts from the short
+template (`update.md`, Phase 2.0); a file it **moves** is only bounded by the
+table (moving never rewrites). How to split so the launch cost actually drops:
 `update.md`, Phase 3.5. A ledger that pushes `CLAUDE.md` past 250 lines (the
 `/project` spill point, `../project/constraints.md`) moves to
 `.claude/constraints.md`, leaving only the always-applicable `MUST`s inline.

@@ -120,9 +120,8 @@ supersede reflects a genuine architectural decision, also write an ADR with
 
 ## File layout and size
 
-`CLAUDE.md` obeys the `/warmup` size table (its `--help`: the worse of lines and
-bytes, FORBIDDEN past 1000 lines or 50 KB). The ledger spills earlier: when it
-pushes the file past **250 lines**, split it:
+`CLAUDE.md` obeys the `/warmup` size table (its `--help`: 500 lines ideal,
+FORBIDDEN past 1000). The ledger spills earlier: when it pushes the file past **250 lines**, split it:
 
 ```markdown
 <!-- CLAUDE.md -->
