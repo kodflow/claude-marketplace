@@ -1,0 +1,111 @@
+#!/bin/sh
+# kodflow-permissions-setup — merge the permission rules this plugin ships
+# (permissions.json) into the user's settings.json.
+#
+# Why a merge and not a copy: settings.json belongs to the user. This adds the
+# rules that are missing, at the end of each list, and nothing else — no rule is
+# ever removed or reordered, no other key is touched. The rules ship from the
+# marketplace so a decision taken once reaches every machine at the next launch.
+#
+#   kodflow-permissions-setup            merge, verbose
+#   kodflow-permissions-setup --quiet    same, silent unless something failed (hook)
+#   kodflow-permissions-setup --check    report what is missing, change nothing
+#
+# KODFLOW_PERMISSIONS=off switches it off. Fails open: an unreadable settings.json
+# or a missing jq is a message on stderr and exit 0, never a broken file.
+set -u
+
+SRC=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+RULES=$SRC/permissions.json
+CLAUDE_CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+SETTINGS=$CLAUDE_CONFIG_DIR/settings.json
+
+QUIET=0; CHECK=0
+for a in "$@"; do
+    case "$a" in
+        --quiet|-q)  QUIET=1 ;;
+        --check|-c)  CHECK=1 ;;
+        --help|-h)   sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *)           echo "kodflow-permissions-setup: option inconnue $a" >&2; exit 2 ;;
+    esac
+done
+
+say()  { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+warn() { printf '%s\n' "kodflow-permissions: $*" >&2; }
+
+[ "${KODFLOW_PERMISSIONS:-}" = off ] && { say "désactivé (KODFLOW_PERMISSIONS=off)"; exit 0; }
+command -v jq >/dev/null 2>&1 || { warn "jq absent, règles non reportées"; exit 0; }
+jq -e 'type == "object"' "$RULES" >/dev/null 2>&1 || { warn "$RULES illisible"; exit 0; }
+
+# A settings.json that is a symlink (dotfiles) stays a symlink: write through it.
+TARGET=$SETTINGS
+n=0
+while [ -L "$TARGET" ] && [ "$n" -lt 10 ]; do
+    l=$(readlink "$TARGET") || break
+    case "$l" in /*) TARGET=$l ;; *) TARGET=$(dirname -- "$TARGET")/$l ;; esac
+    n=$((n + 1))
+done
+
+if [ -e "$TARGET" ]; then
+    jq -e 'type == "object"
+           and ((.permissions // {}) | type == "object")
+           and ((.permissions.allow // []) | type == "array")
+           and ((.autoMode // {}) | type == "object")
+           and ((.autoMode.allow // []) | type == "array")' \
+        "$TARGET" >/dev/null 2>&1 \
+        || { warn "$SETTINGS illisible ou de forme inattendue, laissé tel quel"; exit 0; }
+    CURRENT=$TARGET
+else
+    CURRENT=/dev/null
+fi
+
+# Appends what is missing, in the order of the shipped file.
+MERGE='
+  def add($path; $want):
+    (getpath($path) // []) as $have
+    | setpath($path; $have + ($want - $have));
+  . as $s
+  | ($s // {})
+  | add(["permissions","allow"]; $r[0].permissions.allow // [])
+  | add(["autoMode","allow"];    $r[0].autoMode.allow    // [])'
+
+# /dev/null yields no input, hence the `// {}` on a slurped empty array.
+SRCJSON=$(jq -s '.[0] // {}' "$CURRENT" 2>/dev/null) || { warn "$SETTINGS illisible"; exit 0; }
+NEW=$(printf '%s' "$SRCJSON" | jq --slurpfile r "$RULES" "$MERGE" 2>/dev/null) \
+    || { warn "fusion impossible, $SETTINGS laissé tel quel"; exit 0; }
+
+MISSING=$(jq -n --argjson a "$SRCJSON" --argjson b "$NEW" '
+    [["permissions","allow"],["autoMode","allow"]][] as $p
+    | ($b | getpath($p) // []) - ($a | getpath($p) // [])
+    | map($p[0] + ": " + .)[]' -r)
+
+if [ -z "$MISSING" ]; then
+    say "à jour : aucune règle à ajouter"
+    exit 0
+fi
+
+if [ "$CHECK" -eq 1 ]; then
+    say "règles manquantes dans $SETTINGS :"
+    printf '%s\n' "$MISSING" | sed 's/^/  /'
+    say "(--check : rien n'a été modifié)"
+    exit 0
+fi
+
+DIR=$(dirname -- "$TARGET")
+mkdir -p "$DIR" 2>/dev/null || { warn "$DIR non créable"; exit 0; }
+TMP=$(mktemp "$DIR/.settings.kodflow.XXXXXX" 2>/dev/null) || { warn "$DIR non inscriptible"; exit 0; }
+# Same mode as the original, so a 0600 file does not become 0644.
+[ -e "$TARGET" ] && cp -p "$TARGET" "$TMP" 2>/dev/null
+if ! printf '%s\n' "$NEW" | jq . > "$TMP" 2>/dev/null; then
+    rm -f "$TMP"; warn "écriture impossible, $SETTINGS laissé tel quel"; exit 0
+fi
+# Backup only now that something really changes.
+if [ -e "$TARGET" ]; then
+    cp -p "$TARGET" "$TARGET.kodflow-bak.$(date +%Y%m%d-%H%M%S)" 2>/dev/null \
+        || { rm -f "$TMP"; warn "sauvegarde impossible, $SETTINGS laissé tel quel"; exit 0; }
+fi
+mv -f "$TMP" "$TARGET" 2>/dev/null || { rm -f "$TMP"; warn "remplacement impossible"; exit 0; }
+
+say "règles ajoutées à $SETTINGS :"
+printf '%s\n' "$MISSING" | sed 's/^/  /'
+exit 0

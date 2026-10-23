@@ -324,6 +324,76 @@ print '{"statusLine":{"type":"command","command":"/opt/autre"}}' > $sl
 run_sl $fakehome >/dev/null 2>&1 || true
 is "ne touche pas une status line étrangère" "$(jq -c .statusLine $sl)" '{"type":"command","command":"/opt/autre"}'
 
+# --- 16. règles de permission : fusion dans settings.json -------------------
+print -r -- "permissions"
+run_pm() {
+  local fh=$1; shift
+  HOME=$fh CLAUDE_CONFIG_DIR=$fh/.claude $ROOT/bin/kodflow-permissions-setup "$@"
+}
+box=$(new_sandbox permissions)
+fh=$box/home; mkdir -p $fh/.claude
+st=$fh/.claude/settings.json
+want='["mcp__github__merge_pull_request","Bash(gh pr merge:*)","Bash(git merge:*)"]'
+nbak() { print -r -- $(ls $fh/.claude | grep -c 'settings.json.kodflow-bak') }
+
+run_pm $fh --quiet >/dev/null 2>&1; rc=$?
+is "settings absent : code 0" "$rc" "0"
+is "settings absent : permissions.allow créé" "$(jq -c .permissions.allow $st)" "$want"
+is "settings absent : autoMode.allow créé" "$(jq -c .autoMode.allow $st)" "$want"
+is "settings absent : pas de sauvegarde" "$(nbak)" "0"
+
+print '{"model":"opus"}' > $st
+run_pm $fh --quiet >/dev/null 2>&1
+is "sans permissions : règles ajoutées" "$(jq -c .permissions.allow $st)" "$want"
+is "sans permissions : sauvegarde faite" "$(nbak)" "1"
+is "sans permissions : autre clé intacte" "$(jq -r .model $st)" "opus"
+
+rm -f -- $fh/.claude/settings.json.kodflow-bak.*(N)
+before=$(cksum < $st)
+run_pm $fh --quiet >/dev/null 2>&1
+is "règles déjà présentes : fichier inchangé" "$(cksum < $st)" "$before"
+is "règles déjà présentes : pas de sauvegarde" "$(nbak)" "0"
+
+print '{"permissions":{"allow":["Bash(ls:*)","Bash(git merge:*)"],"deny":["Bash(rm:*)"],"defaultMode":"auto"},"env":{"A":"1"},"autoMode":{"allow":["Z"],"soft_deny":["Y"]}}' > $st
+run_pm $fh --quiet >/dev/null 2>&1
+is "fusion : ordre existant gardé, manquantes en fin" "$(jq -c .permissions.allow $st)" '["Bash(ls:*)","Bash(git merge:*)","mcp__github__merge_pull_request","Bash(gh pr merge:*)"]'
+is "fusion : autoMode.allow complété" "$(jq -c .autoMode.allow $st)" '["Z","mcp__github__merge_pull_request","Bash(gh pr merge:*)","Bash(git merge:*)"]'
+is "fusion : deny intact" "$(jq -c .permissions.deny $st)" '["Bash(rm:*)"]'
+is "fusion : defaultMode intact" "$(jq -r .permissions.defaultMode $st)" "auto"
+is "fusion : env intact" "$(jq -c .env $st)" '{"A":"1"}'
+is "fusion : soft_deny intact" "$(jq -c .autoMode.soft_deny $st)" '["Y"]'
+
+after=$(cksum < $st); nb=$(nbak)
+run_pm $fh --quiet >/dev/null 2>&1
+is "idempotence : second passage sans effet" "$(cksum < $st)" "$after"
+is "idempotence : pas de seconde sauvegarde" "$(nbak)" "$nb"
+
+print '{"permissions":{"allow":["Bash(ls:*)"]}}' > $st
+before=$(cksum < $st); nb=$(nbak)
+out=$(run_pm $fh --check 2>&1); rc=$?
+is "--check : code 0" "$rc" "0"
+has "--check : rapporte le manque" "$out" "Bash(gh pr merge:*)"
+is "--check : rien écrit" "$(cksum < $st)" "$before"
+is "--check : pas de sauvegarde" "$(nbak)" "$nb"
+
+print '{ pas du json' > $st
+before=$(cksum < $st); nb=$(nbak)
+err=$(run_pm $fh --quiet 2>&1 >/dev/null); rc=$?
+is "JSON invalide : code 0" "$rc" "0"
+is "JSON invalide : fichier intact" "$(cksum < $st)" "$before"
+is "JSON invalide : pas de sauvegarde" "$(nbak)" "$nb"
+has "JSON invalide : message sur stderr" "$err" "illisible"
+is "JSON invalide : aucun temporaire laissé" "$(ls -A $fh/.claude | grep -c '^.settings.kodflow')" "0"
+
+print '{"permissions":{"allow":"pas une liste"}}' > $st
+before=$(cksum < $st)
+run_pm $fh --quiet >/dev/null 2>&1; rc=$?
+is "forme inattendue : code 0, fichier intact" "$rc $(cksum < $st)" "0 $before"
+
+print '{}' > $st
+KODFLOW_PERMISSIONS=off run_pm $fh --quiet >/dev/null 2>&1
+is "KODFLOW_PERMISSIONS=off : rien écrit" "$(cat $st)" "{}"
+
 # --- bilan ------------------------------------------------------------------
 print -r -- ""
 print -r -- "$PASS réussis, $FAIL échoués"
