@@ -242,7 +242,7 @@ run Stop "" '{"stop_hook_active":true}' on-stop.sh
 
 echo "== Stop · open tasks reminder"
 TD=$T/home/.claude/tasks/session-sess-1; mkdir -p "$TD"
-: > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+: > "$T/tmp/sp/edited"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
 printf '{"id":"1","subject":"Done one","status":"completed"}' > "$TD/1.json"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
 nudged && bad "finished list" "$OUT" || ok "a finished list asks for nothing"
@@ -250,8 +250,8 @@ printf '{"id":"2","subject":"Ship it","status":"in_progress"}' > "$TD/2.json"
 printf '{"id":"3","subject":"Later","status":"pending"}' > "$TD/3.json"
 rm -f "$T/tmp/sp/stop-count"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#2 Ship it \\(in_progress, via TaskUpdate\\)") and test("#3 Later \\(pending") and (test("Done one") | not)' >/dev/null 2>&1 \
-    && ok "open tasks are named, finished ones are not" || bad "open tasks nudge" "$OUT"
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("Open tasks \\(TaskUpdate\\)[^\\n]*: #2 #3 \\(") and (test("#1") | not)' >/dev/null 2>&1 \
+    && ok "open tasks are named by id on one line, finished ones are not" || bad "open tasks nudge" "$OUT"
 [ "$(printf '%s\n' "$OUT" | grep -c '^{')" -le 1 ] && ok "still exactly one JSON document" || bad "single document" "$OUT"
 rm -f "$T/tmp/sp/stop-count"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
@@ -259,7 +259,7 @@ nudged && bad "tasks nudge once" "$OUT" || ok "the same open set is not reported
 printf '{"id":"2","subject":"Ship it","status":"completed"}' > "$TD/2.json"
 rm -f "$T/tmp/sp/stop-count"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#3 Later")' >/dev/null 2>&1 \
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test(": #3 \\(")' >/dev/null 2>&1 \
     && ok "a changed open set is reported again" || bad "changed set" "$OUT"
 stop_env() { rm -f "$T/tmp/sp/stop-count"
     OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}' \
@@ -268,7 +268,7 @@ printf '{"id":"5","subject":"Fresh","status":"pending"}' > "$TD/5.json"
 stop_env KODFLOW_STOP_TASKS=off
 nudged && bad "tasks off" "$OUT" || ok "KODFLOW_STOP_TASKS=off: no open-tasks reminder"
 stop_env
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#5 Fresh")' >/dev/null 2>&1 \
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#5")' >/dev/null 2>&1 \
     && ok "switched back on, the set it held back is reported" || bad "tasks back on" "$OUT"
 rm -f "$TD/5.json"
 printf '{"id":"4","subject":"New","status":"pending"}' > "$TD/4.json"
@@ -276,7 +276,7 @@ rm -f "$T/tmp/sp/stop-count"
 OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}' \
     | CLAUDE_CODE_ENABLE_TODO_TOOLS=0 bash "$S/on-stop.sh" 2>/dev/null)
 nudged && bad "tools off" "$OUT" || ok "nothing is asked when the task tools are off"
-rm -rf "$TD" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
+rm -rf "$TD" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-count"
 
 echo "== Stop · open tasks of the tasks MCP, main agent only"
 MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"
@@ -284,13 +284,13 @@ printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Main open","status":"
   {"id":"2","agent":"a1b2","subject":"Sub open","status":"pending"},
   {"id":"3","agent":"main","subject":"Main done","status":"completed"}]}' > "$MS/tasks.json"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#1 Main open \\(in_progress, via task_update\\)") and (test("Sub open") | not) and (test("Main done") | not)' >/dev/null 2>&1 \
-    && ok "the main agent's open MCP tasks are named, a subagent's are not" || bad "mcp tasks nudge" "$OUT"
+nudged && bad "mcp tasks nudge" "$OUT" \
+    || ok "one main task in progress, alone, is true: nothing is said (a subagent's pending task is not the main agent's)"
 rm -f "$T/tmp/sp/stop-count"
 OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}' \
     | CLAUDE_CODE_ENABLE_TODO_TOOLS=0 bash "$S/on-stop.sh" 2>/dev/null)
 nudged && bad "mcp nudge once" "$OUT" || ok "MCP tasks follow the same once-per-set rule, tools off or not"
-rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
+rm -rf "$MS" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-count"
 
 echo "== Stop · a task list must say what is true now"
 mkdir -p "$MS"
@@ -299,14 +299,14 @@ printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Done","status":"compl
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 stale && ok "work left, nothing in progress or waiting: flagged" || bad "stale list" "$OUT"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
-stale && ok "flagged again on the next turn until corrected" || bad "stale list repeat" "$OUT"
+stale && bad "stale list repeat" "$OUT" || ok "the same false state is not said twice in a row"
 stop_env KODFLOW_STOP_TASKS=off
 stale && bad "stale off" "$OUT" || ok "KODFLOW_STOP_TASKS=off: the task-list rule is off too"
 printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Wait","status":"waiting"},{"id":"2","agent":"main","subject":"Next","status":"pending"}]}' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 stale && bad "waiting accepted" "$OUT" || ok "a task waiting on the user makes the list truthful"
 printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Go","status":"waiting","assignee":"human"},{"id":"2","agent":"main","subject":"Next","status":"pending"}]}' > "$MS/tasks.json"
-rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 stale && bad "human waiting accepted" "$OUT" || ok "a task assigned to the user (assignee human) is read as any waiting task"
 printf '%s' '{"tasks":[{"id":"1","agent":"main","subject":"Doing","status":"in_progress"},{"id":"2","agent":"main","subject":"Next","status":"pending"},{"id":"3","agent":"a1","subject":"Sub","status":"pending"}]}' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
@@ -315,9 +315,8 @@ printf '%s' '{"tasks":[{"id":"1","agent":"a1","subject":"Sub only","status":"pen
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 stale && bad "subagent list" "$OUT" || ok "a subagent's list is not the main agent's to correct"
 printf '%s' '{"epics":{"main":{"id":2,"title":"New"}},"tasks":[{"id":"1","agent":"main","epic":1,"subject":"Old epic left open","status":"pending"},{"id":"2","agent":"main","epic":2,"subject":"New work","status":"in_progress"}]}' > "$MS/tasks.json"
-rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | (test("Old epic") | not) and test("New work")' >/dev/null 2>&1 \
-    && ok "only the current epic is reminded (v1 file)" || bad "epic filter" "$OUT"
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+nudged && bad "epic filter" "$OUT" || ok "another epic's pending task is not the current epic's: nothing said (v1 file)"
 
 echo "== Stop · v2 epics: the active epic only"
 V2='{"version":2,"next_id":6,"next_epic":3,"active":{"main":2},
@@ -326,39 +325,39 @@ V2='{"version":2,"next_id":6,"next_epic":3,"active":{"main":2},
            {"id":"2","agent":"main","epic":2,"subject":"Active doing","status":"in_progress"},
            {"id":"3","agent":"main","epic":0,"subject":"Loose todo","status":"pending"}]}'
 printf '%s' "$V2" > "$MS/tasks.json"
-rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("Active doing") and (test("Other epic todo") | not) and test("#3 Loose todo \\(pending")' >/dev/null 2>&1 \
-    && ok "reminder: the active epic's tasks and epic 0's (one per message), not another open epic's" || bad "v2 reminder" "$OUT"
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("Requests still open[^\\n]*: #3 \\(") and (test("#1") | not) and (test("#2") | not)' >/dev/null 2>&1 \
+    && ok "a pending request with no epic is said; the active epic in progress and another epic are not" || bad "v2 reminder" "$OUT"
 stale && bad "v2 truthful" "$OUT" || ok "an open epic with pending work does not flag an active epic in progress"
 printf '%s' "$V2" | jq -c '.tasks[1].status = "completed" | .tasks += [{"id":"4","agent":"main","epic":2,"subject":"Active next","status":"pending"}]' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 stale && ok "truthfulness: the active epic with work left and nothing under way is flagged" || bad "v2 stale" "$OUT"
 printf '%s' "$V2" | jq -c '.active = {}' > "$MS/tasks.json"
-rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("Loose todo") and (test("Active doing") | not)' >/dev/null 2>&1 \
+rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#3") and (test("#2") | not)' >/dev/null 2>&1 \
     && ok "no active epic: the tasks with no epic are the ones checked" || bad "epic 0 fallback" "$OUT"
 printf '{"epics":7,"active":"x","tasks":[1,' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] \
     && ok "a malformed tasks.json: Stop still exits 0 with one document" || bad "stop malformed" "rc=$RC $OUT"
-rm -rf "$MS" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/stop-count"
+rm -rf "$MS" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-count"
 
 echo "== Stop · one task in progress per worker"
-mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
 printf '%s' '{"version":2,"epics":[{"id":1,"agent":"main","title":"A"},{"id":2,"agent":"main","title":"B"}],"active":{"main":1},"tasks":[
   {"id":"1","agent":"main","epic":1,"subject":"One","status":"in_progress"},
   {"id":"2","agent":"main","epic":2,"subject":"Two","status":"in_progress"},
   {"id":"3","agent":"a1","epic":0,"subject":"Sub","status":"in_progress"}]}' > "$MS/tasks.json"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("2 tasks are in progress for 1 worker") and test("#2 Two") and (test("Sub") | not)' >/dev/null 2>&1 \
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("#1 #2 \\(2 in progress for 1 worker") and (test("#3") | not)' >/dev/null 2>&1 \
     && ok "two tasks in progress, no subagent: flagged across epics" || bad "cap flag" "$OUT"
 printf '{"agents":{"a1":{"type":"Explore","started":%s,"stopped":null}}}' "$(date +%s)" > "$MS/agents.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | grep -q 'tasks are in progress for' && bad "cap with subagent" "$OUT" || ok "a running subagent covers the second task"
-rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+printf '%s' "$OUT" | grep -q 'in progress for' && bad "cap with subagent" "$OUT" || ok "a running subagent covers the second task"
+rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
 
 echo "== Stop · a task tied to a stopped worker"
-mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/workers-nudged"
+mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-said"
 NOW=$(date +%s)
 printf '{"agents":{"r1":{"type":"review-pr3","started":%s,"stopped":%s},"c2":{"type":"sdk-consensus2","started":%s,"stopped":null}}}' \
     "$((NOW - 600))" "$NOW" "$((NOW - 600))" > "$MS/agents.json"
@@ -368,22 +367,63 @@ printf '%s' '{"version":2,"epics":[],"active":{},"tasks":[
   {"id":"43","agent":"main","epic":0,"subject":"Mine","status":"in_progress"}]}' > "$MS/tasks.json"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
 CTX=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null)
-printf '%s' "$CTX" | grep -q '#36 Review PR 3: worker review-pr3 is stopped' \
+printf '%s' "$CTX" | grep -q 'Tasks to set right.*: #36 (subagent stopped' \
     && ok "a task whose worker stopped is named with its worker" || bad "dead worker" "$OUT"
-printf '%s' "$CTX" | grep -q '#42 Consensus: worker' && bad "live worker flagged" "$CTX" || ok "a task tied to a running worker is not flagged"
-printf '%s' "$CTX" | grep -q 'tasks are in progress for' && bad "cap with tied tasks" "$CTX" \
+printf '%s' "$CTX" | grep -q '#42' && bad "live worker flagged" "$CTX" || ok "a task tied to a running worker is not flagged"
+printf '%s' "$CTX" | grep -q 'in progress for' && bad "cap with tied tasks" "$CTX" \
     || ok "a tied task holds its worker's slot: one untied task for the main thread passes the headcount"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | grep -q 'worker review-pr3 is stopped' && bad "dead worker repeated" "$OUT" \
+printf '%s' "$OUT" | grep -q 'subagent stopped' && bad "dead worker repeated" "$OUT" \
     || ok "the stopped-worker reminder is given once per set"
 printf '%s' '{"version":2,"epics":[],"active":{},"tasks":[
   {"id":"42","agent":"main","epic":0,"subject":"Consensus","status":"in_progress","worker":"sdk-consensus2","worker_id":"c2"},
   {"id":"43","agent":"main","epic":0,"subject":"Mine","status":"in_progress"},
   {"id":"44","agent":"main","epic":0,"subject":"Other","status":"in_progress"}]}' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("2 tasks are in progress for 1 worker[^\\n]*: #43 Mine, #44 Other\\. ")' >/dev/null 2>&1 \
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test(": #43 #44 \\(2 in progress for 1 worker")' >/dev/null 2>&1 \
     && ok "a tied task takes its worker's slot: two untied tasks for the main thread are flagged" || bad "untied cap" "$OUT"
-rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged" "$T/tmp/sp/workers-nudged"
+rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-said"
+
+echo "== Stop · one line per cause, said once, in the user's language"
+mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
+CTXS() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
+NOW=$(date +%s)
+# The case reported on 23/10/2026: three tasks in progress on subagents that
+# have stopped were listed three times, under three explanations.
+printf '{"agents":{"x1":{"type":"fj-cr","started":%s,"stopped":%s,"epic":5},"x2":{"type":"audit","started":%s,"stopped":%s,"epic":5}}}' \
+    "$((NOW - 900))" "$NOW" "$((NOW - 900))" "$NOW" > "$MS/agents.json"
+printf '%s' '{"version":2,"epics":[{"id":5,"agent":"main","title":"Raft"}],"active":{"main":5},"tasks":[
+  {"id":"99","agent":"main","epic":5,"subject":"Fix CR threads","status":"in_progress","worker":"fj-cr","worker_id":"x1"},
+  {"id":"100","agent":"main","epic":5,"subject":"Audit SDK","status":"in_progress","worker":"audit","worker_id":"x2"},
+  {"id":"101","agent":"main","epic":5,"subject":"Audit forgejo","status":"in_progress","worker":"audit","worker_id":"x2"}]}' > "$MS/tasks.json"
+mkdir -p "$T/home/.claude"; printf '{"language":"Français"}' > "$T/home/.claude/settings.json"
+stop_env KODFLOW_ROOT=on; C=$(CTXS)
+[ "$(printf '%s\n' "$C" | wc -l | tr -d ' ')" = 1 ] && [ "$(printf '%s' "$C" | grep -o '#100' | wc -l | tr -d ' ')" = 1 ] \
+    && ok "the reported case: one line, each task named once" || bad "one line" "$C"
+printf '%s' "$C" | grep -qF "Tâches à remettre d'aplomb"$'\e[39m'" : #99 #100 #101 (sous-agent arrêté" \
+    && ok "language \"Français\" in the user settings: French, accents kept" || bad "french" "$C"
+printf '%s' "$C" | grep -qF $'\e[31m' && ok "a stopped subagent's line is red" || bad "red" "$C"
+[ "${#C}" -lt 200 ] && ok "the whole feedback stays under 200 characters (${#C})" || bad "short" "${#C}"
+stop_env KODFLOW_ROOT=on; [ -z "$(CTXS)" ] && ok "the same state is not said twice in a row" || bad "repeat" "$OUT"
+jq '.tasks[2].status = "completed"' "$MS/tasks.json" > "$MS/t" && mv "$MS/t" "$MS/tasks.json"
+stop_env KODFLOW_ROOT=on; CTXS | grep -q ': #99 #100 (' && ok "a changed state is said again" || bad "changed" "$OUT"
+rm -f "$T/tmp/sp/stop-said"; stop_env KODFLOW_ROOT=on NO_COLOR=1
+CTXS | grep -qF $'\e[' && bad "no_color" "$OUT" || ok "NO_COLOR: no escape sequence at all"
+rm -f "$T/tmp/sp/stop-said"; stop_env KODFLOW_ROOT=on KODFLOW_LANG=en
+CTXS | grep -q 'Tasks to set right.*subagent stopped' && ok "KODFLOW_LANG=en overrides the setting" || bad "lang override" "$OUT"
+mkdir -p "$T/repo/.claude"; printf '{"language":"english"}' > "$T/repo/.claude/settings.local.json"
+rm -f "$T/tmp/sp/stop-said"; stop_env KODFLOW_ROOT=on
+CTXS | grep -q 'Tasks to set right' && ok "the project's settings.local.json wins over the user's" || bad "lang precedence" "$OUT"
+rm -f "$T/repo/.claude/settings.local.json"
+# True states are never reported: in progress on a running subagent, waiting
+printf '{"agents":{"x1":{"type":"fj-cr","started":%s,"stopped":null,"epic":5}}}' "$NOW" > "$MS/agents.json"
+printf '%s' '{"version":2,"epics":[{"id":5,"agent":"main","title":"Raft"}],"active":{"main":5},"tasks":[
+  {"id":"1","agent":"main","epic":5,"subject":"Delegated","status":"in_progress","worker":"fj-cr","worker_id":"x1"},
+  {"id":"2","agent":"main","epic":5,"subject":"Await go","status":"waiting"},
+  {"id":"3","agent":"main","epic":5,"subject":"Next","status":"pending"}]}' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-said"; stop_env KODFLOW_ROOT=on
+[ -z "$(CTXS)" ] && ok "in progress on a running subagent, waiting, pending behind them: nothing said" || bad "true state" "$OUT"
+rm -rf "$MS" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-count" "$T/home/.claude/settings.json"
 
 echo "== PreToolUse · task tools (served by the mod, never by this script)"
 SD=$T/home/.claude/kodflow/sessions/sess-1
@@ -600,31 +640,50 @@ sys_turn 'Stop hook feedback:
 [ -f "$TP" ] && ok "Stop hook feedback carries user text and is still triaged" || bad "stop feedback" "no gate"
 rm -rf "$T/home/.claude/kodflow"
 
+echo "== UserPromptSubmit · the directive in the user's language"
+printf '{"language":"Français"}' > "$T/home/.claude/settings.json"
+beat; run UserPromptSubmit "" '{"prompt":"salut"}' on-user.sh
+C=$(ctx_of)
+printf '%s' "$C" | grep -q "TRIER ce message" && printf '%s' "$C" | grep -q 'Branche : feat/test' \
+    && ok "French setting: the directive and the branch are in French" || bad "fr directive" "$C"
+printf '%s' "$C" | grep -qF $'\e[' && bad "fr escape" "$C" || ok "no colour where the screen shows nothing"
+[ "${#C}" -lt 900 ] && ok "the French context stays under 900 characters (${#C})" || bad "fr size" "${#C}"
+mkdir -p "$SD"; beat; printf '%s' '{"version":2,"active":{"main":2},
+  "epics":[{"id":1,"agent":"main","title":"api-gateway","touched":5},{"id":2,"agent":"main","title":"SDK status-line","touched":9}],
+  "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Fix daemon","status":"pending"},
+           {"id":"3","agent":"main","epic":2,"subject":"Freeze golden renders now","status":"in_progress"},
+           {"id":"5","agent":"main","epic":0,"subject":"Loose","status":"pending"}]}' > "$SD/tasks.json"
+run UserPromptSubmit "" '{"prompt":"salut"}' on-user.sh; C=$(ctx_of)
+printf '%s' "$C" | grep -qF 'Épiques : active #2 SDK status-line 0/1, en cours #3 Freeze golden renders now · autres ouvertes : #1 api-gateway 0/1 · sans épique : 1 tâche(s) ouverte(s)' \
+    && ok "the epic state in French" || bad "fr epics" "$C"
+[ "${#C}" -lt 1000 ] && ok "with the epic state, French, under 1000 characters (${#C})" || bad "fr size state" "${#C}"
+rm -f "$T/home/.claude/settings.json" "$SD/tasks.json" "$SD/triage-pending"
+
 echo "== Stop · a message the turn never filed"
 SDS=$SD; mkdir -p "$SDS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/turn-system"
 triage_stop() { rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
     TC=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null); }
 beat; run UserPromptSubmit "" '{"prompt":"une question ?"}' on-user.sh
 triage_stop
-printf '%s' "$TC" | grep -q 'This message has no task' && printf '%s' "$TC" | grep -q 'task_create(epic=0)' \
+printf '%s' "$TC" | grep -q 'Message with no task' && printf '%s' "$TC" | grep -q 'task_create' \
     && ok "a turn that ends with its message unfiled is reminded" || bad "stop triage" "$OUT"
 triage_stop
-printf '%s' "$TC" | grep -q 'This message has no task' && ok "reminded every turn until filed" || bad "stop triage repeat" "$OUT"
+printf '%s' "$TC" | grep -q 'Message with no task' && bad "stop triage repeat" "$OUT" || ok "the same unfiled message is not reminded twice in a row"
 beat; run UserPromptSubmit "" '{"prompt":"et une autre"}' on-user.sh; triage_stop
-printf '%s' "$TC" | grep -q '2 messages of the user have no task' && printf '%s' "$TC" | grep -q 'either context on a task or a new task' \
+printf '%s' "$TC" | grep -q '2 messages with no task' && printf '%s' "$TC" | grep -q 'task_update(id, description)' \
     && ok "two messages unfiled: the reminder counts them" || bad "stop two messages" "$OUT"
 printf 'resume\n' > "$TP"; triage_stop
-printf '%s' "$TC" | grep -q 'never settled' && ! printf '%s' "$TC" | grep -q 'This message has no task' \
+printf '%s' "$TC" | grep -q 'Tasks left open at the session start' && ! printf '%s' "$TC" | grep -q 'with no task' \
     && ok "a resume left unsettled names task_update(status) alone" || bad "stop resume" "$OUT"
 beat; run UserPromptSubmit "" '{"prompt":"<task-notification>\n<status>completed</status>\n</task-notification>"}' on-user.sh
 [ -f "$T/tmp/sp/turn-system" ] && ok "a system turn is marked for the Stop hook" || bad "turn-system" "absent"
 printf 'prompt\n' > "$TP"; triage_stop
-printf '%s' "$TC" | grep -q 'This message has no task' && bad "stop on a system turn" "$OUT" || ok "no triage reminder at the end of a system turn"
+printf '%s' "$TC" | grep -q 'Message with no task' && bad "stop on a system turn" "$OUT" || ok "no triage reminder at the end of a system turn"
 beat; run UserPromptSubmit "" '{"prompt":"merci"}' on-user.sh
 [ ! -f "$T/tmp/sp/turn-system" ] && ok "a typed prompt clears the system-turn mark" || bad "turn-system kept" "present"
 rm -f "$TP"; triage_stop
-printf '%s' "$TC" | grep -q 'This message has no task\|never settled' && bad "stop filed" "$OUT" || ok "a filed message is not reminded"
-rm -rf "$T/home/.claude/kodflow" "$T/tmp/sp/stop-count" "$T/tmp/sp/tasks-nudged"
+printf '%s' "$TC" | grep -q 'with no task\|session start' && bad "stop filed" "$OUT" || ok "a filed message is not reminded"
+rm -rf "$T/home/.claude/kodflow" "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
 
 echo "== SessionStart · review the task list left open"
 RS=$SD; mkdir -p "$RS"; rm -f "$TP"; beat

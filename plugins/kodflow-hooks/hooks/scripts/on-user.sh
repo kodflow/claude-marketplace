@@ -60,11 +60,16 @@ UserPromptSubmit)
     # a Claude Code without mods or KODFLOW_MOD=off.
     SDIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
     BEAT=2; . "$LIB/beat.sh" 2>/dev/null && { kf_beat "$SDIR"; BEAT=$?; }
+    # Texts in the user's language (lib/msg.sh, hooks/messages.json), never
+    # coloured: this context is not shown on screen, the model alone reads it.
+    kf_msg() { :; }; kf_lang() { KF_LANG=en; }
+    . "$LIB/msg.sh" 2>/dev/null
+    kf_lang "$PROJECT_DIR"
     msg=""
     case "$BEAT" in
-        1) msg=$KF_BEAT_LOST; rm -f -- "$SDIR/triage-pending" 2>/dev/null ;;
+        1) msg=$(kf_msg user.beat_lost); msg=${msg:-$KF_BEAT_LOST}; rm -f -- "$SDIR/triage-pending" 2>/dev/null ;;
         2) if [ "${KODFLOW_MOD:-}" != off ] && [ ! -f "$STATE/mod-absent-said" ]; then
-               msg="kodflow-hooks: the task tools did not load. They are a mod and need Claude Code 2.1.293 or later (or run /reload-plugins); tasks are not tracked this session."
+               msg=$(kf_msg user.mod_absent)
                mkdir -p "$STATE" 2>/dev/null && : > "$STATE/mod-absent-said" 2>/dev/null
            fi ;;
     esac
@@ -102,14 +107,14 @@ UserPromptSubmit)
     # resumed or compacted session picks the task back up.
     _branch
     NL=$'\n' ctx=""
-    [ "$BRANCH" != detached ] && ctx="Current branch: $BRANCH"
+    [ "$BRANCH" != detached ] && ctx=$(kf_msg user.branch branch="$BRANCH")
     if [ -d "$PROJECT_DIR/.claude/plans" ]; then
         newest=$(ls -t "$PROJECT_DIR/.claude/plans"/*.md 2>/dev/null | head -1)
-        [ -n "$newest" ] && ctx="${ctx:+$ctx$NL}Latest plan: .claude/plans/${newest##*/} (read it when resuming)"
+        [ -n "$newest" ] && ctx="${ctx:+$ctx$NL}$(kf_msg user.plan file="${newest##*/}")"
     fi
     if [ -d "$PROJECT_DIR/.claude/goals" ]; then
         newest=$(ls -t "$PROJECT_DIR/.claude/goals"/*.md 2>/dev/null | head -1)
-        [ -n "$newest" ] && ctx="${ctx:+$ctx$NL}Latest goal: .claude/goals/${newest##*/}"
+        [ -n "$newest" ] && ctx="${ctx:+$ctx$NL}$(kf_msg user.goal file="${newest##*/}")"
     fi
 
     # The main agent's epics as the task tools left them, so the triage below
@@ -118,20 +123,21 @@ UserPromptSubmit)
     # Any read error leaves the line out.
     tasks=$SDIR/tasks.json
     if [ "$BEAT" = 0 ] && [ -s "$tasks" ]; then
-        state=$(jq -r -L "$LIB" 'include "epics"; v2 | active("main") as $a
-            | [epic_rows("main")] as $rows
+        state=$(jq -r -L "$LIB" --slurpfile msgs "${KF_MSG_FILE:-/dev/null}" --arg l "${KF_LANG:-en}" 'include "epics"; v2 | active("main") as $a
+            | def t($k): ($msgs[0] // {})[$k] as $e | ($e[$l] // $e.en // "");
+              [epic_rows("main")] as $rows
             | ($rows | map(select(.id == $a)) | .[0]) as $act
             | ($rows | map(select(.id != $a and .done < .total)) | sort_by(-.touched) | .[:5]) as $others
             | ([.tasks[] | select((.agent // "main") == "main" and (.epic // 0) == 0 and .status != "completed")] | length) as $loose
             | [.tasks[] | select((.agent // "main") == "main" and .assignee == "human" and .status != "completed")] as $human
             | if $act == null and ($others | length) == 0 and $loose == 0 and ($human | length) == 0 then empty else
-                [ (if $act then "active #\($act.id) \($act.title) \($act.done)/\($act.total)"
-                      + (if $act.current then ", in progress #\($act.current.id) \($act.current.subject)" else "" end)
-                   else "none active" end),
-                  (if ($others | length) > 0 then "other open: " + ($others | map("#\(.id) \(.title) \(.done)/\(.total)") | join("; ")) else empty end),
-                  (if $loose > 0 then "no epic: \($loose) open task(s)" else empty end),
-                  (if ($human | length) > 0 then "waiting on the user: " + ($human | map("#\(.id) \(.subject)") | join("; ")) + " (task_update completed once answered)" else empty end)
-                ] | "Epics: " + join(" · ") end' "$tasks" 2>/dev/null)
+                [ (if $act then "\(t("user.epics.active")) #\($act.id) \($act.title) \($act.done)/\($act.total)"
+                      + (if $act.current then ", \(t("user.epics.in_progress")) #\($act.current.id) \($act.current.subject)" else "" end)
+                   else t("user.epics.none") end),
+                  (if ($others | length) > 0 then t("user.epics.others") + ($others | map("#\(.id) \(.title) \(.done)/\(.total)") | join("; ")) else empty end),
+                  (if $loose > 0 then (t("user.epics.loose") | split("{n}") | join("\($loose)")) else empty end),
+                  (if ($human | length) > 0 then t("user.epics.human") + ($human | map("#\(.id) \(.subject)") | join("; ")) + t("user.epics.human_tail") else empty end)
+                ] | t("user.epics") + join(" · ") end' "$tasks" 2>/dev/null)
         [ -n "$state" ] && ctx="${ctx:+$ctx$NL}$state"
     fi
 
@@ -177,17 +183,11 @@ UserPromptSubmit)
     # Kept short: it rides on every prompt.
     # A system turn brought no message to sort: the state above is what it
     # needs, the directive would only send it triaging a notification.
-    [ -z "$SYSTURN" ] && [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}TRIAGE this message before acting (kodflow task tools), one task per message; task_create always names its epic (epic=id, 0 for none, no default):
-- new work for an open epic: task_create(epic=id)
-- context on the in_progress task: task_update(id, description)
-- change to a completed task: task_create \"Rework #N: ...\" in its epic
-- new subject: task_epic(title, 20 chars max), then task_create(epic=its id)
-- question: task_create(epic=0), completed once answered
-- subject (create, update): 30 characters max, refused beyond; detail goes in description"
+    [ -z "$SYSTURN" ] && [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}$(kf_msg user.triage)"
     # Code in a repository is delegated to subagents (the PreToolUse gate of
     # on-tool.sh and the Stop rule enforce it); off with KODFLOW_ROOT=off.
-    [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it."
-    [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}Keep statuses true: in_progress while worked on, waiting when blocked on the user, completed once verified."
+    [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}$(kf_msg user.root)"
+    [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}$(kf_msg user.statuses)"
     jq -n -c --arg c "$ctx" --arg m "$msg" '{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$c}}
         + (if $m == "" then {} else {systemMessage:$m} end)' 2>/dev/null
     _log ;;
