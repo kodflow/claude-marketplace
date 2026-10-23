@@ -114,19 +114,26 @@ const PANES = [
  */
 export const SWITCH_KEYS = { agents: "a", tasks: "t" } as const;
 
+/**
+ * « Tâches (2) »: a name and its count, always of one width up to 99 (a
+ * figure space after a single digit, the count even at 0). A tab that grew
+ * or shrank with its count would move the tab beside it from under the
+ * pointer.
+ */
+export const tabTitle = (name: string, n: number): string =>
+  `${name} (${n})${"\u2007".repeat(Math.max(0, 2 - String(n).length))}`;
+
 /** « Tâches (2) »: the tasks left to do across the open epics. */
-export const tasksTitle = (board: HudBoard): string => {
-  const n = board.epics
-    .flatMap((e) => e.tasks)
-    .filter((t) => t.status !== "completed").length;
-  return n ? `Tâches (${n})` : "Tâches";
-};
+export const tasksTitle = (board: HudBoard): string =>
+  tabTitle(
+    "Tâches",
+    board.epics.flatMap((e) => e.tasks).filter((t) => t.status !== "completed")
+      .length,
+  );
 
 /** « Agents (1) »: the subagents at work, the main loop not counted. */
-export const agentsTitle = (agents: readonly HudAgent[]): string => {
-  const n = running(agents).length;
-  return n ? `Agents (${n})` : "Agents";
-};
+export const agentsTitle = (agents: readonly HudAgent[]): string =>
+  tabTitle("Agents", running(agents).length);
 
 /** How often tasks.json's time, the agents and the TTLs are looked at. */
 export const POLL_MS = 3_000;
@@ -381,24 +388,26 @@ async function syncPanes($: any): Promise<void> {
     const tTitle = tasksTitle(await read($, boardAtom));
     const agents = await read($, agentsAtom);
     const aTitle = agentsTitle(agents);
-    let moved = false;
+    const opened: string[] = [];
     const tasks = find(TASKS_PANE);
     if (tasks && tasks.title !== tTitle) {
       await $.ui.open({ id: TASKS_PANE, title: tTitle });
-      moved = true;
+      opened.push(TASKS_PANE);
     }
     const pane = find(AGENTS_PANE);
     if (running(agents).length === 0) {
       if (pane) await $.ui.close({ id: AGENTS_PANE });
     } else if (pane ? pane.title !== aTitle : agentsWanted) {
       await $.ui.open({ id: AGENTS_PANE, title: aTitle });
-      moved = true;
+      opened.push(AGENTS_PANE);
     }
-    if (!moved || !shown) return;
+    if (!opened.length || !shown) return;
+    // Undo only what these opens raised: a pane in front that they did not
+    // open is the person's click, landed meanwhile, and it stands
     const after: any[] = await $.ui.panes().catch(() => []);
     const front = after.find((p) => p.isShown);
     const back = after.find((p) => p.id === shown.id);
-    if (back && front?.id !== shown.id)
+    if (back && front && front.id !== shown.id && opened.includes(front.id))
       await $.ui.open({ id: back.id, title: back.title });
   } finally {
     syncing = false;
@@ -521,7 +530,7 @@ export const register: Register = (on, options) => {
       };
     return {
       text: placed.length
-        ? `kodflow-hud: ${placed.join(", ")} open.`
+        ? `kodflow-hud: ${placed.map((t) => t.trim()).join(", ")} open.`
         : "kodflow-hud: no room to seat a pane here (a -p run or a host without panes).",
     };
   });

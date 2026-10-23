@@ -29,6 +29,8 @@ export type Host = {
   commands: string[];
   runs: string[][];
   checks: { exitCode: number; stdout: string };
+  /** Called after each open: what the person does while the module opens. */
+  afterOpen?: (id: string) => void;
 };
 
 export function host(
@@ -70,6 +72,7 @@ export function host(
     if (at) at.title = title;
     else h.panes.push({ id: e.id, title });
     h.shown = e.id;
+    h.afterOpen?.(e.id);
     return { value: { isPlaced: true } };
   });
   on("ui.close", async (_$: any, e: any) => {

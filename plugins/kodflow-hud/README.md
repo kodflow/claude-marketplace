@@ -51,11 +51,24 @@ rest.
 
 With `autoOpen` on (the default) the Tasks pane opens when a session starts,
 alone, so it is the one shown; a session that starts with the panes still
-up (a reload, a restart) is brought back to « Tâches » as well. The Agents tab opens with the first subagent
-and closes with the last: the main loop alone never gets a tab. Every poll
-(3 s) the two tabs are retitled when their count moved. An open or a retitle
-may raise the pane it names; the pane shown before is opened again after, so
-the view does not jump to Agents. The engine seats a pane nobody asked for
+up (a reload, a restart) is brought back to « Tâches » as well. The Agents
+tab opens with the first subagent and closes with the last: the main loop
+alone never gets a tab. Every poll (3 s) the two tabs are retitled when
+their count moved. An open or a retitle may raise the pane it names; the
+pane shown before is opened again after, so the view does not jump to
+Agents.
+
+The tabs hold still under a click, as the tree's rows do:
+
+- A title is always its name and its count, one width from 0 to 99
+  (« Tâches (0) », a figure space after a single digit). A tab that grew or
+  shrank with its count (« Tâches » becoming « Tâches (1) ») moved the
+  Agents tab beside it from under the pointer.
+- A retitle puts back only what its own open raised. Before, a click on a
+  tab that landed while the poll retitled was undone: the pane shown before
+  the retitle was raised again over the person's choice.
+
+The engine seats a pane nobody asked for
 only where it has room — from 144 columns, docked beside the transcript in
 the fullscreen layout — and keeps it waiting below that; `/hud` seats it at
 any width.
@@ -439,7 +452,8 @@ glyphs) and a model column filled only from what the session said.
 with the host in memory and a mocked clock: « Tâches » alone at start and
 shown, the Agents tab opened and counted with the subagents and closed with
 the last while « Tâches » stays in front (the host raising every pane it
-opens), `a` and `t` switching the tabs (and `a` with no subagent opening
+opens), a click on a tab standing through a retitle, the titles keeping one
+width, `a` and `t` switching the tabs (and `a` with no subagent opening
 nothing), a session starting on « Tâches » even with both tabs up and
 `autoOpen` off, `/hud off` keeping it shut, panes mounted at several widths on the
 terminal and desktop surfaces, each loop in its colour, results returned
