@@ -26,6 +26,7 @@ Restrict shell usage to these command families; anything outside is out of scope
 - `Bash(make:*)`
 - `Bash(git log:*)`, `Bash(git show:*)`, `Bash(git diff:*)` — read-only history and diff inspection
 - `Bash(grep:*)`, `Bash(ls:*)` — read-only search and listing, for when Read, Glob and Grep do not fit
+- Find files with Glob, scoped to the repository or the reviewed path; never walk `~` or `/` (no `find` over the home directory).
 
 The git commands stay read-only: never pass an option that writes a file or runs a program, notably `--output`, `--ext-diff` and `--textconv`. In a read-only review the caller's format replaces the JSON output (rule in Plan review mode below) and nothing that changes files or the environment runs, such as `clang-format -i`, `clang-tidy --fix`, `make install`; use the check or diff modes instead.
 

@@ -50,6 +50,7 @@ targets.
 - `Bash(zig:*)` — `build`, `build test`, `fmt`, `test`, `translate-c`, `env`
 - `Bash(git log:*)`, `Bash(git show:*)`, `Bash(git diff:*)` — read-only history and diff inspection
 - `Bash(grep:*)`, `Bash(ls:*)` — read-only search and listing, for when Read, Glob and Grep do not fit
+- Find files with Glob, scoped to the repository or the reviewed path; never walk `~` or `/` (no `find` over the home directory).
 - Nothing else. Zig's toolchain is self-contained; there is no separate linter,
   formatter or test runner to reach for.
 
