@@ -111,7 +111,7 @@ regex.
 
 | Action | Status | Reason |
 |--------|--------|--------|
-| Auto-merge when all green | **FORBIDDEN** | Watch is monitor+fix only, merge is explicit |
+| Auto-merge by a subagent | **FORBIDDEN** | A subagent reports the PR; the main thread merges it as soon as it is green and reviewed, without waiting for the user |
 | Skip dashboard display | **FORBIDDEN** | User must see progress |
 | Auto-resolve human reviews | **FORBIDDEN** | Only humans resolve their own |
 | Watch without PR/MR | **FORBIDDEN** | Must have a target to monitor |

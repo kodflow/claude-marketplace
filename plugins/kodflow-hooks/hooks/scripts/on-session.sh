@@ -117,7 +117,7 @@ $open"
 1. MCP first: mcp__github__* / mcp__gitlab__* before gh or glab; mcp__context7__* for library docs.
 2. No hook rewrites a Bash command. For compressed output prefix rtk yourself (rtk git status, rtk ls); never on a read whose bytes matter (cat, head, tail, sed, diff, patch, checksums).
 3. Commits: conventional messages, no AI attribution, no .claude/ path in a message. Enforced by this plugin on PreToolUse and by the repo commit-msg hook.
-4. Never commit on main/master — /git creates the branch and the PR. Never --no-verify, -n or core.hooksPath. A forced push (--force, -f, +refspec) is refused: use --force-with-lease. A subagent never merges and never pushes to the default branch.
+4. Never commit on main/master — /git creates the branch and the PR. Never --no-verify, -n or core.hooksPath. A forced push (--force, -f, +refspec) is refused: use --force-with-lease. A subagent never merges and never pushes to the default branch; the main thread merges a PR as soon as its CI is green and it has reviewed it, without asking the user.
 5. Workflow: /project → /warmup → /search → /plan → /refine → /challenge → /goal. /feature and /fix open the tracker item and the branch; /review before merge.
 6. Before finishing: update the CLAUDE.md of every directory this session changed — warmup --update convention, only what changed, at most 1000 lines. The Stop hook reminds you once per directory.
 7. Recover state from .claude/plans/*.md (latest = current task), .claude/goals/*.md (directives), .claude/contexts/*.md (research).
