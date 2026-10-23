@@ -70,7 +70,7 @@ kf_block_rule() {
           elif $t == "Read" then
             ($i.file_path // "") as $p | if ($p | startswith("/")) then "Read(/\($p))" else "" end
           elif $t == "WebFetch" then
-            ($i.url // "" | capture("^[a-z]+://(?<h>[^/:?#]+)")?.h // "") as $h
+            (($i.url // "" | capture("^[a-z]+://(?<h>[^/:?#]+)") | .h)? // "") as $h
             | if $h == "" then "WebFetch" else "WebFetch(domain:\($h))" end
           elif $t == "" then ""
           else $t end' 2>/dev/null
