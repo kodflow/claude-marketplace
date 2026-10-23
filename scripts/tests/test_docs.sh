@@ -50,7 +50,9 @@ echo "# x" > "$repo/README.md"
 check "file present" "ok" "$(state_of readme)"
 mkdir -p "$repo/docs/adr" && echo x > "$repo/docs/adr/notes.txt"
 check "dir without .md is missing" "missing" "$(state_of adr)"
-mkdir -p "$repo/docs/ops/deep" && echo x > "$repo/docs/ops/deep/pra.md"
+mkdir -p "$repo/docs/ops/deep" && : > "$repo/docs/ops/deep/empty.md"
+check "dir with only an empty .md" "missing" "$(state_of ops)"
+echo x > "$repo/docs/ops/deep/pra.md"
 check "dir with nested .md" "ok" "$(state_of ops)"
 
 # init creates the empty manifest, once.
@@ -79,6 +81,17 @@ check "empty reason is still ignored" "ignored" "$(state_of flow)"
 check "moved path" "docs/schema.md" "$(docs compute | jq -r '.docs[] | select(.id == "data") | .path')"
 echo "# s" > "$repo/docs/schema.md"
 check "moved path present" "ok" "$(state_of data)"
+
+# The hooks' rules: an empty path is the default, `ignored: true` counts,
+# ignored wins over presence, an unreadable manifest is an absent one.
+saved="$(cat "$repo/docs/manifest.json")"
+echo '{"version":1,"documents":{"readme":{"path":"","ignored":true}}}' > "$repo/docs/manifest.json"
+check "empty path is the default" "README.md" "$(docs compute | jq -r '.docs[] | select(.id == "readme") | .path')"
+check "ignored true, over presence" "ignored" "$(state_of readme)"
+check "ignored true has an empty reason" "" "$(docs compute | jq -r '.docs[] | select(.id == "readme") | .reason')"
+echo '{not json' > "$repo/docs/manifest.json"
+check "unreadable manifest is absent" "ok" "$(state_of readme)"
+printf '%s\n' "$saved" > "$repo/docs/manifest.json"
 
 # unignore drops only the mark, and an entry left empty.
 docs unignore flow >/dev/null

@@ -11,15 +11,17 @@
 # Exit 0 = answered · 2 = usage · 3 = jq missing · 4 = not in a git work tree
 #      5 = unknown document id
 # ============================================================================
-# The catalogue (catalogue.json, beside this script) is a copy of the one
-# kodflow-hooks owns: a plugin is installed alone and cannot read a sibling's
+# The catalogue (../catalogue.json) is a byte copy of kodflow-hooks'
+# hooks/docs-catalog.json, diffed in CI: a plugin is installed alone and cannot read a sibling's
 # file, so /docs must be able to compute the state without the hooks.
 #
 # State, one entry per catalogue document, in catalogue order:
-#   path   the manifest's `path`, else the catalogue's `default`
-#   state  ignored  the manifest carries `ignored` (a string, even empty)
+#   path   the manifest's `path` when a non-empty string, else `default`
+#   state  ignored  the manifest's `ignored` is a string (even empty) or true;
+#                   it wins over presence
 #          ok       a file that exists and is not empty, or a directory
-#                   (path ending in /) holding a .md anywhere below it
+#                   (path ending in /) holding a non-empty .md anywhere below
+# The same rules as kodflow-hooks' lib/docs.sh, so both agree on a state.
 #          missing  anything else
 #
 # The manifest (docs/manifest.json at the git root) is rewritten with its
@@ -41,7 +43,7 @@ root="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo '{"error":"not in 
 manifest="$root/docs/manifest.json"
 
 manifest_json() { # the manifest, or the empty one when absent or malformed
-    if [ -f "$manifest" ] && jq -e 'type == "object"' "$manifest" >/dev/null 2>&1; then
+    if [ -f "$manifest" ] && jq -e 'type == "object" and ((.documents // {}) | type) == "object"' "$manifest" >/dev/null 2>&1; then
         cat "$manifest"
     else
         echo '{"version":1,"documents":{}}'
@@ -50,7 +52,7 @@ manifest_json() { # the manifest, or the empty one when absent or malformed
 
 present() { # path relative to root -> 0 when the document is there
     case "$1" in
-        */) [ -d "$root/$1" ] && [ -n "$(find "$root/$1" -type f -name '*.md' 2>/dev/null | head -1)" ] ;;
+        */) [ -d "$root/$1" ] && [ -n "$(find "$root/$1" -type f -name '*.md' -size +0 2>/dev/null | head -1)" ] ;;
         *)  [ -s "$root/$1" ] ;;
     esac
 }
@@ -65,8 +67,8 @@ compute() {
     lines="$(jq -r --argjson m "$m" '
         .documents[] as $d
         | ($m.documents[$d.id] // {}) as $e
-        | [$d.id, ($e.path // $d.default),
-           (if ($e.ignored | type) == "string" then "1" else "0" end)] | @tsv' "$catalogue")"
+        | [$d.id, (if ($e.path | type) == "string" and $e.path != "" then $e.path else $d.default end),
+           (if ($e.ignored | type) == "string" or $e.ignored == true then "1" else "0" end)] | @tsv' "$catalogue")"
     states=""
     while IFS="$(printf '\t')" read -r id path ign; do
         [ -n "$id" ] || continue
@@ -85,8 +87,12 @@ EOF
         | {version: 1, root: $root, manifest: $rel, updated: $now,
            docs: [.documents[] as $d
                   | ($m.documents[$d.id] // {}) as $e
-                  | {id: $d.id, name: $d.name, path: ($e.path // $d.default), state: $s[$d.id]}
-                    + (if $s[$d.id] == "ignored" then {reason: $e.ignored} else {} end)
+                  | {id: $d.id, name: $d.name,
+                     path: (if ($e.path | type) == "string" and $e.path != "" then $e.path else $d.default end),
+                     state: $s[$d.id]}
+                    + (if $s[$d.id] == "ignored"
+                       then {reason: (if ($e.ignored | type) == "string" then $e.ignored else "" end)}
+                       else {} end)
                     + {source: $d.source, why: $d.why}]}' "$catalogue"
 }
 

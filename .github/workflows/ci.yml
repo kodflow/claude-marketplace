@@ -84,6 +84,13 @@ jobs:
           diff plugins/kodflow-workflow/skills/_shared/gated-models.txt plugins/kodflow-hooks/hooks/gated-models.txt \
             || { echo "::error::gated-models.txt differs between _shared and kodflow-hooks"; exit 1; }
 
+      # /docs computes the documents state itself when kodflow-hooks is not
+      # installed, from a copy of the hooks' catalogue. One source, two places.
+      - name: The documents catalogue is the same in /docs and the hooks
+        run: |
+          diff plugins/kodflow-hooks/hooks/docs-catalog.json plugins/kodflow-workflow/skills/docs/catalogue.json \
+            || { echo "::error::catalogue.json differs from kodflow-hooks' docs-catalog.json"; exit 1; }
+
       # route-agent.sh carries agents.sh, the hooks' reader of agent
       # definitions (project, user, installed plugin), because a plugin is
       # installed alone and cannot source a sibling's file. One source, two

@@ -1,50 +1,216 @@
 {
   "version": 1,
+  "about": "The fifteen project documents kodflow-hooks tracks (lib/docs.sh). touches are bash patterns matched against a path relative to the git root, where * also crosses /.",
   "documents": [
-    { "id": "prd", "name": "Exigences produit", "default": "docs/product/requirements.md", "source": "video",
-      "why": "Ce que le produit fait, pour qui, fonction par fonction, et ce qu'il ne fait pas.",
-      "touches": [] },
-    { "id": "trd", "name": "Exigences techniques", "default": "docs/tech/requirements.md", "source": "video",
-      "why": "La pile, les contraintes d'exécution et les limites que le code doit tenir.",
-      "touches": ["go.mod", "package.json", "Dockerfile", "*.tf"] },
-    { "id": "flow", "name": "Parcours", "default": "docs/product/flow.md", "source": "video",
-      "why": "Les chemins d'un utilisateur d'un écran ou d'un appel à l'autre, erreurs comprises.",
-      "touches": ["routes", "pages", "handlers HTTP", "templates"] },
-    { "id": "design", "name": "Brief de design", "default": "docs/design/brief.md", "source": "video",
-      "why": "L'intention visuelle, les composants et les règles qu'une interface doit suivre.",
-      "touches": ["*.css", "*.scss", "templates", "*.tsx", "*.vue"] },
-    { "id": "data", "name": "Schéma de données", "default": "docs/tech/data.md", "source": "video",
-      "why": "Les entités, leurs relations, leur durée de vie et qui voit quoi.",
-      "touches": ["migrations", "*.sql", "schema", "models"] },
-    { "id": "impl", "name": "Plan d'implémentation", "default": "docs/plan/implementation.md", "source": "video",
-      "why": "Les tâches dans l'ordre où elles se construisent, avec leurs dépendances.",
-      "touches": [] },
-    { "id": "adr", "name": "Décisions (ADR)", "default": "docs/adr/", "source": "extra",
-      "why": "Pourquoi chaque choix d'architecture a été fait plutôt qu'un autre.",
-      "touches": [] },
-    { "id": "voice", "name": "Ton et règles d'écriture", "default": "docs/design/voice.md", "source": "extra",
-      "why": "Comment le produit parle, ce qu'il ne dit jamais, la ponctuation et les mots.",
-      "touches": ["templates", "*.md publics", "i18n", "contenus"] },
-    { "id": "glossary", "name": "Glossaire", "default": "docs/product/glossary.md", "source": "extra",
-      "why": "Un mot par notion du métier, le même dans le code, l'interface et les documents.",
-      "touches": [] },
-    { "id": "quality", "name": "Qualité attendue", "default": "docs/tech/quality.md", "source": "extra",
-      "why": "Les seuils mesurables : performance, disponibilité, accessibilité, couverture.",
-      "touches": [] },
-    { "id": "testing", "name": "Stratégie de test", "default": "docs/tech/testing.md", "source": "extra",
-      "why": "Quoi tester à quel niveau, avec quels outils, et ce qui bloque une fusion.",
-      "touches": ["*_test.*", "tests/", "e2e/"] },
-    { "id": "threat", "name": "Modèle de menaces", "default": "docs/security/threat-model.md", "source": "extra",
-      "why": "Ce qu'on protège, contre qui, par où on attaque et ce qui l'empêche.",
-      "touches": ["auth", "crypto", "secrets", "firewall", "nftables"] },
-    { "id": "rgpd", "name": "Registre RGPD", "default": "docs/compliance/rgpd.md", "source": "extra",
-      "why": "Chaque traitement de données personnelles, sa base légale et sa durée.",
-      "touches": ["données personnelles", "migrations"] },
-    { "id": "ops", "name": "PRA et runbooks", "default": "docs/ops/", "source": "extra",
-      "why": "Comment remettre le service en marche et les gestes d'exploitation.",
-      "touches": ["ansible", "terraform", "*.nomad.hcl", "systemd"] },
-    { "id": "readme", "name": "README et démarrage", "default": "README.md", "source": "extra",
+    {
+      "id": "prd",
+      "name": "Exigences produit",
+      "default": "docs/product/requirements.md",
+      "source": "video",
+      "why": "Ce que le produit doit faire, pour qui, et ce qui est hors du périmètre.",
+      "touches": []
+    },
+    {
+      "id": "trd",
+      "name": "Exigences techniques",
+      "default": "docs/tech/requirements.md",
+      "source": "video",
+      "why": "La pile, les versions et les contraintes techniques que le code doit tenir.",
+      "touches": [
+        "go.mod",
+        "*/go.mod",
+        "package.json",
+        "*/package.json",
+        "Cargo.toml",
+        "*/Cargo.toml",
+        "pyproject.toml",
+        "*/pyproject.toml",
+        "Dockerfile",
+        "*/Dockerfile",
+        "*.tf"
+      ]
+    },
+    {
+      "id": "flow",
+      "name": "Parcours",
+      "default": "docs/product/flow.md",
+      "source": "video",
+      "why": "Les écrans et les routes, dans l'ordre où un utilisateur les traverse.",
+      "touches": [
+        "routes/*",
+        "*/routes/*",
+        "pages/*",
+        "*/pages/*",
+        "handlers/*",
+        "*/handlers/*",
+        "*handler*.go",
+        "*router*",
+        "templates/*",
+        "*/templates/*"
+      ]
+    },
+    {
+      "id": "design",
+      "name": "Brief de design",
+      "default": "docs/design/brief.md",
+      "source": "video",
+      "why": "L'intention visuelle, les composants et les règles d'interface.",
+      "touches": [
+        "*.css",
+        "*.scss",
+        "*.sass",
+        "*.tsx",
+        "*.jsx",
+        "*.vue",
+        "*.svelte",
+        "templates/*",
+        "*/templates/*"
+      ]
+    },
+    {
+      "id": "data",
+      "name": "Schéma de données",
+      "default": "docs/tech/data.md",
+      "source": "video",
+      "why": "Les entités, leurs relations et la façon dont le schéma évolue.",
+      "touches": [
+        "migrations/*",
+        "*/migrations/*",
+        "*.sql",
+        "*schema*",
+        "models/*",
+        "*/models/*"
+      ]
+    },
+    {
+      "id": "impl",
+      "name": "Plan d'implémentation",
+      "default": "docs/plan/implementation.md",
+      "source": "video",
+      "why": "Les étapes de construction, dans l'ordre, avec ce qui prouve chacune.",
+      "touches": []
+    },
+    {
+      "id": "adr",
+      "name": "Décisions (ADR)",
+      "default": "docs/adr/",
+      "source": "extra",
+      "why": "Le pourquoi des choix d'architecture, une décision par fichier.",
+      "touches": []
+    },
+    {
+      "id": "voice",
+      "name": "Ton et règles d'écriture",
+      "default": "docs/design/voice.md",
+      "source": "extra",
+      "why": "Comment le projet parle à ses lecteurs, et ce qu'il n'écrit jamais.",
+      "touches": [
+        "templates/*",
+        "*/templates/*",
+        "i18n/*",
+        "*/i18n/*",
+        "locales/*",
+        "*/locales/*",
+        "content/*",
+        "*/content/*"
+      ]
+    },
+    {
+      "id": "glossary",
+      "name": "Glossaire",
+      "default": "docs/product/glossary.md",
+      "source": "extra",
+      "why": "Un sens par mot du métier, le même dans le code et dans les échanges.",
+      "touches": []
+    },
+    {
+      "id": "quality",
+      "name": "Qualité attendue",
+      "default": "docs/tech/quality.md",
+      "source": "extra",
+      "why": "Les seuils que le code doit tenir : performances, accessibilité, couverture.",
+      "touches": []
+    },
+    {
+      "id": "testing",
+      "name": "Stratégie de test",
+      "default": "docs/tech/testing.md",
+      "source": "extra",
+      "why": "Ce qui est testé, à quel niveau, et ce qui ne l'est volontairement pas.",
+      "touches": [
+        "*_test.*",
+        "*.test.*",
+        "*.spec.*",
+        "test/*",
+        "*/test/*",
+        "tests/*",
+        "*/tests/*",
+        "e2e/*",
+        "*/e2e/*"
+      ]
+    },
+    {
+      "id": "threat",
+      "name": "Modèle de menaces",
+      "default": "docs/security/threat-model.md",
+      "source": "extra",
+      "why": "Les actifs, les attaquants plausibles et les défenses qui leur répondent.",
+      "touches": [
+        "auth/*",
+        "*/auth/*",
+        "*auth.*",
+        "*_auth*",
+        "*oauth*",
+        "*crypto*",
+        "*secret*",
+        "*firewall*",
+        "*nftables*",
+        "*.nft"
+      ]
+    },
+    {
+      "id": "rgpd",
+      "name": "Registre RGPD",
+      "default": "docs/compliance/rgpd.md",
+      "source": "extra",
+      "why": "Les traitements de données personnelles, leur base légale et leurs durées.",
+      "touches": [
+        "migrations/*",
+        "*/migrations/*",
+        "*personal*",
+        "*gdpr*",
+        "*rgpd*",
+        "*consent*"
+      ]
+    },
+    {
+      "id": "ops",
+      "name": "PRA et runbooks",
+      "default": "docs/ops/",
+      "source": "extra",
+      "why": "Comment déployer, reprendre après sinistre et opérer au quotidien.",
+      "touches": [
+        "ansible/*",
+        "*/ansible/*",
+        "*playbook*",
+        "roles/*",
+        "*/roles/*",
+        "terraform/*",
+        "*/terraform/*",
+        "*.nomad.hcl",
+        "*.service",
+        "*.timer",
+        "systemd/*",
+        "*/systemd/*"
+      ]
+    },
+    {
+      "id": "readme",
+      "name": "README et démarrage",
+      "default": "README.md",
+      "source": "extra",
       "why": "Ce qu'est le projet et comment le lancer en cinq minutes.",
-      "touches": [] }
+      "touches": []
+    }
   ]
 }
