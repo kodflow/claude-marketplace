@@ -120,9 +120,12 @@ const TASKS_MAIN_ONLY = [
   "Arbre   Graphe                         ↑↓ choisir · ⏎ plier/déplier · tab changer de vue",
 ].join("\n");
 
-test("the reported case, the main loop alone: « Tâches » only, no tab for Agents, no word said three times", async ($, on) => {
+test("the reported case, the main loop alone: « Tâches » in front, « Agents (0) » behind, no word said three times", async ($, on) => {
   const { h } = await seeded($, on, false);
-  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (2)\u2007" }]);
+  expect(h.panes).toEqual([
+    { id: "hud-agents", title: "Agents (0)\u2007" },
+    { id: "hud-tasks", title: "Tâches (2)\u2007" },
+  ]);
   expect(h.shown).toBe("hud-tasks");
   const ui = await mount($, "hud-tasks", "Tâches (2)");
   const tree = await ui.drawn({ in: "tree" });
@@ -160,8 +163,8 @@ test("the reported case with subagents: each named, its role, its colour, the fr
   const { h } = await seeded($, on, true);
   // Three at work, counted on the tab; « Tâches » stays the one shown
   expect(h.panes).toEqual([
-    { id: "hud-tasks", title: "Tâches (3)\u2007" },
     { id: "hud-agents", title: "Agents (3)\u2007" },
+    { id: "hud-tasks", title: "Tâches (3)\u2007" },
   ]);
   expect(h.shown).toBe("hud-tasks");
 

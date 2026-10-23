@@ -11,9 +11,10 @@ not.
   model and effort it runs on, how long since it moved, what it waits on or
   unblocks, the critical path in the margin, and the tasks waiting on the
   person. Tab turns it into a graph by state (R4). The tab counts the tasks
-  left to do: « Tâches (2) ». It is the view a session starts on.
-- **Agents** — only while a subagent runs, its tab counting them (« Agents
-  (1) »): the main loop on one line, then each subagent with its name, its
+  left to do: « Tâches (2) ». It is the view a session starts on, and it
+  stays the one shown until the person picks another tab.
+- **Agents** — a tab behind « Tâches », counting the subagents at work
+  (« Agents (1) », « Agents (0) » with none): the main loop on one line, then each subagent with its name, its
   role (its type, short), its model, its state (a frozen one in red), the
   task it holds, the folder it works in and the files it last read, wrote or
   committed.
@@ -41,22 +42,34 @@ rest.
 
 | Command | Effect |
 |---------|--------|
-| `a` (in « Tâches ») | shows the Agents tab, while a subagent runs |
-| `t` (in « Agents ») | shows the Tâches tab |
 | a click on a tab | shows it (the engine's tab strip) |
-| `/hud` | opens the Tasks pane, and the Agents pane while a subagent runs |
-| `/hud tasks` (`tâches`) | opens the Tasks pane |
-| `/hud agents` | opens the Agents pane while a subagent runs; with none, says so and opens it with the first |
+| `pane:next` / `pane:previous` | the engine's own actions, once bound (below) |
+| `a` (in « Tâches ») / `t` (in « Agents ») | ask the engine for the other tab; 2.1.309 declines while a pane holds the keyboard (below) |
+| `/hud` | opens both, « Tâches » shown, with the keyboard |
+| `/hud tasks` (`tâches`) | opens or shows the Tasks pane, with the keyboard |
+| `/hud agents` | opens or shows the Agents pane, with the keyboard; with no tab up and no subagent, says so and opens it with the first |
 | `/hud off` (`close`) | closes both; the Agents tab no longer opens by itself until `/hud` |
 
-With `autoOpen` on (the default) the Tasks pane opens when a session starts,
-alone, so it is the one shown; a session that starts with the panes still
-up (a reload, a restart) is brought back to « Tâches » as well. The Agents
-tab opens with the first subagent and closes with the last: the main loop
-alone never gets a tab. Every poll (3 s) the two tabs are retitled when
-their count moved. An open or a retitle may raise the pane it names; the
-pane shown before is opened again after, so the view does not jump to
-Agents.
+With `autoOpen` on (the default) a session starts by opening « Agents »,
+then « Tâches »: of two new panes the engine shows the newer, so « Tâches »
+is the one shown. A session that starts with the panes still up (a reload,
+a restart) keeps the tab the person was on. Every poll (3 s) the two tabs
+are retitled when their count moved, and nothing the module does on its
+own brings « Agents » in front: only a click on its tab, the engine's
+`pane:next`, or `/hud agents` do, and the person stays there until they
+pick « Tâches » again.
+
+Why the Agents tab stays up with no subagent: the engine (2.1.309) never
+changes the tab shown when a pane already up is retitled, but it shows a
+NEW pane unless a pane holds the keyboard, and it gives a mod no way to
+open a pane behind the others or to show an open one again (`focus` is
+granted only while no pane holds the keyboard, and takes the keyboard
+with it). An Agents tab that closed with the last subagent came back in
+front with the next one, and the old way back, opening « Tâches » again,
+was a retitle that changed nothing. So « Agents » closes only when the
+person closes it (or `/hud off`), and a missing one is added only when it
+cannot come in front: while the person is in a pane, whose tab stays
+shown, or when « Tâches » is not up at all.
 
 The tabs hold still under a click, as the tree's rows do:
 
@@ -64,9 +77,8 @@ The tabs hold still under a click, as the tree's rows do:
   (« Tâches (0) », a figure space after a single digit). A tab that grew or
   shrank with its count (« Tâches » becoming « Tâches (1) ») moved the
   Agents tab beside it from under the pointer.
-- A retitle puts back only what its own open raised. Before, a click on a
-  tab that landed while the poll retitled was undone: the pane shown before
-  the retitle was raised again over the person's choice.
+- A retitle never moves the tab shown, so a click on a tab stands through
+  the polls.
 
 The engine seats a pane nobody asked for
 only where it has room — from 144 columns, docked beside the transcript in
@@ -211,7 +223,7 @@ of its lanes.
 | `↑` `↓` | choose a task |
 | `⏎` (or space) | fold or unfold it; opening a top-level task folds the other |
 | `tab` | tree ↔ graph |
-| `a` | the Agents tab |
+| `a` | asks for the Agents tab (see below) |
 | click on a task | choose it; on a task with subtasks, or a second click, fold it |
 | click on « Arbre » / « Graphe » | that view |
 
@@ -242,9 +254,15 @@ engine's typings). It cannot claim a chord of its own at the prompt: a
 Button's `action` only borrows one of the engine's existing actions. So the
 switch is a plain letter while a pane has the keyboard:
 
-- `a` in « Tâches » (the tree posts it, `register.tsx` opens Agents); with no
-  subagent at work it opens nothing and a toast says why;
+- `a` in « Tâches » (the tree posts it, `register.tsx` opens Agents with
+  `focus`); with no tab up and no subagent at work it opens nothing and a
+  toast says why;
 - `t` in « Agents », a Button on its last row (`t: Tâches`), also clickable.
+
+Both ask the engine to show an open pane, and the only way a mod has is
+`$.ui.open({ focus: true })`, which 2.1.309 grants only while no pane
+holds the keyboard: from inside a pane, which is where the letters arrive,
+it declines and the tab stays. The tab strip and `pane:next` work.
 
 Neither ctrl+t (the engine's task list) nor ctrl+a (start of line) is
 touched. From the prompt, the engine itself has `pane:next` and
@@ -369,7 +387,7 @@ Set them in `/config` or under `pluginConfigs["kodflow-hud"].options`.
 | Option | Default | Meaning |
 |--------|---------|---------|
 | `silentMinutes` | `10` | quiet time after which a task in progress is flagged silent |
-| `autoOpen` | `true` | open the Tasks pane when a session starts, and the Agents tab while a subagent runs |
+| `autoOpen` | `true` | open the Agents tab, then the Tasks pane, when a session starts |
 | `ci` | `true` | ask `gh pr checks` about cited pull requests |
 
 `KODFLOW_HUD_TRACE=/absolute/path.json` writes what the panes would draw to

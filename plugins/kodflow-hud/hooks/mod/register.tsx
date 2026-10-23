@@ -7,11 +7,13 @@
 //               who works each task, on what model, how long since it moved,
 //               the silent ones and the ones waiting on the person; the
 //               view a session starts on, its tab counting the tasks left;
-//   « Agents »  only while a subagent runs, its tab counting them: the main
-//               loop, then each subagent with its role, model, state, task,
-//               folder and last files (syncPanes opens, retitles, closes).
-// « Tâches » is the one shown at start; with a pane focused, `a` shows
-// « Agents » and `t` « Tâches » (SWITCH_KEYS), beside the engine's tabs.
+//   « Agents »  up from the session's start (or its first subagent), its tab
+//               counting the subagents at work: the main loop, then each
+//               subagent with its role, model, state, task, folder and last
+//               files (syncPanes retitles it, never closes it).
+// « Tâches » is the one shown, and stays so: nothing the module does on its
+// own brings « Agents » in front; a click on its tab, /hud agents or the
+// engine's pane actions do. `a` and `t` (SWITCH_KEYS) ask the engine too.
 // And a few words of each reply in colour (colors.ts): the transcript draws
 // `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
 //
@@ -146,9 +148,9 @@ const TASK_TOOL = /^mcp__kodflow-hooks__task_(create|update|epic|focus)$/;
 let polling = false;
 let checking = false;
 let syncing = false;
-// Whether the Agents tab opens by itself when a subagent starts: autoOpen at
-// first; off once the person closes that tab or runs /hud off, on again with
-// /hud or /hud agents
+// Whether the Agents tab opens by itself (at start, or with a subagent):
+// autoOpen at first; off once the person closes that tab or runs /hud off,
+// on again with /hud or /hud agents
 let agentsWanted = true;
 let lastSession = "";
 let lastMtime: number | undefined = -1;
@@ -369,13 +371,16 @@ async function record($: any, e: any, r: any): Promise<void> {
 }
 
 /**
- * The panes as the counts want them, every poll. « Tâches » carries the
- * tasks left, « Agents » the subagents at work, retitled only when the count
- * moved; the Agents tab opens when a subagent starts (unless the person
- * closed it, or turned autoOpen off and never asked) and closes when none is
- * left, so the main loop alone never gets a tab. An open or a retitle may
- * raise the pane it names: the pane shown before is shown again after, so
- * the « Tâches » view the session starts on stays in front.
+ * The panes as the counts want them, every poll: each tab retitled when its
+ * count moved, and the Agents tab added when a subagent runs and it is not
+ * up yet (unless the person closed it, or turned autoOpen off and never
+ * asked). Nothing here can bring a pane in front, so the tab the person is
+ * on stays theirs. The engine (2.1.309) never changes the tab shown on a
+ * retitle; it shows a NEW pane unless a pane holds the keyboard, and it has
+ * no way to open one behind or to show an open one again. So the Agents tab,
+ * once up, stays up with no subagent (« Agents (0) ») rather than close and
+ * come back in front; and one that is missing is added only when that shows
+ * nothing new: a pane holds the keyboard, or « Tâches » is not up at all.
  */
 async function syncPanes($: any): Promise<void> {
   if (syncing) return;
@@ -384,49 +389,57 @@ async function syncPanes($: any): Promise<void> {
     const panes: any[] = await $.ui.panes().catch(() => []);
     if (!Array.isArray(panes)) return;
     const find = (id: string) => panes.find((p) => p.id === id);
-    const shown = panes.find((p) => p.isShown);
     const tTitle = tasksTitle(await read($, boardAtom));
     const agents = await read($, agentsAtom);
     const aTitle = agentsTitle(agents);
-    const opened: string[] = [];
     const tasks = find(TASKS_PANE);
-    if (tasks && tasks.title !== tTitle) {
+    if (tasks && tasks.title !== tTitle)
       await $.ui.open({ id: TASKS_PANE, title: tTitle });
-      opened.push(TASKS_PANE);
-    }
     const pane = find(AGENTS_PANE);
-    if (running(agents).length === 0) {
-      if (pane) await $.ui.close({ id: AGENTS_PANE });
-    } else if (pane ? pane.title !== aTitle : agentsWanted) {
+    if (pane) {
+      if (pane.title !== aTitle)
+        await $.ui.open({ id: AGENTS_PANE, title: aTitle });
+    } else if (
+      agentsWanted &&
+      running(agents).length > 0 &&
+      (!tasks || panes.some((p) => p.isFocused))
+    )
       await $.ui.open({ id: AGENTS_PANE, title: aTitle });
-      opened.push(AGENTS_PANE);
-    }
-    if (!opened.length || !shown) return;
-    // Undo only what these opens raised: a pane in front that they did not
-    // open is the person's click, landed meanwhile, and it stands
-    const after: any[] = await $.ui.panes().catch(() => []);
-    const front = after.find((p) => p.isShown);
-    const back = after.find((p) => p.id === shown.id);
-    if (back && front && front.id !== shown.id && opened.includes(front.id))
-      await $.ui.open({ id: back.id, title: back.title });
   } finally {
     syncing = false;
   }
 }
 
+/**
+ * The panes the person asked for, « Agents » before « Tâches »: of two new
+ * panes the engine shows the last one opened. The one asked to be in front
+ * (`front`) is opened with `focus`, the only way to show a pane already up:
+ * the engine grants it while no pane holds the keyboard, as after a command.
+ */
 async function openPanes(
   $: any,
   which: readonly { id: string; title: string }[],
+  front: string,
 ) {
   const placed: string[] = [];
   const board = await read($, boardAtom);
   const agents = await read($, agentsAtom);
-  for (const p of which) {
+  const ordered = [...which].sort(
+    (a, b) => Number(a.id === front) - Number(b.id === front),
+  );
+  for (const p of ordered) {
     const title = p.id === TASKS_PANE ? tasksTitle(board) : agentsTitle(agents);
-    // The Agents tab stands only while a subagent runs: asked for now, it
-    // opens with the first one
-    if (p.id === AGENTS_PANE && running(agents).length === 0) continue;
-    const r = await $.ui.open({ id: p.id, title });
+    // The Agents tab stands once a subagent runs: asked for now, it opens
+    // with the first one
+    if (p.id === AGENTS_PANE && running(agents).length === 0) {
+      const up: any[] = await $.ui.panes().catch(() => []);
+      if (!up.some((u) => u.id === AGENTS_PANE)) continue;
+    }
+    const r = await $.ui.open({
+      id: p.id,
+      title,
+      ...(p.id === front && { focus: true as const }),
+    });
     if (r.isPlaced) placed.push(title);
   }
   return placed;
@@ -437,18 +450,25 @@ async function showTasks($: any): Promise<void> {
   await $.ui.open({
     id: TASKS_PANE,
     title: tasksTitle(await read($, boardAtom)),
+    focus: true,
   });
 }
 
-/** Show « Agents », which stands only while a subagent runs. */
+/**
+ * Show « Agents », which stands once a subagent runs. The engine shows an
+ * open pane on `focus` only while no pane holds the keyboard: from a key
+ * typed in « Tâches » it declines, and the tab strip or ctrl+x tab does it.
+ */
 async function showAgents($: any): Promise<void> {
   const agents = await read($, agentsAtom);
-  if (running(agents).length === 0) {
+  const up: any[] = await $.ui.panes().catch(() => []);
+  const isUp = Array.isArray(up) && up.some((p) => p.id === AGENTS_PANE);
+  if (!isUp && running(agents).length === 0) {
     $.ui.toast("kodflow-hud : aucun sous-agent en cours, pas d'onglet Agents.");
     return;
   }
   agentsWanted = true;
-  await $.ui.open({ id: AGENTS_PANE, title: agentsTitle(agents) });
+  await $.ui.open({ id: AGENTS_PANE, title: agentsTitle(agents), focus: true });
 }
 
 /** Write what the panes would draw to KODFLOW_HUD_TRACE, when it is set. */
@@ -487,13 +507,22 @@ export const register: Register = (on, options) => {
     });
     agentsWanted = autoOpen;
     // Unasked, the engine seats a pane only where it has room (144 columns);
-    // below that it waits, and /hud seats it at any width. Only « Tâches »
-    // opens here, so it is the view the session starts on: the Agents tab
-    // comes with the first subagent (syncPanes). A session that starts with
-    // the panes still up (a reload) is brought back to « Tâches » too
+    // below that it waits, and /hud seats it at any width. « Agents » opens
+    // before « Tâches », so « Tâches », the newer, is the view the session
+    // starts on; a pane already up (a reload) is only retitled, and the tab
+    // the person was on stays shown
     const up: any[] = await $.ui.panes().catch(() => []);
-    const kept = Array.isArray(up) && up.some((p) => p.id === TASKS_PANE);
-    if (autoOpen || kept) await $.ui.open(PANES[0]).catch(() => undefined);
+    const has = (id: string) =>
+      Array.isArray(up) && up.some((p) => p.id === id);
+    const kept = has(TASKS_PANE);
+    if (autoOpen && !kept && !has(AGENTS_PANE))
+      await $.ui
+        .open({ id: AGENTS_PANE, title: agentsTitle(await read($, agentsAtom)) })
+        .catch(() => undefined);
+    if (autoOpen || kept)
+      await $.ui
+        .open({ id: TASKS_PANE, title: tasksTitle(await read($, boardAtom)) })
+        .catch(() => undefined);
     $.clock.every(POLL_MS, () => kick($));
     kick($);
     return next(e);
@@ -523,7 +552,11 @@ export const register: Register = (on, options) => {
         ? PANES.filter((p) => p.id === AGENTS_PANE)
         : PANES;
     kick($);
-    const placed = await openPanes($, which);
+    const placed = await openPanes(
+      $,
+      which,
+      agentsOnly ? AGENTS_PANE : TASKS_PANE,
+    );
     if (agentsOnly && !placed.length)
       return {
         text: "kodflow-hud: no subagent is running; the Agents tab opens with the first one.",
