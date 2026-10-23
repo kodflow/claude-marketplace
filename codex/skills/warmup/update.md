@@ -1,12 +1,16 @@
 # Update Mode (--update) for CLAUDE.md Refresh
 
+Sizes are judged by the one table in `SKILL.md` (*Size thresholds*): the worse
+of lines and bytes. Paths below are relative to the repository root
+(`git rev-parse --show-toplevel`), never a hardcoded `/workspace`.
+
 ## Phase 1.0: Full Code Scan
 
 ```yaml
 scan_workflow:
   0_load_gitignore:
     action: "Load .gitignore patterns"
-    command: "cat /workspace/.gitignore 2>/dev/null"
+    command: "cat .gitignore 2>/dev/null"
     rule: "ALL patterns are STRICTLY respected"
 
   1_discover_code:
@@ -26,7 +30,7 @@ scan_workflow:
       - ".git/"
 
   2_extract_metadata:
-    action: "Extract metadata per directory"
+    action: "Extract metadata per directory — Grep and outlines, not whole-file reads"
     parallel_per_directory:
       - "Public functions/types"
       - "Patterns used"
@@ -58,7 +62,7 @@ create_missing_workflow:
     rule: "STRICT - All .gitignore patterns are honored"
     implementation: |
       # Read and parse .gitignore
-      gitignore_patterns = parse_gitignore("/workspace/.gitignore")
+      gitignore_patterns = parse_gitignore(".gitignore")
 
       # Use git ls-files to list only tracked files
       tracked_dirs = git ls-files --directory | get_unique_dirs()
@@ -72,15 +76,13 @@ create_missing_workflow:
     action: "Find directories without CLAUDE.md (respecting .gitignore)"
     tool: Bash + Glob
     command: |
-      # List only directories NOT ignored by git
-      find /workspace -type d \
-        -not -path '*/.git/*' \
-        -exec sh -c 'git check-ignore -q "$1" 2>/dev/null || echo "$1"' _ {} \; \
-        | while read dir; do
-            # Check if it contains source code
-            if ls "$dir"/*.{go,ts,py,rs,java,sh,html,tf} 2>/dev/null | head -1 > /dev/null; then
-              [ ! -f "$dir/CLAUDE.md" ] && echo "$dir"
-            fi
+      # Directories that hold tracked or unignored code, in ONE git call —
+      # git already applies .gitignore, so no per-directory check-ignore fork.
+      git ls-files --cached --others --exclude-standard \
+        '*.go' '*.ts' '*.py' '*.rs' '*.java' '*.sh' '*.html' '*.css' '*.tf' '*Dockerfile*' \
+        | sed -e 's|/[^/]*$||' -e t -e 's|.*|.|' | sort -u \
+        | while IFS= read -r dir; do
+            [ -f "$dir/CLAUDE.md" ] || echo "$dir"
           done
 
     include_criteria:
@@ -114,7 +116,7 @@ create_missing_workflow:
       |------|-------------|
       | <files> | TODO |
 
-    max_lines: 30  # Minimal template, enriched later
+    max_lines: 30  # Minimal template, enriched later; never past 200 (SKILL.md)
 ```
 
 **ABSOLUTE RULE: .gitignore is the source of truth for exclusions.**
@@ -156,6 +158,54 @@ obsolete_detection:
     action: |
       verify imports/usages in code
       compare with what is documented
+
+  dated_state:
+    description: "Status prose older than 30 days (scan.md, Phase 1.2)"
+    action: |
+      FOR each candidate line:
+        show it with its section heading
+        propose ONE of: refresh the status (the user gives the new state),
+        move the history to docs/ (a runbook, an ADR, a CHANGELOG) and leave
+        a one-line pointer, or keep as is
+    rule: "Never decide a status alone — a deployment state is a fact only the user or the system can confirm"
+```
+
+---
+
+## Phase 3.5: Split the oversized CLAUDE.md files
+
+**Trigger:** a CLAUDE.md at CRITICAL or FORBIDDEN (SKILL.md, *Size thresholds*).
+The goal is a lower **launch** cost, so the moved text must stop loading at
+launch (Claude Code memory docs: subdirectory CLAUDE.md and path-scoped rules
+load on demand; `@imports` load with their parent and save nothing).
+
+```yaml
+split_workflow:
+  1_outline:
+    action: "grep -n '^#{1,3} ' <file> — sections with their line spans and bytes"
+
+  2_classify_each_section:
+    always_needed: "rules for every task (guardrails, workflow, commit rules) → stays"
+    one_subtree:   "concerns one directory → that directory's CLAUDE.md (on demand)"
+    file_types:    "concerns a file pattern → .claude/rules/<topic>.md with paths: (on demand)"
+    history_state: "dated status, decision logs, runbook steps → docs/ (ADR, runbook), one-line pointer left"
+    reference:     "long tables, inventories → a doc the section links to, read when needed"
+
+  3_propose:
+    action: "Show the plan: section → destination, bytes moved, launch cost before/after"
+    dry_run: "--dry-run prints the plan and stops"
+    tool: AskUserQuestion
+    options:
+      - "Apply the whole split (Recommended)"
+      - "Apply section by section"
+      - "Skip the split"
+
+  4_apply:
+    rules:
+      - "MOVE, never delete: every moved section leaves a one-line pointer"
+      - "Keep the project's language and wording; no rewrite while moving"
+      - "A moved ledger goes to .claude/constraints.md (SKILL.md, Phase 1.5)"
+      - "Re-measure: the source file must land at ACCEPTABLE or better"
 ```
 
 ---
@@ -190,8 +240,8 @@ update_generation:
     - <attention point detected in code>
 
   constraints:
-    max_lines: 200  # ACCEPTABLE threshold
-    critical_threshold: 300  # Must be condensed or split
+    target_lines: 200  # a generated or rewritten file (Claude Code docs)
+    ceiling: "the SKILL.md size table — CRITICAL means condense or split (Phase 3.5)"
     no_implementation_details: true
     no_obsolete_info: true
     maintain_existing_structure: true
@@ -239,8 +289,8 @@ apply_workflow:
 
   validation:
     post_apply:
-      - "Verify file lines: IDEAL(0-150), ACCEPTABLE(151-200), WARNING(201-250), CRITICAL(251-300)"
-      - "Flag files > 300 lines as FORBIDDEN (must split)"
+      - "Measure lines and bytes (wc -lc) against the SKILL.md size table"
+      - "Flag FORBIDDEN files (must split, Phase 3.5)"
       - "Verify no obsolete references"
       - "Verify structure section matches reality"
       - "Verify timestamp injected in first line"
@@ -271,7 +321,7 @@ learn_workflow:
   2_compare_with_documented:
     action: "Read existing CLAUDE.md files and filter already-documented patterns"
     rule: "Only keep patterns with 3+ occurrences AND not already in CLAUDE.md"
-    tools: [Read, Grep]
+    tools: [Grep]  # the CLAUDE.md files are already loaded or outlined
 
   3_scope_learnings:
     rules:
@@ -285,7 +335,7 @@ learn_workflow:
     constraints:
       - "Max 5 learnings per CLAUDE.md per update"
       - "Each learning = 1-2 lines max"
-      - "Respect line thresholds (150/200/250/300)"
+      - "Respect the SKILL.md size table: a file at WARNING or above gets no injection"
       - "If threshold exceeded → skip injection, warn user"
     format: "- **{pattern_name}**: {description} ({n} occurrences)"
 ```
@@ -305,12 +355,13 @@ learn_workflow:
     OK /src/CLAUDE.md - Updated structure
     OK /src/handlers/CLAUDE.md - Removed obsolete refs
     -- /tests/CLAUDE.md - Skipped (user choice)
+    OK /CLAUDE.md - Split: 56 KB → 22 KB at launch (3 sections moved)
 
   Learned conventions:
     OK <n> patterns discovered, <n> injected
 
   Validation:
-    OK Line thresholds: 0 FORBIDDEN, 0 CRITICAL, 0 WARNING
+    OK Size thresholds: 0 FORBIDDEN, 0 CRITICAL, 0 WARNING
     OK Structure sections match reality
     OK No broken file references
 
