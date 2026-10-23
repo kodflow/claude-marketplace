@@ -107,6 +107,10 @@ Chain:  /plan → /challenge → /goal → /git
 Resolve the argument to a plan. Read the project's constraint ledger too
 (`CLAUDE.md` and `.claude/constraints.md`) — a plan that violates a recorded
 `MUST` is wrong before any reviewer opens it, and that check costs nothing.
+Same for the project's documents (the `ok` entries of
+`bash "${CODEX_HOME:-$HOME/.codex}"/skills/docs/scripts/docs.sh compute`)
+and the ADRs that concern the plan: hand them to every reviewer, and treat a
+contradiction with one as a finding citing `fichier:ligne`.
 
 **If there is no plan**, do not invent one to have something to debate. Say so
 and point at `/plan`. A description given inline is acceptable: structure it into

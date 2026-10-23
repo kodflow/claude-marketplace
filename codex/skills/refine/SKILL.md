@@ -106,6 +106,13 @@ resolve_mode_and_slug() {
 }
 ```
 
+### Project documents (all modes)
+
+Read the project's documents that concern the slug (the `ok` entries of
+`bash "${CODEX_HOME:-$HOME/.codex}"/skills/docs/scripts/docs.sh compute`)
+and its ADRs. A directive that contradicts one carries the contradiction in
+`# CONSTRAINTS`, with `fichier:ligne`, and the user is told before `/goal`.
+
 ## Phase 1: AUTO lens depth — FULL mode only
 
 Read `auto.md`. AUTO picks 4-critical-lenses
