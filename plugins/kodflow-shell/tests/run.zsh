@@ -291,6 +291,13 @@ out=$(run_setup $fakehome 2>&1)
 is "la synchro épargne un superclaude étranger" "$(readlink $fakehome/.local/bin/superclaude)" "/bin/true"
 [[ $out != *"/.local/bin/superclaude"* ]] && ok "la synchro tait un superclaude étranger" \
   || ko "la synchro tait un superclaude étranger" "$out"
+ln -sfn "$fakehome/.claude/kodflow-shell/../x" $fakehome/.local/bin/superclaude
+out=$(run_setup $fakehome 2>&1)
+is "la synchro épargne un superclaude qui sort du miroir par .." \
+  "$(readlink $fakehome/.local/bin/superclaude)" "$fakehome/.claude/kodflow-shell/../x"
+[[ $out != *"/.local/bin/superclaude"* ]] && ok "la synchro tait un superclaude qui sort par .." \
+  || ko "la synchro tait un superclaude qui sort par .." "$out"
+ln -sfn /bin/true $fakehome/.local/bin/superclaude
 run_setup $fakehome --uninstall >/dev/null 2>&1
 is "la désinstallation épargne un superclaude étranger" "$(readlink $fakehome/.local/bin/superclaude)" "/bin/true"
 

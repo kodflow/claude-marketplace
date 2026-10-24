@@ -57,6 +57,11 @@ unlink_ours() {
     lnk=$1
     [ -L "$lnk" ] || return 0
     target=$(readlink "$lnk" 2>/dev/null || echo "")
+    # A target with a `..` segment can climb out of the mirror while still
+    # starting with "$DEST/": it is not ours.
+    case "$target" in
+        */../*|*/..) target="" ;;
+    esac
     case "$target" in
         "$DEST"/*)
             if [ "$CHECK" -eq 1 ]; then say "à délier $lnk"
