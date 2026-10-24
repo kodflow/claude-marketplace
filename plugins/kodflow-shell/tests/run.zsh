@@ -250,38 +250,56 @@ box=$(new_sandbox setup)
 fakehome=$box/home; mkdir -p $fakehome
 run_setup $fakehome --quiet >/dev/null 2>&1 || true
 [[ -L $fakehome/.local/bin/super-claude ]] && ok "installe le lien" || ko "installe le lien" "absent"
-is "superclaude pointe sur la cible de super-claude" "$(readlink $fakehome/.local/bin/superclaude)" \
-  "$fakehome/.claude/kodflow-shell/bin/super-claude"
-rm -f $fakehome/.local/bin/superclaude
+[[ ! -e $fakehome/.local/bin/superclaude && ! -L $fakehome/.local/bin/superclaude ]] \
+  && ok "ne crée plus superclaude" || ko "ne crée plus superclaude" "créé"
 out=$(run_setup $fakehome --check 2>&1)
-[[ $out == *"à lier  $fakehome/.local/bin/superclaude"* ]] && ok "--check signale superclaude absent" \
-  || ko "--check signale superclaude absent" "$out"
-[[ ! -e $fakehome/.local/bin/superclaude ]] && ok "--check ne le recrée pas" || ko "--check ne le recrée pas" "créé"
-run_setup $fakehome --quiet >/dev/null 2>&1 || true
-[[ -L $fakehome/.local/bin/superclaude ]] && ok "le lien manquant est reposé" || ko "le lien manquant est reposé" "absent"
+[[ $out != *"/.local/bin/superclaude"* ]] && ok "--check ne réclame plus superclaude" \
+  || ko "--check ne réclame plus superclaude" "$out"
 out=$(run_setup $fakehome --check --uninstall 2>&1)
 [[ -L $fakehome/.local/bin/super-claude ]] && ok "--check --uninstall ne supprime rien" \
   || ko "--check --uninstall ne supprime rien" "le lien a disparu"
 
 # --- 13. désinstallation : ne touche pas au lien d'un autre -----------------
 ln -sfn /bin/true $fakehome/.local/bin/claude-sessions
-rm -f $fakehome/.local/bin/superclaude
-ln -sfn /bin/true $fakehome/.local/bin/superclaude
 out=$(run_setup $fakehome --uninstall 2>&1)
-[[ -L $fakehome/.local/bin/superclaude ]] && ok "épargne un superclaude étranger" \
-  || ko "épargne un superclaude étranger" "supprimé"
 [[ -L $fakehome/.local/bin/claude-sessions ]] && ok "épargne un lien étranger" \
   || ko "épargne un lien étranger" "supprimé"
 [[ ! -e $fakehome/.local/bin/super-claude ]] && ok "retire son propre lien" \
   || ko "retire son propre lien" "encore là"
 
-# superclaude à nous, lui, part avec le reste
-box=$(new_sandbox unlink-own)
+# --- 13b. superclaude : l'ancien lien sans tiret est retiré par la synchro ---
+# Une version antérieure le posait sans qu'on le demande ; la synchro du
+# SessionStart l'enlève là où il pointe chez nous, et seulement là.
+box=$(new_sandbox sc-own)
 fakehome=$box/home; mkdir -p $fakehome
 run_setup $fakehome --quiet >/dev/null 2>&1 || true
-run_setup $fakehome --uninstall >/dev/null 2>&1
+ln -sfn $fakehome/.claude/kodflow-shell/bin/super-claude $fakehome/.local/bin/superclaude
+out=$(run_setup $fakehome --check 2>&1)
+[[ $out == *"à délier $fakehome/.local/bin/superclaude"* && -L $fakehome/.local/bin/superclaude ]] \
+  && ok "--check annonce le retrait de notre superclaude sans y toucher" \
+  || ko "--check annonce le retrait de notre superclaude sans y toucher" "$out"
+run_setup $fakehome --quiet >/dev/null 2>&1 || true
 [[ ! -e $fakehome/.local/bin/superclaude && ! -L $fakehome/.local/bin/superclaude ]] \
-  && ok "retire son propre superclaude" || ko "retire son propre superclaude" "encore là"
+  && ok "la synchro retire un superclaude à nous" || ko "la synchro retire un superclaude à nous" "encore là"
+[[ -L $fakehome/.local/bin/super-claude ]] && ok "super-claude reste en place" \
+  || ko "super-claude reste en place" "absent"
+
+box=$(new_sandbox sc-foreign)
+fakehome=$box/home; mkdir -p $fakehome/.local/bin
+ln -sfn /bin/true $fakehome/.local/bin/superclaude
+out=$(run_setup $fakehome 2>&1)
+is "la synchro épargne un superclaude étranger" "$(readlink $fakehome/.local/bin/superclaude)" "/bin/true"
+[[ $out != *"/.local/bin/superclaude"* ]] && ok "la synchro tait un superclaude étranger" \
+  || ko "la synchro tait un superclaude étranger" "$out"
+ln -sfn "$fakehome/.claude/kodflow-shell/../x" $fakehome/.local/bin/superclaude
+out=$(run_setup $fakehome 2>&1)
+is "la synchro épargne un superclaude qui sort du miroir par .." \
+  "$(readlink $fakehome/.local/bin/superclaude)" "$fakehome/.claude/kodflow-shell/../x"
+[[ $out != *"/.local/bin/superclaude"* ]] && ok "la synchro tait un superclaude qui sort par .." \
+  || ko "la synchro tait un superclaude qui sort par .." "$out"
+ln -sfn /bin/true $fakehome/.local/bin/superclaude
+run_setup $fakehome --uninstall >/dev/null 2>&1
+is "la désinstallation épargne un superclaude étranger" "$(readlink $fakehome/.local/bin/superclaude)" "/bin/true"
 
 # --- 14. mise à jour : un fichier retiré en amont disparaît -----------------
 box=$(new_sandbox stale)
