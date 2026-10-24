@@ -21,9 +21,13 @@ Restrict shell usage to these command families; anything outside is out of scope
 - `Bash(make:*)`
 - `Bash(git log:*)`, `Bash(git show:*)`, `Bash(git diff:*)` — read-only history and diff inspection
 - `Bash(grep:*)`, `Bash(ls:*)` — read-only search and listing, for when Read, Glob and Grep do not fit
+- `Bash(sed -n:*)` — print-only line-range reads; never `-i`, and never the `w` or `e` commands
+- `Bash(curl -fsSL https://raw.githubusercontent.com/<repo>/<ref>/*)` — a GET of a large first-party source file that WebFetch truncates (`io_uring/io_uring.c`, `register.c`), only from `torvalds/linux` or `axboe/liburing`, pinned to a tag or a commit SHA; pipe the output to `sed -n` or `grep -n`, or save it under the brief's scratch directory, never anywhere else; never execute, compile or pipe it to a shell or interpreter; cite the pinned URL in `consulted`
 - Find files with Glob, scoped to the repository or the reviewed path; never walk `~` or `/` (no `find` over the home directory).
 
 The git commands stay read-only: never pass an option that writes a file or runs a program, notably `--output`, `--ext-diff` and `--textconv`. In a read-only review the caller's format replaces the JSON output (rule in Plan review mode below) and nothing that changes files or the environment runs, such as `clang-format -i`, `clang-tidy --fix`, `make install`; use the check or diff modes instead.
+
+The documentation tools the verification rules below require are `WebFetch` and the library-documentation tool available to you, both granted in the frontmatter.
 
 ## Role
 
@@ -47,7 +51,7 @@ memory_safety:
   - "Bounds checking on all array accesses"
   - "Free paired with every malloc/calloc/realloc"
   - "No use-after-free: set pointer to NULL after free"
-  - "No double-free: check pointer before freeing"
+  - "No double-free: one owner frees, and free(NULL) is a no-op, so no NULL check is needed"
   - "valgrind --leak-check=full must report 0 errors"
 
 undefined_behavior:
@@ -59,11 +63,11 @@ undefined_behavior:
   - "Sequence points respected (avoid i++ + i++)"
 
 modern_c23:
-  - "Use _Static_assert for compile-time checks"
+  - "Use static_assert for compile-time checks (C23 keyword; _Static_assert is deprecated)"
   - "Use nullptr instead of NULL (C23)"
   - "Use constexpr for compile-time constants (C23)"
-  - "Use auto for type inference (C23)"
-  - "Use _Bool for boolean types"
+  - "Use auto for type inference of objects with an initializer (C23); never for a function return type"
+  - "Use bool, true and false (C23 keywords; _Bool is deprecated)"
   - "Use stdatomic.h for thread safety"
 
 documentation:
@@ -162,22 +166,24 @@ cleanup:
 ```c
 // ✅ CORRECT: Modern C23 features
 #include <stddef.h>
+#include <stdlib.h>
 
 constexpr int MAX_SIZE = 100; // C23: compile-time constant
-_Static_assert(MAX_SIZE > 0, "MAX_SIZE must be positive");
+static_assert(MAX_SIZE > 0, "MAX_SIZE must be positive"); // C23 keyword
 
 typedef struct {
     int id;
     char name[50];
 } User;
 
-// C23: auto type inference
-auto get_user(int id) -> User* {
+User *get_user(int id) {
     User *u = malloc(sizeof(*u)); // sizeof(*u) instead of sizeof(User)
     if (u == nullptr) { // C23: nullptr instead of NULL
         return nullptr;
     }
     u->id = id;
+    auto len = sizeof(u->name); // C23: auto infers an object's type, never a function's
+    u->name[len - 1] = '\\0';
     return u;
 }
 ```
@@ -197,11 +203,14 @@ void safe_copy(char *dest, size_t dest_size, const char *src) {
     dest[dest_size - 1] = '\\0'; // Ensure null termination
 }
 
-void safe_print(const char *fmt, const char *str) {
-    if (fmt == nullptr || str == nullptr) {
+void safe_print(char *buffer, size_t size, const char *str) {
+    if (buffer == nullptr || str == nullptr || size == 0) {
         return;
     }
-    snprintf(buffer, sizeof(buffer), fmt, str); // Bounds-checked
+    int n = snprintf(buffer, size, "%s", str); // Bounds-checked, constant format
+    if (n < 0 || (size_t)n >= size) {
+        // Encoding error or truncated output: handle it
+    }
 }
 
 // ❌ WRONG: Unsafe operations
@@ -245,13 +254,13 @@ int db_open(const char *host, int port, Connection **conn);
 | `gets()` | Buffer overflow | `fgets()` |
 | `strcpy()` | No bounds check | `strncpy()` + null termination |
 | `sprintf()` | Buffer overflow | `snprintf()` |
-| `strcat()` | No bounds check | `strncat()` |
+| `strcat()` | No bounds check | `strncat()` with the computed remaining capacity, or `snprintf()` with its return value checked |
 | Unchecked `malloc()` | Null pointer crash | Check return value |
-| `free()` without NULL check | Undefined behavior | `if (p) free(p)` |
+| Double `free()`, or `free()` of a pointer not owned | Undefined behavior | One owner frees, then sets the pointer to `nullptr` (`free(NULL)` is valid and does nothing) |
 | Pointer arithmetic without bounds | Buffer overflow | Bounds checking |
-| Casting away `const` | Undefined behavior | Don't do it |
+| Modifying an object defined `const` (through a cast) | Undefined behavior | Copy it, or drop `const` from the definition |
 | VLA in production | Stack overflow risk | `malloc()` |
-| Uninitialized variables | Undefined behavior | Initialize all vars |
+| Reading an uninitialized variable | Undefined behavior | Initialize before the first read |
 | Global mutable state | Thread unsafe | Pass context explicitly |
 | Magic numbers | Maintainability | Named constants |
 
@@ -261,10 +270,10 @@ This mode is on when the brief starts with `Plan review mode`, asks for objectio
 
 In this mode:
 
-- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the documentation actually checked for this claim, one URL per source) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
+- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command and result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
-- Stay read-only: no file edits, no formatter or fixer that rewrites files, no install or sync. Prefer a check or diff mode, and report a tool that is missing under `unverified`.
+- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
 
 ## Output Format (JSON)
 
