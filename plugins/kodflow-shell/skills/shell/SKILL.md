@@ -70,6 +70,10 @@ super-claude sessions [-a]    la liste
 super-claude clean red|warn|green [-a] [-n]
                               supprime les vieilles sessions, une confirmation par session
                               (Entrée = oui), avec tout ce qui est indexé sur leur id
+super-claude rm <TAB> [-y] [-n]
+                              supprime une session précise (id ou préfixe, plusieurs
+                              acceptés), choisie dans le même sélecteur ; [y/N], Entrée
+                              = non, la session en cours refusée
 ```
 
 Les titres ne sont pas inventés : Claude Code écrit lui-même des enregistrements

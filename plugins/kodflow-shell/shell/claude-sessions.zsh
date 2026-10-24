@@ -17,10 +17,13 @@
 #
 #   claude-sessions [-a] [<dir>]        the list, coloured by age
 #   claude-sessions clean <niveau>      delete old sessions, one Y/n each
-#   super-claude sessions|clean …       the same, from the command you type
+#   claude-sessions rm <id|préfixe>…    delete these sessions, one y/N each
+#   super-claude sessions|clean|rm …    the same, from the command you type
 #   TAB after `super-claude `           sessions of this directory, then of
 #                                       every other one, matched on the id *and*
 #                                       on the words of the title
+#   TAB after `super-claude rm `        the same picker, minus the ids already
+#                                       on the line (also `claude-sessions rm `)
 #   autosuggestion                      `--resume <uuid>` rebuilt from sessions
 #                                       that still exist, not dead ids from history
 #
@@ -95,8 +98,11 @@ _claude_sessions_size() {
   local -a st
   local -i b=0
   zstat -A st +size -- "$pdir/$id.jsonl" 2>/dev/null && b=$st[1]
+  # du -k, not -b: -b is GNU only, and BSD du on macOS rejects it — the
+  # subagent transcripts, often the bulk of a session, then counted for 0.
   if [[ -d $pdir/$id ]]; then
-    b+=$(du -sb -- "$pdir/$id" 2>/dev/null | cut -f1)
+    local kb=$(du -sk -- "$pdir/$id" 2>/dev/null | cut -f1)
+    (( b += ${kb:-0} * 1024 ))
   fi
   print -r -- $b
 }
@@ -427,6 +433,163 @@ _claude_sessions_clean() {
 }
 
 #--------------------------------------------------------------------#
+# rm: one session, chosen by id                                       #
+#--------------------------------------------------------------------#
+# clean picks by age; rm takes ids (or unambiguous prefixes of them) and asks
+# y/N for each — the default is NO here, the opposite of clean: an id typed or
+# picked by TAB is a precise target, and a stray Enter must not destroy it.
+#
+# The session Claude Code is running in is refused outright. Claude Code
+# exports its id to every process it starts as CLAUDE_CODE_SESSION_ID (a
+# subagent sees its parent's), which is exactly the transcript being written.
+# A session written to in the last two minutes may be open in another
+# terminal: that is warned about, and skipped under -y.
+
+CLAUDE_SESSIONS_ACTIVE_S=${CLAUDE_SESSIONS_ACTIVE_S:-120}
+
+# "cwd<TAB>title" of one transcript: from the cache when it is current, never
+# writing it — the session is about to go.
+_claude_sessions_meta_of() {
+  local pdir=$1 id=$2 mtime=$3 cached=
+  local cfile=$CLAUDE_SESSIONS_CACHE/${pdir:t}/$id
+  [[ -r $cfile ]] && cached=$(<$cfile)
+  if [[ $cached == "$mtime	"* ]]; then
+    print -r -- "${cached#*	}"
+  else
+    _claude_session_meta "$pdir/$id.jsonl"
+  fi
+}
+
+# One line describing a transcript: id8, age, size, directory, title.
+# $1 = transcript path, $2 = size in bytes (optional, computed otherwise).
+_claude_sessions_line() {
+  local f=$1 pdir=${1:h} id=${${1:t}%.jsonl} meta cwd title
+  local -a st
+  local -i mtime=0 sz
+  zstat -A st +mtime -- "$f" 2>/dev/null && mtime=$st[1]
+  sz=${2:-$(_claude_sessions_size "$pdir" "$id")}
+  meta=$(_claude_sessions_meta_of "$pdir" "$id" $mtime)
+  cwd=${meta%%	*} title=${meta#*	}
+  [[ $meta == *"	"* ]] || cwd= title=
+  printf '  %s%s  %4s  %6s  %-28s  %s%s\n' \
+    "$(_claude_sessions_color $(_claude_sessions_level $mtime))" "${id[1,8]}" \
+    "$(_claude_sessions_age $mtime)" "$(_claude_sessions_human $sz)" \
+    "$(_claude_sessions_short "${cwd:-${pdir:t}}")" "${title:-(sans titre)}" \
+    "$(_claude_sessions_reset)"
+}
+
+# rm <yes> <dry> <id|prefix>...
+_claude_sessions_remove() {
+  local yes=$1 dry=$2; shift 2
+  if (( ! $# )); then
+    print -u2 "claude-sessions rm : au moins un id (ou préfixe d'id) — TAB les propose"
+    return 2
+  fi
+
+  # Every transcript of every directory, untitled ones included: rm is the
+  # way to get rid of a session the pickers do not even show.
+  local -a files targets cands cids
+  files=($(_claude_sessions_root)/*/*.jsonl(.N))
+  local arg f
+  local -i bad=0
+  for arg in "$@"; do
+    arg=${arg:l}
+    if [[ ! $arg =~ '^[0-9a-f-]+$' ]]; then
+      print -u2 "claude-sessions rm : « $arg » n'est pas un id de session"
+      bad=1; continue
+    fi
+    cands=()
+    for f in $files; do
+      [[ ${${f:t}%.jsonl} == ${arg}* ]] && cands+=("$f")
+    done
+    if (( ! ${#cands} )); then
+      print -u2 "claude-sessions rm : aucune session « $arg »"
+      bad=1; continue
+    fi
+    cids=(${(u)${cands:t}%.jsonl})
+    if (( ${#cids} > 1 )); then
+      print -u2 "claude-sessions rm : « $arg » est ambigu, ${#cids} sessions commencent ainsi :"
+      for f in $cands; do
+        print -u2 -r -- "$(_claude_sessions_line "$f")    ${${f:t}%.jsonl}"
+      done
+      bad=1; continue
+    fi
+    # The same id under two project dirs: both copies are targets, each asked.
+    for f in $cands; do
+      (( ${targets[(Ie)$f]} )) || targets+=("$f")
+    done
+  done
+  if (( bad )); then
+    print -u2 "rien n'a été supprimé."
+    return 2
+  fi
+
+  local -a sizes
+  local -i i total=0 sz
+  for f in $targets; do
+    sz=$(_claude_sessions_size "${f:h}" "${${f:t}%.jsonl}")
+    sizes+=($sz); (( total += sz ))
+  done
+  print -r -- "${#targets} session(s) visée(s) — $(_claude_sessions_human $total)"
+  (( dry )) && print -r -- "(simulation : rien ne sera supprimé)"
+  print -r -- ""
+
+  local id pdir reply
+  local -a st
+  local -i removed=0 freed=0 failed=0 refused=0 aborted=0 mtime
+  for (( i = 1; i <= ${#targets}; i++ )); do
+    f=$targets[i] pdir=${targets[i]:h} id=${${targets[i]:t}%.jsonl}
+    _claude_sessions_line "$f" $sizes[i]
+    if [[ -n ${CLAUDE_CODE_SESSION_ID:-} && $id == ${CLAUDE_CODE_SESSION_ID:l} ]]; then
+      print -u2 "  session en cours (CLAUDE_CODE_SESSION_ID) : refusée."
+      (( refused++ )); continue
+    fi
+    mtime=0; zstat -A st +mtime -- "$f" 2>/dev/null && mtime=$st[1]
+    if (( EPOCHSECONDS - mtime < CLAUDE_SESSIONS_ACTIVE_S )); then
+      print -u2 "  attention : écrite il y a $(( EPOCHSECONDS - mtime )) s, peut-être ouverte dans un autre terminal."
+      if (( yes && ! dry )); then
+        print -u2 "  ignorée avec -y : relancer sans -y pour la confirmer."
+        (( refused++ )); continue
+      fi
+    fi
+    (( dry )) && continue
+    if (( ! yes )); then
+      if [[ ! -t 0 ]]; then
+        print -u2 "  (pas de terminal : abandon, -y pour supprimer sans question)"
+        aborted=1; break
+      fi
+      # The default is no, and a read that FAILS (EOF, closed pty) is a no too.
+      if ! read -r "reply?  supprimer ? [y/N] "; then
+        print -u2 ""
+        print -u2 "  entrée fermée : abandon, rien de plus n'est supprimé."
+        aborted=1; break
+      fi
+      case ${reply:l} in
+        y|yes|o|oui) ;;
+        *)           print -r -- "  gardée."; continue ;;
+      esac
+    fi
+    if _claude_sessions_rm "$pdir" "$id"; then
+      (( removed++ )); (( freed += sizes[i] ))
+    else
+      (( failed++ ))
+      print -u2 "  ${id[1,8]} : suppression incomplète (droits ? fichier occupé ?)"
+    fi
+  done
+
+  print -r -- ""
+  if (( dry )); then
+    print -r -- "Simulation : ${#targets} session(s), $(_claude_sessions_human $total) libérables."
+  else
+    print -r -- "$removed session(s) supprimée(s), $(_claude_sessions_human $freed) libéré(s)."
+    (( failed )) && print -u2 "$failed session(s) partiellement supprimée(s) — relancer après avoir corrigé la cause."
+  fi
+  _cs_key= _cs_stamp=0
+  (( failed || refused || aborted )) && return 1
+  return 0
+}
+
+#--------------------------------------------------------------------#
 # claude-sessions: the list, for humans                               #
 #--------------------------------------------------------------------#
 
@@ -439,16 +602,21 @@ _claude_sessions_legend() {
 
 claude-sessions() {
   emulate -L zsh
-  local all=0 dry=0 dir=$PWD cmd=list level= i
+  local all=0 dry=0 yes=0 dir=$PWD cmd=list level= i
+  local -a targets
   while (( $# )); do
     case $1 in
       -a|--all)       all=1 ;;
       -n|--dry-run)   dry=1 ;;
+      -y|--yes)       yes=1 ;;
       --no-color)     local NO_COLOR=1 ;;
-      clean|nettoie)  cmd=clean ;;
+      clean|nettoie)  [[ $cmd == rm ]] && targets+=("$1") || cmd=clean ;;
+      rm|supprime)    [[ $cmd == rm ]] && targets+=("$1") || cmd=rm ;;
       -h|--help)      cmd=help ;;
       -*)             print -u2 "claude-sessions: option inconnue $1"; return 2 ;;
-      *)  if [[ $cmd == clean && -z $level ]]; then level=$1; else dir=${~1}; fi ;;
+      *)  if [[ $cmd == rm ]]; then targets+=("$1")
+          elif [[ $cmd == clean && -z $level ]]; then level=$1
+          else dir=${~1}; fi ;;
     esac
     shift
   done
@@ -457,9 +625,11 @@ claude-sessions() {
   if [[ $cmd == help ]]; then
     print -r -- "usage : claude-sessions [-a] [<dossier>]        lister"
     print -r -- "        claude-sessions clean <niveau> [-a] [-n]  nettoyer"
+    print -r -- "        claude-sessions rm <id|préfixe>… [-y] [-n] supprimer ces sessions"
     print -r -- ""
     print -r -- "  -a, --all      toutes les sessions, tous dossiers confondus"
-    print -r -- "  -n, --dry-run  clean en simulation"
+    print -r -- "  -n, --dry-run  clean / rm en simulation"
+    print -r -- "  -y, --yes      rm sans question"
     print -r -- ""
     print -r -- "  niveaux de clean (du plus large au plus étroit) :"
     print -r -- "    green  toutes les sessions"
@@ -467,10 +637,20 @@ claude-sessions() {
     print -r -- "    red    les rouges seulement (> ${CLAUDE_SESSIONS_WARN_D} j)"
     print -r -- "  chaque suppression demande confirmation, Entrée = oui."
     print -r -- ""
+    print -r -- "  rm (alias supprime) : un id ou un préfixe non ambigu, cherché dans tous"
+    print -r -- "  les dossiers ; TAB propose les sessions. Chaque session demande [y/N],"
+    print -r -- "  Entrée = non. La session en cours est refusée ; une session écrite il y a"
+    print -r -- "  moins de ${CLAUDE_SESSIONS_ACTIVE_S} s est signalée, et ignorée avec -y."
+    print -r -- ""
     _claude_sessions_legend
     print -r -- ""
-    print -r -- "  aussi disponible en : super-claude sessions / super-claude clean <niveau>"
+    print -r -- "  aussi disponible en : super-claude sessions | clean <niveau> | rm <id>…"
     return 0
+  fi
+
+  if [[ $cmd == rm ]]; then
+    _claude_sessions_remove $yes $dry "${targets[@]}"
+    return $?
   fi
 
   if [[ $cmd == clean ]]; then
@@ -555,14 +735,18 @@ _claude_sessions_add() {
   compadd -U -Q -V "$group" -X "%B$group%b" -l -d display -a values
 }
 
+# _claude_sessions_add_verbs [verb...] — every verb, or only those named.
 _claude_sessions_add_verbs() {
   local -a display values
   local pat="${IPREFIX}${PREFIX}${SUFFIX}"
   pat=${pat:l}
-  local -a verbs=(clean sessions)
-  local -a descs=("nettoyer les vieilles sessions (green|warn|red)" "lister les sessions")
+  local -a verbs=(clean rm sessions)
+  local -a descs=("nettoyer les vieilles sessions (green|warn|red)"
+                  "supprimer une session précise, choisie sur TAB"
+                  "lister les sessions")
   local i
   for (( i = 1; i <= ${#verbs}; i++ )); do
+    (( $# )) && ! (( ${@[(Ie)${verbs[i]}]} )) && continue
     [[ -z $pat || ${verbs[i]} == ${pat}* ]] || continue
     values+=("$verbs[i]")
     display+=("${(r:10:)verbs[i]}  $descs[i]")
@@ -571,17 +755,69 @@ _claude_sessions_add_verbs() {
   compadd -U -Q -V verbes -X "%Bcommandes%b" -l -d display -a values
 }
 
+_claude_sessions_add_levels() {
+  local -a lv=(green warn red)
+  local -a ld=(
+    "green   toutes les sessions"
+    "warn    les jaunes et les rouges (> ${CLAUDE_SESSIONS_FRESH_H} h)"
+    "red     les rouges seulement (> ${CLAUDE_SESSIONS_WARN_D} j)")
+  compadd -Q -V niveaux -X "%Bniveau%b" -l -d ld -a lv
+}
+
+# Drop from the _cs_* arrays the sessions named by the given words: a full id,
+# or a prefix of at least 8 characters (what the picker shows).
+_claude_sessions_drop() {
+  (( $# )) || return 0
+  local -a ids titles ages dirs mtimes pdirs
+  local i w skip
+  for (( i = 1; i <= ${#_cs_ids}; i++ )); do
+    skip=0
+    for w in "$@"; do
+      (( ${#w} >= 8 )) && [[ $_cs_ids[i] == ${w}* ]] && { skip=1; break }
+    done
+    (( skip )) && continue
+    ids+=("$_cs_ids[i]"); titles+=("$_cs_titles[i]"); ages+=("$_cs_ages[i]")
+    dirs+=("$_cs_dirs[i]"); mtimes+=("$_cs_mtimes[i]"); pdirs+=("$_cs_pdirs[i]")
+  done
+  _cs_ids=("${ids[@]}") _cs_titles=("${titles[@]}") _cs_ages=("${ages[@]}")
+  _cs_dirs=("${dirs[@]}") _cs_mtimes=("${mtimes[@]}") _cs_pdirs=("${pdirs[@]}")
+}
+
+# The rm picker: the resume picker minus the ids already on the line.
+# $1 = index in $words of the first id argument.
+_claude_sessions_complete_rm() {
+  local -i k first=$1 n=0
+  local -a typed
+  local w
+  for (( k = first; k <= ${#words}; k++ )); do
+    (( k == CURRENT )) && continue
+    w=${words[k]:l}
+    [[ -n $w && $w != -* ]] && typed+=("$w")
+  done
+  compstate[insert]=menu
+  compstate[list]='list force'
+  _cs_stamp=0
+  _claude_sessions_load && { _claude_sessions_drop "${typed[@]}"; _claude_sessions_add "sessions ici" 0 && n=1 }
+  if (( CLAUDE_SESSIONS_ALL )); then
+    _claude_sessions_load_foreign && { _claude_sessions_drop "${typed[@]}"; _claude_sessions_add "autres dossiers" 1 && n=1 }
+  fi
+  _cs_key= _cs_stamp=0            # arrays were filtered: force a reload
+  (( n ))
+}
+
 _super-claude() {
   local prev=${words[CURRENT-1]} n=0
 
   # `super-claude clean <TAB>` → the three levels.
   if [[ ${words[2]} == (clean|nettoie) ]] && (( CURRENT == 3 )); then
-    local -a lv=(green warn red)
-    local -a ld=(
-      "green   toutes les sessions"
-      "warn    les jaunes et les rouges (> ${CLAUDE_SESSIONS_FRESH_H} h)"
-      "red     les rouges seulement (> ${CLAUDE_SESSIONS_WARN_D} j)")
-    compadd -Q -V niveaux -X "%Bniveau%b" -l -d ld -a lv
+    _claude_sessions_add_levels
+    return 0
+  fi
+
+  # `super-claude rm <TAB>` → the sessions, as many as wanted.
+  if [[ ${words[2]} == (rm|supprime) ]] && (( CURRENT >= 3 )); then
+    [[ $PREFIX == -* ]] || { _claude_sessions_complete_rm 3 && return 0 }
+    compadd -- -y -n
     return 0
   fi
 
@@ -603,9 +839,35 @@ _super-claude() {
   _default
 }
 
+# claude-sessions [-a] [<dir>] | clean <niveau> | rm <id>…
+_claude-sessions() {
+  local -i k vi=0
+  local verb=
+  for (( k = 2; k < CURRENT; k++ )); do
+    case ${words[k]} in
+      rm|supprime|clean|nettoie) verb=${words[k]} vi=k; break ;;
+    esac
+  done
+  case $verb in
+    rm|supprime)
+      [[ $PREFIX == -* ]] && { compadd -- -y -n; return 0 }
+      _claude_sessions_complete_rm $(( vi + 1 )) && return 0 ;;
+    clean|nettoie)
+      (( CURRENT == vi + 1 )) && { _claude_sessions_add_levels; return 0 }
+      compadd -- -a -n; return 0 ;;
+    *)
+      [[ $PREFIX == -* ]] && { compadd -- -a --all -h --help; return 0 }
+      _claude_sessions_add_verbs clean rm
+      _path_files -/
+      return 0 ;;
+  esac
+  _default
+}
+
 if (( $+functions[compdef] )); then
   compdef _super-claude super-claude
   compdef _super-claude claude
+  compdef _claude-sessions claude-sessions
 fi
 
 #--------------------------------------------------------------------#

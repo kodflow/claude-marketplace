@@ -111,9 +111,15 @@ run_cs() {
     zpty -w cs "$ROOT/bin/claude-sessions $*"
     sleep 1.5
     [[ -n $input ]] && zpty -w -n cs "$input"
-    sleep 2
+    # Drain for a fixed time, not "until nothing is pending": zpty -r -t fails
+    # as soon as the pty has no byte ready at that instant, so a loop on it
+    # stopped after the first chunk (the PROMPT_SP line) and every pty
+    # assertion saw only "%" — on macOS that was every run.
     local line acc=
-    while zpty -r -t cs line; do acc+=$line; done
+    local -F end=$(( EPOCHREALTIME + 2 ))
+    while (( EPOCHREALTIME < end )); do
+      zpty -r -t cs line && acc+=$line || sleep 0.1
+    done
     zpty -d cs 2>/dev/null || true
     out=${acc//$'\r'/}
   fi
@@ -411,6 +417,118 @@ is "forme inattendue : code 0, fichier intact" "$rc $(cksum < $st)" "0 $before"
 print '{}' > $st
 KODFLOW_PERMISSIONS=off run_pm $fh --quiet >/dev/null 2>&1
 is "KODFLOW_PERMISSIONS=off : rien écrit" "$(cat $st)" "{}"
+
+# --- 17. rm : une session précise -------------------------------------------
+# Défaut NON, à l'inverse de clean : un id tapé ou choisi sur TAB est une cible
+# précise, une Entrée de trop ne doit pas la détruire. La suite elle-même
+# tourne souvent dans Claude Code : l'id de la session hôte ne doit pas fuiter.
+print -r -- "rm"
+unset CLAUDE_CODE_SESSION_ID
+id1=aaaaaaa1-0000-0000-0000-000000000001
+id2=aaaaaaa2-0000-0000-0000-000000000002
+id3=bbbbbbb3-0000-0000-0000-000000000003
+
+box=$(new_sandbox rm-full)
+pdir=$(make_session $box $id1 30)
+make_session $box $id2 30 >/dev/null
+out=$(run_cs $box pty $'y\n' rm $id1)
+[[ ! -e $pdir/$id1.jsonl && -e $pdir/$id2.jsonl ]] && ok "id complet + y : celle-là seulement" \
+  || ko "id complet + y : celle-là seulement" "$(ls $pdir)"
+has "rapport final" "$out" "1 session(s) supprimée(s)"
+has "affiche le titre" "$out" "FIXTURE $id1"
+
+box=$(new_sandbox rm-prefix)
+pdir=$(make_session $box $id1 30)
+make_session $box $id2 30 >/dev/null
+out=$(run_cs $box pty $'y\n' rm aaaaaaa1)
+[[ ! -e $pdir/$id1.jsonl && -e $pdir/$id2.jsonl ]] && ok "préfixe non ambigu résolu" \
+  || ko "préfixe non ambigu résolu" "$(ls $pdir)"
+
+box=$(new_sandbox rm-ambig)
+pdir=$(make_session $box $id1 30)
+make_session $box $id2 30 >/dev/null
+out=$(run_cs $box none "" rm aaaa -y)
+has "préfixe ambigu refusé" "$out" "ambigu"
+has "liste les candidats (1)" "$out" "$id1"
+has "liste les candidats (2)" "$out" "$id2"
+is  "préfixe ambigu : rien supprimé" "$(n_jsonl $pdir)" 2
+
+box=$(new_sandbox rm-unknown)
+pdir=$(make_session $box $id1 30)
+out=$(run_cs $box none "" rm $id1 cccccccc -y)
+has "id inconnu signalé" "$out" "aucune session « cccccccc »"
+is  "un id inconnu bloque tout le lot" "$(n_jsonl $pdir)" 1
+out=$(run_cs $box none "" rm 'x;rm' -y)
+has "argument qui n'est pas un id refusé" "$out" "n'est pas un id"
+
+box=$(new_sandbox rm-default)
+pdir=$(make_session $box $id1 30)
+out=$(run_cs $box pty $'\n' rm $id1)
+has "Entrée = non" "$out" "gardée"
+is  "Entrée ne supprime pas" "$(n_jsonl $pdir)" 1
+out=$(run_cs $box pty $'\004' rm $id1)
+has "EOF sur pty : abandon" "$out" "entrée fermée"
+is  "EOF sur pty : rien supprimé" "$(n_jsonl $pdir)" 1
+out=$(run_cs $box none "" rm $id1)
+has "sans terminal : abandon" "$out" "pas de terminal"
+is  "sans terminal : rien supprimé" "$(n_jsonl $pdir)" 1
+
+box=$(new_sandbox rm-dry)
+pdir=$(make_session $box $id1 30)
+out=$(run_cs $box none "" rm $id1 -n)
+has "-n annonce la simulation" "$out" "Simulation"
+is  "-n ne supprime rien" "$(n_jsonl $pdir)" 1
+
+box=$(new_sandbox rm-yes)
+pdir=$(make_session $box $id1 30)
+mkdir -p $box/config/exports; print -n keep > $box/config/exports/$id1-20260101T000000Z
+out=$(run_cs $box none "" rm $id1 -y)
+has "-y supprime sans question" "$out" "1 session(s) supprimée(s)"
+for art in "projects/${pdir:t}/$id1.jsonl" "projects/${pdir:t}/$id1" "session-env/$id1" \
+           "file-history/$id1" "tasks/session-${id1[1,8]}" "teams/session-${id1[1,8]}"; do
+  [[ ! -e $box/config/$art ]] && ok "rm emporte $art" || ko "rm emporte $art" "encore présent"
+done
+[[ -e $box/config/exports/$id1-20260101T000000Z ]] && ok "rm épargne exports/" || ko "rm épargne exports/" "supprimé"
+
+# Une session d'un autre dossier se résout depuis ici.
+box=$(new_sandbox rm-foreign)
+mkdir -p $box/elsewhere
+fpdir=$box/config/projects/${${box}//[^a-zA-Z0-9]/-}-elsewhere
+mkdir -p $fpdir
+printf '{"type":"user","cwd":"%s"}\n{"type":"ai-title","aiTitle":"ailleurs"}\n' $box/elsewhere > $fpdir/$id3.jsonl
+age_file 30 $fpdir/$id3.jsonl
+out=$(run_cs $box none "" rm bbbbbbb3 -y)
+[[ ! -e $fpdir/$id3.jsonl ]] && ok "résout dans les autres dossiers" || ko "résout dans les autres dossiers" "$out"
+
+# Garde-fous : la session en cours, et une session écrite à l'instant.
+box=$(new_sandbox rm-current)
+pdir=$(make_session $box $id1 30)
+out=$(export CLAUDE_CODE_SESSION_ID=$id1; run_cs $box none "" rm $id1 -y)
+has "session en cours refusée" "$out" "session en cours"
+is  "session en cours intacte" "$(n_jsonl $pdir)" 1
+
+box=$(new_sandbox rm-recent)
+pdir=$(make_session $box $id1 0)
+out=$(run_cs $box none "" rm $id1 -y)
+has "session récente signalée" "$out" "peut-être ouverte"
+is  "session récente épargnée par -y" "$(n_jsonl $pdir)" 1
+
+# super-claude route le verbe vers claude-sessions.
+box=$(new_sandbox rm-super)
+pdir=$(make_session $box $id1 30)
+out=$(cd $box/work && CLAUDE_CONFIG_DIR=$box/config XDG_CACHE_HOME=$box/cache NO_COLOR=1 \
+      $ROOT/bin/super-claude supprime $id1 -y 2>&1 </dev/null) || true
+is "super-claude supprime → claude-sessions rm" "$(n_jsonl $pdir)" 0
+
+# Complétion : les ids déjà sur la ligne ne sont plus proposés.
+_cs_ids=($id1 $id2 $id3) _cs_titles=(a b c) _cs_ages=(1d 1d 1d)
+_cs_dirs=(d d d) _cs_mtimes=(1 2 3) _cs_pdirs=(p p p)
+_claude_sessions_drop $id1 bbbbbbb3
+is "complétion : ids saisis retirés" "${_cs_ids[*]}" "$id2"
+is "complétion : colonnes alignées" "${_cs_titles[*]}" "b"
+_cs_ids=($id1 $id2) _cs_titles=(a b) _cs_ages=(1d 1d) _cs_dirs=(d d) _cs_mtimes=(1 2) _cs_pdirs=(p p)
+_claude_sessions_drop aaaa
+is "complétion : un préfixe court ne retire rien" "${#_cs_ids}" "2"
 
 # --- bilan ------------------------------------------------------------------
 print -r -- ""
