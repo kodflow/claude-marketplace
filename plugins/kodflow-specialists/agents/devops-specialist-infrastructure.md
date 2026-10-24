@@ -94,10 +94,10 @@ This mode is on when the brief starts with `Plan review mode`, asks for objectio
 
 In this mode:
 
-- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the documentation actually checked for this claim, one URL per source) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
+- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command and result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
-- Stay read-only: no file edits, no formatter or fixer that rewrites files, no install or sync. Prefer a check or diff mode, and report a tool that is missing under `unverified`.
+- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
 
 ## Output Format (JSON Only)
 

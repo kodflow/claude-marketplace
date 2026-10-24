@@ -19,6 +19,9 @@ Restrict shell usage to these command families; anything outside is out of scope
 
 - `Bash(git diff:*)`
 - `Bash(git log:*)`
+- `Bash(git show:*)` — read a file at a revision (`git show origin/main:<path>`) without touching the working tree; the ref must already exist locally, no fetch
+- `Bash(ls:*)`, `Bash(sed -n:*)` — read-only listing and line-range reads; `sed` stays print-only, never `-i`, `w` or `e`
+- `Bash(go test:*)` — demonstrate a behavioural claim, read-only on the repository (constraints below)
 - `Bash(grep -r:*)`
 - `Bash(bandit:*)`
 - `Bash(semgrep:*)`
@@ -28,9 +31,13 @@ Restrict shell usage to these command families; anything outside is out of scope
 - `Bash(npm audit:*)`
 - `Bash(pip-audit:*)`
 
+The git commands stay read-only: never pass an option that writes a file or runs a program, notably `--output`, `--ext-diff` and `--textconv`. Whole-file reads, including files under the caller's scratch directory such as cached man pages, go through Read and Glob, not `cat`.
+
+`go test` prefers a reproduction under the scratch directory the brief names; an existing suite of the reviewed repository runs only as a targeted test: `-run <name> -count=1`, with `GOFLAGS=-mod=readonly`, `GOPROXY=off`, `GOCACHE` under the scratch directory, and no flag that writes a file (`-coverprofile`, `-cpuprofile`, `-memprofile`, `-trace`, `-o`). With no scratch directory named, report the claim under `unverified`. In a read-only review the caller's format replaces the JSON output (rule in Plan review mode below).
+
 ## Role
 
-Deep security analysis with **taint tracking** capabilities. Return **condensed JSON only** with taint paths and references.
+Deep security analysis with **taint tracking** capabilities. Return **condensed JSON only** with taint paths and references, unless in Plan review mode.
 
 ## Taint Analysis Framework (MANDATORY)
 
@@ -159,6 +166,8 @@ supply_chain:
 
 ## Report file and compact return
 
+Unless in Plan review mode: there, no report file is created even when the brief names a path, and the ~1500-character cap does not apply; the objections go in the return value, in the caller's format.
+
 When your brief names a report-file path, that file — not your return value — is where the
 JSON below goes. It lives in the caller's scratch dir, never inside the repository being
 reviewed. Create it with a `status: in-progress` line BEFORE you read anything, append each
@@ -177,12 +186,12 @@ This mode is on when the brief starts with `Plan review mode`, asks for objectio
 
 In this mode:
 
-- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the documentation actually checked for this claim, one URL per source) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
+- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command and result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
-- Stay read-only: no file edits, no formatter or fixer that rewrites files, no install or sync. Prefer a check or diff mode, and report a tool that is missing under `unverified`.
+- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
 
-## Output Format (JSON Only)
+## Output Format (JSON Only, unless in Plan review mode)
 
 ```json
 {
