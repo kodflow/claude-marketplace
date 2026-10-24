@@ -73,6 +73,7 @@ super-claude <TAB>            les sessions de ce dossier, puis celles des autres
 super-claude <uuid>           reprend cette session, depuis son dossier d'origine
 super-claude sessions [-a]    la liste, coloriée par âge
 super-claude clean <niveau>   le ménage
+super-claude rm <TAB>         supprime une session précise, choisie dans la liste
 super-claude help             tout
 ```
 
@@ -96,6 +97,34 @@ d'autosuggestion les remplace par une session réelle du dossier courant.
 `-a` étend à tous les dossiers, `-n` simule. Chaque suppression demande confirmation, Entrée
 vaut oui, `a` accepte les suivantes, `q` arrête.
 
+### Une session précise : `rm`
+
+```
+claude-sessions rm <id|préfixe>… [-y] [-n]     (alias : supprime, ou super-claude rm …)
+```
+
+`super-claude rm <TAB>` ouvre le même sélecteur que la reprise — « sessions ici » puis
+« autres dossiers », filtré sur les mots du titre, l'id et le dossier — sans les ids déjà
+saisis sur la ligne. Un préfixe d'id est résolu parmi les sessions de tous les dossiers ; un
+préfixe ambigu est refusé avec la liste des candidats, un id inconnu bloque tout le lot.
+
+```
+$ claude-sessions rm 3f2a91c0
+1 session(s) visée(s) — 4M
+
+  3f2a91c0    9d      4M  ~/Projects/demo               Hotspot wifi 5 GHz
+  supprimer ? [y/N] y
+
+1 session(s) supprimée(s), 4M libéré(s).
+```
+
+Ici **Entrée vaut non**, à l'inverse de `clean` : une cible précise ne doit pas tomber sur
+une touche de trop, et une entrée fermée (pas de terminal, `^D`) n'est jamais un oui. `-y`
+supprime sans question, `-n` simule. La session dans laquelle Claude Code tourne est refusée :
+Claude Code exporte son id à tout ce qu'il lance dans `CLAUDE_CODE_SESSION_ID`. Une session
+écrite il y a moins de deux minutes est signalée — elle est peut-être ouverte dans un autre
+terminal — et `-y` la laisse en place.
+
 Une session n'est pas seulement son transcript : `projects/<slug>/<id>/` (les transcripts de
 sous-agents, plusieurs dizaines de Mo), `session-env/<id>`, `file-history/<id>`,
 `tasks/session-<id8>` et `teams/session-<id8>` portent le même id et partent avec elle.
@@ -110,6 +139,7 @@ sous-agents, plusieurs dizaines de Mo), `session-env/<id>`, `file-history/<id>`,
 | `CLAUDE_SESSIONS_ALL` | 1 | 0 retire le groupe « autres dossiers » de la complétion |
 | `CLAUDE_SESSIONS_MAX` | 40 | sessions proposées pour le dossier courant |
 | `CLAUDE_SESSIONS_ALL_MAX` | 40 | sessions proposées pour les autres dossiers |
+| `CLAUDE_SESSIONS_ACTIVE_S` | 120 | `rm` signale une session écrite depuis moins de secondes |
 | `SUPER_CLAUDE_MODEL` | `default` | modèle d'un lancement : `SUPER_CLAUDE_MODEL=opus super-claude` |
 | `NO_COLOR` | — | coupe les couleurs |
 
@@ -125,7 +155,8 @@ transcript : un TAB coûte ~45 ms à chaud, une frappe ~15 ms, même avec des tr
 Le ménage supprime des choses : la suite couvre les seuils d'âge, la simulation, les deux
 manières dont l'entrée peut se fermer (pipe sans terminal, `^D` sur un pty), Entrée qui vaut
 oui, `a` refusé par défaut puis accepté, la liste exacte de ce qu'une suppression emporte —
-et ce qu'elle épargne —, le plafond d'affichage qui ne doit pas limiter le ménage, et
+et ce qu'elle épargne —, `rm` (id complet, préfixe, préfixe ambigu, id inconnu, Entrée et EOF
+qui valent non, `-y`, `-n`, la session en cours et une session active épargnées), le plafond d'affichage qui ne doit pas limiter le ménage, et
 l'installateur (`--check` qui n'écrit rien, un lien étranger qu'on n'arrache pas, un fichier
 retiré en amont qui disparaît du miroir). Tout tourne dans un `HOME` et un dossier de
 configuration jetables : la suite ne peut pas voir une vraie session, encore moins la supprimer.

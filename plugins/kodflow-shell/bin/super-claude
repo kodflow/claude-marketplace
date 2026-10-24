@@ -10,6 +10,7 @@
 #   super-claude <uuid>              resume that session (what TAB inserts)
 #   super-claude sessions [-a]       list sessions, coloured by age
 #   super-claude clean <niveau> [-a] delete old sessions, one Y/n each
+#   super-claude rm <id>… [-y] [-n]  delete these sessions, one y/N each
 #   super-claude help                the whole thing
 #
 # Always on the account's default model: a `/model` choice persisted in
@@ -36,7 +37,7 @@ workdir=""
 
 # Housekeeping verbs are handed to claude-sessions (zsh, next to this file).
 case "${1:-}" in
-    sessions|ls|clean|nettoie|help|--help|-h)
+    sessions|ls|clean|nettoie|rm|supprime|help|--help|-h)
         helper=$(dirname "$0")/claude-sessions
         [ -x "$helper" ] || helper=claude-sessions
         if ! command -v "$helper" >/dev/null 2>&1 && [ ! -x "$helper" ]; then
