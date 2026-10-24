@@ -52,8 +52,10 @@ constraints do not care what shape anyone wanted.
 ### 1.3 Every specialist must cite what it checked
 
 `../_shared/specialists.md` defines what a specialist owes back: `consulted`
-(the documentation actually checked, per claim that needed it) and `unverified`
-(what it could not confirm). Put that requirement in every specialist brief.
+(the sources actually checked, per claim that needed it: a documentation URL, a
+source file read at a named revision as `path@rev`, or a scratch measurement with
+its command and result) and `unverified` (what it could not confirm). Put that
+requirement in every specialist brief.
 
 **A technology objection with an empty `consulted` list is a memory claim.**
 Route it to *needs the user* or send it back for verification — do not accept it
@@ -121,6 +123,26 @@ angle rather than assume it passed.
 
 `N = --concurrency` (default 3, hard max 6). Each round is four steps.
 
+Before round 1, create one scratch directory for the whole run, outside the
+project, and name it in every brief:
+
+```bash
+TS="$(date +%Y%m%d-%H%M%S)"
+SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/challenge-${TS}.XXXXXX")"
+```
+
+It is the only place a reviewer may write (a throwaway measurement, a fetched
+source file), and only where its own Command scope allows it. A brief that names
+no scratch directory leaves the reviewer read-only everywhere: the claim it could
+have measured goes under `unverified`.
+
+Gather the **project records** once too: the documents and ADRs Phase 0 already
+hands to reviewers, the verification scripts the plan cites (a dependency or
+layering check, a lint gate), and the benchmark methodology file when the plan
+makes a performance claim. Find them in the repository and the plan; each goes
+in the brief as a path with a one-line purpose, so a specialist reads the
+domain's founding decisions instead of rediscovering them.
+
 ### 2.1 Argue — all reviewers, one message, in parallel
 
 Each reviewer gets the **plan text inline**, not a path. A reviewer that has to
@@ -145,11 +167,24 @@ Here is a plan. Argue against it from the <lens> lens.
 Constraints this project has already accepted:
 <the MUST/MUST NOT constraints from the ledger, verbatim>
 
+Project records:
+<path — one-line purpose, per record>
+
+Scratch directory: <$SCRATCH>
+
+Prior objections (round 2 on; omit in round 1):
+<per objection: ID, claim verbatim, remedy, disposition (accepted / rejected /
+needs the user / unverified), and the rejection proof or the plan location where
+the fix was applied>
+For each prior ID, say whether the fix is correct, or why the rejection is wrong.
+
 Return objections only; the output format of
 your own definition does not apply here. For each objection, six fields:
 severity (blocking / material / minor), claim, evidence (file:line, or the plan
-line it contradicts), remedy, consulted (the documentation you checked, one URL
-per source), unverified (what you could not confirm, and what you tried). An
+line it contradicts), remedy, consulted (the sources you checked, one entry per
+source: a URL, a file read at a revision as path@rev, or a scratch measurement
+with its command and result), unverified (what you could not confirm, and what
+you tried). An
 objection with no concrete failure behind it is noise — leave it out. If the
 plan is sound from your lens, say so and stop; do not manufacture an objection
 to look useful.
@@ -161,7 +196,8 @@ lenses, the specialists and Codex.
 
 ### 2.2 Triage — you, not a reviewer
 
-Judge each objection against the plan and the codebase:
+Give each objection a stable ID, `R<round>-<n>`, kept for the rest of the run.
+Then judge each one against the plan and the codebase:
 
 | Verdict | Meaning | Effect |
 |---------|---------|--------|
@@ -175,6 +211,10 @@ Do not average them: pick, and say why.
 
 **Rejected objections are recorded in the output.** A reviewer that was wrong
 about something specific is information for the next round.
+
+The next round's briefs carry every objection so far **with its text**, not its
+ID alone: a reviewer handed `R1-3: fixed` cannot tell whether the fix answers
+the claim or misreads it.
 
 ### 2.3 Ask — the moment a difficulty appears
 

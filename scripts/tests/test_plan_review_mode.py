@@ -49,4 +49,17 @@ for a in routed:
 brief = DEBATE.read_text()
 check("debate.md brief uses the Plan review mode marker", "Plan review\nmode" in brief or "Plan review mode" in brief)
 check("debate.md names the six fields", all(f in brief for f in ("severity", "claim", "evidence", "remedy", "consulted", "unverified")))
+
+# Evidence a reviewer can produce without leaving read-only: a read at a
+# revision and a measurement under the brief's scratch directory, never a write
+# in the reviewed repository.
+check("canonical text accepts a read at a revision", canon is not None and "`path@rev`" in canon)
+check("canonical text bounds writes to the brief's scratch directory",
+      canon is not None and "scratch directory the brief names" in canon and "read-only on the reviewed repository" in canon)
+# Round N must be able to judge how round N-1 was answered: the objection text,
+# not its ID alone.
+check("debate.md brief carries prior objections with their text",
+      "Prior objections" in brief and all(f in brief for f in ("ID, claim verbatim", "remedy", "disposition")))
+check("debate.md brief names a scratch directory", "Scratch directory: <$SCRATCH>" in brief and "mktemp -d" in brief)
+check("debate.md brief names the project records", "Project records:" in brief)
 sys.exit(1 if fails else 0)
