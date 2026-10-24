@@ -89,25 +89,38 @@ edited=""
 # changed (warmup --update convention). Once per directory per session: the
 # feedback continues the turn, and a second reminder for the same directory
 # would be a loop, not a rule.
+# A fixed number of forks whatever the size of the tracker: one awk keeps the
+# distinct directories edited in the project, the walk up to the nearest
+# CLAUDE.md runs on builtins once per directory, and one awk drops what was
+# updated this session or already asked. A test per line, two greps each, cost
+# seconds on a long session's tracker.
 if [ -n "$edited" ]; then
     touch "$STATE/claudemd-nudged" 2>/dev/null
-    due=""; d=""
-    while IFS= read -r f; do
-        [ -n "$f" ] || continue
-        case "$f" in "$PROJECT_DIR"/*) ;; *) continue ;; esac
-        case "$f" in */CLAUDE.md|*/.claude/*|*/.git/*) continue ;; esac
-        d=${f%/*}
+    dirs=$(printf '%s\n' "$edited" | P="$PROJECT_DIR/" awk '
+        index($0, ENVIRON["P"]) != 1 { next }
+        /\/CLAUDE\.md$/ || /\/\.claude\// || /\/\.git\// { next }
+        { d = $0; sub(/\/[^\/]*$/, "", d); if (!(d in seen)) { seen[d] = 1; print d } }')
+    found=""
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
         while [ "${#d}" -ge "${#PROJECT_DIR}" ]; do
             [ -f "$d/CLAUDE.md" ] && break
             [ "$d" = "$PROJECT_DIR" ] && break
             d=${d%/*}
         done
-        [ -f "$d/CLAUDE.md" ] || continue
-        printf '%s\n' "$edited" | grep -qxF "$d/CLAUDE.md" && continue      # updated this session
-        grep -qxF "$d" "$STATE/claudemd-nudged" 2>/dev/null && continue    # already asked
-        printf '%s\n' "$d" >> "$STATE/claudemd-nudged"
-        due="${due:+$due, }${d#$PROJECT_DIR/}/CLAUDE.md"
-    done <<<"$edited"
+        [ -f "$d/CLAUDE.md" ] && found="$found$d$NL"
+    done <<<"$dirs"
+    new=""
+    [ -n "$found" ] && new=$(printf '%s' "$found" | awk '
+        FILENAME == ARGV[1] { upd[$0] = 1; next }                 # updated this session
+        FILENAME == ARGV[2] { asked[$0] = 1; next }               # already asked
+        !(($0 "/CLAUDE.md") in upd) && !($0 in asked) && !($0 in seen) { seen[$0] = 1; print }
+    ' "$STATE/edited" "$STATE/claudemd-nudged" - 2>/dev/null)
+    due=""
+    if [ -n "$new" ]; then
+        printf '%s\n' "$new" >> "$STATE/claudemd-nudged"
+        while IFS= read -r d; do due="${due:+$due, }${d#$PROJECT_DIR/}/CLAUDE.md"; done <<<"$new"
+    fi
     [ -n "$due" ] && _add "$(kf_msg stop.claudemd dirs="$due")"
 fi
 
