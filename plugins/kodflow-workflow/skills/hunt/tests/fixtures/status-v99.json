@@ -1,0 +1,122 @@
+{
+  "v": 99,
+  "slug": "payments-ledger",
+  "seq": 412,
+  "state": "hunting",
+  "pause": null,
+  "counter": {
+    "open": 7,
+    "cap": 10,
+    "resume_at": 7,
+    "issues": [
+      "core#101",
+      "core#102",
+      "core#104",
+      "core#107",
+      "core#108",
+      "sdk#12"
+    ],
+    "reserved": 1
+  },
+  "pass": {
+    "n": 2,
+    "sha": "3f9c2e1a7b4d",
+    "cells_done": 3,
+    "cells_total": 8,
+    "cells": [
+      "post-retry-idempotent",
+      "settle-crash-recovery",
+      "cutoff-boundary"
+    ]
+  },
+  "queue": {
+    "tokens_total": 2,
+    "holders": [
+      {
+        "slug": "payments-ledger",
+        "pid": 48211,
+        "label": "witness post-retry-idempotent x20",
+        "since": 1793019600000,
+        "exclusive": false
+      },
+      {
+        "slug": "",
+        "pid": 48302,
+        "label": "",
+        "since": 1793019720000,
+        "exclusive": false
+      }
+    ],
+    "waiting": [
+      {
+        "slug": "payments-ledger",
+        "label": "vet tags=integration",
+        "since": 1793019780000
+      }
+    ]
+  },
+  "tip": {
+    "sha": "8a1d0c4e9f2b7a6c5d3e1f0a9b8c7d6e5f4a3b2c",
+    "bundle_at": 1793019500000
+  },
+  "codex": {
+    "pending": 1,
+    "done": 3,
+    "skipped": 1,
+    "abandoned": 0,
+    "by_issue": {
+      "core#103": "done",
+      "core#105": "done",
+      "core#106": "done",
+      "core#109": "skipped",
+      "core#110": "pending"
+    }
+  },
+  "decisions": [
+    {
+      "repo": "core",
+      "issue": 111,
+      "title": "Reject or queue postings after the settlement cut-off?"
+    }
+  ],
+  "beat": 1793019785000,
+  "busy": {
+    "since": 1793019600000,
+    "deadline": 1793021400000
+  },
+  "notified_seq": 405,
+  "notify_failed": false,
+  "events": [
+    {
+      "seq": 380,
+      "kind": "confirmed",
+      "text": "core k=4/20 p=0.2"
+    },
+    {
+      "seq": 388,
+      "kind": "label",
+      "text": "core #110 hunt:fixed-local"
+    },
+    {
+      "seq": 395,
+      "kind": "integrate-fail",
+      "text": "core #108 witness of a reverse dependency failed"
+    },
+    {
+      "seq": 401,
+      "kind": "tip-after",
+      "text": "core 8a1d0c4e9f2b7a6c5d3e1f0a9b8c7d6e5f4a3b2c"
+    },
+    {
+      "seq": 405,
+      "kind": "decision",
+      "text": "core #111 Reject or queue postings after the settlement cut-off?"
+    },
+    {
+      "seq": 410,
+      "kind": "pass-start",
+      "text": "3f9c2e1a7b4d"
+    }
+  ],
+  "layout": "unknown to v1 readers"
+}

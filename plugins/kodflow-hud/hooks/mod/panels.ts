@@ -13,12 +13,33 @@
 // missing, ○ ignored). A click on a line ignores it or brings it back; «
 // créer » and « Créer les manquants » ask for the docs prompt in the prompt
 // box, never sent.
+//
+// « Chasse »: /hunt's runs as active.json and each status.json say (hunt.ts),
+// one section a hunt; a tab only while a hunt is listed. « reprendre », on a
+// hunt probably orphaned, asks for `/hunt --resume <slug>` in the prompt box,
+// never sent.
 
-import type { HudBlock, HudDoc, HudDocs } from "../../types";
+import type {
+  HudBlock,
+  HudDoc,
+  HudDocs,
+  HudHunt,
+  HudHuntRun,
+} from "../../types";
 import type { TreeModel } from "./tree.ts";
 import { MODES, missingOf } from "./docs.ts";
 import { HOUR_MS, hhmm, tally } from "./refusals.ts";
 import {
+  NO_HUNT,
+  ORPHAN_MS,
+  STALL_MS,
+  flagsOf,
+  huntTab,
+  kindFr,
+  stateFr,
+} from "./hunt.ts";
+import {
+  AMBER,
   BLUE,
   GREEN,
   MAUVE,
@@ -40,22 +61,31 @@ import {
 } from "./layout.tsx";
 import { cells } from "./width.ts";
 
-/** What the two views read beside the tree: handed down with it. */
-export type Extra = { docs: HudDocs; blocks: HudBlock[]; now: number };
+/** What the other views read beside the tree: handed down with it. */
+export type Extra = {
+  docs: HudDocs;
+  blocks: HudBlock[];
+  now: number;
+  /** Absent from an older caller: no hunt, no « Chasse » tab. */
+  hunt?: HudHunt;
+};
 
 export const NO_EXTRA: Extra = {
   docs: { found: false, docs: [] },
   blocks: [],
   now: 0,
+  hunt: NO_HUNT,
 };
 
 export const SETTINGS_LOCAL = ".claude/settings.local.json";
 
 /** The bar's counts: the refusals of the last hour, the documents missing. */
 export function countsOf(extra: Extra): BarCounts {
+  const hunt = extra.hunt ? huntTab(extra.hunt) : undefined;
   return {
     blocks: extra.blocks.filter((b) => extra.now - b.at < HOUR_MS).length,
     docs: missingOf(extra.docs).length,
+    ...(hunt && { hunt }),
   };
 }
 
@@ -72,6 +102,17 @@ export function viewScreen(
   extra: Extra = NO_EXTRA,
 ): Screen | string {
   const counts = countsOf(extra);
+  // « Chasse » gone while shown (the hunt ended): the tree, as tab would
+  if (ui.view === "hunt" && !counts.hunt) ui = { ...ui, view: "tree" };
+  if (ui.view === "hunt")
+    return huntScreen(
+      extra.hunt ?? NO_HUNT,
+      ui,
+      width,
+      rows,
+      counts,
+      extra.now,
+    );
   if (ui.view === "blocks") return blocksScreen(extra, ui, width, rows, counts);
   if (ui.view === "docs")
     return docsScreen(extra.docs, ui, width, rows, counts);
@@ -527,5 +568,252 @@ export function docsScreen(
     docs.found
       ? "Aucun document dans docs.json."
       : "Pas de docs.json pour cette session (kodflow-hooks le tient, dans un dépôt git).",
+  );
+}
+
+// --- « Chasse » ---------------------------------------------------------------------
+
+/** « il y a 12 min », « il y a 2 h 05 », from a time in milliseconds. */
+export function ago(now: number, at: number | undefined): string {
+  if (at === undefined) return "jamais";
+  const m = Math.max(0, Math.floor((now - at) / 60_000));
+  return m < 1 ? "à l'instant" : `il y a ${minutes(m)}`;
+}
+
+/** « 12 min », « 2 h 05 ». */
+const minutes = (m: number): string =>
+  m < 120
+    ? `${m} min`
+    : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+
+const short = (sha: string | undefined): string =>
+  sha ? sha.slice(0, 12) : "—";
+const plural = (n: number, one: string, many: string): string =>
+  `${n} ${n > 1 ? many : one}`;
+
+/** A list line's key: the hunt's slug, then the line's rank in its section. */
+export const huntKey = (slug: string, i: number): string => `${slug}#${i}`;
+export const slugOfKey = (key: string): string =>
+  key.slice(0, Math.max(0, key.lastIndexOf("#")));
+
+/** The digest's events: those after the last time the view was left. */
+export function digestOf(
+  run: HudHuntRun,
+  since: Record<string, number> | undefined,
+): { seq: number; kind: string; text: string }[] {
+  const from = since?.[run.slug] ?? 0;
+  return (run.status?.events ?? []).filter((e) => e.seq > from).slice(-8);
+}
+
+const LABEL = 13;
+
+/** One hunt: its head line (glyph, slug, state, flags, « reprendre »), then its rows. */
+function huntLines(
+  run: HudHuntRun,
+  ui: Ui,
+  width: number,
+  now: number,
+): { lines: Cell[][]; button?: { x: number; w: number; act: Act } } {
+  const s = run.status;
+  const f = flagsOf(run, now);
+  const head: Span[] = [
+    span(f.stalled ? "◆ " : "● ", { color: f.stalled ? RED : AMBER }),
+    span(run.slug, { bold: true }),
+    dim(" · "),
+    span(stateFr(s?.state ?? run.state), { color: MAUVE }),
+  ];
+  if (f.orphan)
+    head.push(
+      dim(" · "),
+      span("orpheline probable", { color: RED, bold: true }),
+    );
+  else if (f.stalled)
+    head.push(dim(" · "), span("figée", { color: RED, bold: true }));
+  const resume = "[reprendre]";
+  const btnW = f.orphan ? cells(resume) : 0;
+  const first: Cell[] = [cell(Math.max(0, width - btnW), head)];
+  let button: { x: number; w: number; act: Act } | undefined;
+  if (btnW && width > btnW) {
+    first.push(cell(btnW, [span(resume, { color: MAUVE, bold: true })]));
+    button = {
+      x: width - btnW,
+      w: btnW,
+      act: { op: "resume", slug: run.slug },
+    };
+  }
+  const lines: Cell[][] = [first];
+  const row = (label: string, value: Span[]) =>
+    lines.push([
+      cell(2),
+      cell(LABEL, [dim(label)]),
+      cell(Math.max(0, width - 2 - LABEL), value),
+    ]);
+  if (!s) {
+    row("état", [span(run.problem ?? "état illisible", { color: RED })]);
+    return { lines, button };
+  }
+  if (s.pause)
+    row("pause", [
+      span(s.pause.reason || "sans raison", { color: YOU }),
+      dim(s.pause.since === undefined ? "" : ` depuis ${hhmm(s.pause.since)}`),
+    ]);
+  row("compteur", [
+    span(`${s.counter.open}/${s.counter.cap}`, { bold: true }),
+    dim(
+      ` ouvertes${s.counter.resumeAt === undefined ? "" : ` · reprise à ${s.counter.resumeAt}`}`,
+    ),
+  ]);
+  row("passe", [
+    span(`n°${s.pass.n}`),
+    dim(` · ${short(s.pass.sha)} · `),
+    span(`${s.pass.done}/${s.pass.total}`),
+    dim(" cases"),
+  ]);
+  const holders = s.queue.holders.map(
+    (h) =>
+      `${h.slug || "hors chasse"}${h.label ? ` « ${h.label} »` : ""}${h.exclusive ? " (exclusif)" : ""}`,
+  );
+  row("file lourde", [
+    dim(`${plural(s.queue.tokens, "jeton", "jetons")} · `),
+    span(holders.length ? holders.join(", ") : "aucun job"),
+  ]);
+  if (s.queue.waiting.length)
+    row("en attente", [
+      span(
+        s.queue.waiting
+          .map(
+            (w) =>
+              `${w.slug || "hors chasse"}${w.label ? ` « ${w.label} »` : ""}`,
+          )
+          .join(", "),
+      ),
+      dim(
+        s.queue.waiting[0]!.since === undefined
+          ? ""
+          : ` · depuis ${hhmm(s.queue.waiting[0]!.since)}`,
+      ),
+    ]);
+  row("bout", [
+    span(short(s.tip.sha), { color: BLUE }),
+    dim(
+      s.tip.bundleAt === undefined ? "" : ` · bundle ${hhmm(s.tip.bundleAt)}`,
+    ),
+  ]);
+  row("Codex", [
+    span(
+      `${s.codex.pending} en attente`,
+      s.codex.pending ? { color: AMBER } : { dim: true },
+    ),
+    dim(
+      ` · ${plural(s.codex.done, "faite", "faites")} · ${plural(s.codex.skipped, "sautée", "sautées")} · ${plural(s.codex.abandoned, "abandonnée", "abandonnées")}`,
+    ),
+  ]);
+  if (!s.decisions.length) row("décisions", [dim("aucune")]);
+  s.decisions
+    .slice(0, 5)
+    .forEach((d, i) =>
+      row(i ? "" : "décisions", [
+        span(`${d.repo}#${d.issue}`, { color: YOU }),
+        span(` ${d.title}`),
+      ]),
+    );
+  row("battement", [
+    span(
+      ago(now, s.beat ?? run.beat),
+      f.stalled ? { color: RED, bold: true } : {},
+    ),
+    dim(
+      f.busy && s.busy?.since !== undefined
+        ? ` · job en cours depuis ${hhmm(s.busy.since)}`
+        : "",
+    ),
+  ]);
+  if (s.notifyFailed)
+    row("notification", [
+      span("en échec", { color: RED, bold: true }),
+      dim(" · le watchdog réessaie"),
+    ]);
+  const news = digestOf(run, ui.hsince);
+  if (!news.length) row("nouveau", [dim("rien depuis ta dernière visite")]);
+  news.forEach((e, i) =>
+    row(i ? "" : "nouveau", [
+      dim(`#${e.seq} `),
+      span(kindFr(e.kind), { color: MAUVE }),
+      span(e.text ? ` ${e.text}` : ""),
+    ]),
+  );
+  return { lines, button };
+}
+
+/** The « Chasse » view, `width` cells by `rows` lines. */
+export function huntScreen(
+  hunt: HudHunt,
+  ui: Ui,
+  width: number,
+  rows: number,
+  counts: BarCounts,
+  now: number,
+): Screen {
+  const n = hunt.runs.length;
+  const head: Cell[][] = [
+    titleOf(
+      [
+        span("Chasse", { color: MAUVE }),
+        dim(n ? ` · ${plural(n, "chasse listée", "chasses listées")}` : ""),
+      ],
+      width,
+    ),
+  ];
+  const list: { line: Cell[]; key: string }[] = [];
+  const rowButtons = new Map<string, { x: number; w: number; act: Act }[]>();
+  if (hunt.problem)
+    list.push({
+      line: [
+        cell(width, [span(`active.json : ${hunt.problem}`, { color: RED })]),
+      ],
+      key: huntKey("", 0),
+    });
+  hunt.runs.forEach((run, r) => {
+    const { lines, button } = huntLines(run, ui, width, now);
+    if (r) list.push({ line: [cell(width)], key: huntKey(run.slug, -1) });
+    lines.forEach((line, i) => {
+      const key = huntKey(run.slug, i);
+      if (!i && button) rowButtons.set(key, [button]);
+      list.push({ line, key });
+    });
+  });
+  const orphan = hunt.runs.find((r) => flagsOf(r, now).orphan);
+  const foot: Cell[][] = [
+    [
+      cell(width, [
+        dim(
+          orphan
+            ? `« reprendre » pose /hunt --resume ${orphan.slug} en brouillon, jamais envoyé ; le préflight décide`
+            : "Lecture seule : active.json et status.json de /hunt, jamais son journal",
+        ),
+      ]),
+    ],
+    [
+      cell(W.gap),
+      cell(Math.max(0, width - W.gap), [
+        dim(
+          `figée : aucun progrès depuis ${minutes(STALL_MS / 60_000)} hors job en cours · orpheline probable : ${minutes(ORPHAN_MS / 60_000)}`,
+        ),
+      ]),
+    ],
+  ];
+  return frame(
+    head,
+    list,
+    foot,
+    [],
+    rowButtons,
+    ui.hsel,
+    ui.ppin,
+    "hunt",
+    width,
+    rows,
+    counts,
+    "Aucune chasse en cours.",
   );
 }

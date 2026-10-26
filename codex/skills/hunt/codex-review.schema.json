@@ -1,0 +1,26 @@
+{
+  "title": "hunt codex review",
+  "description": "Answer of the one Codex review a fixed hunt issue gets. verdict ok = the fix holds; remark = a precision worth a comment, not a defect; defect = the fix is wrong or incomplete, with the evidence and, when possible, the corrective patch.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdict", "summary", "evidence", "patch"],
+  "properties": {
+    "verdict": { "type": "string", "enum": ["ok", "remark", "defect"] },
+    "summary": { "type": "string", "maxLength": 1200 },
+    "evidence": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "line", "why"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "why": { "type": "string", "maxLength": 600 }
+        }
+      }
+    },
+    "patch": { "type": ["string", "null"], "maxLength": 20000 }
+  }
+}

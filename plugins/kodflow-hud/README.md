@@ -18,6 +18,10 @@ not.
   refused in the session, and the project's documents (present, missing,
   ignored). « Refus (n) » counts the refusals of the last hour,
   « Documents (n) » the documents missing.
+- **Chasse** — a last view, only while `/hunt` lists a run (see
+  [Chasse](#chasse)): each hunt's state, counter, pass, heavy queue, tip,
+  Codex, pending decisions and what happened since the view was last left;
+  « Chasse 7/10 » counts the busiest hunt's open issues against its cap.
 - **Toasts** — a task done, a task blocked (`waiting`), a task gone silent:
   at most one per task and per state.
 - **Coloured words** — a few words of a reply drawn in colour in the
@@ -215,9 +219,9 @@ of its lanes.
 |--------------|--------|
 | `↑` `↓` | choose a task |
 | `⏎` (or space) | fold or unfold it; opening a top-level task folds the other |
-| `tab` | the next view: Arbre, Graphe, Refus, Documents, then Arbre again |
+| `tab` | the next view: Arbre, Graphe, Refus, Documents, Chasse (only while a hunt is listed), then Arbre again |
 | click on a task | choose it; on a task with subtasks, or a second click, fold it |
-| click on « Arbre » / « Graphe » / « Refus » / « Documents » | that view |
+| click on « Arbre » / « Graphe » / « Refus » / « Documents » / « Chasse » | that view |
 
 The tree is a `Client` region (`hooks/mod/client.tsx`, a surface module):
 the engine hands it keys once a click has given it the focus (Escape gives
@@ -300,6 +304,63 @@ bar is the missing ones.
   never overwritten: a toast says so. The draft is posed by `$.prompt.fill`;
   Escape gives the keyboard back to the prompt, ⏎ sends it.
 
+### Chasse
+
+What `/hunt` (kodflow-workflow) is doing, read from the two files its own
+scripts write whole (a file beside, then `mv`): `active.json`, the hunts
+under way, and each hunt's `status.json`, a snapshot of at most 16 KiB. The
+paths are built from `$HOME` and the slug made path-safe, never from a field
+of a file: `$HOME/.local/state/hunt/active.json` and
+`$HOME/.local/state/hunt/<slug>/status.json` (never `XDG_STATE_HOME`). Never
+the hunt's journal (`ledger.jsonl`): /hunt folds it, the view only reads the
+result.
+
+The tab is there only while `active.json` lists a hunt, always last, and of
+one width whatever the figures: « Chasse 7/10 », the busiest hunt's open
+issues against its cap, « ×2 » with two hunts; under 64 cells of bar it is
+« Chasse » alone, and a bar too narrow even for that leaves it to `tab`.
+`tab` does not stop on it while no hunt is listed, and a view left on it
+when the hunt ends shows the tree.
+
+One section a hunt: its state (`chasse`, `gel`, `passe finale`, `push`,
+`attente du merge`, `pause` with its reason, `terminée`), the counter and
+where it resumes, the pass (number, frozen SHA, cells played), the heavy
+queue (each token labelled by the hunt holding it, `hors chasse` for
+another job, then what waits), the tip and its last bundle, Codex (pending,
+done, skipped, abandoned), the decisions waiting on the person, the beat,
+a failed desktop notification (`notify_failed`, the watchdog retries), and
+« nouveau »: the events since the view was last left (all of the last 20 on
+a first visit).
+
+- **figée** — in an active state only (`hunting`, `frozen`, `final-pass`,
+  `pushing`): no progress for 2 h 05 (hunt-status' default `stall_ms`) and
+  no job of the hunt running; a job past its deadline counts as none.
+- **orpheline probable** — the same past 4 h 10, or the watchdog's last
+  event says the owner is gone. The view cannot test a process, hence
+  « probable ». A paused hunt, or one waiting for its merge, is never
+  judged.
+- **« reprendre »** (or `⏎` on that hunt) — only on an orphan: puts
+  `/hunt --resume <slug>` in an EMPTY prompt box as a draft, never sent,
+  as « Créer » does; the hooks module checks the slug again (listed now,
+  probably orphaned, `[a-z0-9-]{1,40}`), and /hunt's preflight decides.
+- **unreadable** — a torn file says « état illisible », a format this
+  version does not know « format vN non lu, mettre à jour kodflow-hud »;
+  nothing is guessed. This read runs after everything else of a poll, in
+  its own try/catch: whatever /hunt's files hold, « Tâches » goes on.
+
+Toasts, in every session that shows the HUD: each new event of a hunt,
+three at most a poll and then « +N autres ». The first read of a hunt is
+the reference, silent; a snapshot older than the last one seen is ignored;
+a slug reused (a new `created` in active.json) starts from zero. The cursor
+lives in `$.state`: after `/clear` or `/resume` the next read is a new,
+silent reference, the view's « nouveau » catches up. The events that call
+for the person now (pause, decision, convergence, MR opened, stall) are
+never toasted: /hunt sends one desktop notification for each, and the view
+shows them. The HUD never notifies the desktop.
+
+The option `hunt` (`false`) or `KODFLOW_HUD_HUNT=off` (or `0`, `false`,
+`no`) turns the view and its toasts off; nothing is read then.
+
 ### Switching panes
 
 The tab strip shows the panes of every plugin, « Tâches » among them. What
@@ -331,6 +392,8 @@ its pane holds the keyboard, and 2.1.309 shows a pane already up only on
 | silent | in progress, and its loop stopped, gone from the list, or quiet for `silentMinutes` |
 | `toi` | tasks with `assignee: "human"`, when tasks.json carries the field |
 | CI | `gh pr checks <url>` for the GitHub pull request URLs an open task cites, every 5 minutes at most |
+| refusals, documents | `blocks.jsonl` and `docs.json` beside tasks.json, re-read whenever their modification time or their size moves |
+| « Chasse » | `$HOME/.local/state/hunt/active.json`, then each listed hunt's `<slug>/status.json` (/hunt's, format v1), re-read every poll and compared as text; never its journal |
 
 Nothing is a second source of truth: the pane draws from `$.state`, which
 holds what was last read from tasks.json, `$.agent.list()` and, for each
@@ -345,8 +408,11 @@ again.
 - Add anything else to what the model reads: no tool, no `context`; one
   system prompt section, the colour convention, and none with
   `KODFLOW_COLORS=off`. `/hud` answers one short line, as any command does.
-- Scan the disk. No `find`, no `fs.list`. The only process it runs is
-  `gh pr checks`, and only for cited pull requests.
+- Scan the disk. No `find`; `fs.list` only on a document's folder the
+  person just brought back, to see whether it holds a `.md`. Two processes:
+  `gh pr checks`, only for cited pull requests, and `mv`, which ends a whole
+  write of a file the person asked to change (`docs/manifest.json`,
+  `.claude/settings.local.json`). Nothing for « Chasse »: two reads.
 
 ## Coloured words
 
@@ -401,6 +467,7 @@ Set them in `/config` or under `pluginConfigs["kodflow-hud"].options`.
 | `silentMinutes` | `10` | quiet time after which a task in progress is flagged silent |
 | `autoOpen` | `true` | open the Tasks pane when a session starts |
 | `ci` | `true` | ask `gh pr checks` about cited pull requests |
+| `hunt` | `true` | the « Chasse » view and its toasts (also `KODFLOW_HUD_HUNT=off`) |
 
 `KODFLOW_HUD_TRACE=/absolute/path.json` writes what the pane would draw to
 that file when the session ends: how a run with no pane (`claude -p`, a
@@ -499,6 +566,17 @@ tab and the one shown while subagents start, grow, end and start again; an
 « Agents » tab of an older version closed at start, left or right of it; a
 retitle leaving the person on the pane they picked; `/hud`, `/hud off`,
 `/hud agents`; and `a` no key of the mod's any more.
+`tests/hunt.test.tsx` holds « Chasse »: the shared status.json fixtures
+(`tests/fixtures/`, kodflow-workflow's own copied byte for byte, and
+`tests/hunt-fixtures.ts`, the same bytes as constants since a test imports
+code only; `bash scripts/check-hunt-fixtures.sh` at the repository's root
+checks both), a torn file and an unknown version, the paths, « figée » and
+« orpheline probable » only in an active state, the toast cursor, the tab
+shown or hidden at each width, a rewrite of the same size seen, the digest,
+the hunt gone while shown, « reprendre » drafted and never for a slug not
+listed. `tests/wiring.test.tsx` also holds a corrupt status.json leaving
+« Tâches » updating, the toasts through the engine, the option and
+`KODFLOW_HUD_HUNT=off`, and blocks.jsonl re-read when only its size moved.
 `tests/reported.test.tsx` draws the reported case: one epic and one loose
 task, the main loop alone (the word « Tâches » only on the tab), then three
 subagents (a general-purpose one, a specialist, one of unknown type, one

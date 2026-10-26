@@ -1,0 +1,291 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016  # jq programs are single-quoted on purpose
+# hunt-push — the only way a hunt's work leaves the machine, and only once it
+# has converged. Recomputes convergence from the ledger itself; never merges.
+#
+#   hunt-push SLUG            converge-check, autosquash, push, open the MRs/PRs
+#   hunt-push SLUG --repin    re-pin consumers on their dependencies' merge SHAs
+#
+# Convergence, recomputed from the ledger (the last `pass-start` is the frozen
+# pass; its `sha` is a SHA, or a map REPO -> SHA):
+#   - every scope.matrix cell has, in that pass, a latest `verdict` `clean`;
+#   - each frozen SHA is the current tip of hunt/SLUG (or was already pushed
+#     from it: a re-run is idempotent);
+#   - counter.open is 0 (status rebuilt from the ledger);
+#   - no `codex` review is `pending`.
+# Otherwise: the reasons on stderr, exit 1, nothing pushed.
+#
+# Then, per repository, dependencies (.depends_on) first: autosquash the
+# fixup! commits on a detached HEAD, check `git diff FROZEN SQUASHED` is empty,
+# re-pin on the dependencies pushed in this run (.repos[REPO].repin, below),
+# push to hunt/SLUG on .remote (default origin) with --force-with-lease, move
+# hunt/SLUG to what was pushed, open the MR/PR to .mr_target with one
+# `Closes #N` per issue labelled fixed-local (work in progress while a
+# dependency is unmerged), move those labels to hunt:fixed with a comment.
+# Ledger: `converged`, then per repository `push` and `mr-opened`, `label`.
+#
+# Re-pin is data, not code: .repos[REPO].repin = {cmd: [argv...], env: {...}}
+# where an argument may hold {sha}, {dep} and {dep.<field>.<field>} (a field of
+# the dependency's scope entry). --repin requires the dependency's `merged`
+# event {repo, merge_sha} and a previous `push` of the consumer. Env names that
+# would run code first (LD_*, BASH_ENV, PATH, …) are dropped. The scope must
+# still be the approved one (hunt-ledger scope-check), else exit 1.
+#
+# Exit: 0 ok · 1 refused/failed · 2 usage.
+set -euo pipefail
+
+readonly ME=hunt-push
+readonly ROOT="$HOME/.local/state/hunt"
+SELF_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+readonly SELF_DIR
+
+die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
+usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
+say() { printf '%s\n' "$*" >&2; }
+
+[[ ${1:-} == -h || ${1:-} == --help ]] && usage 0
+[[ $# -ge 1 && $# -le 2 ]] || usage 2
+slug=$1 repin=false
+[[ ${2:-} == "" ]] || { [[ $2 == --repin ]] || usage 2; repin=true; }
+[[ $slug =~ ^[a-z0-9-]{1,40}$ ]] || die 2 "slug invalide: $slug"
+d="$ROOT/$slug"
+scope_f="$d/scope.json"
+[[ -r $scope_f ]] || die 1 "$scope_f absent"
+"$SELF_DIR/hunt-ledger" scope-check "$slug" || exit 1
+scope=$(jq -c . "$scope_f")
+L="$SELF_DIR/hunt-ledger"
+F="$SELF_DIR/hunt-forge"
+wt_root=${HUNT_WORKTREES:-$HOME/Projects/.worktrees}
+
+events=$("$L" read "$slug" | jq -cs .)
+ev() { jq -c "$@" <<<"$events"; }
+
+repo_field() { jq -r --arg k "$1" ".repos[\$k]$2 // empty" <<<"$scope"; }
+repo_path() { local p; p=$(repo_field "$1" .path); printf '%s\n' "${p/#\~/$HOME}"; }
+integ_wt() { printf '%s/%s-hunt-%s\n' "$wt_root" "$(basename "$(repo_path "$1")")" "$slug"; }
+tip_of() { git -C "$(repo_path "$1")" rev-parse --verify --quiet "refs/heads/hunt/$slug" || true; }
+
+# The push token: hunt-ledger accepts `converged` and `push` only from a
+# process holding it; it lives for this run only.
+token=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+umask 077
+printf '%s\n' "$token" >"$d/.push-token"
+trap 'rm -f "$d/.push-token"' EXIT
+export HUNT_PUSH_TOKEN=$token
+append() { "$L" append "$slug" "$1" "$2" >/dev/null; }
+
+# Dependencies first.
+order_repos() { # KEYS... -> topological order (dependencies first)
+  jq -rn --argjson s "$scope" '
+    $ARGS.positional as $keys
+    | [$keys, []]
+    | until((.[0] | length) == 0;
+        .[1] as $done
+        | ([.[0][] | select(all(($s.repos[.].depends_on // [])[]; (($keys | index(.)) == null) or (($done | index(.)) != null)))]) as $ready
+        | if ($ready | length) == 0 then error("cycle in depends_on") else [(.[0] - $ready), ($done + $ready)] end)
+    | .[1][]' --args "$@" || die 1 "cycle dans depends_on"
+}
+
+# {sha}, {dep}, {dep.a.b} in each argument.
+expand_arg() { # ARG DEP SHA
+  jq -rn --arg a "$1" --arg dep "$2" --arg sha "$3" --argjson s "$scope" '
+    $a | gsub("\\{sha\\}"; $sha) | gsub("\\{dep\\}"; $dep)
+    | gsub("\\{dep\\.(?<p>[A-Za-z0-9_.]+)\\}"; ((.p | split(".")) as $path | $s.repos[$dep] | getpath($path) // "" | tostring))'
+}
+
+run_repin() { # CONSUMER DEP SHA WORKTREE -> 0 if a commit was made
+  local c=$1 dep=$2 sha=$3 wt=$4 cmd=() a envs=()
+  local spec; spec=$(jq -c --arg k "$c" '.repos[$k].repin // empty' <<<"$scope")
+  [[ -n $spec ]] || { say "pas de .repos.$c.repin: $c n'est pas re-épinglé sur $dep"; return 1; }
+  while IFS= read -r -d '' a; do cmd+=("$(expand_arg "$a" "$dep" "$sha")"); done \
+    < <(jq -j '.cmd[] | tostring + "\u0000"' <<<"$spec")
+  [[ ${#cmd[@]} -gt 0 ]] || die 1 "repin.cmd vide pour $c"
+  while IFS= read -r -d '' a; do safe_env "${a%%=*}" && envs+=("$a"); done \
+    < <(jq -j --arg k "$c" '((.repos[$k].env // {}) + (.repos[$k].repin.env // {})) | to_entries[] | "\(.key)=\(.value)\u0000"' <<<"$scope")
+  ( cd "$wt" && env "${envs[@]+"${envs[@]}"}" "${cmd[@]}" ) || die 1 "re-pin de $c sur $dep@$sha en échec"
+  git -C "$wt" add -A
+  if git -C "$wt" diff --cached --quiet; then return 1; fi
+  git -C "$wt" commit -q -m "chore(deps): pin $dep to ${sha:0:12}"
+}
+
+# Names a scope may not set: they would run code before the command does.
+safe_env() { # NAME
+  [[ $1 =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  [[ $1 =~ ^(LD_.*|DYLD_.*|BASH_ENV|ENV|BASH_FUNC_.*|PATH|IFS|PS4|PROMPT_COMMAND|SHELLOPTS|BASHOPTS|HOME|HUNT_.*)$ ]] \
+    && { say "variable $1 du scope ignorée"; return 1; }
+  return 0
+}
+
+guard_branch() { # REPO BRANCH
+  local b=$2
+  [[ $b == "hunt/$slug" ]] || die 1 "refusé: ne pousse que hunt/$slug"
+  for x in "$(repo_field "$1" .base)" "$(repo_field "$1" .mr_target)" main master; do
+    [[ -n $x && $b == "$x" ]] && die 1 "refusé: $b est une branche protégée de $1"
+  done
+  return 0
+}
+
+push_tip() { # REPO SHA [force]
+  local k=$1 sha=$2 remote
+  remote=$(repo_field "$k" .remote); remote=${remote:-origin}
+  guard_branch "$k" "hunt/$slug"
+  if [[ ${3:-} == force ]]; then
+    git -C "$(integ_wt "$k")" push -q --force-with-lease="refs/heads/hunt/$slug" "$remote" "$sha:refs/heads/hunt/$slug"
+  else
+    git -C "$(integ_wt "$k")" push -q "$remote" "$sha:refs/heads/hunt/$slug"
+  fi
+}
+
+# ============================================================================ repin
+if [[ $repin == true ]]; then
+  done_any=false
+  for k in $(jq -r '.repos | to_entries[] | select(.value.owned == true and ((.value.depends_on // []) | length) > 0) | .key' <<<"$scope"); do
+    ev --arg k "$k" -e 'any(.[]; .kind == "push" and .repo == $k)' >/dev/null \
+      || die 1 "$k n'a jamais été poussé: rien à re-épingler"
+    wt=$(integ_wt "$k")
+    [[ -d $wt ]] || die 1 "worktree d'intégration absent: $wt"
+    [[ -z $(git -C "$wt" status --porcelain) ]] || die 1 "worktree non propre: $wt"
+    for dep in $(jq -r --arg k "$k" '.repos[$k].depends_on[]' <<<"$scope"); do
+      msha=$(ev -r --arg d "$dep" '[.[] | select(.kind == "merged" and .repo == $d) | .merge_sha] | last // empty')
+      [[ -n $msha ]] || die 1 "SHA de merge de $dep absent du ledger: --repin refusé"
+      if run_repin "$k" "$dep" "$msha" "$wt"; then
+        new=$(git -C "$wt" rev-parse HEAD)
+        push_tip "$k" "$new"
+        append repin "$(jq -cn --arg c "$k" --arg d "$dep" --arg s "$msha" '{consumer:$c, dep:$d, sha:$s}')"
+        append push "$(jq -cn --arg r "$k" --arg s "$new" --arg b "hunt/$slug" '{repo:$r, sha:$s, branch:$b, repin:true}')"
+        done_any=true
+      fi
+    done
+  done
+  if [[ $done_any == true ]]; then say "re-épinglé et poussé"; else say "rien à re-épingler"; fi
+  exit 0
+fi
+
+# ===================================================================== convergence
+reasons=()
+pass=$(ev '[.[] | select(.kind == "pass-start")] | last // empty')
+[[ -n $pass ]] || die 1 "non convergé: aucune passe (pass-start) au ledger"
+pass_seq=$(jq -r .seq <<<"$pass"); pass_n=$(jq -r '.n // empty' <<<"$pass")
+owned=$(jq -c '[.repos | to_entries[] | select(.value.owned == true) | .key]' <<<"$scope")
+frozen=$(jq -c --argjson o "$owned" '
+  if (.sha | type) == "object" then .sha
+  elif (.sha | type) == "string" and ($o | length) == 1 then {($o[0]): .sha}
+  else null end' <<<"$pass")
+[[ $frozen != null ]] || die 1 "non convergé: SHA figé illisible dans pass-start (une map REPO→SHA est requise avec plusieurs dépôts)"
+
+missing=$(jq -r --argjson ev "$events" --argjson n "${pass_n:-null}" --argjson after "$pass_seq" '
+  [ (.matrix // [])[] | (if type == "object" then .id else . end) | tostring ] as $cells
+  | $cells[] as $c
+  | ([$ev[] | select(.kind == "verdict" and .seq > $after and (.cell | tostring) == $c
+                     and ($n == null or .pass == null or .pass == $n))] | last) as $v
+  | if $v == null then "case \($c): aucun verdict"
+    elif $v.result != "clean" then "case \($c): \($v.result)"
+    else empty end' <<<"$scope")
+[[ -z $missing ]] || while IFS= read -r m; do reasons+=("$m"); done <<<"$missing"
+[[ $(jq '.matrix // [] | length' <<<"$scope") -gt 0 ]] || reasons+=("matrice vide dans le scope")
+
+status=$("$L" rebuild "$slug")
+open=$(jq -r '.counter.open' <<<"$status")
+[[ $open == 0 ]] || reasons+=("compteur à $open (0 attendu)")
+
+pending=$(ev -r '[.[] | select(.kind == "codex")] | group_by("\(.repo // "")#\(.issue)")
+                 | map(last | select(.result == "pending") | "#\(.issue)") | join(" ")')
+[[ -z $pending ]] || reasons+=("revue Codex en attente: $pending")
+
+for k in $(jq -r 'keys[]' <<<"$frozen"); do
+  fsha=$(jq -r --arg k "$k" '.[$k]' <<<"$frozen")
+  tip=$(tip_of "$k")
+  [[ -n $tip ]] || { reasons+=("$k: hunt/$slug absent"); continue; }
+  if [[ $tip != "$fsha"* ]]; then
+    ev --arg k "$k" --arg f "$fsha" --arg t "$tip" -e \
+      'any(.[]; .kind == "push" and .repo == $k and .frozen == $f and .sha == $t)' >/dev/null \
+      || reasons+=("$k: le bout $tip n'est pas le SHA figé $fsha")
+  fi
+done
+
+if [[ ${#reasons[@]} -gt 0 ]]; then
+  say "$ME: non convergé, rien n'est poussé :"
+  for r in "${reasons[@]}"; do say "  - $r"; done
+  exit 1
+fi
+
+# ============================================================================ push
+if ! ev --argjson f "$frozen" -e 'any(.[]; .kind == "converged" and .shas == $f)' >/dev/null; then
+  append converged "$(jq -cn --argjson f "$frozen" --argjson n "${pass_n:-null}" '{shas:$f, pass:$n}')"
+fi
+
+declare -A pushed=()
+mapfile -t frozen_keys < <(jq -r 'keys[]' <<<"$frozen")
+mapfile -t order < <(order_repos "${frozen_keys[@]}")
+for k in "${order[@]}"; do
+  fsha=$(jq -r --arg k "$k" '.[$k]' <<<"$frozen")
+  fsha=$(git -C "$(repo_path "$k")" rev-parse "$fsha^{commit}")
+  wt=$(integ_wt "$k")
+  prev=$(ev -r --arg k "$k" --arg f "$fsha" '[.[] | select(.kind == "push" and .repo == $k and .frozen == $f)] | last | .sha // empty')
+  if [[ -n $prev ]]; then
+    say "$k: déjà poussé ($prev)"
+    pushed[$k]=$prev
+  else
+    [[ -d $wt ]] || die 1 "worktree d'intégration absent: $wt"
+    [[ -z $(git -C "$wt" status --porcelain) ]] || die 1 "worktree non propre: $wt"
+    base=$(repo_field "$k" .base); remote=$(repo_field "$k" .remote); remote=${remote:-origin}
+    upstream=""
+    for r in "refs/remotes/$remote/$base" "refs/heads/$base"; do
+      git -C "$wt" rev-parse --verify --quiet "$r" >/dev/null && { upstream=$r; break; }
+    done
+    [[ -n $upstream ]] || die 1 "$k: base '$base' introuvable"
+    mb=$(git -C "$wt" merge-base "$fsha" "$upstream")
+    git -C "$wt" checkout -q --detach "$fsha"
+    if ! GIT_SEQUENCE_EDITOR=true git -C "$wt" rebase -q -i --autosquash "$mb" >/dev/null 2>&1; then
+      git -C "$wt" rebase --abort >/dev/null 2>&1 || true
+      git -C "$wt" checkout -q -f "hunt/$slug"
+      die 1 "$k: autosquash en conflit, rien n'est poussé"
+    fi
+    squashed=$(git -C "$wt" rev-parse HEAD)
+    if ! git -C "$wt" diff --quiet "$fsha" "$squashed"; then
+      git -C "$wt" checkout -q -f "hunt/$slug"
+      die 1 "$k: l'autosquash change l'arbre (git diff $fsha $squashed non vide)"
+    fi
+    for dep in $(jq -r --arg k "$k" '.repos[$k].depends_on // [] | .[]' <<<"$scope"); do
+      if [[ -n ${pushed[$dep]:-} ]]; then run_repin "$k" "$dep" "${pushed[$dep]}" "$wt" || true; fi
+    done
+    out=$(git -C "$wt" rev-parse HEAD)
+    push_tip "$k" "$out" force || { git -C "$wt" checkout -q -f "hunt/$slug"; die 1 "$k: push en échec"; }
+    git -C "$wt" checkout -q -f "hunt/$slug"
+    git -C "$wt" reset -q --hard "$out"
+    append push "$(jq -cn --arg r "$k" --arg f "$fsha" --arg s "$out" --arg b "hunt/$slug" \
+      '{repo:$r, frozen:$f, sha:$s, branch:$b}')"
+    pushed[$k]=$out
+  fi
+
+  # MR/PR, once per repository and frozen SHA.
+  if ev --arg k "$k" --arg f "$fsha" -e 'any(.[]; .kind == "mr-opened" and .repo == $k and .frozen == $f)' >/dev/null; then
+    continue
+  fi
+  mapfile -t closes < <(ev -r --arg k "$k" '[.[] | select(.kind == "label" and .repo == $k and .issue != null)]
+    | group_by(.issue) | map(last | select((.label | ltrimstr("hunt:")) == "fixed-local") | .issue) | .[] | tostring')
+  deps_open=()
+  for dep in $(jq -r --arg k "$k" '.repos[$k].depends_on // [] | .[]' <<<"$scope"); do
+    ev --arg d "$dep" -e 'any(.[]; .kind == "merged" and .repo == $d)' >/dev/null || deps_open+=("$dep")
+  done
+  topic=$(jq -r '.topic // ""' <<<"$scope")
+  title="hunt($slug): ${topic:0:80}"
+  draft=()
+  if [[ ${#deps_open[@]} -gt 0 ]]; then draft=(--draft); title="$title (waits for the merge of ${deps_open[*]})"; fi
+  body=$(printf 'Hunt `%s`: %s\n\nPushed: %s (frozen %s, autosquashed, same tree).\n\n' "$slug" "$topic" "${pushed[$k]}" "$fsha"
+         for n in "${closes[@]+"${closes[@]}"}"; do printf 'Closes #%s\n' "$n"; done)
+  target=$(repo_field "$k" .mr_target); target=${target:-$(repo_field "$k" .base)}
+  mr=$("$F" "$slug" "$k" mr-create --source "hunt/$slug" --target "$target" --title "$title" --body "$body" "${draft[@]+"${draft[@]}"}") \
+    || die 1 "$k: ouverture de la MR en échec (relancer hunt-push: idempotent)"
+  append mr-opened "$(jq -c --arg r "$k" --arg f "$fsha" --argjson c "$(printf '%s\n' "${closes[@]+"${closes[@]}"}" | jq -R 'select(. != "") | tonumber' | jq -cs .)" \
+    '{repo:$r, frozen:$f, url, mr:.number, closes:$c}' <<<"$mr")"
+  for n in "${closes[@]+"${closes[@]}"}"; do
+    if "$F" "$slug" "$k" issue-label "$n" --add "hunt:fixed" --remove "hunt:fixed-local" >/dev/null 2>&1 \
+       && "$F" "$slug" "$k" issue-comment "$n" --body "Fix pushed in ${pushed[$k]} ($(jq -r .url <<<"$mr"))." >/dev/null 2>&1; then
+      append label "$(jq -cn --arg r "$k" --argjson i "$n" '{repo:$r, issue:$i, label:"fixed"}')"
+    else
+      say "$k #$n: label/commentaire non posés"
+    fi
+  done
+  say "$k: $(jq -r .url <<<"$mr")"
+done
