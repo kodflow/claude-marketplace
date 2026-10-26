@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016  # jq programs are single-quoted on purpose
+# hunt-queue — run one heavy job (build, test, lint, container) when the
+# machine has room for it, shared with `lourd` so that every heavy job on the
+# host is counted, hunt or not.
+#
+#   hunt-queue [--exclusive] [--label TEXT] [--wait SECONDS] [--lock PATH]
+#              [--deadline SECONDS] -- CMD...
+#
+# Locks, all in ~/.cache/lourd/, always taken in this order: gate.lock, then
+# token.<i>.lock, then (exclusive only) the project lock; `lourd` adds
+# gros.lock after them for repo-wide jobs.
+#   normal     gate held briefly, until one free token is taken
+#   exclusive  gate, every token, and the project lock (--lock PATH, else
+#              scope.json .repos[$HUNT_REPO].lock of hunt $HUNT_SLUG)
+# Tokens: $HUNT_TOKENS, else ~/.cache/lourd/tokens.conf, else 2. No child of
+# CMD inherits a lock (a daemon it starts cannot keep a token).
+#
+# --wait     longest wait for the locks (default 7200 s). Past it: exit 75,
+#            the queue record stays with state "timeout", and a `queue-timeout`
+#            event goes to the ledger of $HUNT_SLUG: no verdict.
+# --deadline longest run of CMD (killed past it, exit 124); published as
+#            `busy.deadline` in status.json.
+#
+# Queue record ~/.cache/hunt/queue/<pid>.json {pid, starttime, boot_id, slug,
+# label, since, exclusive, state waiting|running|timeout, deadline}, removed on
+# exit; records and job directories of dead processes are purged at start.
+# Each job gets its own temporary directory, exported as HUNT_JOB_TMP and under
+# every variable listed in scope.json .queue.tmp_env, removed on exit; the
+# scope's .repos[$HUNT_REPO].env is exported too. CMD runs through `lourd`
+# when it is on PATH ($HUNT_LOURD overrides the path, empty disables it), with
+# HUNT_QUEUE_HELD=1 so lourd does not take a second token. With $HUNT_SLUG
+# set, a `job` event records label, exit code, wait and run time.
+#
+# Exit: CMD's code · 2 usage · 75 queue timeout.
+set -euo pipefail
+
+readonly ME=hunt-queue
+readonly ROOT="$HOME/.local/state/hunt"
+readonly LDIR="$HOME/.cache/lourd"
+readonly QDIR="$HOME/.cache/hunt/queue"
+readonly TDIR="$HOME/.cache/hunt/tmp"
+SELF_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+readonly SELF_DIR
+
+die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
+usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
+now_ms() { date +%s%3N; }
+
+proc_starttime() {
+  local s
+  s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+  s=${s##*) }
+  # shellcheck disable=SC2086
+  set -- $s
+  printf '%s\n' "${20}"
+}
+boot_id() { cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo unknown; }
+
+exclusive=false label="" wait_s=7200 lock_path="" deadline_s=""
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --exclusive) exclusive=true; shift ;;
+    --label) [[ $# -ge 2 ]] || usage 2; label=$2; shift 2 ;;
+    --wait) [[ ${2:-} =~ ^[0-9]+$ ]] || die 2 "--wait SECONDS"; wait_s=$2; shift 2 ;;
+    --lock) [[ -n ${2:-} ]] || die 2 "--lock PATH"; lock_path=$2; shift 2 ;;
+    --deadline) [[ ${2:-} =~ ^[1-9][0-9]*$ ]] || die 2 "--deadline SECONDS"; deadline_s=$2; shift 2 ;;
+    -h|--help) usage 0 ;;
+    --) shift; break ;;
+    *) usage 2 ;;
+  esac
+done
+[[ $# -ge 1 ]] || usage 2
+command -v jq >/dev/null 2>&1 || die 1 "jq absent"
+command -v flock >/dev/null 2>&1 || die 1 "flock absent"
+
+slug=${HUNT_SLUG:-}
+[[ -z $slug || $slug =~ ^[a-z0-9-]{1,40}$ ]] || die 2 "HUNT_SLUG invalide: $slug"
+scope='{}'
+if [[ -n $slug && -r $ROOT/$slug/scope.json ]]; then
+  scope=$(jq -c 'objects' "$ROOT/$slug/scope.json" 2>/dev/null || echo '{}')
+  [[ -n $scope ]] || scope='{}'
+fi
+repo=${HUNT_REPO:-}
+
+ntok=${HUNT_TOKENS:-}
+[[ -z $ntok && -r $LDIR/tokens.conf ]] && ntok=$(tr -dc '0-9' <"$LDIR/tokens.conf")
+[[ $ntok =~ ^[1-9][0-9]*$ ]] || ntok=2
+
+if [[ $exclusive == true && -z $lock_path && -n $repo ]]; then
+  lock_path=$(jq -r --arg r "$repo" '.repos[$r].lock // empty' <<<"$scope")
+fi
+if [[ -n $lock_path ]]; then
+  lock_path=${lock_path/#\~/$HOME}
+  [[ $lock_path == "$HOME/.cache/"* ]] || die 2 "verrou de projet hors de ~/.cache: $lock_path"
+fi
+
+mkdir -p "$LDIR" "$QDIR" "$TDIR"
+
+# --- purge what dead jobs left -----------------------------------------------
+for f in "$QDIR"/*.json; do
+  [[ -e $f ]] || continue
+  read -r p st b < <(jq -r '"\(.pid // 0) \(.starttime // 0) \(.boot_id // "")"' "$f" 2>/dev/null || echo "0 0 x")
+  if [[ $p -gt 0 && $b == "$(boot_id)" && $(proc_starttime "$p" 2>/dev/null) == "$st" ]]; then continue; fi
+  rm -f "$f"
+done
+for dd in "$TDIR"/job-*; do
+  [[ -d $dd ]] || continue
+  p=${dd##*/job-}; p=${p%%.*}
+  [[ $p =~ ^[0-9]+$ ]] && kill -0 "$p" 2>/dev/null && continue
+  rm -rf "$dd"
+done
+
+# --- queue record ------------------------------------------------------------
+rec="$QDIR/$$.json"
+since=$(now_ms)
+deadline_ms=null
+state=waiting
+write_record() {
+  local tmp
+  tmp=$(mktemp "$QDIR/.rec.XXXXXX")
+  jq -cn --argjson pid $$ --arg st "$(proc_starttime $$)" --arg b "$(boot_id)" \
+    --arg slug "$slug" --arg label "$label" --argjson since "$since" \
+    --argjson ex "$exclusive" --arg state "$state" --argjson dl "$deadline_ms" '
+    {pid:$pid, starttime:($st|tonumber), boot_id:$b, slug:$slug, label:$label,
+     since:$since, exclusive:$ex, state:$state, deadline:$dl}' >"$tmp"
+  mv -f "$tmp" "$rec"
+}
+
+jobtmp=""
+child=""
+# shellcheck disable=SC2317  # invoked by the EXIT trap
+cleanup() {
+  if [[ -n $child ]]; then kill -TERM "$child" 2>/dev/null || true; fi
+  if [[ -n $jobtmp ]]; then rm -rf "$jobtmp"; fi
+  if [[ $state != timeout ]]; then rm -f "$rec"; fi
+}
+trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
+
+ledger() { # KIND JSON — best effort: a ledger hiccup never fails the job
+  [[ -n $slug && -d $ROOT/$slug ]] || return 0
+  "$SELF_DIR/hunt-ledger" append "$slug" "$1" "$2" >/dev/null 2>&1 \
+    || printf '%s: évènement %s non journalisé\n' "$ME" "$1" >&2
+}
+
+timed_out() {
+  state=timeout
+  write_record
+  ledger queue-timeout "$(jq -cn --arg l "$label" --argjson ex "$exclusive" \
+    --argjson w "$wait_s" '{label:$l, exclusive:$ex, wait_s:$w}')"
+  die 75 "délai d'attente de la file dépassé (${wait_s}s): aucun verdict"
+}
+
+write_record
+t0=$(date +%s)
+remaining() { local r=$(( wait_s - ($(date +%s) - t0) )); [[ $r -lt 0 ]] && r=0; printf '%s\n' "$r"; }
+
+# flock -w 0 would wait forever: no time left means a single try.
+lock_fd() { # FD SECONDS
+  if [[ $2 -gt 0 ]]; then flock -o -E 75 -w "$2" "$1"; else flock -o -E 75 -n "$1"; fi
+}
+FDS=()
+take() { # FILE — blocking, within what is left of --wait
+  local fd
+  exec {fd}>>"$1"
+  lock_fd "$fd" "$(remaining)" || timed_out
+  FDS+=("$fd")
+}
+
+exec {GFD}>>"$LDIR/gate.lock"
+lock_fd "$GFD" "$wait_s" || timed_out
+if [[ $exclusive == true ]]; then
+  for (( i = 0; i < ntok; i++ )); do take "$LDIR/token.$i.lock"; done
+  [[ -n $lock_path ]] && { mkdir -p "$(dirname "$lock_path")"; take "$lock_path"; }
+else
+  got=""
+  while [[ -z $got ]]; do
+    for (( i = 0; i < ntok; i++ )); do
+      exec {fd}>>"$LDIR/token.$i.lock"
+      if flock -o -E 75 -n "$fd"; then got=$fd; break; fi
+      exec {fd}>&-
+    done
+    [[ -n $got ]] && break
+    [[ $(remaining) -gt 0 ]] || timed_out
+    sleep 0.2
+  done
+  FDS+=("$got")
+fi
+exec {GFD}>&-
+
+# --- run -----------------------------------------------------------------------
+waited_ms=$(( $(now_ms) - since ))
+since=$(now_ms)
+[[ -n $deadline_s ]] && deadline_ms=$(( since + deadline_s * 1000 ))
+state=running
+write_record
+
+jobtmp=$(mktemp -d "$TDIR/job-$$.XXXXXX")
+export HUNT_JOB_TMP=$jobtmp HUNT_QUEUE_HELD=1
+while IFS= read -r v; do
+  [[ $v =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$v=$jobtmp"
+done < <(jq -r '.queue.tmp_env // [] | .[] | strings' <<<"$scope")
+if [[ -n $repo ]]; then
+  while IFS= read -r -d '' kv; do
+    k=${kv%%=*}
+    [[ $k =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "${kv?}"
+  done < <(jq -j --arg r "$repo" '.repos[$r].env // {} | to_entries[] | "\(.key)=\(.value)\u0000"' <<<"$scope")
+fi
+
+lourd_bin=${HUNT_LOURD-$(command -v lourd || true)}
+cmd=("$@")
+[[ -n $lourd_bin ]] && cmd=("$lourd_bin" "${cmd[@]}")
+[[ -n $deadline_s ]] && cmd=(timeout --kill-after=30 "$deadline_s" "${cmd[@]}")
+
+holders=$(jq -s '[.[] | select(.state=="running")] | length' "$QDIR"/*.json 2>/dev/null || echo 1)
+(
+  # The child holds no lock: a daemon it leaves behind cannot keep a token.
+  for f in "${FDS[@]}"; do x=$f; exec {x}>&-; done
+  exec "${cmd[@]}"
+) &
+child=$!
+set +e
+wait "$child"
+rc=$?
+set -e
+child=""
+ledger job "$(jq -cn --arg l "$label" --argjson rc "$rc" --argjson ex "$exclusive" \
+  --argjson w "$waited_ms" --argjson run "$(( $(now_ms) - since ))" --argjson h "$holders" \
+  '{label:$l, rc:$rc, exclusive:$ex, waited_ms:$w, run_ms:$run, concurrency:$h}')"
+exit "$rc"

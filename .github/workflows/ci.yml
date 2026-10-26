@@ -105,6 +105,15 @@ jobs:
       - name: The router resolves, namespaces and refuses as documented
         run: bash scripts/tests/test_route_agent.sh
 
+      # /hunt's scripts: concurrent ledger writers, the heavy-job queue, slot
+      # reservation at the cap, all-or-nothing integration, hunt-push refusing
+      # without convergence — and the status.json contract kodflow-hud reads.
+      - name: The /hunt scripts behave
+        run: |
+          shellcheck plugins/kodflow-workflow/bin/hunt-*
+          bash plugins/kodflow-workflow/skills/hunt/tests/run.sh
+          bash plugins/kodflow-workflow/skills/hunt/tests/status-contract.sh
+
       # Context cost, not correctness: pinned model/effort, description and
       # SKILL.md budgets, copied memory blocks, bare cross-plugin references.
       # Every finding is a warning until a check is named in COST_CHECKS_STRICT

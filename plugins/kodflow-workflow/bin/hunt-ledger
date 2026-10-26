@@ -1,0 +1,533 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016  # jq programs are single-quoted on purpose
+# hunt-ledger — the only writer of a /hunt journal, and of the two state files
+# derived from it (status.json, active.json).
+#
+#   hunt-ledger init SLUG                     register SLUG in active.json
+#   hunt-ledger append SLUG KIND [JSON]       append one event, fold it into status.json
+#   hunt-ledger read SLUG [--since SEQ]       complete events, one JSON object per line
+#   hunt-ledger rebuild SLUG                  status.json from the whole ledger (printed)
+#   hunt-ledger owner SLUG --set-state STATE  record a state change (event `state`)
+#   hunt-ledger owner SLUG --release          drop the owner (entry removed once `done`)
+#   hunt-ledger notify SLUG                   retry a failed desktop notification
+#                                             (used by `hunt-status --watchdog`)
+#
+# State lives in $HOME/.local/state/hunt/<SLUG>/ (never XDG_STATE_HOME):
+# scope.json (written before init), ledger.jsonl, ledger.lock, status.json.
+# Every event is one line {"seq","ts","kind",...} written by a single write(2)
+# under flock and fsynced; a line longer than 4096 bytes is refused, so a crash
+# can at worst leave one unterminated tail, which readers skip and the next
+# writer truncates. status.json is folded under the same lock, incrementally
+# when status.seq + 1 == seq and status.v matches, from the whole ledger
+# otherwise. Kinds `converged` and `push` belong to hunt-push alone; a `slot`
+# that would take the open counter past scope.thresholds.cap is refused (exit
+# 1), atomically, under the ledger lock. The event vocabulary is ledger.md's.
+# `append` prints the seq it wrote.
+#
+# Exit: 0 ok · 1 refused/failed · 2 usage · 75 lock timeout. Linux (flock, /proc).
+set -euo pipefail
+
+readonly ME=hunt-ledger
+readonly ROOT="$HOME/.local/state/hunt"
+readonly STATUS_V=1
+readonly MAX_LINE=4096
+# Kinds that do not prove the hunt is alive: they leave `beat` alone.
+readonly NON_PROGRESS='["stall"]'
+# Kinds that call for the user now: one desktop notification each.
+readonly ACT_NOW='["pause","decision","converged","mr-opened","stall"]'
+
+die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
+usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
+now_ms() { date +%s%3N; }
+
+check_slug() {
+  [[ ${1:-} =~ ^[a-z0-9-]{1,40}$ ]] || die 2 "slug invalide: '${1:-}' (attendu [a-z0-9-]{1,40})"
+}
+
+write_atomic() { # FILE CONTENT
+  local tmp
+  tmp=$(mktemp "$(dirname "$1")/.$(basename "$1").XXXXXX")
+  printf '%s\n' "$2" >"$tmp"
+  mv -f "$tmp" "$1"
+}
+
+# --- process identity --------------------------------------------------------
+proc_starttime() { # PID -> field 22 of /proc/PID/stat
+  local s
+  s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+  s=${s##*) }
+  # shellcheck disable=SC2086
+  set -- $s
+  printf '%s\n' "${20}"
+}
+boot_id() { cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo unknown; }
+
+# The owner is the agent session's process: HUNT_OWNER_PID when given, else the
+# nearest ancestor whose name is `claude`, else the parent.
+owner_pid() {
+  if [[ -n ${HUNT_OWNER_PID:-} ]]; then printf '%s\n' "$HUNT_OWNER_PID"; return; fi
+  local p=$PPID comm
+  while [[ $p -gt 1 ]]; do
+    comm=$(cat "/proc/$p/comm" 2>/dev/null || true)
+    [[ $comm == claude ]] && { printf '%s\n' "$p"; return; }
+    p=$(awk '{ sub(/^.*\) /, ""); print $2 }' "/proc/$p/stat" 2>/dev/null || echo 1)
+  done
+  printf '%s\n' "$PPID"
+}
+
+proc_json() { # PID -> {pid,starttime,boot_id}
+  local st
+  st=$(proc_starttime "$1" || echo 0)
+  jq -cn --argjson pid "$1" --arg st "$st" --arg b "$(boot_id)" \
+    '{pid:$pid, starttime:($st|tonumber? // 0), boot_id:$b}'
+}
+
+proc_alive() { # JSON {pid,starttime,boot_id} -> 0 if that very process runs
+  local pid st b
+  pid=$(jq -r '.pid // 0' <<<"$1"); st=$(jq -r '.starttime // 0' <<<"$1"); b=$(jq -r '.boot_id // ""' <<<"$1")
+  [[ $pid -gt 0 && $b == "$(boot_id)" ]] || return 1
+  [[ $(proc_starttime "$pid" 2>/dev/null) == "$st" ]]
+}
+
+# --- active.json (global, under .active.lock) --------------------------------
+active_lock() {
+  mkdir -p "$ROOT"
+  exec {AFD}>>"$ROOT/.active.lock"
+  flock -o -E 75 -w 30 "$AFD" || die 75 "verrou active.json non obtenu"
+}
+active_unlock() { exec {AFD}>&-; }
+active_read() {
+  local cur
+  cur=$(cat "$ROOT/active.json" 2>/dev/null || true)
+  if [[ -n $cur ]] && jq -e 'type=="object" and (.hunts|type)=="array"' >/dev/null 2>&1 <<<"$cur"; then
+    printf '%s\n' "$cur"
+  else
+    printf '{"v":1,"hunts":[]}\n'
+  fi
+}
+active_apply() { # [jq args...] JQ_FILTER — read-modify-write under the lock
+  local out
+  active_lock
+  out=$(active_read | jq -c "$@") || { active_unlock; return 1; }
+  write_atomic "$ROOT/active.json" "$out"
+  active_unlock
+}
+
+# --- ledger ------------------------------------------------------------------
+hunt_dir() { printf '%s/%s\n' "$ROOT" "$1"; }
+
+ledger_lock() { # SLUG
+  local d; d=$(hunt_dir "$1")
+  exec {LFD}>>"$d/ledger.lock"
+  flock -o -E 75 -w "${HUNT_LEDGER_WAIT:-60}" "$LFD" || die 75 "verrou du ledger non obtenu"
+}
+ledger_unlock() { exec {LFD}>&-; }
+
+# Complete lines only: an unterminated tail is a crashed write, not an event.
+ledger_complete() { # FILE
+  local data
+  [[ -s $1 ]] || return 0
+  data=$(cat "$1"; printf x)
+  data=${data%x}
+  if [[ $data != *$'\n' ]]; then
+    if [[ $data == *$'\n'* ]]; then data=${data%$'\n'*}$'\n'; else data=; fi
+  fi
+  printf '%s' "$data"
+}
+
+# Truncate a torn tail (caller holds the ledger lock: nobody else writes).
+ledger_heal() { # FILE
+  local f=$1 size keep
+  [[ -s $f ]] || return 0
+  [[ $(tail -c 1 "$f" | od -An -c | tr -d ' ') == '\n' ]] && return 0
+  size=$(stat -c %s "$f")
+  keep=$(ledger_complete "$f" | wc -c)
+  if [[ $keep -lt $size ]]; then truncate -s "$keep" "$f"; fi
+}
+
+last_seq() { # FILE (healed) -> highest seq, 0 if empty
+  local last s
+  last=$(tail -n 1 "$1" 2>/dev/null || true)
+  [[ -z $last ]] && { echo 0; return; }
+  s=$(jq -r 'if type=="object" and (.seq|type)=="number" then .seq else empty end' 2>/dev/null <<<"$last" || true)
+  if [[ -z $s ]]; then
+    s=$(jq -nR '[inputs | fromjson? | objects | .seq | numbers] | max // 0' <"$1")
+  fi
+  printf '%s\n' "$s"
+}
+
+# --- the reducer (status v1) -------------------------------------------------
+# One step per event; the same function folds incrementally and rebuilds, so
+# the two paths cannot disagree. Three fields beyond the published contract
+# keep the fold exact when an event repeats: counter.issues (keys repo#N still
+# counted) and counter.reserved (slots not yet turned into issues),
+# pass.cells (cells with a verdict in this pass), codex.by_issue. Fields that do not come from the ledger
+# (queue snapshot, busy, notified_seq, notify_failed) are set by finish().
+read -r -d '' JQ_LIB <<'JQ' || true
+def clip($n): tostring | if length > $n then .[0:$n-1] + "…" else . end;
+def ikey($e): "\($e.repo // "")#\($e.issue)";
+def etext($e):
+  [ ($e.repo // empty | tostring),
+    (if $e.issue != null then "#\($e.issue)" else empty end),
+    ($e.text // $e.title // $e.summary // $e.question // $e.reason // $e.label // $e.to
+     // $e.url // $e.outcome // "" | tostring),
+    ($e.detail // empty | tostring) ]
+  | map(select(. != "")) | join(" ") | clip(160);
+def shastr: if type == "object" then (to_entries
+              | if length == 1 then .[0].value else map("\(.key):\(.value | tostring | .[0:12])") | join(" ") end)
+            else . end;
+# Kinds kept out of the 20 notable events.
+def quiet: ["verdict","agent","agent-end","claim","release","tip-before","forge-intent",
+            "forge-done","codex","slot","witness-run","job","finding","bundle"];
+def parked: ["fixed-local","needs-decision","off-topic","fixed"];
+def recount: .counter.open = ((.counter.issues | length) + .counter.reserved);
+def add_issue($k): .counter.issues = ((.counter.issues - [$k]) + [$k]) | recount;
+def drop_issue($k): .counter.issues = (.counter.issues - [$k]) | recount;
+def add_decision($e):
+  .decisions = ([.decisions[] | select(.repo != $e.repo or .issue != $e.issue)]
+                + [{repo:$e.repo, issue:$e.issue, title:(($e.title // $e.question // "") | clip(120))}]);
+def drop_decision($e):
+  .decisions = [.decisions[] | select(.repo != $e.repo or .issue != $e.issue)];
+def codex_count:
+  .codex.by_issue as $m
+  | .codex.pending   = ([$m[] | select(. == "pending")]   | length)
+  | .codex.done      = ([$m[] | select(. == "done")]      | length)
+  | .codex.skipped   = ([$m[] | select(. == "skipped")]   | length)
+  | .codex.abandoned = ([$m[] | select(. == "abandoned")] | length);
+def init($scope; $slug; $tokens):
+  { v: 1, slug: $slug, seq: 0, state: "hunting", pause: null,
+    counter: { open: 0, cap: ($scope.thresholds.cap // 10),
+               resume_at: ($scope.thresholds.resume_at // 7), issues: [], reserved: 0 },
+    pass: { n: 0, sha: null, cells_done: 0, cells_total: (($scope.matrix // []) | length), cells: [] },
+    queue: { tokens_total: $tokens, holders: [], waiting: [] },
+    tip: { sha: null, bundle_at: null },
+    codex: { pending: 0, done: 0, skipped: 0, abandoned: 0, by_issue: {} },
+    decisions: [], beat: null, busy: null, notified_seq: 0, notify_failed: false,
+    events: [] };
+def step($e):
+  .seq = $e.seq
+  | (if ($nonprogress | index($e.kind)) then . else .beat = $e.ts end)
+  | if   $e.kind == "state"   then .state = ($e.to // $e.state // .state)
+                                   | (if .state != "paused" then .pause = null else . end)
+    elif $e.kind == "pause"   then .state = "paused"
+                                   | .pause = {reason: ($e.reason // ""), since: $e.ts}
+    elif $e.kind == "resume"  then (if .state == "paused" then .state = "hunting" else . end) | .pause = null
+    elif $e.kind == "converged" then .state = "pushing"
+    elif $e.kind == "push"    then .state = "awaiting-merge"
+    elif $e.kind == "teardown" then .state = "done" | .pause = null
+    elif $e.kind == "pass-start" then
+      .pass = { n: ($e.n // (.pass.n + 1)), sha: ($e.sha // null | shastr), cells_done: 0,
+                cells_total: ($e.cells_total // .pass.cells_total), cells: [] }
+    elif $e.kind == "pass-end" then
+      (if $e.cells_done != null then .pass.cells_done = $e.cells_done else . end)
+    elif $e.kind == "verdict" then
+      (if ($e.pass == null or $e.pass == .pass.n) and ($e.result // "") != "no-verdict" and $e.cell != null
+       then .pass.cells = ((.pass.cells - [$e.cell | tostring]) + [$e.cell | tostring])
+            | .pass.cells_done = (.pass.cells | length)
+            | (if .pass.cells_total > 0 and .pass.cells_done > .pass.cells_total
+               then .pass.cells_done = .pass.cells_total else . end)
+       else . end)
+    elif $e.kind == "slot" then .counter.reserved += 1 | recount
+    elif $e.kind == "forge-done" then
+      (if ($e.op // "") == "issue-create" and $e.issue != null then
+         add_issue(ikey($e))
+         | (if .counter.reserved > 0 then .counter.reserved -= 1 else . end) | recount
+       else . end)
+    elif $e.kind == "label" then
+      (($e.label // "") | ltrimstr("hunt:")) as $l
+      | if (parked | index($l)) then drop_issue(ikey($e))
+          | (if $l == "needs-decision" then add_decision($e) else drop_decision($e) end)
+        elif $l == "open" or $l == "reopened" then add_issue(ikey($e))
+        else . end
+    elif $e.kind == "decision" then drop_issue(ikey($e)) | add_decision($e)
+    elif $e.kind == "closed" then drop_issue(ikey($e)) | drop_decision($e)
+    elif $e.kind == "codex" then
+      .codex.by_issue[ikey($e)] = ($e.result // "pending") | codex_count
+    elif $e.kind == "tip-after" then .tip.sha = ($e.sha // .tip.sha)
+    elif $e.kind == "bundle"  then .tip.bundle_at = $e.ts | .tip.sha = ($e.sha // .tip.sha)
+    else . end
+  | if (quiet | index($e.kind)) then .
+    else .events = ((.events + [{seq: $e.seq, kind: $e.kind, text: etext($e)}]) | .[-20:]) end;
+# Bounded to 16 KiB: oldest events go first, then the oldest decisions.
+def bound:
+  until((tojson | utf8bytelength) <= 16384 or ((.events | length) == 0 and (.decisions | length) == 0);
+        if (.events | length) > 0 then .events = .events[1:] else .decisions = .decisions[1:] end);
+def finish($queue; $busy; $nseq; $nfail):
+  .v = 1 | .queue = $queue | .busy = $busy
+  | .notified_seq = $nseq | .notify_failed = $nfail
+  | .decisions = .decisions[-40:]
+  | bound;
+JQ
+
+tokens_total() {
+  local n=${HUNT_TOKENS:-}
+  [[ -z $n && -r $HOME/.cache/lourd/tokens.conf ]] && n=$(tr -dc '0-9' <"$HOME/.cache/lourd/tokens.conf")
+  [[ $n =~ ^[1-9][0-9]*$ ]] || n=2
+  printf '%s\n' "$n"
+}
+
+# Snapshot of ~/.cache/hunt/queue: live records only (a dead pid is ignored here,
+# purged by hunt-queue). Prints {queue, busy} for SLUG.
+queue_snapshot() { # SLUG
+  local dir=$HOME/.cache/hunt/queue f recs=() rec
+  if [[ -d $dir ]]; then
+    for f in "$dir"/*.json; do
+      [[ -e $f ]] || continue
+      rec=$(jq -c 'select(type=="object")' "$f" 2>/dev/null) || continue
+      [[ -n $rec ]] || continue
+      proc_alive "$(jq -c '{pid:(.pid//0), starttime:(.starttime//0), boot_id:(.boot_id//"")}' <<<"$rec")" || continue
+      recs+=("$rec")
+    done
+  fi
+  printf '%s\n' "${recs[@]+"${recs[@]}"}" | jq -cs --arg slug "$1" --argjson n "$(tokens_total)" '
+    map(select(type=="object")) as $r
+    | { queue: { tokens_total: $n,
+                 holders: [$r[] | select(.state=="running")
+                           | {slug:(.slug//""), pid, label:(.label//""), since, exclusive:(.exclusive==true)}]
+                          | sort_by(.since) | .[:16],
+                 waiting: [$r[] | select(.state=="waiting") | {slug:(.slug//""), label:(.label//""), since}]
+                          | sort_by(.since) | .[:16] },
+        busy: ([$r[] | select(.state=="running" and .slug==$slug)] as $mine
+               | if ($mine | length) == 0 then null
+                 else { since: ($mine | map(.since) | min),
+                        deadline: (if any($mine[]; .deadline == null) then null
+                                   else ($mine | map(.deadline) | max) end) } end) }'
+}
+
+scope_json() { # SLUG
+  local f; f="$(hunt_dir "$1")/scope.json"
+  jq -c 'if type=="object" then . else error("scope.json is not an object") end' "$f" 2>/dev/null \
+    || die 1 "$f absent ou illisible"
+}
+
+# Full rebuild from the ledger. Carries notified_seq / notify_failed over from
+# the current status.json: they record notifications, not events.
+compute_rebuild() { # SLUG -> status JSON
+  local slug=$1 d scope prev nseq nfail snap
+  d=$(hunt_dir "$slug"); scope=$(scope_json "$slug")
+  prev=$(jq -c 'select(type=="object")' "$d/status.json" 2>/dev/null || true)
+  [[ -n $prev ]] || prev='{}'
+  nseq=$(jq -r '.notified_seq // 0 | numbers' <<<"$prev" 2>/dev/null || echo 0)
+  nfail=$(jq -r '.notify_failed == true' <<<"$prev" 2>/dev/null || echo false)
+  snap=$(queue_snapshot "$slug")
+  ledger_complete "$d/ledger.jsonl" | jq -cnR \
+    --argjson scope "$scope" --arg slug "$slug" --argjson snap "$snap" \
+    --argjson nonprogress "$NON_PROGRESS" --argjson nseq "$nseq" --argjson nfail "$nfail" "$JQ_LIB"'
+    reduce (inputs | fromjson? | objects | select((.seq|type)=="number" and (.kind|type)=="string")) as $e
+      (init($scope; $slug; $snap.queue.tokens_total); step($e))
+    | finish($snap.queue; $snap.busy; $nseq; $nfail)'
+}
+
+compute_step() { # SLUG EVENT_JSON -> status JSON, or nothing if a rebuild is due
+  local slug=$1 ev=$2 d prev snap
+  d=$(hunt_dir "$slug")
+  prev=$(jq -c 'select(type=="object")' "$d/status.json" 2>/dev/null || true)
+  [[ -n $prev ]] || return 0
+  jq -e --argjson e "$ev" --argjson v "$STATUS_V" '.v == $v and (.seq + 1) == $e.seq' >/dev/null <<<"$prev" || return 0
+  snap=$(queue_snapshot "$slug")
+  jq -c --argjson e "$ev" --argjson snap "$snap" --argjson nonprogress "$NON_PROGRESS" "$JQ_LIB"'
+    step($e) | finish($snap.queue; $snap.busy; .notified_seq; .notify_failed)' <<<"$prev"
+}
+
+is_act_now() { [[ $(jq -n --argjson a "$ACT_NOW" --arg k "$1" '$a | index($k) != null') == true ]]; }
+is_progress() { [[ $(jq -n --argjson a "$NON_PROGRESS" --arg k "$1" '$a | index($k) == null') == true ]]; }
+
+can_notify() {
+  [[ -n ${DBUS_SESSION_BUS_ADDRESS:-} ]] && [[ -n ${DISPLAY:-}${WAYLAND_DISPLAY:-} ]] \
+    && command -v notify-send >/dev/null 2>&1
+}
+send_notify() { # SLUG TEXT
+  timeout 10 notify-send -a hunt -u critical "hunt $1" "$2" </dev/null >/dev/null 2>&1 {LFD}>&-
+}
+
+# --- commands ----------------------------------------------------------------
+cmd_init() {
+  [[ $# -eq 1 ]] || usage 2
+  local slug=$1 d pid me cur created now
+  check_slug "$slug"
+  d=$(hunt_dir "$slug")
+  [[ -r $d/scope.json ]] || die 1 "$d/scope.json absent: écrire le scope avant init"
+  scope_json "$slug" >/dev/null
+  touch "$d/ledger.jsonl" "$d/ledger.lock"
+  pid=$(owner_pid); me=$(proc_json "$pid"); now=$(now_ms)
+  active_lock
+  cur=$(active_read | jq -c --arg s "$slug" '.hunts[] | select(.slug==$s)' | head -n 1)
+  if [[ -n $cur ]]; then
+    local owner
+    owner=$(jq -c '.owner.proc // {}' <<<"$cur")
+    if proc_alive "$owner" && [[ $(jq -c . <<<"$owner") != "$(jq -c . <<<"$me")" ]]; then
+      active_unlock
+      die 1 "la chasse '$slug' a un propriétaire vivant (pid $(jq -r .pid <<<"$owner"))"
+    fi
+  fi
+  # A slug reused after its ledger was emptied is a new hunt: new `created`.
+  created=$now
+  if [[ -n $cur && -s $d/ledger.jsonl ]]; then created=$(jq -r ".created // $now" <<<"$cur"); fi
+  local out
+  out=$(active_read | jq -c --arg s "$slug" --argjson c "$created" --argjson now "$now" \
+      --arg sess "${CLAUDE_SESSION_ID:-}" --argjson proc "$me" '
+    (.hunts | map(select(.slug==$s)) | .[0]) as $old
+    | .v = 1
+    | .hunts = ([.hunts[] | select(.slug != $s)]
+                + [{slug:$s, created:$c, owner:{session:$sess, proc:$proc},
+                    beat:($old.beat // $now), watch:($old.watch // null),
+                    state:($old.state // "hunting")}])')
+  write_atomic "$ROOT/active.json" "$out"
+  active_unlock
+  ledger_lock "$slug"
+  ledger_heal "$d/ledger.jsonl"
+  write_atomic "$d/status.json" "$(compute_rebuild "$slug")"
+  ledger_unlock
+  printf '%s\n' "$d"
+}
+
+cmd_append() {
+  [[ $# -ge 2 && $# -le 3 ]] || usage 2
+  local slug=$1 kind=$2 data=${3:-'{}'} d seq ts line status nseq
+  check_slug "$slug"
+  [[ $kind =~ ^[a-z][a-z0-9-]{0,31}$ ]] || die 2 "kind invalide: '$kind'"
+  d=$(hunt_dir "$slug")
+  [[ -r $d/scope.json ]] || die 1 "chasse inconnue: $slug (pas de scope.json)"
+  scope_json "$slug" >/dev/null
+  jq -e 'type=="object"' >/dev/null 2>&1 <<<"$data" || die 2 "JSON attendu: un objet"
+  if [[ $kind == converged || $kind == push ]]; then
+    local tok=""
+    [[ -r $d/.push-token ]] && tok=$(cat "$d/.push-token")
+    [[ -n $tok && ${HUNT_PUSH_TOKEN:-} == "$tok" ]] \
+      || die 1 "le type '$kind' est réservé à hunt-push"
+  fi
+  [[ -e $d/ledger.jsonl ]] || touch "$d/ledger.jsonl"
+  ledger_lock "$slug"
+  ledger_heal "$d/ledger.jsonl"
+  seq=$(( $(last_seq "$d/ledger.jsonl") + 1 ))
+  ts=$(now_ms)
+  line=$(jq -c --argjson seq "$seq" --argjson ts "$ts" --arg kind "$kind" \
+    '{seq:$seq, ts:$ts, kind:$kind} + del(.seq, .ts, .kind)' <<<"$data")
+  if [[ $kind == slot ]]; then
+    local st
+    st=$(jq -c 'select(type=="object")' "$d/status.json" 2>/dev/null || true)
+    [[ -n $st ]] || st=$(compute_rebuild "$slug")
+    jq -e '.counter.open < .counter.cap' >/dev/null <<<"$st" \
+      || { ledger_unlock; die 1 "plafond atteint ($(jq -r '"\(.counter.open)/\(.counter.cap)"' <<<"$st")): pas de place"; }
+  fi
+  local bytes
+  bytes=$(printf '%s\n' "$line" | wc -c)
+  if [[ $bytes -gt $MAX_LINE ]]; then
+    ledger_unlock
+    die 1 "ligne de $bytes octets > $MAX_LINE: stocker le détail à part et le référencer par hash"
+  fi
+  # One write(2) of the whole line, then fsync.
+  dd of="$d/ledger.jsonl" oflag=append conv=notrunc,fsync bs=8192 count=1 iflag=fullblock \
+    status=none <<<"$line" || { ledger_unlock; die 1 "écriture du ledger en échec"; }
+
+  status=$(compute_step "$slug" "$line")
+  [[ -n $status ]] || status=$(compute_rebuild "$slug")
+  if is_act_now "$kind"; then
+    local text
+    text=$(jq -r '.events[-1].text // ""' <<<"$status")
+    [[ $(jq -r '.events[-1].kind // ""' <<<"$status") == "$kind" ]] || text=$kind
+    if can_notify && send_notify "$slug" "$kind: $text"; then
+      status=$(jq -c --argjson s "$seq" '.notified_seq = $s | .notify_failed = false' <<<"$status")
+    else
+      status=$(jq -c '.notify_failed = true' <<<"$status")
+    fi
+  fi
+  write_atomic "$d/status.json" "$status"
+  # Mirror beat (progress kinds) and state into active.json.
+  local progress=true
+  is_progress "$kind" || progress=false
+  active_apply --arg s "$slug" --argjson ts "$ts" --argjson p "$progress" \
+    --arg st "$(jq -r .state <<<"$status")" '
+    .hunts |= map(if .slug == $s then (if $p then .beat = $ts else . end) | .state = $st else . end)' \
+    || true
+  ledger_unlock
+  nseq=$seq
+  printf '%s\n' "$nseq"
+}
+
+cmd_read() {
+  local slug=${1:-} since=0 d
+  [[ $# -ge 1 ]] || usage 2
+  shift
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      --since) [[ ${2:-} =~ ^[0-9]+$ ]] || die 2 "--since SEQ"; since=$2; shift 2 ;;
+      *) usage 2 ;;
+    esac
+  done
+  check_slug "$slug"
+  d=$(hunt_dir "$slug")
+  [[ -d $d ]] || die 1 "chasse inconnue: $slug"
+  ledger_complete "$d/ledger.jsonl" \
+    | jq -cR --argjson s "$since" 'fromjson? | objects | select((.seq|type)=="number" and .seq > $s)'
+}
+
+cmd_rebuild() {
+  [[ $# -eq 1 ]] || usage 2
+  local slug=$1 d out
+  check_slug "$slug"
+  d=$(hunt_dir "$slug")
+  [[ -d $d ]] || die 1 "chasse inconnue: $slug"
+  ledger_lock "$slug"
+  ledger_heal "$d/ledger.jsonl"
+  out=$(compute_rebuild "$slug")
+  write_atomic "$d/status.json" "$out"
+  ledger_unlock
+  printf '%s\n' "$out"
+}
+
+cmd_owner() {
+  [[ $# -ge 2 ]] || usage 2
+  local slug=$1; shift
+  check_slug "$slug"
+  case $1 in
+    --set-state)
+      case ${2:-} in
+        hunting|paused|frozen|final-pass|pushing|awaiting-merge|done) ;;
+        *) die 2 "--set-state hunting|paused|frozen|final-pass|pushing|awaiting-merge|done" ;;
+      esac
+      cmd_append "$slug" state "$(jq -cn --arg s "$2" '{to:$s}')" >/dev/null ;;
+    --release)
+      active_apply --arg s "$slug" '
+        .hunts |= (map(if .slug == $s then .owner = {session:"", proc:null} else . end)
+                   | map(select(.slug != $s or .state != "done")))' ;;
+    *) usage 2 ;;
+  esac
+}
+
+# Retry the desktop notification of the latest act-now event not yet notified.
+cmd_notify() {
+  [[ $# -eq 1 ]] || usage 2
+  local slug=$1 d st nseq ev
+  check_slug "$slug"
+  d=$(hunt_dir "$slug")
+  ledger_lock "$slug"
+  st=$(jq -c 'select(type=="object")' "$d/status.json" 2>/dev/null || true)
+  [[ -n $st ]] || { ledger_unlock; die 1 "status.json illisible"; }
+  nseq=$(jq -r '.notified_seq // 0' <<<"$st")
+  ev=$(ledger_complete "$d/ledger.jsonl" | jq -cnR --argjson a "$ACT_NOW" --argjson n "$nseq" \
+    '[inputs | fromjson? | objects | select(.seq > $n and ($a | index(.kind)))] | last // empty')
+  if [[ -z $ev ]]; then
+    st=$(jq -c '.notify_failed = false' <<<"$st")
+  elif can_notify && send_notify "$slug" "$(jq -r '"\(.kind): \(.text // .title // .reason // "")"' <<<"$ev")"; then
+    st=$(jq -c --argjson s "$(jq .seq <<<"$ev")" '.notified_seq = $s | .notify_failed = false' <<<"$st")
+  else
+    st=$(jq -c '.notify_failed = true' <<<"$st")
+    write_atomic "$d/status.json" "$st"; ledger_unlock; exit 1
+  fi
+  write_atomic "$d/status.json" "$st"
+  ledger_unlock
+}
+
+command -v jq >/dev/null 2>&1 || die 1 "jq absent"
+command -v flock >/dev/null 2>&1 || die 1 "flock absent"
+case ${1:-} in
+  init)    shift; cmd_init "$@" ;;
+  append)  shift; cmd_append "$@" ;;
+  read)    shift; cmd_read "$@" ;;
+  rebuild) shift; cmd_rebuild "$@" ;;
+  owner)   shift; cmd_owner "$@" ;;
+  notify)  shift; cmd_notify "$@" ;;
+  -h|--help) usage 0 ;;
+  *) usage 2 ;;
+esac

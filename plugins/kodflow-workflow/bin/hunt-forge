@@ -1,0 +1,457 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016  # jq programs are single-quoted on purpose
+# hunt-forge — issues, merge requests and CI of one repository of a hunt,
+# whatever its forge. The forge comes from scope.json .repos[REPO].
+#
+#   hunt-forge SLUG REPO auth                         check the credentials (GET /user)
+#   hunt-forge SLUG REPO issue-create --title T (--body B | --body-file F)
+#                                     --nonce N [--label L]...
+#       prints the issue number; idempotent: an issue already carrying
+#       `hunt-nonce: N` is returned instead of a second one
+#   hunt-forge SLUG REPO issue-list [--label L] [--state open|closed|all]
+#       JSON [{number,title,state,labels,body}] (state open|closed)
+#   hunt-forge SLUG REPO issue-comment N (--body B | --body-file F)
+#   hunt-forge SLUG REPO issue-label N [--add L]... [--remove L]...
+#   hunt-forge SLUG REPO issue-close N [--body B | --body-file F]
+#   hunt-forge SLUG REPO issue-find-nonce NONCE       prints the number; exit 1 if none
+#   hunt-forge SLUG REPO mr-create --source BRANCH --target BRANCH --title T
+#                                  (--body B | --body-file F) [--draft]
+#       JSON {number,url}; an open MR/PR from BRANCH is returned, not duplicated
+#   hunt-forge SLUG REPO mr-status N                  JSON {number,state,merge_sha,url}
+#                                                     (state open|merged|closed)
+#   hunt-forge SLUG REPO ci-status REF                JSON {state,url}
+#                                                     (pending|running|success|failed|none)
+#
+# Forges: github (gh, its own login; GH_TOKEN from .token_env when set),
+# gitlab (API v4 at .api_url), forgejo (API v1 at .api_url), local (a
+# file-backed fake under <state>/SLUG/forge-local/REPO/, for tests). For gitlab
+# and forgejo the token is read from the variable .token_env names (default
+# GITLAB_PERSONAL_ACCESS_TOKEN, FORGEJO_TOKEN) and reaches curl through
+# `-K <(...)`, never argv; https only, no redirect, .ca_file when set; the
+# project path is URL-encoded here and refused if a raw `/` survives; lists
+# are paginated. Labels missing on the forge are created.
+#
+# Exit: 0 ok · 1 refused/failed (forge error included) · 2 usage.
+set -euo pipefail
+
+readonly ME=hunt-forge
+readonly ROOT="$HOME/.local/state/hunt"
+
+die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
+usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
+
+[[ ${1:-} == -h || ${1:-} == --help ]] && usage 0
+[[ $# -ge 3 ]] || usage 2
+slug=$1 key=$2 op=$3
+shift 3
+[[ $slug =~ ^[a-z0-9-]{1,40}$ ]] || die 2 "slug invalide: $slug"
+[[ $key =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || die 2 "clé de dépôt invalide: $key"
+command -v jq >/dev/null 2>&1 || die 1 "jq absent"
+scope_f="$ROOT/$slug/scope.json"
+[[ -r $scope_f ]] || die 1 "$scope_f absent"
+repo=$(jq -c --arg k "$key" '.repos[$k] // empty' "$scope_f")
+[[ -n $repo ]] || die 1 "dépôt '$key' absent du scope"
+forge=$(jq -r '.forge // ""' <<<"$repo")
+project=$(jq -r '.project // ""' <<<"$repo")
+api_url=$(jq -r '.api_url // ""' <<<"$repo"); api_url=${api_url%/}
+ca_file=$(jq -r '.ca_file // ""' <<<"$repo"); ca_file=${ca_file/#\~/$HOME}
+
+# --- options -------------------------------------------------------------------
+title="" body="" body_set=false nonce="" source_br="" target_br="" draft=false
+state_f=open label_f="" labels=() add=() remove=() pos=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --title) title=${2?}; shift 2 ;;
+    --body) body=${2?}; body_set=true; shift 2 ;;
+    --body-file) [[ -r ${2?} ]] || die 2 "illisible: $2"; body=$(cat "$2"); body_set=true; shift 2 ;;
+    --nonce) nonce=${2?}; shift 2 ;;
+    --label) labels+=("${2?}"); label_f=$2; shift 2 ;;
+    --state) state_f=${2?}; shift 2 ;;
+    --add) add+=("${2?}"); shift 2 ;;
+    --remove) remove+=("${2?}"); shift 2 ;;
+    --source) source_br=${2?}; shift 2 ;;
+    --target) target_br=${2?}; shift 2 ;;
+    --draft) draft=true; shift ;;
+    --*) die 2 "option inconnue: $1" ;;
+    *) pos+=("$1"); shift ;;
+  esac
+done
+[[ $state_f =~ ^(open|closed|all)$ ]] || die 2 "--state open|closed|all"
+[[ -z $nonce || $nonce =~ ^[A-Za-z0-9._-]{1,80}$ ]] || die 2 "nonce invalide"
+num_arg() { [[ ${pos[0]:-} =~ ^[0-9]+$ ]] || die 2 "numéro attendu"; printf '%s\n' "${pos[0]}"; }
+nonce_line() { printf 'hunt-nonce: %s' "$1"; }
+labels_json() { if [[ $# -eq 0 ]]; then echo '[]'; else printf '%s\n' "$@" | jq -R . | jq -cs .; fi; }
+
+# --- local: file-backed fake ---------------------------------------------------
+L="$ROOT/$slug/forge-local/$key"
+local_lock() { mkdir -p "$L/issues" "$L/mrs" "$L/ci"; exec {LK}>>"$L/.lock"; flock -o -E 75 -w 30 "$LK" || die 1 "verrou local"; }
+local_next() { local f="$L/.next-$1" n; n=$(( $(cat "$f" 2>/dev/null || echo 0) + 1 )); echo "$n" >"$f"; echo "$n"; }
+local_issue() { [[ -r $L/issues/$1.json ]] || die 1 "issue #$1 inconnue"; cat "$L/issues/$1.json"; }
+local_put() { local tmp; tmp=$(mktemp "$L/.w.XXXXXX"); printf '%s\n' "$2" >"$tmp"; mv -f "$tmp" "$1"; }
+local_list() {
+  local f
+  for f in "$L"/issues/*.json; do if [[ -e $f ]]; then cat "$f"; fi; done | jq -cs --arg s "$state_f" --arg l "$label_f" '
+    map(select(($s == "all" or .state == $s) and ($l == "" or (.labels | index($l)))))
+    | sort_by(.number) | map({number, title, state, labels, body})'
+}
+local_find_nonce() {
+  local f
+  for f in "$L"/issues/*.json; do if [[ -e $f ]]; then cat "$f"; fi; done \
+    | jq -rs --arg n "$(nonce_line "$1")" '[.[] | select(.body | split("\n") | index($n))] | first | .number // empty'
+}
+
+do_local() {
+  local_lock
+  case $op in
+    auth) echo '{"login":"local"}' ;;
+    issue-create)
+      local found n
+      found=$(local_find_nonce "$nonce")
+      [[ -n $found ]] && { echo "$found"; return; }
+      n=$(local_next issue)
+      local_put "$L/issues/$n.json" "$(jq -cn --argjson n "$n" --arg t "$title" \
+        --arg b "$(printf '%s\n\n%s' "$body" "$(nonce_line "$nonce")")" \
+        --argjson l "$(labels_json "${labels[@]+"${labels[@]}"}")" \
+        '{number:$n, title:$t, body:$b, state:"open", labels:$l, comments:[]}')"
+      echo "$n" ;;
+    issue-list) local_list ;;
+    issue-comment)
+      local n; n=$(num_arg)
+      local_put "$L/issues/$n.json" "$(local_issue "$n" | jq -c --arg b "$body" '.comments += [$b]')" ;;
+    issue-label)
+      local n; n=$(num_arg)
+      local_put "$L/issues/$n.json" "$(local_issue "$n" | jq -c \
+        --argjson a "$(labels_json "${add[@]+"${add[@]}"}")" --argjson r "$(labels_json "${remove[@]+"${remove[@]}"}")" \
+        '.labels = (((.labels - $r) - $a) + $a)')" ;;
+    issue-close)
+      local n; n=$(num_arg)
+      local_put "$L/issues/$n.json" "$(local_issue "$n" | jq -c --arg b "$body" \
+        '.state = "closed" | if $b != "" then .comments += [$b] else . end')" ;;
+    issue-find-nonce)
+      local found; found=$(local_find_nonce "${pos[0]:?}")
+      [[ -n $found ]] || exit 1
+      echo "$found" ;;
+    mr-create)
+      local f n existing=""
+      for f in "$L"/mrs/*.json; do
+        [[ -e $f ]] || continue
+        jq -e --arg s "$source_br" '.source == $s and .state == "open"' "$f" >/dev/null && existing=$f
+      done
+      if [[ -n $existing ]]; then jq -c '{number, url}' "$existing"; return; fi
+      n=$(local_next mr)
+      local_put "$L/mrs/$n.json" "$(jq -cn --argjson n "$n" --arg s "$source_br" --arg t "$target_br" \
+        --arg ti "$title" --arg b "$body" --argjson d "$draft" \
+        '{number:$n, source:$s, target:$t, title:$ti, body:$b, draft:$d, state:"open",
+          merge_sha:null, url:"local://mr/\($n)"}')"
+      jq -c '{number, url}' "$L/mrs/$n.json" ;;
+    mr-status)
+      local n; n=$(num_arg)
+      [[ -r $L/mrs/$n.json ]] || die 1 "MR !$n inconnue"
+      jq -c '{number, state, merge_sha, url}' "$L/mrs/$n.json" ;;
+    ci-status)
+      local ref=${pos[0]:?} f
+      f="$L/ci/$(printf '%s' "$ref" | tr '/' '_').json"
+      if [[ -r $f ]]; then jq -c '{state, url:(.url // null)}' "$f"; else echo '{"state":"none","url":null}'; fi ;;
+    *) usage 2 ;;
+  esac
+}
+
+# --- gitlab / forgejo over curl ------------------------------------------------
+token=""
+load_token() {
+  local var
+  var=$(jq -r '.token_env // empty' <<<"$repo")
+  if [[ -z $var ]]; then
+    case $forge in gitlab) var=GITLAB_PERSONAL_ACCESS_TOKEN ;; forgejo) var=FORGEJO_TOKEN ;; esac
+  fi
+  [[ $var =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die 1 "token_env invalide"
+  token=${!var:-}
+  [[ -n $token ]] || die 1 "variable $var vide: pas de token"
+  [[ $token =~ ^[A-Za-z0-9_.:=+/-]+$ ]] || die 1 "le token de $var contient des caractères inattendus"
+}
+curl_config() { # never on argv: read by curl from a process substitution
+  case $forge in
+    gitlab)  printf 'header = "PRIVATE-TOKEN: %s"\n' "$token" ;;
+    forgejo) printf 'header = "Authorization: token %s"\n' "$token" ;;
+  esac
+}
+enc() { jq -rn --arg s "$1" '$s | @uri'; }
+proj_path() {
+  local p
+  case $forge in
+    gitlab)
+      p=$(enc "$project")
+      [[ $p != */* ]] || die 1 "chemin de projet mal encodé: $p"
+      printf '/projects/%s\n' "$p" ;;
+    forgejo)
+      [[ $project =~ ^[^/]+/[^/]+$ ]] || die 1 "projet forgejo attendu sous la forme owner/name: $project"
+      local o r
+      o=$(enc "${project%%/*}"); r=$(enc "${project#*/}")
+      [[ $o != */* && $r != */* ]] || die 1 "chemin de projet mal encodé"
+      printf '/repos/%s/%s\n' "$o" "$r" ;;
+  esac
+}
+api() { # METHOD PATH [JSON] -> response body
+  local m=$1 p=$2 data=${3:-} args out code
+  args=(-sS --proto "=https" --max-redirs 0 --connect-timeout 10 --max-time 60
+        -X "$m" -H 'Accept: application/json' -w '\n%{http_code}')
+  [[ -n $ca_file ]] && args+=(--cacert "$ca_file")
+  if [[ -n $data ]]; then
+    args+=(-H 'Content-Type: application/json' --data-binary @-)
+  fi
+  out=$(curl "${args[@]}" -K <(curl_config) "$api_url$p" <<<"$data") || die 1 "$m $p: réseau en échec"
+  code=${out##*$'\n'}; out=${out%$'\n'*}
+  [[ $code == 2* ]] || die 1 "$m $p: HTTP $code $(head -c 300 <<<"$out")"
+  printf '%s\n' "$out"
+}
+paged() { # PATH (with ?query) -> one JSON array of every page
+  local p=$1 page=1 chunk all='[]' size
+  case $forge in gitlab) size="per_page=100" ;; *) size="limit=50" ;; esac
+  while [[ $page -le 50 ]]; do
+    chunk=$(api GET "$p&$size&page=$page")
+    [[ $(jq 'length' <<<"$chunk") -gt 0 ]] || break
+    all=$(jq -cn --argjson a "$all" --argjson b "$chunk" '$a + $b')
+    page=$(( page + 1 ))
+  done
+  printf '%s\n' "$all"
+}
+gl_state() { case $state_f in open) echo opened ;; *) echo "$state_f" ;; esac; }
+fj_label_ids() { # NAMES... -> JSON array of ids, creating missing labels
+  local P all ids=() name id
+  P=$(proj_path)
+  all=$(paged "$P/labels?x=1")
+  for name in "$@"; do
+    id=$(jq -r --arg n "$name" 'map(select(.name == $n)) | first | .id // empty' <<<"$all")
+    if [[ -z $id ]]; then
+      id=$(api POST "$P/labels" "$(jq -cn --arg n "$name" '{name:$n, color:"#ededed"}')" | jq -r .id)
+    fi
+    ids+=("$id")
+  done
+  if [[ ${#ids[@]} -eq 0 ]]; then echo '[]'; else printf '%s\n' "${ids[@]}" | jq -cs 'map(tonumber)'; fi
+}
+api_find_nonce() {
+  local P line all
+  line=$(nonce_line "$1")
+  P=$(proj_path)
+  case $forge in
+    gitlab)
+      all=$(api GET "$P/issues?state=all&in=description&search=$(enc "$line")&per_page=100")
+      jq -r --arg n "$line" '[.[] | select((.description // "") | split("\n") | index($n))] | first | .iid // empty' <<<"$all" ;;
+    forgejo)
+      # Newest first, three pages: an issue made by a retried write is recent.
+      local page=1 chunk
+      while [[ $page -le 3 ]]; do
+        chunk=$(api GET "$P/issues?state=all&type=issues&limit=50&page=$page")
+        [[ $(jq length <<<"$chunk") -gt 0 ]] || break
+        jq -r --arg n "$line" '[.[] | select((.body // "") | split("\n") | index($n))] | first | .number // empty' <<<"$chunk" | grep . && return 0
+        page=$(( page + 1 ))
+      done ;;
+  esac
+}
+
+do_api() {
+  [[ $api_url == https://* ]] || die 1 "api_url doit être en https: '$api_url'"
+  command -v curl >/dev/null 2>&1 || die 1 "curl absent"
+  load_token
+  local P; P=$(proj_path)
+  case $op in
+    auth) api GET /user | jq -c '{login:(.username // .login)}' ;;
+    issue-create)
+      [[ -n $title && -n $nonce ]] || die 2 "--title et --nonce requis"
+      local found
+      found=$(api_find_nonce "$nonce" || true)
+      [[ -n $found ]] && { echo "$found"; return; }
+      local full; full=$(printf '%s\n\n%s\n' "$body" "$(nonce_line "$nonce")")
+      case $forge in
+        gitlab) api POST "$P/issues" "$(jq -cn --arg t "$title" --arg b "$full" \
+                  --arg l "$(IFS=,; echo "${labels[*]+"${labels[*]}"}")" '{title:$t, description:$b, labels:$l}')" | jq -r .iid ;;
+        forgejo) api POST "$P/issues" "$(jq -cn --arg t "$title" --arg b "$full" \
+                  --argjson l "$(fj_label_ids "${labels[@]+"${labels[@]}"}")" '{title:$t, body:$b, labels:$l}')" | jq -r .number ;;
+      esac ;;
+    issue-list)
+      case $forge in
+        gitlab) paged "$P/issues?state=$(gl_state)&labels=$(enc "$label_f")" | jq -c \
+                  'map({number:.iid, title, state:(if .state == "opened" then "open" else "closed" end), labels, body:(.description // "")})' ;;
+        forgejo) paged "$P/issues?state=$state_f&type=issues&labels=$(enc "$label_f")" | jq -c \
+                  'map({number, title, state, labels:[.labels[].name], body:(.body // "")})' ;;
+      esac ;;
+    issue-comment)
+      local n; n=$(num_arg); [[ $body_set == true ]] || die 2 "--body requis"
+      case $forge in
+        gitlab) api POST "$P/issues/$n/notes" "$(jq -cn --arg b "$body" '{body:$b}')" >/dev/null ;;
+        forgejo) api POST "$P/issues/$n/comments" "$(jq -cn --arg b "$body" '{body:$b}')" >/dev/null ;;
+      esac ;;
+    issue-label)
+      local n; n=$(num_arg)
+      case $forge in
+        gitlab) api PUT "$P/issues/$n" "$(jq -cn --arg a "$(IFS=,; echo "${add[*]+"${add[*]}"}")" \
+                  --arg r "$(IFS=,; echo "${remove[*]+"${remove[*]}"}")" '{add_labels:$a, remove_labels:$r}')" >/dev/null ;;
+        forgejo)
+          if [[ ${#add[@]} -gt 0 ]]; then
+            api POST "$P/issues/$n/labels" "$(jq -cn --argjson l "$(fj_label_ids "${add[@]}")" '{labels:$l}')" >/dev/null
+          fi
+          local id
+          if [[ ${#remove[@]} -gt 0 ]]; then
+            for id in $(fj_label_ids "${remove[@]}" | jq -r '.[]'); do
+              api DELETE "$P/issues/$n/labels/$id" >/dev/null || true
+            done
+          fi ;;
+      esac ;;
+    issue-close)
+      local n; n=$(num_arg)
+      if [[ -n $body ]]; then do_api_comment "$n"; fi
+      case $forge in
+        gitlab) api PUT "$P/issues/$n" '{"state_event":"close"}' >/dev/null ;;
+        forgejo) api PATCH "$P/issues/$n" '{"state":"closed"}' >/dev/null ;;
+      esac ;;
+    issue-find-nonce)
+      local found; found=$(api_find_nonce "${pos[0]:?}" || true)
+      [[ -n $found ]] || exit 1
+      echo "$found" ;;
+    mr-create)
+      [[ -n $source_br && -n $target_br && -n $title ]] || die 2 "--source, --target et --title requis"
+      case $forge in
+        gitlab)
+          local ex
+          ex=$(api GET "$P/merge_requests?state=opened&source_branch=$(enc "$source_br")&per_page=100")
+          if [[ $(jq length <<<"$ex") -gt 0 ]]; then jq -c 'first | {number:.iid, url:.web_url}' <<<"$ex"; return; fi
+          api POST "$P/merge_requests" "$(jq -cn --arg s "$source_br" --arg t "$target_br" --arg ti "$title" \
+            --arg b "$body" --argjson d "$draft" \
+            '{source_branch:$s, target_branch:$t, title:(if $d then "Draft: " + $ti else $ti end), description:$b}')" \
+            | jq -c '{number:.iid, url:.web_url}' ;;
+        forgejo)
+          local ex
+          ex=$(paged "$P/pulls?state=open")
+          ex=$(jq -c --arg s "$source_br" 'map(select(.head.ref == $s)) | first // empty' <<<"$ex")
+          if [[ -n $ex ]]; then jq -c '{number, url:.html_url}' <<<"$ex"; return; fi
+          api POST "$P/pulls" "$(jq -cn --arg s "$source_br" --arg t "$target_br" --arg ti "$title" \
+            --arg b "$body" --argjson d "$draft" \
+            '{head:$s, base:$t, title:(if $d then "WIP: " + $ti else $ti end), body:$b}')" \
+            | jq -c '{number, url:.html_url}' ;;
+      esac ;;
+    mr-status)
+      local n; n=$(num_arg)
+      case $forge in
+        gitlab) api GET "$P/merge_requests/$n" | jq -c '{number:.iid,
+                  state:(if .state == "opened" then "open" elif .state == "merged" then "merged" else "closed" end),
+                  merge_sha:(.merge_commit_sha // .squash_commit_sha), url:.web_url}' ;;
+        forgejo) api GET "$P/pulls/$n" | jq -c '{number,
+                  state:(if .merged then "merged" elif .state == "open" then "open" else "closed" end),
+                  merge_sha:(.merge_commit_sha // null), url:.html_url}' ;;
+      esac ;;
+    ci-status)
+      local ref=${pos[0]:?}
+      case $forge in
+        gitlab)
+          local q; if [[ $ref =~ ^[0-9a-f]{40}$ ]]; then q="sha=$ref"; else q="ref=$(enc "$ref")"; fi
+          api GET "$P/pipelines?$q&per_page=1" | jq -c 'first as $p | if $p == null then {state:"none", url:null}
+            else {state:({"success":"success","failed":"failed","canceled":"failed","running":"running",
+                          "skipped":"none","manual":"none"}[$p.status] // "pending"), url:$p.web_url} end' ;;
+        forgejo)
+          api GET "$P/commits/$(enc "$ref")/status" | jq -c 'if (.statuses // []) | length == 0 then {state:"none", url:null}
+            else {state:({"success":"success","pending":"pending","failure":"failed","error":"failed"}[.state] // "pending"),
+                  url:(.statuses[0].target_url // null)} end' ;;
+      esac ;;
+    *) usage 2 ;;
+  esac
+}
+do_api_comment() {
+  local P; P=$(proj_path)
+  case $forge in
+    gitlab) api POST "$P/issues/$1/notes" "$(jq -cn --arg b "$body" '{body:$b}')" >/dev/null ;;
+    forgejo) api POST "$P/issues/$1/comments" "$(jq -cn --arg b "$body" '{body:$b}')" >/dev/null ;;
+  esac
+}
+
+# --- github via gh -------------------------------------------------------------
+do_github() {
+  command -v gh >/dev/null 2>&1 || die 1 "gh absent"
+  [[ $project =~ ^[^/]+/[^/]+$ ]] || die 1 "projet github attendu sous la forme owner/name: $project"
+  local var
+  var=$(jq -r '.token_env // empty' <<<"$repo")
+  if [[ -n $var ]]; then
+    [[ $var =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die 1 "token_env invalide"
+    export GH_TOKEN="${!var:-}"
+  fi
+  local R=(-R "$project") tmpb
+  tmpb=$(mktemp); trap 'rm -f "$tmpb"' EXIT
+  ensure_labels() { local l; for l in "$@"; do gh label create "$l" "${R[@]}" --color ededed >/dev/null 2>&1 || true; done; }
+  find_nonce() {
+    gh api "repos/$project/issues?state=all&sort=created&direction=desc&per_page=100" \
+      --jq "[.[] | select(.pull_request == null) | select((.body // \"\") | split(\"\n\") | index(\"$(nonce_line "$1")\"))] | first | .number // empty"
+  }
+  case $op in
+    auth) gh api user --jq '{login}' ;;
+    issue-create)
+      [[ -n $title && -n $nonce ]] || die 2 "--title et --nonce requis"
+      local found; found=$(find_nonce "$nonce" || true)
+      [[ -n $found ]] && { echo "$found"; return; }
+      printf '%s\n\n%s\n' "$body" "$(nonce_line "$nonce")" >"$tmpb"
+      ensure_labels "${labels[@]+"${labels[@]}"}"
+      local args=() l url
+      for l in "${labels[@]+"${labels[@]}"}"; do args+=(--label "$l"); done
+      url=$(gh issue create "${R[@]}" --title "$title" --body-file "$tmpb" "${args[@]+"${args[@]}"}") || die 1 "gh issue create en échec"
+      echo "${url##*/}" ;;
+    issue-list)
+      local args=(--state "$state_f" --limit 1000 --json "number,title,state,labels,body")
+      [[ -n $label_f ]] && args+=(--label "$label_f")
+      gh issue list "${R[@]}" "${args[@]}" | jq -c 'map({number, title, state:(.state | ascii_downcase), labels:[.labels[].name], body})' ;;
+    issue-comment)
+      local n; n=$(num_arg); printf '%s\n' "$body" >"$tmpb"
+      gh issue comment "$n" "${R[@]}" --body-file "$tmpb" >/dev/null ;;
+    issue-label)
+      local n args=() l; n=$(num_arg)
+      ensure_labels "${add[@]+"${add[@]}"}"
+      for l in "${add[@]+"${add[@]}"}"; do args+=(--add-label "$l"); done
+      for l in "${remove[@]+"${remove[@]}"}"; do args+=(--remove-label "$l"); done
+      if [[ ${#args[@]} -gt 0 ]]; then gh issue edit "$n" "${R[@]}" "${args[@]}" >/dev/null; fi ;;
+    issue-close)
+      local n; n=$(num_arg)
+      if [[ -n $body ]]; then printf '%s\n' "$body" >"$tmpb"; gh issue comment "$n" "${R[@]}" --body-file "$tmpb" >/dev/null; fi
+      gh issue close "$n" "${R[@]}" >/dev/null ;;
+    issue-find-nonce)
+      local found; found=$(find_nonce "${pos[0]:?}" || true)
+      [[ -n $found ]] || exit 1
+      echo "$found" ;;
+    mr-create)
+      [[ -n $source_br && -n $target_br && -n $title ]] || die 2 "--source, --target et --title requis"
+      local ex
+      ex=$(gh pr list "${R[@]}" --head "$source_br" --state open --json number,url --jq 'first // empty')
+      if [[ -n $ex ]]; then jq -c '{number, url}' <<<"$ex"; return; fi
+      printf '%s\n' "$body" >"$tmpb"
+      local args=(); [[ $draft == true ]] && args+=(--draft)
+      local url
+      url=$(gh pr create "${R[@]}" --head "$source_br" --base "$target_br" --title "$title" --body-file "$tmpb" "${args[@]+"${args[@]}"}") \
+        || die 1 "gh pr create en échec"
+      jq -cn --arg u "$url" '{number:($u | split("/") | last | tonumber), url:$u}' ;;
+    mr-status)
+      local n; n=$(num_arg)
+      gh pr view "$n" "${R[@]}" --json number,state,mergeCommit,url | jq -c '{number,
+        state:(.state | ascii_downcase), merge_sha:(.mergeCommit.oid // null), url}' ;;
+    ci-status)
+      local ref=${pos[0]:?}
+      gh api "repos/$project/commits/$ref/check-runs?per_page=100" | jq -c '.check_runs as $r
+        | if ($r | length) == 0 then {state:"none", url:null}
+          elif any($r[]; .status != "completed") then {state:"running", url:$r[0].html_url}
+          elif any($r[]; (.conclusion // "") | IN("failure","cancelled","timed_out","action_required"))
+            then {state:"failed", url:([$r[] | select(.conclusion | IN("failure","cancelled","timed_out","action_required"))][0].html_url)}
+          else {state:"success", url:$r[0].html_url} end' ;;
+    *) usage 2 ;;
+  esac
+}
+
+case $op in
+  auth|issue-create|issue-list|issue-comment|issue-label|issue-close|issue-find-nonce|mr-create|mr-status|ci-status) ;;
+  *) usage 2 ;;
+esac
+if [[ $op == issue-create && ( -z $title || -z $nonce ) ]]; then die 2 "--title et --nonce requis"; fi
+if [[ $op == issue-comment && $body_set != true ]]; then die 2 "--body ou --body-file requis"; fi
+if [[ $op == mr-create && ( -z $source_br || -z $target_br || -z $title ) ]]; then die 2 "--source, --target et --title requis"; fi
+case $op in issue-find-nonce|ci-status) [[ -n ${pos[0]:-} ]] || die 2 "argument manquant" ;; esac
+
+case $forge in
+  local) do_local ;;
+  github) do_github ;;
+  gitlab|forgejo) do_api ;;
+  *) die 1 "forge inconnue pour '$key': '$forge'" ;;
+esac
