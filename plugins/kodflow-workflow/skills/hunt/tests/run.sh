@@ -229,6 +229,21 @@ check "bundle writes a verified tip.bundle" bash -c 'hunt-git g r bundle >/dev/n
 check "reset-tip back to an ancestor" bash -c 'hunt-git g r reset-tip "$0" >/dev/null && [[ $(hunt-git g r tip) == "$0" ]]' "$base_tip"
 hunt-git g r reset-tip "$(git -C "$T/wt/repo-hunt-g-fix-2" rev-parse HEAD)" >/dev/null 2>&1
 check "reset-tip refuses a SHA that is not an ancestor" test $? -eq 1
+mkdir -p "$S/b"; jq '.repos.r.remote = "origin"' "$S/g/scope.json" >"$S/b/scope.json"
+hunt-ledger init b >/dev/null
+hunt-git b r integ-init main >/dev/null
+echo extra >"$T/wt/repo-hunt-b/extra"; hunt-git b r commit integ "feat: extra" >/dev/null
+hunt-git b r worktree-remove integ
+hunt-git b r branch-delete hunt/b >/dev/null 2>&1
+check "branch-delete refuses hunt/<slug> neither pushed nor bundled" test $? -eq 1
+check "branch-delete accepts hunt/<slug> once bundled" bash -c 'hunt-git b r bundle >/dev/null && hunt-git b r branch-delete hunt/b'
+check "bundle-restore recreates hunt/<slug> at the bundle's head" \
+  bash -c '[[ $(hunt-git b r bundle-restore) == $(git bundle list-heads "$0" | cut -d" " -f1) ]] && hunt-git b r bundle-restore' "$S/b/tip.bundle"
+hunt-git b r integ-init main >/dev/null
+echo more >"$T/wt/repo-hunt-b/more"; hunt-git b r commit integ "feat: more" >/dev/null
+hunt-git b r bundle-restore >/dev/null 2>&1
+check "bundle-restore never moves an existing, different branch" test $? -eq 1
+hunt-git b r worktree-remove integ
 
 echo "== hunt-forge (local)"
 n1=$(hunt-forge g r issue-create --title "bug one" --body "observed / expected" --nonce n-1 --label hunt:g)

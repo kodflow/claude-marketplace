@@ -18,11 +18,18 @@
 #                                             SHA (idempotent; never moves an
 #                                             existing branch elsewhere)
 #   hunt-git SLUG REPO branch-delete BRANCH   local only; hunt/SLUG, hunt-fix/SLUG/*,
-#                                             hunt-w/SLUG/* and nothing else
+#                                             hunt-w/SLUG/* and nothing else;
+#                                             hunt/SLUG only once its tip is on
+#                                             <remote>/hunt/SLUG or in the bundle
 #   hunt-git SLUG REPO integrate BRANCH       rebase BRANCH on the tip, fast-forward
 #                                             hunt/SLUG; all or nothing; prints the tip
 #   hunt-git SLUG REPO reset-tip SHA          hunt/SLUG back to SHA (an ancestor)
 #   hunt-git SLUG REPO bundle                 tip.bundle: tmp, verify, mv
+#   hunt-git SLUG REPO bundle-restore         verify the bundle, create hunt/SLUG
+#                                             at its head when missing; refuses
+#                                             to move an existing, different one
+#                                             (its objects are fetched: then
+#                                             reset-tip to an ancestor)
 #   hunt-git SLUG REPO tip                    SHA of hunt/SLUG
 #
 # REPO is a key of scope.json .repos; its .path is the main checkout. Worktrees
@@ -58,6 +65,15 @@ repo_name=$(basename "$repo_path")
 integ_wt="$wt_root/$repo_name-hunt-$slug"
 tip_branch="hunt/$slug"
 
+bundle_path() {
+  local n; n=$(jq '.repos | length' "$scope_f")
+  if [[ $n -le 1 ]]; then printf '%s\n' "$ROOT/$slug/tip.bundle"; else printf '%s\n' "$ROOT/$slug/tip-$key.bundle"; fi
+}
+bundle_head() { # BUNDLE -> SHA of refs/heads/hunt/SLUG in it, verified
+  [[ -r $1 ]] || return 1
+  g bundle verify -q "$1" >/dev/null 2>&1 || return 1
+  g bundle list-heads "$1" "refs/heads/$tip_branch" 2>/dev/null | awk 'NR == 1 { print $1 }'
+}
 check_name() { [[ ${1:-} =~ ^[a-z0-9][a-z0-9.-]{0,40}$ ]] || die 2 "nom de worktree invalide: '${1:-}'"; }
 wt_of() { # NAME -> path
   if [[ $1 == integ ]]; then printf '%s\n' "$integ_wt"; else check_name "$1"; printf '%s\n' "$wt_root/$repo_name-hunt-$slug-$1"; fi
@@ -158,6 +174,15 @@ case $op in
       *) die 1 "refusé: $br n'appartient pas à la chasse $slug" ;;
     esac
     g show-ref --verify --quiet "refs/heads/$br" || exit 0
+    if [[ $br == "hunt/$slug" ]]; then
+      cur=$(tip_sha)
+      remote=$(jq -r --arg k "$key" '.repos[$k].remote // "origin"' "$scope_f")
+      rsha=$(g rev-parse --verify --quiet "refs/remotes/$remote/$br" || true)
+      bsha=$(bundle_head "$(bundle_path)" || true)
+      if ! { [[ -n $rsha ]] && g merge-base --is-ancestor "$cur" "$rsha"; } && [[ $bsha != "$cur" ]]; then
+        die 1 "refusé: $br ($cur) n'est ni poussé sur $remote ni dans le bundle — ce serait la seule copie"
+      fi
+    fi
     g branch -D "$br" >/dev/null || die 1 "suppression de $br impossible (worktree encore présent ?)" ;;
 
   integrate)
@@ -201,14 +226,27 @@ case $op in
   bundle)
     [[ $# -eq 0 ]] || usage 2
     tip_sha >/dev/null
-    n=$(jq '.repos | length' "$scope_f")
-    if [[ $n -le 1 ]]; then out="$ROOT/$slug/tip.bundle"; else out="$ROOT/$slug/tip-$key.bundle"; fi
+    out=$(bundle_path)
     tmp="$out.tmp.$$"
     trap 'rm -f "$tmp"' EXIT
     g bundle create -q "$tmp" "refs/heads/$tip_branch" 2>/dev/null || die 1 "git bundle create en échec"
     g bundle verify -q "$tmp" >/dev/null 2>&1 || die 1 "git bundle verify en échec: $tmp"
     mv -f "$tmp" "$out"
     printf '%s\n' "$out" ;;
+
+  bundle-restore)
+    [[ $# -eq 0 ]] || usage 2
+    b=$(bundle_path)
+    [[ -r $b ]] || die 1 "bundle absent: $b"
+    bsha=$(bundle_head "$b") || die 1 "bundle invalide: $b"
+    [[ -n $bsha ]] || die 1 "$tip_branch absent du bundle $b"
+    g fetch -q "$b" "refs/heads/$tip_branch" 2>/dev/null || die 1 "lecture du bundle impossible: $b"
+    if cur=$(g rev-parse --verify --quiet "refs/heads/$tip_branch"); then
+      [[ $cur == "$bsha" ]] || die 1 "$tip_branch existe sur $cur, le bundle sur $bsha: reset-tip $bsha si c'est un ancêtre, sinon décider"
+    else
+      g branch "$tip_branch" "$bsha" >/dev/null || die 1 "création de $tip_branch impossible"
+    fi
+    printf '%s\n' "$bsha" ;;
 
   tip)
     [[ $# -eq 0 ]] || usage 2

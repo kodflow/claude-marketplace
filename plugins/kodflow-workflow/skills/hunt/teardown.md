@@ -25,7 +25,9 @@ keeps the ledger: the trail outlives the hunt.
    last with `worktree-remove integ`.
 4. Local branches, through `hunt-git <slug> <repo> branch-delete <branch>` —
    which refuses anything but these: `hunt-fix/<slug>/*`, `hunt-w/<slug>/*`,
-   and `hunt/<slug>` (only once pushed or bundled). Nothing else, ever.
+   and `hunt/<slug>` — the latter only when its tip is on
+   `<remote>/hunt/<slug>` or is the head of the verified bundle (checked by the
+   script). Nothing else, ever.
 5. Images tagged `*:hunt-<slug>-*`.
 6. Queue records of this slug in `~/.cache/hunt/queue/`.
 7. Labels `hunt:*` removed from the issues that stayed open
