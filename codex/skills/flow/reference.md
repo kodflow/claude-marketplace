@@ -12,7 +12,7 @@ Index, by lane:
 | load | `/warmup` |
 | research | `/search` |
 | design | `/plan` `/challenge` `/refine` |
-| verify | `/review` `/debug` `/lint` |
+| verify | `/review` `/debug` `/lint` `/hunt` |
 | ship | `/git` `/adr` |
 | keep | `/learn` `/docs` |
 | observe | `/recap` |
@@ -397,6 +397,23 @@ signals a process itself.
 | reads | the kodflow-hooks task list, the running subagents and their worktrees, the open PRs and their CI |
 | writes | nothing but its own fingerprint (`recap-last`) · a `/recap --tick` cron job on `--loop` |
 | gate | **an iteration with nothing new prints one line**, never the table again |
+
+---
+
+## /hunt
+
+`kodflow-workflow` · inherit · **Hunt a topic's defects until a frozen pass finds none**
+
+**Type** `/hunt "<topic>" | --resume <slug> | --status <slug> | --teardown <slug> [--force]`
+
+| | |
+|---|---|
+| reads | the repositories of the scope · the forge's open issues on the topic · `~/.local/state/hunt/<slug>/ledger.jsonl` on resume |
+| writes | `~/.local/state/hunt/<slug>/` (`scope.json`, `ledger.jsonl`, `status.json`, `tip.bundle`) · `active.json` · issues labelled `hunt:<slug>` · worktrees and `hunt-*` branches · a `git push` deny in `.claude/settings.local.json` until teardown · one MR/PR per repository at convergence, through `hunt-push` |
+| after | nothing — this is an entry point |
+| then | the user merges the MRs · `/hunt --status` closes what the forge did not · `/hunt --teardown` |
+| gate | **one approval of `scope.json`, then nothing is pushed before a full pass on a frozen SHA finds nothing**; a finding becomes an issue only after a verifier replays it; never merges |
+| loop | passes until convergence, bounded by `max_passes` and `max_hours`; `--resume` rebuilds every role from the ledger |
 
 ---
 

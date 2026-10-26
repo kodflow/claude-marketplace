@@ -26,7 +26,7 @@ The whole thing. Default view.
 
 ```text
 ╔════════════════════════════════════════════════════════════════════════════════╗
-║  kodflow — the work loop        23 skills · 4 plugins · 29 agents · 5 hooks     ║
+║  kodflow — the work loop        24 skills · 4 plugins · 29 agents · 5 hooks     ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 
   THE SPINE                         LEAVES BEHIND                    THEN TYPE
@@ -99,6 +99,8 @@ The whole thing. Default view.
   ( the proof gate returns the run to isolation rather than waving it through
   /review --loop     converges on correctness, not on tone
   /lint              `make lint` if the Makefile has it, else the toolchain, to zero
+  /hunt "<topic>"    matrix ──▶ verified issues ──▶ fixes ──▶ frozen pass ──▶ MR
+  ◆ one scope approval; nothing is pushed before a frozen pass finds nothing
 
 
   WHAT OUTLIVES THE SESSION
@@ -131,7 +133,7 @@ The whole thing. Default view.
 
 ```text
 +==============================================================================+
-|  kodflow -- the work loop   23 skills . 4 plugins . 29 agents . 5 hooks     |
+|  kodflow -- the work loop   24 skills . 4 plugins . 29 agents . 5 hooks     |
 +==============================================================================+
 
   THE SPINE                        LEAVES BEHIND                   THEN TYPE
@@ -204,6 +206,8 @@ The whole thing. Default view.
   ( the proof gate returns the run to isolation rather than waving it through
   /review --loop    converges on correctness, not on tone
   /lint             `make lint` if the Makefile has it, else the toolchain
+  /hunt "<topic>"   matrix --> verified issues --> fixes --> frozen pass --> MR
+  <> one scope approval; nothing is pushed before a frozen pass finds nothing
 
 
   WHAT OUTLIVES THE SESSION
