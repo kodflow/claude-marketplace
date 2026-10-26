@@ -11,6 +11,11 @@
 #   hunt-ledger owner SLUG --release          drop the owner (entry removed once `done`)
 #   hunt-ledger notify SLUG                   retry a failed desktop notification
 #                                             (used by `hunt-status --watchdog`)
+#   hunt-ledger scope-check SLUG              exit 1 when scope.json no longer has
+#                                             the scope_sha256 of the last `start`
+#                                             or `scope-update` event (every other
+#                                             hunt script runs it before reading
+#                                             the scope); 0 when none is recorded
 #
 # State lives in $HOME/.local/state/hunt/<SLUG>/ (never XDG_STATE_HOME):
 # scope.json (written before init), ledger.jsonl, ledger.lock, status.json.
@@ -519,6 +524,23 @@ cmd_notify() {
   ledger_unlock
 }
 
+# The approved scope is the one whose hash the last `start` / `scope-update`
+# recorded: an edit after the approval is refused until it is approved again.
+cmd_scope_check() {
+  [[ $# -eq 1 ]] || usage 2
+  local slug=$1 d want have
+  check_slug "$slug"
+  d=$(hunt_dir "$slug")
+  [[ -r $d/scope.json ]] || die 1 "$d/scope.json absent"
+  want=$(ledger_complete "$d/ledger.jsonl" 2>/dev/null | jq -rnR '
+    [inputs | fromjson? | objects | select((.kind == "start" or .kind == "scope-update")
+      and (.scope_sha256 | type) == "string")] | last | .scope_sha256 // empty')
+  [[ -n $want ]] || return 0
+  have=$(sha256sum "$d/scope.json" | cut -d' ' -f1)
+  [[ $have == "$want" ]] \
+    || die 1 "scope.json modifié après approbation ($have, approuvé $want): faire approuver la modification (scope-update) ou la défaire"
+}
+
 command -v jq >/dev/null 2>&1 || die 1 "jq absent"
 command -v flock >/dev/null 2>&1 || die 1 "flock absent"
 case ${1:-} in
@@ -528,6 +550,7 @@ case ${1:-} in
   rebuild) shift; cmd_rebuild "$@" ;;
   owner)   shift; cmd_owner "$@" ;;
   notify)  shift; cmd_notify "$@" ;;
+  scope-check) shift; cmd_scope_check "$@" ;;
   -h|--help) usage 0 ;;
   *) usage 2 ;;
 esac

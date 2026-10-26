@@ -27,7 +27,9 @@
 # Re-pin is data, not code: .repos[REPO].repin = {cmd: [argv...], env: {...}}
 # where an argument may hold {sha}, {dep} and {dep.<field>.<field>} (a field of
 # the dependency's scope entry). --repin requires the dependency's `merged`
-# event {repo, merge_sha} and a previous `push` of the consumer.
+# event {repo, merge_sha} and a previous `push` of the consumer. Env names that
+# would run code first (LD_*, BASH_ENV, PATH, …) are dropped. The scope must
+# still be the approved one (hunt-ledger scope-check), else exit 1.
 #
 # Exit: 0 ok · 1 refused/failed · 2 usage.
 set -euo pipefail
@@ -49,6 +51,7 @@ slug=$1 repin=false
 d="$ROOT/$slug"
 scope_f="$d/scope.json"
 [[ -r $scope_f ]] || die 1 "$scope_f absent"
+"$SELF_DIR/hunt-ledger" scope-check "$slug" || exit 1
 scope=$(jq -c . "$scope_f")
 L="$SELF_DIR/hunt-ledger"
 F="$SELF_DIR/hunt-forge"
@@ -97,12 +100,20 @@ run_repin() { # CONSUMER DEP SHA WORKTREE -> 0 if a commit was made
   while IFS= read -r -d '' a; do cmd+=("$(expand_arg "$a" "$dep" "$sha")"); done \
     < <(jq -j '.cmd[] | tostring + "\u0000"' <<<"$spec")
   [[ ${#cmd[@]} -gt 0 ]] || die 1 "repin.cmd vide pour $c"
-  while IFS= read -r -d '' a; do envs+=("$a"); done \
+  while IFS= read -r -d '' a; do safe_env "${a%%=*}" && envs+=("$a"); done \
     < <(jq -j --arg k "$c" '((.repos[$k].env // {}) + (.repos[$k].repin.env // {})) | to_entries[] | "\(.key)=\(.value)\u0000"' <<<"$scope")
   ( cd "$wt" && env "${envs[@]+"${envs[@]}"}" "${cmd[@]}" ) || die 1 "re-pin de $c sur $dep@$sha en échec"
   git -C "$wt" add -A
   if git -C "$wt" diff --cached --quiet; then return 1; fi
   git -C "$wt" commit -q -m "chore(deps): pin $dep to ${sha:0:12}"
+}
+
+# Names a scope may not set: they would run code before the command does.
+safe_env() { # NAME
+  [[ $1 =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  [[ $1 =~ ^(LD_.*|DYLD_.*|BASH_ENV|ENV|BASH_FUNC_.*|PATH|IFS|PS4|PROMPT_COMMAND|SHELLOPTS|BASHOPTS|HOME|HUNT_.*)$ ]] \
+    && { say "variable $1 du scope ignorée"; return 1; }
+  return 0
 }
 
 guard_branch() { # REPO BRANCH

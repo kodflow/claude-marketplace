@@ -334,6 +334,23 @@ check "the pushed consumer pins the merge SHA" test "$(git -C "$T/app.git" show 
 check "repin and push events are in the ledger" \
   test "$(hunt-ledger read m | jq -rs '[.[] | select(.kind == "repin" or (.kind == "push" and .repin == true)) | .kind] | join(",")')" = repin,push
 
+echo "== scope bound to its approval"
+mkdir -p "$S/sb"
+jq -n --arg p "$R" '{matrix:["c1"], repos:{r:{path:$p, forge:"local", owned:true, base:"main",
+  env:{FOO:"bar", LD_PRELOAD:"/nonexistent.so", PATH:"/nowhere"}}}}' >"$S/sb/scope.json"
+hunt-ledger init sb >/dev/null
+hunt-ledger append sb start "{\"scope_sha256\":\"$(sha256sum "$S/sb/scope.json" | cut -d' ' -f1)\"}" >/dev/null
+check "the approved scope passes scope-check" hunt-ledger scope-check sb
+check "a job gets the scope's env but never LD_PRELOAD or PATH from it" \
+  env HUNT_SLUG=sb HUNT_REPO=r hunt-queue -- /bin/sh -c '[ "$FOO" = bar ] && [ -z "${LD_PRELOAD:-}" ] && [ "$PATH" != /nowhere ]'
+jq '.repos.r.forge = "gitlab" | .repos.r.api_url = "https://elsewhere.invalid"' "$S/sb/scope.json" >"$T/sb.json" && mv "$T/sb.json" "$S/sb/scope.json"
+for c in "hunt-forge sb r issue-list" "hunt-git sb r tip" "hunt-push sb" "env HUNT_SLUG=sb hunt-queue -- true"; do
+  $c >/dev/null 2>&1
+  check "an edit after approval stops: $c (exit 1)" test $? -eq 1
+done
+hunt-ledger append sb scope-update "{\"scope_sha256\":\"$(sha256sum "$S/sb/scope.json" | cut -d' ' -f1)\"}" >/dev/null
+check "a scope-update with the new hash approves the edit" hunt-ledger scope-check sb
+
 echo "== hunt-status"
 check "the table renders" bash -c 'hunt-status g | grep -q "Compteur"'
 check "--json is status.json" test "$(hunt-status g --json | jq -S .)" = "$(jq -S . "$S/g/status.json")"

@@ -27,7 +27,10 @@
 # exit; records and job directories of dead processes are purged at start.
 # Each job gets its own temporary directory, exported as HUNT_JOB_TMP and under
 # every variable listed in scope.json .queue.tmp_env, removed on exit; the
-# scope's .repos[$HUNT_REPO].env is exported too. CMD runs through `lourd`
+# scope's .repos[$HUNT_REPO].env is exported too, except names that would run
+# code first or unhook the job (LD_*, BASH_ENV, ENV, PATH, HOME, HUNT_*…).
+# The scope must still have the hash recorded at its approval
+# (hunt-ledger scope-check), else exit 1. CMD runs through `lourd`
 # when it is on PATH ($HUNT_LOURD overrides the path, empty disables it), with
 # HUNT_QUEUE_HELD=1 so lourd does not take a second token. With $HUNT_SLUG
 # set, a `job` event records label, exit code, wait and run time.
@@ -46,6 +49,15 @@ readonly SELF_DIR
 die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
 usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
 now_ms() { date +%s%3N; }
+
+# Names a scope may not set: they would run code before CMD does, or unhook
+# the queue itself.
+safe_env() { # NAME
+  [[ $1 =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+  if [[ $1 =~ ^(LD_.*|DYLD_.*|BASH_ENV|ENV|BASH_FUNC_.*|PATH|IFS|PS4|PROMPT_COMMAND|SHELLOPTS|BASHOPTS|HOME|HUNT_.*)$ ]]; then
+    printf '%s: variable %s du scope ignorée\n' "$ME" "$1" >&2; return 1
+  fi
+}
 
 proc_starttime() {
   local s
@@ -78,6 +90,7 @@ slug=${HUNT_SLUG:-}
 [[ -z $slug || $slug =~ ^[a-z0-9-]{1,40}$ ]] || die 2 "HUNT_SLUG invalide: $slug"
 scope='{}'
 if [[ -n $slug && -r $ROOT/$slug/scope.json ]]; then
+  "$SELF_DIR/hunt-ledger" scope-check "$slug" || exit 1
   scope=$(jq -c 'objects' "$ROOT/$slug/scope.json" 2>/dev/null || echo '{}')
   [[ -n $scope ]] || scope='{}'
 fi
@@ -200,12 +213,12 @@ write_record
 jobtmp=$(mktemp -d "$TDIR/job-$$.XXXXXX")
 export HUNT_JOB_TMP=$jobtmp HUNT_QUEUE_HELD=1
 while IFS= read -r v; do
-  [[ $v =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "$v=$jobtmp"
+  safe_env "$v" && export "$v=$jobtmp"
 done < <(jq -r '.queue.tmp_env // [] | .[] | strings' <<<"$scope")
 if [[ -n $repo ]]; then
   while IFS= read -r -d '' kv; do
     k=${kv%%=*}
-    [[ $k =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && export "${kv?}"
+    safe_env "$k" && export "${kv?}"
   done < <(jq -j --arg r "$repo" '.repos[$r].env // {} | to_entries[] | "\(.key)=\(.value)\u0000"' <<<"$scope")
 fi
 

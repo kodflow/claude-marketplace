@@ -43,6 +43,8 @@ set -euo pipefail
 
 readonly ME=hunt-git
 readonly ROOT="$HOME/.local/state/hunt"
+SELF_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+readonly SELF_DIR
 
 die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
 usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
@@ -55,6 +57,7 @@ shift 3
 [[ $key =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || die 2 "clé de dépôt invalide: $key"
 scope_f="$ROOT/$slug/scope.json"
 [[ -r $scope_f ]] || die 1 "$scope_f absent"
+"$SELF_DIR/hunt-ledger" scope-check "$slug" || exit 1
 repo_path=$(jq -r --arg k "$key" '.repos[$k].path // empty' "$scope_f")
 [[ -n $repo_path ]] || die 1 "dépôt '$key' absent du scope"
 repo_path=${repo_path/#\~/$HOME}

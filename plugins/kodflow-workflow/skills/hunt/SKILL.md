@@ -195,7 +195,10 @@ Then show it **once**:
    [1] start   [2] show scope.json   [3] edit a field   [4] cancel
 ```
 
-Nothing is created before an explicit **start**. That answer is recorded as
+Nothing is created before an explicit **start**. The `start` event records
+`scope_sha256`; every script refuses a `scope.json` that no longer matches it
+(`hunt-ledger scope-check`). To change the scope later, show the change, get a
+yes, then append `scope-update` with the new hash. That answer is recorded as
 the first ledger line (`hunt-ledger init`, then `append <slug> start`) and it is
 the only approval the hunt asks for — later questions are `hunt:needs-decision`
 tasks, never blocking prompts.

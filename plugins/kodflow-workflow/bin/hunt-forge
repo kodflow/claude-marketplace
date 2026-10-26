@@ -39,6 +39,8 @@ set -euo pipefail
 
 readonly ME=hunt-forge
 readonly ROOT="$HOME/.local/state/hunt"
+SELF_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+readonly SELF_DIR
 
 die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
 usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
@@ -52,6 +54,7 @@ shift 3
 command -v jq >/dev/null 2>&1 || die 1 "jq absent"
 scope_f="$ROOT/$slug/scope.json"
 [[ -r $scope_f ]] || die 1 "$scope_f absent"
+"$SELF_DIR/hunt-ledger" scope-check "$slug" || exit 1
 repo=$(jq -c --arg k "$key" '.repos[$k] // empty' "$scope_f")
 [[ -n $repo ]] || die 1 "dépôt '$key' absent du scope"
 forge=$(jq -r '.forge // ""' <<<"$repo")
