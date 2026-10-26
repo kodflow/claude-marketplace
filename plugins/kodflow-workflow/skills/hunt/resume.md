@@ -13,9 +13,10 @@ this module works, a `/clear` in the middle of a hunt costs a few minutes.
 ## 1. Ownership
 
 - `hunt-ledger init <slug>` takes over the slug in `active.json` with this
-  session's process identity; it refuses while the recorded owner process is
-  still alive (same pid, start time and boot). Two sessions never drive one
-  hunt.
+  session's process identity (the nearest `claude` ancestor); it refuses
+  (exit 1) while the recorded owner process is still alive and is not this
+  session (same pid, start time and boot). Two sessions never drive one hunt.
+  It keeps `created` and the state, and rebuilds `status.json`.
 - Preflight runs again (`SKILL.md` phase 0) — the machine may have changed
   since; the budget is recomputed and recorded.
 - `hunt-ledger rebuild <slug>` — `status.json` rebuilt from the whole ledger,
@@ -25,16 +26,23 @@ this module works, a `/clear` in the middle of a hunt costs a few minutes.
 
 Per `owned` repository, in the integration worktree and every hunt worktree:
 
-1. abort any rebase or cherry-pick in progress;
+1. abort any rebase, cherry-pick or merge in progress —
+   `hunt-git <slug> <repo> abort integ` for the integration worktree,
+   `abort <name>` for the others;
 2. reset `hunt/<slug>` to the SHA of the last `tip-after`
-   (`hunt-git <slug> <repo> reset-tip <sha>`); a `tip-before` with no
-   `tip-after` is an integration that never happened;
-3. if the branch is missing or does not match, restore it from `tip.bundle`.
+   (`hunt-git <slug> <repo> reset-tip <sha>`, refused unless that SHA is an
+   ancestor of the tip); a `tip-before` with no `tip-after` is an integration
+   that never happened;
+3. if the branch is missing or does not match, restore it from the bundle —
+   `tip.bundle`, or `tip-<repo>.bundle` when the scope has several
+   repositories — then `hunt-git <slug> <repo> integ-init <base>` re-attaches
+   the integration worktree.
 
 ## 3. Worktrees: resume or discard
 
-Every `~/Projects/.worktrees/<repo>-hunt-<slug>-*` is classified from the
-ledger:
+Every `$HUNT_WORKTREES/<repo>-hunt-<slug>-*` (default
+`~/Projects/.worktrees`, `<repo>` the basename of the scope's `path`) is
+classified from the ledger:
 
 | Worktree | Ledger says | Decision |
 |----------|-------------|----------|
@@ -49,16 +57,23 @@ Discard with `hunt-git <slug> <repo> worktree-remove <name>`.
 
 ## 4. Processes and queue
 
-- Stop the hunt's leftover job scopes (`run-*` units started for this slug)
-  and purge queue records and `GOTMPDIR` directories of dead pids — both
-  happen when `hunt-queue` starts.
+- Stop the hunt's leftover jobs: with the host's `lourd`, each job runs in a
+  transient `run-*.scope` unit; the unit names no slug, so stop only those
+  whose processes run in this hunt's worktrees (`systemctl --user status
+  'run-*.scope'`). Queue records and job temporary directories of dead pids are purged by the
+  next `hunt-queue` start; nothing to do by hand.
 - Forge intents without their done: `hunt-forge … issue-find-nonce <nonce>`
   for each, then append the missing `forge-done` or allow the retry.
 
 ## 5. Follow
 
-Re-arm Monitor on `hunt-status <slug> --watch` and check the watchdog timer is
-active. Append `resume` with the seq the rebuild started from.
+Re-arm Monitor on `hunt-status <slug> --watch` and re-install the watchdog
+with `hunt-status --install-watchdog` — always on resume: the unit names the
+script by its absolute path, which changes with every plugin update.
+
+Append `resume` (`from_seq`: the seq the rebuild started from) **only when the
+hunt may run again**: the event moves a `paused` hunt back to `hunting`. A
+hunt whose pause reason still holds stays paused, with no `resume`.
 
 ## 6. Roles
 
@@ -80,6 +95,6 @@ A role is relaunched only when idle in the ledger's eyes (no open claim, no
 | `hunting` | dispatch per `roles.md` |
 | `paused` | show the reason; resume only once it is resolved (`permission`: an allow rule added; `disk`: space freed; `cap`: counter ≤ threshold) |
 | `frozen`, `final-pass` | `convergence.md` §1–2 — the frozen SHA must still be the tip, else back to hunting |
-| `pushing` | `hunt-push <slug>` again — it is idempotent on what it already pushed |
+| `pushing` | `hunt-push <slug>` again — it is idempotent on what it already pushed and the MRs it already opened |
 | `awaiting-merge` | check the MRs (`convergence.md` §4) |
 | `done` | offer teardown |

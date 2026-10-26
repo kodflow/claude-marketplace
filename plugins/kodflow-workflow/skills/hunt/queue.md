@@ -5,13 +5,20 @@ role runs goes through `hunt-queue`. Nothing heavy runs directly: two OOMs from
 parallel builds are exactly what this file prevents.
 
 ```bash
-hunt-queue [--exclusive] [--label TEXT] [--wait SECONDS] [--lock PATH] -- CMD...
+HUNT_SLUG=<slug> HUNT_REPO=<repo> \
+hunt-queue [--exclusive] [--label TEXT] [--wait SECONDS] [--deadline SECONDS] [--lock PATH] -- CMD...
 ```
+
+`HUNT_SLUG` and `HUNT_REPO` (a key of `scope.json .repos`) are set on every
+call a role makes: they give the job its scope (env, project lock, temporary
+directories) and its ledger events. Without them the job still queues, as a
+job outside any hunt.
 
 | Exit | Meaning | What the role does |
 |------|---------|--------------------|
 | CMD's own | CMD ran | interpret per the adapter |
-| `75` | waited longer than `--wait` for the gate or a token | `queue-timeout` event; the run is **no verdict** — never a pass, never a fail |
+| `75` | waited longer than `--wait` for the gate or a token | `hunt-queue` already wrote `queue-timeout`; the run is **no verdict** — never a pass, never a fail |
+| `124` | CMD ran past `--deadline` and was killed | **no verdict** |
 | `2` | usage | fix the call |
 
 ## Gate, then tokens
@@ -28,16 +35,23 @@ overflowing it.
 
 - Token count: `HUNT_TOKENS`, else `~/.cache/lourd/tokens.conf`, default 2. Root
   sets `HUNT_TOKENS` from the budget in every brief.
-- Locks are taken with `flock -o`, so a daemon a job leaves behind does not
-  keep the token.
+- The project lock is `--lock PATH`, else the scope's `.repos[$HUNT_REPO].lock`;
+  it must live under `~/.cache/`.
+- Locks are taken with `flock -o`: CMD and anything it starts hold none, so a
+  daemon a job leaves behind does not keep the token.
 - **Exclusivity is decided by the scope**, not by the agent: the scope lists the
   packages and tag sets whose witnesses start containers
-  (`repos[].exclusive`). A container that appears during a normal job means the
-  job was misclassified: rerun it exclusive and tell root to fix the scope.
+  (`repos.<repo>.exclusive`). A container that appears during a normal job
+  means the job was misclassified: rerun it exclusive and tell root to fix the
+  scope.
 - An exclusive job that times out releases the gate.
-- `CMD` runs under `lourd` when it exists (memory and CPU cap of the host).
+- `CMD` runs under `lourd` when it is on `PATH` (memory and CPU cap of the
+  host), with `HUNT_QUEUE_HELD=1` so `lourd` does not take a second token.
+  `HUNT_LOURD` overrides the path; empty disables it.
 
 ## `--wait` per role
+
+The default is 7200 s. Roles pass their own:
 
 | Role | `--wait` | Why |
 |------|----------|-----|
@@ -46,17 +60,27 @@ overflowing it.
 | fixer | 1800 | |
 | integrator | 3600 | integration is serial; waiting is cheaper than a no-verdict |
 
-The stall threshold of the scope is set above the longest wait, so a role
-waiting for a token is not reported stale.
+The stall threshold of the scope (`thresholds.stall_ms`, default 2 h 05) is
+set above the longest wait, so a role waiting for a token is not reported
+stale. `--deadline` is published as `busy.deadline` in `status.json`; past it a
+silent hunt can be judged stalled.
 
 ## What a job gets
 
-- `GOTMPDIR` — a fresh `mktemp -d` under the state directory, removed by trap
-  when the job ends; dead jobs' directories are purged at queue start and on
-  resume.
-- A queue record `~/.cache/hunt/queue/<pid>.json` (`slug`, `label`, `since`,
-  `exclusive`, `state` `waiting|running|timeout`), removed on exit; records of
-  dead pids are purged at start. `status.json.queue` shows them.
+- The scope's `.repos[$HUNT_REPO].env`, exported.
+- Its own temporary directory under `~/.cache/hunt/tmp/`, exported as
+  `HUNT_JOB_TMP` **and** under every variable the scope lists in
+  `.queue.tmp_env` (Go: `["GOTMPDIR"]`), removed when the job ends; the
+  directories of dead jobs are purged when the next job starts. It lives as
+  long as the job: anything needed after it (a test binary, a log) is built and
+  used inside one job, or copied out.
+- A queue record `~/.cache/hunt/queue/<pid>.json` (`pid`, `starttime`,
+  `boot_id`, `slug`, `label`, `since`, `exclusive`, `state`
+  `waiting|running|timeout`, `deadline`), removed on exit — except a `timeout`
+  record, kept for the HUD until purged; records of dead pids are purged at
+  start. `status.json.queue` shows them.
+- With `HUNT_SLUG` set, a `job` event when CMD ends (label, exit code, wait and
+  run time, concurrency).
 - Containers: `--memory` limits whose sum fits the budget; images tagged with
   the scope's template (`<image>:hunt-<slug>-<sha12>`) so teardown finds them.
 

@@ -111,7 +111,17 @@ Chain:  /hunt → (merge the MRs yourself) → /hunt --status → --teardown
 
 Every script named below is on `PATH` while the plugin is enabled
 (`plugins/kodflow-workflow/bin/`) and answers `--help`. Exit codes everywhere:
-`0` ok · `1` refused or failed · `2` usage · `75` queue timeout (**no verdict**).
+`0` ok · `1` refused or failed · `2` usage · `75` queue or lock timeout (**no
+verdict**) · `124` a job killed at its `--deadline` (**no verdict**).
+
+| Script | Does |
+|--------|------|
+| `hunt-ledger` | the only writer of `ledger.jsonl`, `status.json`, `active.json` (`ledger.md`) |
+| `hunt-status` | the table, `--json`, `--watch` for Monitor, the watchdog and its timer |
+| `hunt-queue` | every heavy job: gate, tokens, scope env, per-job temp dirs (`queue.md`) |
+| `hunt-git` | every git operation of a role, confined to the hunt's worktrees and branches; never pushes |
+| `hunt-forge` | issues, MRs/PRs, CI on github, gitlab, forgejo (and `local`, for tests) |
+| `hunt-push` | the only push, after it has recomputed convergence; never merges |
 
 ---
 
@@ -124,14 +134,14 @@ hunt does not start; nothing is half-created.
 |---|-------|-----|------------|
 | 1 | Agent teams off on **every** settings layer | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is unset or `0` in the process env, `~/.claude/settings.json`, the project's `.claude/settings.json` and `.claude/settings.local.json`, and the managed settings (`/etc/claude-code/managed-settings.json`, and the `managed-settings.d/` drop-ins next to it). Read each with `jq -r '.env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS // empty'` | refuse; a managed layer at `1` cannot be overridden by the user — say so |
 | 2 | Forked subagents off | `CLAUDE_CODE_FORK_SUBAGENT=0` in the env block that the session runs with | refuse; name the settings file to edit |
-| 3 | Forge reachable and authenticated, per repository of the scope | `gh auth status` for `github`; `hunt-forge <slug> <repo> issue-list` for `gitlab` and `forgejo` (the script does `GET /user` with the token variable the scope names) | refuse; never print or echo a token |
+| 3 | Forge reachable and authenticated, per repository of the scope | `hunt-forge <slug> <repo> auth` — `gh api user` for `github`, `GET /user` with the token variable the scope names for `gitlab` and `forgejo` | refuse; never print or echo a token |
 | 4 | Codex reachable | `codex login status` | **not** blocking: record `codex: unavailable`, the final report will say "converged without Codex" |
 | 5 | Machine budget | `nproc`, `MemAvailable` from `/proc/meminfo` → hunters, fixers, heavy tokens (below) | refuse when even the minimum (1 hunter, 1 fixer, 1 token) does not fit |
 | 6 | Disk | `df -P` on `~/Projects/.worktrees`, `~/.local/state` and the Go/build caches | refuse under the scope's `thresholds.disk_min_gib` |
 | 7 | Other workloads | running kind clusters / containers (`docker ps`, `kind get clusters`) | ask the user to stop them; record what was stopped, teardown restarts it |
 | 8 | Toolchain pinned | `GOTOOLCHAIN=local` is in the scope's env and is set on every command; `-mod=mod` appears nowhere in the scope | refuse |
 | 9 | Not already running | `~/.local/state/hunt/active.json` — `hunt-ledger init` refuses a slug whose owner process is alive | refuse; offer `--status` |
-| 10 | Dry run done once | the ledger of some earlier hunt on this machine holds a complete cycle (finding → confirmed → fixed → integrated) with no permission prompt | warn, and do not leave the hunt unattended until one has run |
+| 10 | Dry run done once | the ledger of some earlier hunt on this machine holds a complete cycle (finding → confirmed → fixed → integrated) with no permission prompt | warn, and do not leave the hunt unattended until one has run (`tests/e2e-dryrun.sh` proves the scripts; this check proves the permissions) |
 
 ### Budget — computed, fixers first
 
@@ -191,18 +201,26 @@ tasks, never blocking prompts.
 ## Phase 2 — register, deny push, arm the follow
 
 1. `hunt-ledger init <slug>` — registers the hunt in `active.json` with this
-   session's process identity; refuses a live owner.
+   session's process identity (its nearest `claude` ancestor); refuses a slug
+   whose owner is another live process. Then `hunt-ledger append <slug> start`.
 2. Add `Bash(git push:*)` to `permissions.deny` of the **project's**
    `.claude/settings.local.json` (create it if absent, keep every other key).
    Pushing goes only through `hunt-push`. Teardown removes exactly this rule.
 3. Arm **Monitor** on `hunt-status <slug> --watch`. It prints one line per new
    ledger event and a `stall` line when the hunt stops beating; it is silent
-   otherwise, so an idle hunt costs no turn. Re-arm it before 30 minutes elapse
-   and on every resume.
-4. Install the watchdog: a `systemd --user` timer running
-   `hunt-status --watchdog` every few minutes. It covers what Monitor cannot —
-   a crashed session, a Monitor lost when the session went to the background.
-5. `hunt-ledger owner <slug> --set-state hunting`, then dispatch per `roles.md`.
+   otherwise, so an idle hunt costs no turn (it polls every
+   `HUNT_WATCH_INTERVAL` seconds, default 2). Re-arm it before 30 minutes
+   elapse and on every resume.
+4. Install the watchdog: `hunt-status --install-watchdog` writes and starts
+   the `systemd --user` timer `hunt-watchdog.timer`, which runs
+   `hunt-status --watchdog` every 5 minutes. It covers what Monitor cannot —
+   a crashed session, a Monitor lost when the session went to the background:
+   it appends `stall` (and notifies) for a hunt whose owner died or whose beat
+   is older than `thresholds.stall_ms`. The unit names the script by its
+   absolute path: install it again after every plugin update (resume does).
+5. `hunt-ledger owner <slug> --set-state hunting` (a `state` event), then
+   `hunt-git <slug> <repo> integ-init <base>` per `owned` repository, then
+   dispatch per `roles.md`.
 
 ## Phases 3–5
 
@@ -223,6 +241,8 @@ language of each repository. Root reads the module before entering its phase.
   role starts from a brief, not from root's context.
 - Resolve the plugin path once per session (`$CLAUDE_PLUGIN_ROOT`) and put it in
   every brief; never persist it — it changes with each plugin update.
+- Every brief sets `HUNT_SLUG=<slug>`, `HUNT_REPO=<repo>` and `HUNT_TOKENS` for
+  the role's `hunt-queue` calls.
 - Writes to the ledger go through `hunt-ledger append` only, never Write/Edit.
 - Every decision rests on a ledger line or a script's output, never on memory of
   the conversation: after `/clear`, the ledger is the conversation.
@@ -247,6 +267,7 @@ language of each repository. Root reads the module before entering its phase.
 | Treat a subagent report that mentions a warning or a block as success | **FORBIDDEN** — unconfirmed until re-checked |
 | A heavy command outside `hunt-queue` / `lourd` | **FORBIDDEN** |
 | Run fixes in the main checkout of a repository | **FORBIDDEN** — worktrees under `~/Projects/.worktrees` only |
+| Bare `git` in a role (commit, cherry-pick, rebase, branch, worktree) | **FORBIDDEN** — `hunt-git` only |
 | Touch a non-`owned` repository | **FORBIDDEN** — file an issue there and wait |
 | Print, echo, log or pass a token in argv | **FORBIDDEN** |
 | Teardown during `awaiting-merge` without `--force` | **FORBIDDEN** |

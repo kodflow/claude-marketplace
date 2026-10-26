@@ -4,30 +4,38 @@ How a Go repository of the scope builds, runs and counts a witness, finds the
 packages a fix can break, and works across several modules. The core of the
 skill knows none of this; it asks the adapter.
 
-Every command below runs through `hunt-queue` and carries the scope's `env`
-for the repository — `GOTOOLCHAIN=local` always, plus `GOEXPERIMENT`,
-`GOPRIVATE`/`GONOSUMDB` when the scope sets them — **for every `go` invocation,
-including `vet`, `list` and `test -c`**, not only for the test run. `-mod=mod`
-is never used.
+Every command below runs through `hunt-queue` with `HUNT_SLUG` and
+`HUNT_REPO` set, so the job exports the scope's `repos.<repo>.env` —
+`GOTOOLCHAIN=local` always, plus `GOEXPERIMENT`, `GOPRIVATE`/`GONOSUMDB` when
+the scope sets them — **for every `go` invocation, including `vet`, `list` and
+`test -c`**, not only for the test run. `-mod=mod` is never used.
+
+The scope sets `queue.tmp_env` to `["GOTMPDIR"]`: each job gets its own
+`GOTMPDIR` (= `HUNT_JOB_TMP`), removed when the job ends.
 
 ---
 
 ## 1. A witness is a compiled test binary
 
 ```bash
-# build once per (package, tag set, -race)
-hunt-queue --label "build <pkg>" -- \
-  env GOTOOLCHAIN=local <scope env> \
-  go test -c -o "$GOTMPDIR/w.test" [-race] [-tags '<tags>'] ./<pkg>
-
-# run N times, each in its own process, in the package directory
-cd <worktree>/<pkg-dir>
-for i in $(seq 1 "$N"); do
-  timeout "<per-run timeout>" "$GOTMPDIR/w.test" -test.run '^<TestName>$' \
-    -test.count=1 -test.v=test2json [-test.timeout <t>] 2>&1 \
-  | go tool test2json -p <import path> -t
-done
+# one job: build once per (package, tag set, -race), then run N times,
+# each in its own process, in the package directory. The binary lives in the
+# job's GOTMPDIR, which disappears with the job: build and runs stay together.
+HUNT_SLUG=<slug> HUNT_REPO=<repo> \
+hunt-queue --label "witness <cell> x<N>" --wait <role wait> --deadline <N × duration + margin> -- \
+  bash -c '
+    set -o pipefail
+    cd <worktree> && go test -c -o "$GOTMPDIR/w.test" [-race] [-tags "<tags>"] ./<pkg> || exit 3
+    cd <worktree>/<pkg-dir>
+    for i in $(seq 1 <N>); do
+      timeout <per-run timeout> "$GOTMPDIR/w.test" -test.run "^<TestName>$" \
+        -test.count=1 -test.v=test2json [-test.timeout <t>] 2>&1 \
+      | go tool test2json -p <import path> -t
+    done' > <witness log>
 ```
+
+The `test2json` stream goes to a log outside the job directory (the worktree's
+ignored files or the state directory): it is what gets counted.
 
 - **Run in the package directory** — tests read `testdata/` relative to it.
 - **Separate processes**: one run per process, so a leaked goroutine or a
@@ -116,8 +124,14 @@ When the scope has several `owned` Go modules that depend on each other:
   never at the repository root;
 - `go get` and the pre-push verification run with `GOWORK=off`, so the module
   graph that gets pushed is the one in `go.mod`, not the workspace's;
-- at convergence the dependency is pushed first, then the consumer is re-pinned
-  with `GOWORK=off go get <dep module>@<pushed sha>` in a dedicated commit;
+- at convergence `hunt-push` pushes the dependency first, then re-pins the
+  consumer with the scope's `repin` command in a dedicated commit. For Go:
+
+  ```json
+  "repin": { "cmd": ["go", "get", "{dep.go.module}@{sha}"], "env": { "GOWORK": "off" } }
+  ```
+
+  (`{dep.go.module}` is the dependency's `go.module`, `{sha}` the pushed SHA);
 - after every later push of the dependency, and after its merge, the consumer
   is re-pinned again (on the merge SHA in the end — `hunt-push <slug> --repin`).
 
@@ -130,6 +144,8 @@ When the scope has several `owned` Go modules that depend on each other:
 | `repos[].witness_tags` | the tag sets: one build and one vet per set |
 | `repos[].exclusive` | packages / tag sets whose witnesses start containers |
 | `repos[].go.race_denylist` | packages or tests never run with `-race` |
-| `repos[].go.module` | module path, for the re-pin |
+| `repos[].go.module` | module path, read by the consumer's `repin` as `{dep.go.module}` |
+| `repos[].repin` | the re-pin command, above |
+| `queue.tmp_env` | `["GOTMPDIR"]` |
 | `matrix[].witness` | package, test name, tags, `-race`, N |
 | `thresholds.witness_timeout_s` | per-run timeout |
