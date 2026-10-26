@@ -29,8 +29,8 @@
 # every variable listed in scope.json .queue.tmp_env, removed on exit; the
 # scope's .repos[$HUNT_REPO].env is exported too, except names that would run
 # code first or unhook the job (LD_*, BASH_ENV, ENV, PATH, HOME, HUNT_*…).
-# The scope must still have the hash recorded at its approval
-# (hunt-ledger scope-check), else exit 1. CMD runs through `lourd`
+# With $HUNT_SLUG set, the scope must exist and still have the hash recorded
+# at its approval (hunt-ledger scope-check), else exit 1. CMD runs through `lourd`
 # when it is on PATH ($HUNT_LOURD overrides the path, empty disables it), with
 # HUNT_QUEUE_HELD=1 so lourd does not take a second token. With $HUNT_SLUG
 # set, a `job` event records label, exit code, wait and run time.
@@ -89,7 +89,8 @@ command -v flock >/dev/null 2>&1 || die 1 "flock absent"
 slug=${HUNT_SLUG:-}
 [[ -z $slug || $slug =~ ^[a-z0-9-]{1,40}$ ]] || die 2 "HUNT_SLUG invalide: $slug"
 scope='{}'
-if [[ -n $slug && -r $ROOT/$slug/scope.json ]]; then
+if [[ -n $slug ]]; then
+  [[ -r $ROOT/$slug/scope.json ]] || die 1 "$ROOT/$slug/scope.json absent: pas de job de chasse sans scope"
   "$SELF_DIR/hunt-ledger" scope-check "$slug" || exit 1
   scope=$(jq -c 'objects' "$ROOT/$slug/scope.json" 2>/dev/null || echo '{}')
   [[ -n $scope ]] || scope='{}'

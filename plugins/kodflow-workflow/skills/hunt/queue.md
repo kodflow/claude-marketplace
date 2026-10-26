@@ -11,8 +11,9 @@ hunt-queue [--exclusive] [--label TEXT] [--wait SECONDS] [--deadline SECONDS] [-
 
 `HUNT_SLUG` and `HUNT_REPO` (a key of `scope.json .repos`) are set on every
 call a role makes: they give the job its scope (env, project lock, temporary
-directories) and its ledger events. Without them the job still queues, as a
-job outside any hunt.
+directories) and its ledger events. With `HUNT_SLUG` set, a missing or
+unapproved `scope.json` refuses the job (exit 1). Without it the job still
+queues, as a job outside any hunt.
 
 | Exit | Meaning | What the role does |
 |------|---------|--------------------|
