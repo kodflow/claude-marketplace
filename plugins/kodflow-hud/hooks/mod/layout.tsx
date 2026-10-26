@@ -79,11 +79,16 @@ export type Screen = {
   list: { top: number; rows: number };
 };
 
-export type View = "tree" | "graph" | "blocks" | "docs";
-export const VIEWS: readonly View[] = ["tree", "graph", "blocks", "docs"];
+export type View = "tree" | "graph" | "blocks" | "docs" | "hunt";
+/** « Chasse » last, and only while a hunt is listed (`BarCounts.hunt`). */
+export const VIEWS: readonly View[] = ["tree", "graph", "blocks", "docs", "hunt"];
 
-/** The counts the views' bar shows beside « Refus » and « Documents ». */
-export type BarCounts = { blocks: number; docs: number };
+/**
+ * The counts the views' bar shows beside « Refus » and « Documents », and
+ * « Chasse »'s label (hunt.ts, one width) when a hunt is listed: no hunt, no
+ * tab.
+ */
+export type BarCounts = { blocks: number; docs: number; hunt?: string };
 const NO_COUNTS: BarCounts = { blocks: 0, docs: 0 };
 
 /**
@@ -97,7 +102,8 @@ export type Act =
   | { op: "cancel" }
   | { op: "create"; ids: string[] }
   | { op: "mode"; mode: "ask" | "context" | "both" }
-  | { op: "ignore"; id: string; ignore: boolean };
+  | { op: "ignore"; id: string; ignore: boolean }
+  | { op: "resume"; slug: string };
 
 /**
  * What the person moved: kept by the surface module, across redraws. `pin`
@@ -118,6 +124,12 @@ export type Ui = {
   mode?: "ask" | "context" | "both";
   /** The line the chosen refusal or document stays on, as `pin`. */
   ppin?: { id: string; y: number };
+  /** « Chasse »: the line chosen, and each hunt's last seq when the view
+   * was opened before this time (`hsince`) and this time (`hlast`): the
+   * digest is what came after `hsince`. */
+  hsel?: string;
+  hsince?: Record<string, number>;
+  hlast?: Record<string, number>;
 };
 
 export const FULL = { links: 88, model: 76, agent: 64 } as const;
@@ -153,8 +165,13 @@ const HINTS: Record<View, string> = {
   graph: "↑↓ choisir · ⏎ plier · tab vue",
   blocks: "↑↓ choisir · ⏎ règle · tab vue",
   docs: "⏎ ignorer · c créer · m mode · tab",
+  hunt: "↑↓ choisir · ⏎ reprendre · tab vue",
 };
 const HINT_SHORT = "↑↓ ⏎ tab";
+// The bar with « Chasse »: the long names and « Chasse » (46 + 3 + 6), then
+// its counter too (46 + 3 + 15)
+const HUNT_WIDE = 55;
+const HUNT_FULL = 64;
 
 // --- cells ------------------------------------------------------------------------
 
@@ -667,7 +684,10 @@ function detailLines(
  * each count of one width up to 99 (a figure space after a single digit) so
  * no name moves from under the pointer when a count does; the hint of the
  * view shown on the right, where it fits. Narrower than 46 cells the counts
- * go and « Documents » is « Docs ».
+ * go and « Documents » is « Docs ». « Chasse » comes last, only while a hunt
+ * is listed, its label of one width (hunt.ts); the bar then needs 9 more
+ * cells for the long names and 18 for its counter, else it is « Chasse »
+ * alone, and a bar too narrow even for that leaves it to the tab key.
  */
 export function tabsLines(
   view: View,
@@ -680,7 +700,8 @@ export function tabsLines(
     const c = Math.min(99, Math.max(0, k));
     return ` (${c})${"\u2007".repeat(2 - String(c).length)}`;
   };
-  const wide = width >= 46;
+  const hunt = counts.hunt;
+  const wide = width >= (hunt ? HUNT_WIDE : 46);
   const names: [View, string][] = wide
     ? [
         ["tree", "Arbre"],
@@ -694,16 +715,18 @@ export function tabsLines(
         ["blocks", "Refus"],
         ["docs", "Docs"],
       ];
+  if (hunt) names.push(["hunt", width >= HUNT_FULL ? hunt : "Chasse"]);
   const sep = wide ? 3 : 1;
   const line: Cell[] = [];
   const tabs: Screen["tabs"] = [];
   let x = 0;
   names.forEach(([v, label], i) => {
+    const w = cells(label);
+    if (v === "hunt" && x + sep + w > width) return;
     if (i) {
       line.push(cell(sep));
       x += sep;
     }
-    const w = cells(label);
     line.push(cell(w, [span(label, on(v))]));
     tabs.push({ x, w, view: v });
     x += w;

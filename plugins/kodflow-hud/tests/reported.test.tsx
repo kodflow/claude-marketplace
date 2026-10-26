@@ -7,6 +7,10 @@ import { SEC, host, start, PANE, TASKS } from "./host.ts";
 import { capture, widths } from "./capture.ts";
 import { colorOf } from "../hooks/mod/who.ts";
 
+// Hundreds of polls on the mocked clock: past the kit's 5 s on a slow machine
+// running every test file at once
+const SLOW = { timeoutMs: 20_000 };
+
 const TASKS_OF = [
   {
     id: "1",
@@ -144,14 +148,18 @@ const TASKS_WITH_SUBS = [
   "  └─ ▶ #3     Onglet agents       prête",
 ].join("\n");
 
-test("the reported case with subagents: each worker named in the tree, « Tâches » the only tab", async ($, on) => {
-  const { h } = await seeded($, on, true);
-  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (3)\u2007" }]);
-  expect(h.shown).toBe("hud-tasks");
-  const tasks = await mount($, "hud-tasks", "Tâches (3)", 12);
-  const drawn = await tasks.drawn({ in: "tree" });
-  expect(capture(drawn).split("\n").slice(0, 7).join("\n")).toBe(
-    TASKS_WITH_SUBS,
-  );
-  expect(JSON.stringify(drawn)).not.toContain("backgroundColor");
-});
+test(
+  "the reported case with subagents: each worker named in the tree, « Tâches » the only tab",
+  SLOW,
+  async ($, on) => {
+    const { h } = await seeded($, on, true);
+    expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (3)\u2007" }]);
+    expect(h.shown).toBe("hud-tasks");
+    const tasks = await mount($, "hud-tasks", "Tâches (3)", 12);
+    const drawn = await tasks.drawn({ in: "tree" });
+    expect(capture(drawn).split("\n").slice(0, 7).join("\n")).toBe(
+      TASKS_WITH_SUBS,
+    );
+    expect(JSON.stringify(drawn)).not.toContain("backgroundColor");
+  },
+);

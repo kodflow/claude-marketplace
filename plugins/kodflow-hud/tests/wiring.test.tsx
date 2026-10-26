@@ -7,6 +7,12 @@ import { NOW, PANE, PR, SEC, T, host, start, writeTasks } from "./host.ts";
 import { capture, widths } from "./capture.ts";
 import { colorOf } from "../hooks/mod/who.ts";
 import { tasksTitle } from "../hooks/mod/register.tsx";
+import { BLOCKS } from "./fixtures.ts";
+import { STATUS_TORN, STATUS_V1 } from "./hunt-fixtures.ts";
+
+// Hundreds of polls on the mocked clock: past the kit's 5 s on a slow machine
+// running every test file at once
+const SLOW = { timeoutMs: 20_000 };
 
 test("session start registers /hud, opens « Tâches » alone, in front, counted, and reads tasks.json", async ($, on) => {
   const { h, clock } = host(on);
@@ -208,19 +214,23 @@ test("toasts: none for what stood at start, then one per task and state", async 
   expect(h.toasts).toHaveLength(2);
 });
 
-test("a silent task is toasted once, when it turns silent", async ($, on) => {
-  const { h, clock } = host(on);
-  writeTasks(h, [T("1", "in_progress")], 1);
-  await start($, clock);
-  await clock.advance(9 * 60_000);
-  expect(h.toasts).toEqual([]);
-  await clock.advance(2 * 60_000);
-  expect(h.toasts).toEqual([
-    "#1 Task 1 : silencieuse, aucune activité depuis 10 min",
-  ]);
-  await clock.advance(10 * 60_000);
-  expect(h.toasts).toHaveLength(1);
-});
+test(
+  "a silent task is toasted once, when it turns silent",
+  SLOW,
+  async ($, on) => {
+    const { h, clock } = host(on);
+    writeTasks(h, [T("1", "in_progress")], 1);
+    await start($, clock);
+    await clock.advance(9 * 60_000);
+    expect(h.toasts).toEqual([]);
+    await clock.advance(2 * 60_000);
+    expect(h.toasts).toEqual([
+      "#1 Task 1 : silencieuse, aucune activité depuis 10 min",
+    ]);
+    await clock.advance(10 * 60_000);
+    expect(h.toasts).toHaveLength(1);
+  },
+);
 
 test("CI is asked at most every five minutes, and only for cited pull requests", async ($, on) => {
   const { h, clock } = host(on);
@@ -281,4 +291,138 @@ test("an epic whose last task was just done stays 20 minutes, in the tree, then 
   // Past 30 minutes since the last one was done: today's board, the file untouched
   await clock.advance(11 * 60_000);
   expect(await drawn()).not.toContain("SDK status-line");
+});
+
+// --- « Chasse »: /hunt's files, read on their own -------------------------------
+
+const HUNT = "/u/dev/.local/state/hunt";
+const ACTIVE = `${HUNT}/active.json`;
+const STATUS = `${HUNT}/payments-ledger/status.json`;
+const activeJson = (created = NOW - 3_600_000) =>
+  JSON.stringify({
+    v: 1,
+    hunts: [{ slug: "payments-ledger", created, beat: NOW, state: "hunting" }],
+  });
+const statusJson = (seq: number, events: object[]) =>
+  JSON.stringify({ ...JSON.parse(STATUS_V1), beat: NOW, seq, events });
+const ev = (seq: number, kind = "confirmed") => ({
+  seq,
+  kind,
+  text: `core #${seq}`,
+});
+const barOf = async ($: any) => {
+  const ui = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-tasks",
+    props: PANE(88, 20),
+  });
+  const lines = capture(await ui.drawn({ in: "tree" })).split("\n");
+  await ui.unmount();
+  return lines;
+};
+
+test("a corrupt status.json says « état illisible » in « Chasse », and the Tasks pane keeps updating", async ($, on) => {
+  const { h, clock } = host(on);
+  writeTasks(h, [T("1", "in_progress")], 1);
+  h.files.set(ACTIVE, { text: activeJson(), mtimeMs: 1 });
+  h.files.set(STATUS, { text: STATUS_TORN, mtimeMs: 1 });
+  await start($, clock);
+  expect((await barOf($))[19]).toContain("Chasse ?");
+  // the tasks move on: the tab's count and the tree follow, whatever /hunt holds
+  writeTasks(
+    h,
+    [T("1", "completed"), T("2", "in_progress"), T("3", "pending")],
+    2,
+  );
+  await clock.advance(3_000);
+  expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (2) " }]);
+  expect(h.toasts).toEqual(["#1 Task 1 : terminée"]);
+  const ui = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-tasks",
+    props: PANE(88, 20),
+  });
+  expect(capture(await ui.drawn({ in: "tree" }))).toContain("Task 3");
+  await ui.pointer({ type: "down", x: 50, y: 19, button: "left" });
+  expect(capture(await ui.drawn({ in: "tree" }))).toMatch(
+    /état +état illisible/,
+  );
+});
+
+test("a hunt's events toasted in the session: none at the first read, then ≤3 and « +N autres »", async ($, on) => {
+  const { h, clock } = host(on);
+  h.files.set(ACTIVE, { text: activeJson(), mtimeMs: 1 });
+  h.files.set(STATUS, { text: statusJson(10, [ev(9), ev(10)]), mtimeMs: 1 });
+  await start($, clock);
+  expect(h.toasts).toEqual([]);
+  h.files.set(STATUS, {
+    text: statusJson(15, [
+      ev(10),
+      ev(11),
+      ev(12, "pause"),
+      ev(13),
+      ev(14),
+      ev(15),
+    ]),
+    mtimeMs: 1,
+  });
+  await clock.advance(3_000);
+  expect(h.toasts).toEqual([
+    "Chasse payments-ledger · confirmée : core #11",
+    "Chasse payments-ledger · confirmée : core #13",
+    "Chasse payments-ledger · confirmée : core #14",
+    "Chasse : +1 autres",
+  ]);
+  // the same file again: nothing more; a reused slug starts over
+  await clock.advance(3_000);
+  expect(h.toasts).toHaveLength(4);
+  h.files.set(ACTIVE, { text: activeJson(NOW), mtimeMs: 2 });
+  h.files.set(STATUS, { text: statusJson(1, [ev(1)]), mtimeMs: 2 });
+  await clock.advance(3_000);
+  expect(h.toasts.slice(4)).toEqual([
+    "Chasse payments-ledger · confirmée : core #1",
+  ]);
+});
+
+test(
+  "the option hunt off: no « Chasse », no toast",
+  { options: { hunt: false } },
+  async ($, on) => {
+    const { h, clock } = host(on);
+    h.files.set(ACTIVE, { text: activeJson(), mtimeMs: 1 });
+    h.files.set(STATUS, { text: statusJson(10, [ev(10)]), mtimeMs: 1 });
+    await start($, clock);
+    h.files.set(STATUS, { text: statusJson(11, [ev(11)]), mtimeMs: 1 });
+    await clock.advance(3_000);
+    expect((await barOf($))[19]).not.toContain("Chasse");
+    expect(h.toasts).toEqual([]);
+  },
+);
+
+test("KODFLOW_HUD_HUNT=off: no « Chasse », no toast", async ($, on) => {
+  const { h, clock } = host(on, { env: { KODFLOW_HUD_HUNT: "off" } });
+  h.files.set(ACTIVE, { text: activeJson(), mtimeMs: 1 });
+  h.files.set(STATUS, { text: statusJson(10, [ev(10)]), mtimeMs: 1 });
+  await start($, clock);
+  h.files.set(STATUS, { text: statusJson(11, [ev(11)]), mtimeMs: 1 });
+  await clock.advance(3_000);
+  expect((await barOf($))[19]).not.toContain("Chasse");
+  expect(h.toasts).toEqual([]);
+});
+
+test("blocks.jsonl rewritten within the same millisecond is read again: the size moved", async ($, on) => {
+  const { h, clock } = host(on);
+  writeTasks(h, [T("1", "in_progress")], 1);
+  const line = (summary: string) =>
+    `${JSON.stringify({ ts: new Date(NOW).toISOString(), kind: "hook", tool: "Bash", summary })}\n`;
+  h.files.set(BLOCKS, { text: line("a"), mtimeMs: 5 });
+  await start($, clock);
+  expect((await barOf($))[19]).toContain("Refus (1)");
+  h.files.set(BLOCKS, { text: line("a") + line("b"), mtimeMs: 5 });
+  await clock.advance(3_000);
+  expect((await barOf($))[19]).toContain("Refus (2)");
 });
