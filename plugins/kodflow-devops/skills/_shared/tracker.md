@@ -1,6 +1,6 @@
 # Work tracking — destination, ledger, and the comment protocol
 
-Shared by `/feature`, `/fix` and `/search`. It answers three questions once, so
+Shared by `/feature`, `/fix` and `/search`, and by `/hunt` through §6. It answers three questions once, so
 the three skills cannot disagree about where a piece of work lives.
 
 ---
@@ -180,3 +180,28 @@ Preconditions, checked before switching:
 | Build a GitLab project path with a greedy regex | **FORBIDDEN** — subgroups vanish |
 | Create a branch over a dirty tree | **FORBIDDEN** |
 | Open an issue without showing the user the title and body first | **FORBIDDEN** |
+
+---
+
+## 6. Exception — `/hunt`
+
+`/hunt` opens issues in batches, unattended, for hours. Showing each one
+before publishing (§5, last row) would stop the hunt at every finding, so the
+preview is replaced — not removed — by **one approval at launch**:
+
+- the user approves the hunt's `scope.json` once; the approval screen states
+  that issues will be opened without a per-issue preview, on which
+  repositories, with which label (`hunt:<slug>`) and up to which cap;
+- that approval covers every issue `/hunt` opens for that slug, and nothing
+  else — not another slug, not an issue opened by any other skill;
+- every other rule of §5 still applies to `/hunt`: search before creating
+  (a duplicate becomes a comment), never rewrite a body, never print a token.
+
+§5 itself is unchanged: for `/feature`, `/fix` and `/search`, an issue is never
+opened without showing its title and body first.
+
+`/hunt` reaches the forge only through its `hunt-forge` script. For GitLab and
+Forgejo the scope names the **variable** that holds the token, never the token,
+one variable per forge: `GITLAB_PERSONAL_ACCESS_TOKEN` for GitLab (the same as
+§1), `FORGEJO_TOKEN` for Forgejo; GitHub goes through `gh`. The token reaches
+`curl` through `-K` from a process substitution, never in argv.
