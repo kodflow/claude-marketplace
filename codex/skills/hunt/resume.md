@@ -33,10 +33,13 @@ Per `owned` repository, in the integration worktree and every hunt worktree:
    (`hunt-git <slug> <repo> reset-tip <sha>`, refused unless that SHA is an
    ancestor of the tip); a `tip-before` with no `tip-after` is an integration
    that never happened;
-3. if the branch is missing or does not match, restore it from the bundle —
-   `tip.bundle`, or `tip-<repo>.bundle` when the scope has several
-   repositories — then `hunt-git <slug> <repo> integ-init <base>` re-attaches
-   the integration worktree.
+3. if the branch is missing, `hunt-git <slug> <repo> bundle-restore`
+   recreates it at the head of the verified bundle (`tip.bundle`, or
+   `tip-<repo>.bundle` when the scope has several repositories), then
+   `hunt-git <slug> <repo> integ-init <base>` re-attaches the integration
+   worktree. If it exists but does not match, `bundle-restore` refuses to move
+   it and only fetches the bundle's objects: `reset-tip <bundle sha>` when that
+   SHA is an ancestor, otherwise the user decides.
 
 ## 3. Worktrees: resume or discard
 

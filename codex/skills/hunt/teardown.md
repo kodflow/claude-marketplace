@@ -25,13 +25,16 @@ keeps the ledger: the trail outlives the hunt.
    last with `worktree-remove integ`.
 4. Local branches, through `hunt-git <slug> <repo> branch-delete <branch>` —
    which refuses anything but these: `hunt-fix/<slug>/*`, `hunt-w/<slug>/*`,
-   and `hunt/<slug>` (only once pushed or bundled). Nothing else, ever.
+   and `hunt/<slug>` — the latter only when its tip is on
+   `<remote>/hunt/<slug>` or is the head of the verified bundle (checked by the
+   script). Nothing else, ever.
 5. Images tagged `*:hunt-<slug>-*`.
 6. Queue records of this slug in `~/.cache/hunt/queue/`.
 7. Labels `hunt:*` removed from the issues that stayed open
    (`hunt-forge … issue-label`); closed issues keep theirs as history.
-8. Remove the `Bash(git push:*)` deny rule from the project's
-   `.claude/settings.local.json` — that rule only, every other key kept.
+8. Remove the deny rules the hunt added (`Bash(git push:*)`, `Bash(git -C:*)`,
+   `Bash(git -c:*)`) from the project's `.claude/settings.local.json` — those
+   only, every other key kept.
 9. Restart what preflight stopped (clusters, containers), as recorded.
 10. Append `teardown` with what was removed (`state` → `done`), then
     `hunt-ledger owner <slug> --release` — the hunt leaves `active.json`.

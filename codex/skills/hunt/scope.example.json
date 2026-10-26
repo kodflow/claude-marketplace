@@ -20,7 +20,7 @@
     "repos.*.lock": "Exclusive project lock taken by hunt-queue --exclusive, under ~/.cache.",
     "repos.*.image": "Optional container image used by witnesses: env variable that names it, and the tag template; teardown removes *:hunt-<slug>-*.",
     "repos.*.lang": "Selects the adapter: adapters/<lang>.md.",
-    "repos.*.env": "Environment applied to every build, test, vet and list command of this repository. GOTOOLCHAIN=local is mandatory for go.",
+    "repos.*.env": "Environment applied to every build, test, vet and list command of this repository. GOTOOLCHAIN=local is mandatory for go. LD_*, DYLD_*, BASH_ENV, ENV, BASH_FUNC_*, PATH, IFS, PS4, PROMPT_COMMAND, SHELLOPTS, BASHOPTS, HOME and HUNT_* are ignored.",
     "repos.*.witness_tags": "Build tag sets the witnesses use; one build and one static check per set (the empty set included).",
     "repos.*.exclusive": "Packages or tag sets whose witnesses start containers: their jobs run hunt-queue --exclusive.",
     "repos.*.depends_on": "Keys of owned repositories this one depends on: pushed first, then this one is re-pinned.",

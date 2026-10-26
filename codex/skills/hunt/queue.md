@@ -67,7 +67,11 @@ silent hunt can be judged stalled.
 
 ## What a job gets
 
-- The scope's `.repos[$HUNT_REPO].env`, exported.
+- The scope's `.repos[$HUNT_REPO].env`, exported — except names that would run
+  code before CMD or unhook the job (`LD_*`, `DYLD_*`, `BASH_ENV`, `ENV`,
+  `BASH_FUNC_*`, `PATH`, `IFS`, `PS4`, `PROMPT_COMMAND`, `SHELLOPTS`,
+  `BASHOPTS`, `HOME`, `HUNT_*`), which are dropped with a warning. A scope
+  edited after its approval is refused (exit 1).
 - Its own temporary directory under `~/.cache/hunt/tmp/`, exported as
   `HUNT_JOB_TMP` **and** under every variable the scope lists in
   `.queue.tmp_env` (Go: `["GOTMPDIR"]`), removed when the job ends; the

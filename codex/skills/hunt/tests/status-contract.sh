@@ -32,7 +32,8 @@ writer() { # ID
 hunt-ledger append contract pass-start '{"n":1,"sha":"0123456789abcdef","cells_total":3}' >/dev/null
 writer 1 & a=$!
 writer 2 & b=$!
-wait "$a" "$b"
+wait "$a"
+wait "$b"
 
 folded=$(jq -S . "$S/status.json")
 rebuilt=$(hunt-ledger rebuild contract | jq -S .)

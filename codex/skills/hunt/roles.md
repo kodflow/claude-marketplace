@@ -105,7 +105,8 @@ replayed the **recorded** command and seen it fail.
      witness now lives on `hunt-w/<slug>/<N>`.
    A forge error is **never retried blind**: first
    `hunt-forge … issue-find-nonce <nonce>` — on an unstable link the issue may
-   already exist.
+   already exist. Exit 3 from either command means the lookup itself failed:
+   wait and look again, do not create.
 5. Remove its worktree and return.
 
 The verifier, not the hunter, decides `hunt:off-topic` (the defect is real but
@@ -135,8 +136,9 @@ branch and a directory).
 Fixers run git **only through `hunt-git`** (`worktree-add`, `cherry-pick`,
 `commit`, `abort`), never bare `git`: those are the operations the narrow allow
 rules cover, and `hunt-git` confines them to the hunt's worktrees and branches.
-`git push` is denied for the hunt's duration, so nothing can leave the machine
-from there.
+The project's deny rules (`git push`, `git -C`, `git -c`) catch the plain
+attempts; they match command text only, so the rule that keeps a push from
+leaving the machine is this one — no bare git in a role — not the deny list.
 
 A fixer that finds the issue cannot be fixed without a decision (behaviour
 change, API break, a defect too rare to verify in the budget) labels it

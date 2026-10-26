@@ -229,6 +229,21 @@ check "bundle writes a verified tip.bundle" bash -c 'hunt-git g r bundle >/dev/n
 check "reset-tip back to an ancestor" bash -c 'hunt-git g r reset-tip "$0" >/dev/null && [[ $(hunt-git g r tip) == "$0" ]]' "$base_tip"
 hunt-git g r reset-tip "$(git -C "$T/wt/repo-hunt-g-fix-2" rev-parse HEAD)" >/dev/null 2>&1
 check "reset-tip refuses a SHA that is not an ancestor" test $? -eq 1
+mkdir -p "$S/b"; jq '.repos.r.remote = "origin"' "$S/g/scope.json" >"$S/b/scope.json"
+hunt-ledger init b >/dev/null
+hunt-git b r integ-init main >/dev/null
+echo extra >"$T/wt/repo-hunt-b/extra"; hunt-git b r commit integ "feat: extra" >/dev/null
+hunt-git b r worktree-remove integ
+hunt-git b r branch-delete hunt/b >/dev/null 2>&1
+check "branch-delete refuses hunt/<slug> neither pushed nor bundled" test $? -eq 1
+check "branch-delete accepts hunt/<slug> once bundled" bash -c 'hunt-git b r bundle >/dev/null && hunt-git b r branch-delete hunt/b'
+check "bundle-restore recreates hunt/<slug> at the bundle's head" \
+  bash -c '[[ $(hunt-git b r bundle-restore) == $(git bundle list-heads "$0" | cut -d" " -f1) ]] && hunt-git b r bundle-restore' "$S/b/tip.bundle"
+hunt-git b r integ-init main >/dev/null
+echo more >"$T/wt/repo-hunt-b/more"; hunt-git b r commit integ "feat: more" >/dev/null
+hunt-git b r bundle-restore >/dev/null 2>&1
+check "bundle-restore never moves an existing, different branch" test $? -eq 1
+hunt-git b r worktree-remove integ
 
 echo "== hunt-forge (local)"
 n1=$(hunt-forge g r issue-create --title "bug one" --body "observed / expected" --nonce n-1 --label hunt:g)
@@ -242,6 +257,12 @@ hunt-forge g r issue-label 1 --add hunt:fixed-local
 check "issue-label adds" test "$(hunt-forge g r issue-list --label hunt:fixed-local | jq length)" -eq 1
 hunt-forge g r issue-create --title x >/dev/null 2>&1
 check "issue-create without --nonce is a usage error" test $? -eq 2
+mkdir -p "$S/dead"
+jq -n '{matrix:[], repos:{r:{forge:"gitlab", api_url:"https://127.0.0.1:9/api/v4", project:"a/b", token_env:"DEAD_TOKEN"}}}' >"$S/dead/scope.json"
+DEAD_TOKEN=x hunt-forge dead r issue-create --title t --body b --nonce n-1 >/dev/null 2>&1
+check "a failed nonce lookup creates nothing (exit 3, not a blind create)" test $? -eq 3
+DEAD_TOKEN=x hunt-forge dead r issue-find-nonce n-1 >/dev/null 2>&1
+check "issue-find-nonce tells a failed lookup (3) from an absent issue (1)" test $? -eq 3
 
 echo "== hunt-push"
 hunt-push g >/dev/null 2>&1
@@ -312,6 +333,23 @@ check "--repin re-pins on the merge SHA and pushes" hunt-push m --repin
 check "the pushed consumer pins the merge SHA" test "$(git -C "$T/app.git" show "hunt/m:dep.pin")" = "example.com/lib@$msha"
 check "repin and push events are in the ledger" \
   test "$(hunt-ledger read m | jq -rs '[.[] | select(.kind == "repin" or (.kind == "push" and .repin == true)) | .kind] | join(",")')" = repin,push
+
+echo "== scope bound to its approval"
+mkdir -p "$S/sb"
+jq -n --arg p "$R" '{matrix:["c1"], repos:{r:{path:$p, forge:"local", owned:true, base:"main",
+  env:{FOO:"bar", LD_PRELOAD:"/nonexistent.so", PATH:"/nowhere"}}}}' >"$S/sb/scope.json"
+hunt-ledger init sb >/dev/null
+hunt-ledger append sb start "{\"scope_sha256\":\"$(sha256sum "$S/sb/scope.json" | cut -d' ' -f1)\"}" >/dev/null
+check "the approved scope passes scope-check" hunt-ledger scope-check sb
+check "a job gets the scope's env but never LD_PRELOAD or PATH from it" \
+  env HUNT_SLUG=sb HUNT_REPO=r hunt-queue -- /bin/sh -c '[ "$FOO" = bar ] && [ -z "${LD_PRELOAD:-}" ] && [ "$PATH" != /nowhere ]'
+jq '.repos.r.forge = "gitlab" | .repos.r.api_url = "https://elsewhere.invalid"' "$S/sb/scope.json" >"$T/sb.json" && mv "$T/sb.json" "$S/sb/scope.json"
+for c in "hunt-forge sb r issue-list" "hunt-git sb r tip" "hunt-push sb" "env HUNT_SLUG=sb hunt-queue -- true"; do
+  $c >/dev/null 2>&1
+  check "an edit after approval stops: $c (exit 1)" test $? -eq 1
+done
+hunt-ledger append sb scope-update "{\"scope_sha256\":\"$(sha256sum "$S/sb/scope.json" | cut -d' ' -f1)\"}" >/dev/null
+check "a scope-update with the new hash approves the edit" hunt-ledger scope-check sb
 
 echo "== hunt-status"
 check "the table renders" bash -c 'hunt-status g | grep -q "Compteur"'
