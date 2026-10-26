@@ -107,11 +107,13 @@ jobs:
 
       # /hunt's scripts: concurrent ledger writers, the heavy-job queue, slot
       # reservation at the cap, all-or-nothing integration, hunt-push refusing
-      # without convergence — and the status.json contract kodflow-hud reads.
+      # without convergence — the status.json contract kodflow-hud reads, and
+      # one whole cycle played by the scripts alone (e2e dry run).
       - name: The /hunt scripts behave
         run: |
-          shellcheck plugins/kodflow-workflow/bin/hunt-*
+          shellcheck plugins/kodflow-workflow/bin/hunt-* plugins/kodflow-workflow/skills/hunt/tests/*.sh
           bash plugins/kodflow-workflow/skills/hunt/tests/run.sh
+          bash plugins/kodflow-workflow/skills/hunt/tests/e2e-dryrun.sh
           bash plugins/kodflow-workflow/skills/hunt/tests/status-contract.sh
 
       # Context cost, not correctness: pinned model/effort, description and
