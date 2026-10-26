@@ -27,6 +27,7 @@ claude plugin install kodflow-workflow@kodflow
 | `/feature` · `/fix` | ouvrent un sujet suivi et sa branche |
 | `/flow` | dessine la carte des skills |
 | `/recap` | l'état du travail en un tableau |
+| `/hunt` | chasse continue des défauts d'un sujet, correction en flux, push seulement après convergence |
 
 ## `/docs` : les documents du projet
 

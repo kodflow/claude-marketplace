@@ -54,9 +54,16 @@ Règles livrées, dans les deux listes :
 - `mcp__github__merge_pull_request`
 - `Bash(gh pr merge:*)`
 - `Bash(git merge:*)`
+- `Bash(hunt-ledger:*)`, `Bash(hunt-status:*)`, `Bash(hunt-queue:*)`, `Bash(hunt-forge:*)`,
+  `Bash(hunt-git:*)`, `Bash(hunt-push:*)` — les scripts de `/hunt` (kodflow-workflow)
+- `Bash(lourd:*)` — l'enveloppe des commandes lourdes de l'hôte, quand elle existe
+- `Bash(codex exec -s read-only:*)` — la revue Codex de `/hunt`, en bac à sable lecture seule
 
 Le classifieur du mode auto refuse sinon la fusion par l'outil MCP même quand `gh pr merge`
 est permis. Les sous-agents ne fusionnent jamais : le hook de `kodflow-hooks` le garantit.
+Les règles de `/hunt` sont étroites : aucun `git`, `curl` ou `gh` nu. Pendant une chasse,
+`/hunt` ajoute `Bash(git push:*)` en `deny` dans le `.claude/settings.local.json` du projet
+et l'en retire au teardown : seul `hunt-push` pousse, et seulement après convergence.
 
 ```bash
 kodflow-permissions-setup --check   # ce qui manque, sans rien écrire
