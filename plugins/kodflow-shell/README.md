@@ -61,9 +61,15 @@ Règles livrées, dans les deux listes :
 
 Le classifieur du mode auto refuse sinon la fusion par l'outil MCP même quand `gh pr merge`
 est permis. Les sous-agents ne fusionnent jamais : le hook de `kodflow-hooks` le garantit.
-Les règles de `/hunt` sont étroites : aucun `git`, `curl` ou `gh` nu. Pendant une chasse,
-`/hunt` ajoute `Bash(git push:*)` en `deny` dans le `.claude/settings.local.json` du projet
-et l'en retire au teardown : seul `hunt-push` pousse, et seulement après convergence.
+Les règles de `/hunt` ne contiennent aucun `git`, `curl` ou `gh` nu, mais elles ne sont
+étroites que par le nom : `hunt-queue` et `lourd` exécutent la commande qu'on leur passe,
+c'est leur rôle (file des travaux lourds). Une commande lancée à travers eux est donc permise
+sans passer par le classifieur ; `/hunt` ne s'en sert que pour les commandes témoins et de
+construction que le scope approuvé décrit. Pendant une chasse, `/hunt` ajoute
+`Bash(git push:*)`, `Bash(git -C:*)` et `Bash(git -c:*)` en `deny` dans le
+`.claude/settings.local.json` du projet et les en retire au teardown. Ces règles portent sur
+le texte de la commande : c'est un premier filtre, pas une barrière ; seul `hunt-push` est
+censé pousser, et seulement après convergence.
 
 ```bash
 kodflow-permissions-setup --check   # ce qui manque, sans rien écrire
