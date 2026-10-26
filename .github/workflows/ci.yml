@@ -107,12 +107,15 @@ jobs:
 
       # /hunt's scripts: concurrent ledger writers, the heavy-job queue, slot
       # reservation at the cap, all-or-nothing integration, hunt-push refusing
-      # without convergence — and the status.json contract kodflow-hud reads.
+      # without convergence — and the status.json contract kodflow-hud reads,
+      # its copies of the fixtures byte for byte kodflow-workflow's.
       - name: The /hunt scripts behave
         run: |
           shellcheck plugins/kodflow-workflow/bin/hunt-*
           bash plugins/kodflow-workflow/skills/hunt/tests/run.sh
           bash plugins/kodflow-workflow/skills/hunt/tests/status-contract.sh
+          shellcheck scripts/check-hunt-fixtures.sh
+          bash scripts/check-hunt-fixtures.sh
 
       # Context cost, not correctness: pinned model/effort, description and
       # SKILL.md budgets, copied memory blocks, bare cross-plugin references.
