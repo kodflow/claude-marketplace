@@ -105,7 +105,8 @@ replayed the **recorded** command and seen it fail.
      witness now lives on `hunt-w/<slug>/<N>`.
    A forge error is **never retried blind**: first
    `hunt-forge … issue-find-nonce <nonce>` — on an unstable link the issue may
-   already exist.
+   already exist. Exit 3 from either command means the lookup itself failed:
+   wait and look again, do not create.
 5. Remove its worktree and return.
 
 The verifier, not the hunter, decides `hunt:off-topic` (the defect is real but

@@ -7,13 +7,15 @@
 #   hunt-forge SLUG REPO issue-create --title T (--body B | --body-file F)
 #                                     --nonce N [--label L]...
 #       prints the issue number; idempotent: an issue already carrying
-#       `hunt-nonce: N` is returned instead of a second one
+#       `hunt-nonce: N` is returned instead of a second one; when that lookup
+#       fails, nothing is created (exit 3)
 #   hunt-forge SLUG REPO issue-list [--label L] [--state open|closed|all]
 #       JSON [{number,title,state,labels,body}] (state open|closed)
 #   hunt-forge SLUG REPO issue-comment N (--body B | --body-file F)
 #   hunt-forge SLUG REPO issue-label N [--add L]... [--remove L]...
 #   hunt-forge SLUG REPO issue-close N [--body B | --body-file F]
-#   hunt-forge SLUG REPO issue-find-nonce NONCE       prints the number; exit 1 if none
+#   hunt-forge SLUG REPO issue-find-nonce NONCE       prints the number; exit 1 if none,
+#                                                     exit 3 if the lookup itself failed
 #   hunt-forge SLUG REPO mr-create --source BRANCH --target BRANCH --title T
 #                                  (--body B | --body-file F) [--draft]
 #       JSON {number,url}; an open MR/PR from BRANCH is returned, not duplicated
@@ -31,7 +33,8 @@
 # project path is URL-encoded here and refused if a raw `/` survives; lists
 # are paginated. Labels missing on the forge are created.
 #
-# Exit: 0 ok · 1 refused/failed (forge error included) · 2 usage.
+# Exit: 0 ok · 1 refused/failed (forge error included) · 2 usage · 3 nonce
+# lookup failed (the issue may or may not exist: retry the lookup, never the write).
 set -euo pipefail
 
 readonly ME=hunt-forge
@@ -235,17 +238,18 @@ api_find_nonce() {
   P=$(proj_path)
   case $forge in
     gitlab)
-      all=$(api GET "$P/issues?state=all&in=description&search=$(enc "$line")&per_page=100")
+      all=$(api GET "$P/issues?state=all&in=description&search=$(enc "$line")&per_page=100") || return 1
       jq -r --arg n "$line" '[.[] | select((.description // "") | split("\n") | index($n))] | first | .iid // empty' <<<"$all" ;;
     forgejo)
       # Newest first, three pages: an issue made by a retried write is recent.
       local page=1 chunk
       while [[ $page -le 3 ]]; do
-        chunk=$(api GET "$P/issues?state=all&type=issues&limit=50&page=$page")
+        chunk=$(api GET "$P/issues?state=all&type=issues&limit=50&page=$page") || return 1
         [[ $(jq length <<<"$chunk") -gt 0 ]] || break
         jq -r --arg n "$line" '[.[] | select((.body // "") | split("\n") | index($n))] | first | .number // empty' <<<"$chunk" | grep . && return 0
         page=$(( page + 1 ))
-      done ;;
+      done
+      return 0 ;;
   esac
 }
 
@@ -259,7 +263,7 @@ do_api() {
     issue-create)
       [[ -n $title && -n $nonce ]] || die 2 "--title et --nonce requis"
       local found
-      found=$(api_find_nonce "$nonce" || true)
+      found=$(api_find_nonce "$nonce") || die 3 "recherche du nonce $nonce en échec: rien n'est créé (réessayer plus tard)"
       [[ -n $found ]] && { echo "$found"; return; }
       local full; full=$(printf '%s\n\n%s\n' "$body" "$(nonce_line "$nonce")")
       case $forge in
@@ -305,7 +309,7 @@ do_api() {
         forgejo) api PATCH "$P/issues/$n" '{"state":"closed"}' >/dev/null ;;
       esac ;;
     issue-find-nonce)
-      local found; found=$(api_find_nonce "${pos[0]:?}" || true)
+      local found; found=$(api_find_nonce "${pos[0]:?}") || die 3 "recherche du nonce en échec: absence non établie"
       [[ -n $found ]] || exit 1
       echo "$found" ;;
     mr-create)
@@ -384,7 +388,7 @@ do_github() {
     auth) gh api user --jq '{login}' ;;
     issue-create)
       [[ -n $title && -n $nonce ]] || die 2 "--title et --nonce requis"
-      local found; found=$(find_nonce "$nonce" || true)
+      local found; found=$(find_nonce "$nonce") || die 3 "recherche du nonce $nonce en échec: rien n'est créé (réessayer plus tard)"
       [[ -n $found ]] && { echo "$found"; return; }
       printf '%s\n\n%s\n' "$body" "$(nonce_line "$nonce")" >"$tmpb"
       ensure_labels "${labels[@]+"${labels[@]}"}"
@@ -410,7 +414,7 @@ do_github() {
       if [[ -n $body ]]; then printf '%s\n' "$body" >"$tmpb"; gh issue comment "$n" "${R[@]}" --body-file "$tmpb" >/dev/null; fi
       gh issue close "$n" "${R[@]}" >/dev/null ;;
     issue-find-nonce)
-      local found; found=$(find_nonce "${pos[0]:?}" || true)
+      local found; found=$(find_nonce "${pos[0]:?}") || die 3 "recherche du nonce en échec: absence non établie"
       [[ -n $found ]] || exit 1
       echo "$found" ;;
     mr-create)

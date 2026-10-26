@@ -242,6 +242,12 @@ hunt-forge g r issue-label 1 --add hunt:fixed-local
 check "issue-label adds" test "$(hunt-forge g r issue-list --label hunt:fixed-local | jq length)" -eq 1
 hunt-forge g r issue-create --title x >/dev/null 2>&1
 check "issue-create without --nonce is a usage error" test $? -eq 2
+mkdir -p "$S/dead"
+jq -n '{matrix:[], repos:{r:{forge:"gitlab", api_url:"https://127.0.0.1:9/api/v4", project:"a/b", token_env:"DEAD_TOKEN"}}}' >"$S/dead/scope.json"
+DEAD_TOKEN=x hunt-forge dead r issue-create --title t --body b --nonce n-1 >/dev/null 2>&1
+check "a failed nonce lookup creates nothing (exit 3, not a blind create)" test $? -eq 3
+DEAD_TOKEN=x hunt-forge dead r issue-find-nonce n-1 >/dev/null 2>&1
+check "issue-find-nonce tells a failed lookup (3) from an absent issue (1)" test $? -eq 3
 
 echo "== hunt-push"
 hunt-push g >/dev/null 2>&1

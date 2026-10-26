@@ -152,7 +152,9 @@ Every forge write is bracketed by `forge-intent` (with a nonce) and
 second one. An intent without its done is resolved on resume, or before any
 retry, with `hunt-forge <slug> <repo> issue-find-nonce <nonce>`: found (exit 0,
 the number) → append the missing `forge-done`; absent (exit 1) → the write may
-be retried.
+be retried; lookup failed (exit 3) → nothing is known: retry the lookup later,
+never the write. `issue-create` itself creates nothing when its own lookup
+fails (exit 3).
 
 ---
 

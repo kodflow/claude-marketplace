@@ -112,7 +112,9 @@ Chain:  /hunt → (merge the MRs yourself) → /hunt --status → --teardown
 Every script named below is on `PATH` while the plugin is enabled
 (`plugins/kodflow-workflow/bin/`) and answers `--help`. Exit codes everywhere:
 `0` ok · `1` refused or failed · `2` usage · `75` queue or lock timeout (**no
-verdict**) · `124` a job killed at its `--deadline` (**no verdict**).
+verdict**) · `124` a job killed at its `--deadline` (**no verdict**) · `3`
+(`hunt-forge`) the nonce lookup failed: nothing created; retry the lookup,
+never the write.
 
 | Script | Does |
 |--------|------|
