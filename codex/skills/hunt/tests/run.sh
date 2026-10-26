@@ -28,6 +28,9 @@ bad() { fail=$((fail + 1)); printf '  FAIL %s\n       %s\n' "$1" "${2:-}"; }
 check() { local name=$1; shift; if "$@" >/dev/null; then ok "$name"; else bad "$name" "$*"; fi; }
 
 DEFAULT_SCOPE='{"matrix":["c1","c2"],"thresholds":{"cap":3,"resume_at":2}}'
+approve() { # SLUG — the `start` event that binds scope.json to its approval
+  hunt-ledger append "$1" start "{\"scope_sha256\":\"$(sha256sum "$S/$1/scope.json" | cut -d' ' -f1)\"}" >/dev/null
+}
 new_hunt() { # SLUG [SCOPE_JSON]
   mkdir -p "$S/$1"
   printf '%s\n' "${2:-$DEFAULT_SCOPE}" >"$S/$1/scope.json"
@@ -162,7 +165,9 @@ last_end=$(awk '/^end m/ { print $3 }' "$JOBDIR/log" | sort -n | tail -n 1)
 x_start=$(awk '/^start x2/ { print $3 }' "$JOBDIR/log")
 check "the exclusive job started after both normal jobs ended" test "$x_start" -gt "$last_end"
 
-new_hunt q
+new_hunt q; approve q
+HUNT_SLUG=nohunt hunt-queue -- true 2>/dev/null
+check "a hunt job without its scope.json is refused (exit 1)" test $? -eq 1
 rm -f "$JOBDIR"/*
 hunt-queue --exclusive --label hold --wait 30 -- "$T/job.sh" hold 3 &
 hpid=$!
@@ -196,6 +201,9 @@ mkdir -p "$S/g"
 jq -n --arg p "$R" '{topic:"demo", matrix:[{id:"c1", repo:"r"}], thresholds:{cap:3},
   repos:{r:{path:$p, forge:"local", owned:true, base:"main", mr_target:"main"}}}' >"$S/g/scope.json"
 hunt-ledger init g >/dev/null
+hunt-git g r tip >/dev/null 2>&1
+check "scripts refuse a scope not yet approved (exit 1)" test $? -eq 1
+approve g
 check "integ-init creates the integration worktree on hunt/g" hunt-git g r integ-init main
 base_tip=$(hunt-git g r tip)
 check "worktree-add fix-1 cuts the flat branch hunt-fix/g/1" hunt-git g r worktree-add fix-1 hunt/g
@@ -230,7 +238,7 @@ check "reset-tip back to an ancestor" bash -c 'hunt-git g r reset-tip "$0" >/dev
 hunt-git g r reset-tip "$(git -C "$T/wt/repo-hunt-g-fix-2" rev-parse HEAD)" >/dev/null 2>&1
 check "reset-tip refuses a SHA that is not an ancestor" test $? -eq 1
 mkdir -p "$S/b"; jq '.repos.r.remote = "origin"' "$S/g/scope.json" >"$S/b/scope.json"
-hunt-ledger init b >/dev/null
+hunt-ledger init b >/dev/null; approve b
 hunt-git b r integ-init main >/dev/null
 echo extra >"$T/wt/repo-hunt-b/extra"; hunt-git b r commit integ "feat: extra" >/dev/null
 hunt-git b r worktree-remove integ
@@ -259,6 +267,7 @@ hunt-forge g r issue-create --title x >/dev/null 2>&1
 check "issue-create without --nonce is a usage error" test $? -eq 2
 mkdir -p "$S/dead"
 jq -n '{matrix:[], repos:{r:{forge:"gitlab", api_url:"https://127.0.0.1:9/api/v4", project:"a/b", token_env:"DEAD_TOKEN"}}}' >"$S/dead/scope.json"
+hunt-ledger init dead >/dev/null; approve dead
 DEAD_TOKEN=x hunt-forge dead r issue-create --title t --body b --nonce n-1 >/dev/null 2>&1
 check "a failed nonce lookup creates nothing (exit 3, not a blind create)" test $? -eq 3
 DEAD_TOKEN=x hunt-forge dead r issue-find-nonce n-1 >/dev/null 2>&1
@@ -313,7 +322,7 @@ jq -n --arg l "$T/lib" --arg a "$T/app" '{topic:"two repos", matrix:["c1"], thre
   repos:{lib:{path:$l, forge:"local", owned:true, base:"main", mr_target:"main", go:{module:"example.com/lib"}},
          app:{path:$a, forge:"local", owned:true, base:"main", mr_target:"main", depends_on:["lib"],
               repin:{cmd:["sh","-c","echo {dep.go.module}@{sha} >dep.pin"], env:{}}}}}' >"$S/m/scope.json"
-hunt-ledger init m >/dev/null
+hunt-ledger init m >/dev/null; approve m
 hunt-git m lib integ-init main >/dev/null; hunt-git m app integ-init main >/dev/null
 fl=$(hunt-git m lib tip); fa=$(hunt-git m app tip)
 hunt-ledger append m pass-start "{\"n\":1,\"sha\":{\"lib\":\"$fl\",\"app\":\"$fa\"},\"cells_total\":1}" >/dev/null

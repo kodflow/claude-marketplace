@@ -33,12 +33,13 @@ hunt-ledger rebuild <slug>                   # status.json from the whole ledger
 hunt-ledger owner <slug> --set-state STATE   # appends a `state` event {to: STATE}
 hunt-ledger owner <slug> --release           # drop the owner; the entry goes once `done`
 hunt-ledger notify <slug>                    # retry the last failed desktop notification
-hunt-ledger scope-check <slug>               # exit 1 if scope.json is not the approved one
+hunt-ledger scope-check <slug>               # exit 1 if scope.json is not, or not yet, the approved one
 ```
 
 Every other hunt script runs `scope-check` before it reads the scope: the hash
 of `scope.json` must equal the `scope_sha256` of the last `start` or
-`scope-update` event. An edit made after the approval — a changed API URL, env,
+`scope-update` event; before any such event every script refuses (nothing is
+created before the approval). An edit made after the approval — a changed API URL, env,
 re-pin command — is refused until the user approves it and root appends
 `scope-update`. It catches an unapproved edit; it is not a wall against an
 agent that may also append to the ledger.
