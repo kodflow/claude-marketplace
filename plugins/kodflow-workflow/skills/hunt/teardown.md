@@ -32,8 +32,9 @@ keeps the ledger: the trail outlives the hunt.
 6. Queue records of this slug in `~/.cache/hunt/queue/`.
 7. Labels `hunt:*` removed from the issues that stayed open
    (`hunt-forge … issue-label`); closed issues keep theirs as history.
-8. Remove the `Bash(git push:*)` deny rule from the project's
-   `.claude/settings.local.json` — that rule only, every other key kept.
+8. Remove the deny rules the hunt added (`Bash(git push:*)`, `Bash(git -C:*)`,
+   `Bash(git -c:*)`) from the project's `.claude/settings.local.json` — those
+   only, every other key kept.
 9. Restart what preflight stopped (clusters, containers), as recorded.
 10. Append `teardown` with what was removed (`state` → `done`), then
     `hunt-ledger owner <slug> --release` — the hunt leaves `active.json`.

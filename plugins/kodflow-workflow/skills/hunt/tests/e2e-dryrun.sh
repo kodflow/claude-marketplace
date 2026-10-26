@@ -109,7 +109,7 @@ hunt-ledger init "$SLUG" >/dev/null
 ledger start "$(jq -cn --arg h "$(sha256sum "$S/scope.json" | cut -d' ' -f1)" \
   '{topic:"calc arithmetic", scope_sha256:$h, budget:{hunters:1, fixers:1, tokens:2}}')"
 mkdir -p "$R/.claude"
-echo '{"permissions":{"deny":["Bash(git push:*)"]}}' >"$R/.claude/settings.local.json"
+echo '{"permissions":{"deny":["Bash(git push:*)","Bash(git -C:*)","Bash(git -c:*)"]}}' >"$R/.claude/settings.local.json"
 hunt-status --install-watchdog >/dev/null
 hunt-ledger owner "$SLUG" --set-state hunting
 expect "the hunt is registered in active.json, hunting" \

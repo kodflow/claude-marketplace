@@ -208,9 +208,15 @@ tasks, never blocking prompts.
 1. `hunt-ledger init <slug>` — registers the hunt in `active.json` with this
    session's process identity (its nearest `claude` ancestor); refuses a slug
    whose owner is another live process. Then `hunt-ledger append <slug> start`.
-2. Add `Bash(git push:*)` to `permissions.deny` of the **project's**
-   `.claude/settings.local.json` (create it if absent, keep every other key).
-   Pushing goes only through `hunt-push`. Teardown removes exactly this rule.
+2. Add `Bash(git push:*)`, `Bash(git -C:*)` and `Bash(git -c:*)` to
+   `permissions.deny` of the **project's** `.claude/settings.local.json`
+   (create it if absent, keep every other key); teardown removes exactly these.
+   Bash rules match the command text, so `git push` alone would not catch
+   `git -C <dir> push`; and no role runs bare git at all (`hunt-git` only), so
+   denying the global-option forms costs nothing. This is a **first filter,
+   not a wall** — `env git push` or a script still gets past it, and only the
+   auto-mode classifier judges those. Pushing is meant to go only through
+   `hunt-push`.
 3. Arm **Monitor** on `hunt-status <slug> --watch`. It prints one line per new
    ledger event and a `stall` line when the hunt stops beating; it is silent
    otherwise, so an idle hunt costs no turn (it polls every
@@ -258,7 +264,7 @@ language of each repository. Root reads the module before entering its phase.
 
 | Action | Status |
 |--------|--------|
-| Push, or open an MR/PR, outside `hunt-push` | **FORBIDDEN** — `git push` is denied for the hunt's duration |
+| Push, or open an MR/PR, outside `hunt-push` | **FORBIDDEN** — `git push`, `git -C`, `git -c` are denied for the hunt's duration (a first filter, not a wall) |
 | Merge anything | **FORBIDDEN** — the user merges |
 | Start without the one-time scope approval | **FORBIDDEN** |
 | Start with agent teams `1` on any settings layer, or forks enabled | **FORBIDDEN** |

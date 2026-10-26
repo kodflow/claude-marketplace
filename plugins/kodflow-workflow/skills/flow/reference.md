@@ -409,7 +409,7 @@ signals a process itself.
 | | |
 |---|---|
 | reads | the repositories of the scope · the forge's open issues on the topic · `~/.local/state/hunt/<slug>/ledger.jsonl` on resume |
-| writes | `~/.local/state/hunt/<slug>/` (`scope.json`, `ledger.jsonl`, `status.json`, `tip.bundle`) · `active.json` · issues labelled `hunt:<slug>` · worktrees and `hunt-*` branches · a `git push` deny in `.claude/settings.local.json` until teardown · one MR/PR per repository at convergence, through `hunt-push` |
+| writes | `~/.local/state/hunt/<slug>/` (`scope.json`, `ledger.jsonl`, `status.json`, `tip.bundle`) · `active.json` · issues labelled `hunt:<slug>` · worktrees and `hunt-*` branches · `git push` / `git -C` / `git -c` denies in `.claude/settings.local.json` until teardown · one MR/PR per repository at convergence, through `hunt-push` |
 | after | nothing — this is an entry point |
 | then | the user merges the MRs · `/hunt --status` closes what the forge did not · `/hunt --teardown` |
 | gate | **one approval of `scope.json`, then nothing is pushed before a full pass on a frozen SHA finds nothing**; a finding becomes an issue only after a verifier replays it; never merges |
