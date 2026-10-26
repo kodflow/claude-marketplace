@@ -87,7 +87,7 @@ order_repos() { # KEYS... -> topological order (dependencies first)
 expand_arg() { # ARG DEP SHA
   jq -rn --arg a "$1" --arg dep "$2" --arg sha "$3" --argjson s "$scope" '
     $a | gsub("\\{sha\\}"; $sha) | gsub("\\{dep\\}"; $dep)
-    | gsub("\\{dep\\.(?<p>[A-Za-z0-9_.]+)\\}"; ($s.repos[$dep] | getpath(.p | split(".")) // "" | tostring))'
+    | gsub("\\{dep\\.(?<p>[A-Za-z0-9_.]+)\\}"; ((.p | split(".")) as $path | $s.repos[$dep] | getpath($path) // "" | tostring))'
 }
 
 run_repin() { # CONSUMER DEP SHA WORKTREE -> 0 if a commit was made

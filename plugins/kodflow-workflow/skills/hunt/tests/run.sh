@@ -278,6 +278,41 @@ check "hunt-push leaves no push token behind" test ! -e "$S/g/.push-token"
 hunt-push g --repin >/dev/null 2>&1
 check "--repin with no dependency has nothing to do" test $? -eq 0
 
+echo "== hunt-push (a dependency and its consumer)"
+for r in lib app; do
+  git init -q -b main "$T/$r"
+  echo "$r" >"$T/$r/README"
+  git -C "$T/$r" add README && git -C "$T/$r" commit -q -m base
+  git init -q --bare "$T/$r.git"
+  git -C "$T/$r" remote add origin "$T/$r.git"
+  git -C "$T/$r" push -q origin main
+done
+mkdir -p "$S/m"
+jq -n --arg l "$T/lib" --arg a "$T/app" '{topic:"two repos", matrix:["c1"], thresholds:{cap:3},
+  repos:{lib:{path:$l, forge:"local", owned:true, base:"main", mr_target:"main", go:{module:"example.com/lib"}},
+         app:{path:$a, forge:"local", owned:true, base:"main", mr_target:"main", depends_on:["lib"],
+              repin:{cmd:["sh","-c","echo {dep.go.module}@{sha} >dep.pin"], env:{}}}}}' >"$S/m/scope.json"
+hunt-ledger init m >/dev/null
+hunt-git m lib integ-init main >/dev/null; hunt-git m app integ-init main >/dev/null
+fl=$(hunt-git m lib tip); fa=$(hunt-git m app tip)
+hunt-ledger append m pass-start "{\"n\":1,\"sha\":{\"lib\":\"$fl\",\"app\":\"$fa\"},\"cells_total\":1}" >/dev/null
+hunt-ledger append m verdict '{"pass":1,"cell":"c1","result":"clean"}' >/dev/null
+check "hunt-push converges on two repositories" hunt-push m
+check "the dependency is pushed before its consumer" \
+  test "$(hunt-ledger read m | jq -rs '[.[] | select(.kind == "push") | .repo] | join(",")')" = lib,app
+check "the consumer is re-pinned on the dependency's pushed SHA" \
+  test "$(git -C "$T/app.git" show "hunt/m:dep.pin")" = "example.com/lib@$fl"
+check "the consumer's MR is a draft waiting for the dependency" \
+  test "$(jq -r '"\(.draft) \(.title | test("waits for the merge of lib"))"' "$S/m/forge-local/app/mrs/1.json")" = "true true"
+hunt-push m --repin >/dev/null 2>&1
+check "--repin is refused without the dependency's merge SHA" test $? -eq 1
+git -C "$T/lib" commit -q --allow-empty -m merge && msha=$(git -C "$T/lib" rev-parse HEAD)
+hunt-ledger append m merged '{"repo":"lib","mr":1,"merge_sha":"'"$msha"'"}' >/dev/null
+check "--repin re-pins on the merge SHA and pushes" hunt-push m --repin
+check "the pushed consumer pins the merge SHA" test "$(git -C "$T/app.git" show "hunt/m:dep.pin")" = "example.com/lib@$msha"
+check "repin and push events are in the ledger" \
+  test "$(hunt-ledger read m | jq -rs '[.[] | select(.kind == "repin" or (.kind == "push" and .repin == true)) | .kind] | join(",")')" = repin,push
+
 echo "== hunt-status"
 check "the table renders" bash -c 'hunt-status g | grep -q "Compteur"'
 check "--json is status.json" test "$(hunt-status g --json | jq -S .)" = "$(jq -S . "$S/g/status.json")"
