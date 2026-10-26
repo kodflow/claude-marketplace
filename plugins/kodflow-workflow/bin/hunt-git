@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016  # jq programs are single-quoted on purpose
+# hunt-git — the git operations of a hunt, confined to its own worktrees and
+# branches. Never pushes (hunt-push does), never touches the main checkout's
+# working tree, never writes a ledger event (the calling role does).
+#
+#   hunt-git SLUG REPO integ-init BASE        integration worktree on hunt/SLUG,
+#                                             cut from BASE (idempotent)
+#   hunt-git SLUG REPO worktree-add NAME BASE fix-<N> → flat branch hunt-fix/SLUG/<N>;
+#                                             any other NAME (sha-<k>, ver-<seq>)
+#                                             is detached at BASE
+#   hunt-git SLUG REPO worktree-remove NAME
+#   hunt-git SLUG REPO commit NAME MSG        add -A + commit in worktree NAME
+#   hunt-git SLUG REPO cherry-pick NAME SHA   in worktree NAME
+#   hunt-git SLUG REPO abort NAME             abort a rebase/cherry-pick/merge in
+#                                             progress (NAME `integ` = integration)
+#   hunt-git SLUG REPO branch-delete BRANCH   local only; hunt/SLUG, hunt-fix/SLUG/*,
+#                                             hunt-w/SLUG/* and nothing else
+#   hunt-git SLUG REPO integrate BRANCH       rebase BRANCH on the tip, fast-forward
+#                                             hunt/SLUG; all or nothing; prints the tip
+#   hunt-git SLUG REPO reset-tip SHA          hunt/SLUG back to SHA (an ancestor)
+#   hunt-git SLUG REPO bundle                 tip.bundle: tmp, verify, mv
+#   hunt-git SLUG REPO tip                    SHA of hunt/SLUG
+#
+# REPO is a key of scope.json .repos; its .path is the main checkout. Worktrees
+# live in $HUNT_WORKTREES (default ~/Projects/.worktrees) as
+# <repo>-hunt-SLUG-NAME, the integration worktree as <repo>-hunt-SLUG, <repo>
+# being the basename of .path. The bundle is <state>/SLUG/tip.bundle when the
+# scope has one repository, <state>/SLUG/tip-REPO.bundle otherwise.
+#
+# Exit: 0 ok · 1 refused/failed · 2 usage.
+set -euo pipefail
+
+readonly ME=hunt-git
+readonly ROOT="$HOME/.local/state/hunt"
+
+die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
+usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
+
+[[ ${1:-} == -h || ${1:-} == --help ]] && usage 0
+[[ $# -ge 3 ]] || usage 2
+slug=$1 key=$2 op=$3
+shift 3
+[[ $slug =~ ^[a-z0-9-]{1,40}$ ]] || die 2 "slug invalide: $slug"
+[[ $key =~ ^[A-Za-z0-9_.-]{1,64}$ ]] || die 2 "clé de dépôt invalide: $key"
+scope_f="$ROOT/$slug/scope.json"
+[[ -r $scope_f ]] || die 1 "$scope_f absent"
+repo_path=$(jq -r --arg k "$key" '.repos[$k].path // empty' "$scope_f")
+[[ -n $repo_path ]] || die 1 "dépôt '$key' absent du scope"
+repo_path=${repo_path/#\~/$HOME}
+git -C "$repo_path" rev-parse --git-dir >/dev/null 2>&1 || die 1 "$repo_path n'est pas un dépôt git"
+
+wt_root=${HUNT_WORKTREES:-$HOME/Projects/.worktrees}
+repo_name=$(basename "$repo_path")
+integ_wt="$wt_root/$repo_name-hunt-$slug"
+tip_branch="hunt/$slug"
+
+check_name() { [[ ${1:-} =~ ^[a-z0-9][a-z0-9.-]{0,40}$ ]] || die 2 "nom de worktree invalide: '${1:-}'"; }
+wt_of() { # NAME -> path
+  if [[ $1 == integ ]]; then printf '%s\n' "$integ_wt"; else check_name "$1"; printf '%s\n' "$wt_root/$repo_name-hunt-$slug-$1"; fi
+}
+g() { git -C "$repo_path" "$@"; }
+gw() { local w=$1; shift; [[ -d $w ]] || die 1 "worktree absent: $w"; git -C "$w" "$@"; }
+commit_of() { g rev-parse --verify --quiet "$1^{commit}" || die 1 "révision inconnue: $1"; }
+tip_sha() { g rev-parse --verify --quiet "refs/heads/$tip_branch" || die 1 "$tip_branch n'existe pas (integ-init d'abord)"; }
+clean_or_die() { [[ -z $(gw "$1" status --porcelain) ]] || die 1 "worktree non propre: $1"; }
+in_progress() { # WORKTREE -> 0 if a rebase/cherry-pick/merge is under way
+  local gd; gd=$(gw "$1" rev-parse --absolute-git-dir)
+  [[ -d $gd/rebase-merge || -d $gd/rebase-apply || -f $gd/CHERRY_PICK_HEAD || -f $gd/MERGE_HEAD || -f $gd/REVERT_HEAD ]]
+}
+abort_all() { # WORKTREE
+  gw "$1" rebase --abort >/dev/null 2>&1 || true
+  gw "$1" cherry-pick --abort >/dev/null 2>&1 || true
+  gw "$1" merge --abort >/dev/null 2>&1 || true
+  gw "$1" revert --abort >/dev/null 2>&1 || true
+}
+
+case $op in
+  integ-init)
+    [[ $# -eq 1 ]] || usage 2
+    if [[ -d $integ_wt ]]; then
+      [[ $(gw "$integ_wt" symbolic-ref -q --short HEAD || true) == "$tip_branch" ]] \
+        || die 1 "$integ_wt n'est pas sur $tip_branch"
+    else
+      mkdir -p "$wt_root"
+      base=$(commit_of "$1")
+      if g show-ref --verify --quiet "refs/heads/$tip_branch"; then
+        g worktree add "$integ_wt" "$tip_branch" >/dev/null 2>&1 || die 1 "worktree d'intégration impossible"
+      else
+        g worktree add -b "$tip_branch" "$integ_wt" "$base" >/dev/null 2>&1 || die 1 "worktree d'intégration impossible"
+      fi
+    fi
+    printf '%s\n' "$integ_wt" ;;
+
+  worktree-add)
+    [[ $# -eq 2 ]] || usage 2
+    name=$1; check_name "$name"; [[ $name != integ ]] || die 2 "nom réservé: integ"
+    wt=$(wt_of "$name"); base=$(commit_of "$2")
+    [[ ! -e $wt ]] || die 1 "existe déjà: $wt"
+    mkdir -p "$wt_root"
+    if [[ $name =~ ^fix-([0-9]+)$ ]]; then
+      br="hunt-fix/$slug/${BASH_REMATCH[1]}"
+      if g show-ref --verify --quiet "refs/heads/$br"; then
+        g worktree add "$wt" "$br" >/dev/null 2>&1 || die 1 "worktree impossible: $wt"
+      else
+        g worktree add -b "$br" "$wt" "$base" >/dev/null 2>&1 || die 1 "worktree impossible: $wt"
+      fi
+    else
+      g worktree add --detach "$wt" "$base" >/dev/null 2>&1 || die 1 "worktree impossible: $wt"
+    fi
+    printf '%s\n' "$wt" ;;
+
+  worktree-remove)
+    [[ $# -eq 1 ]] || usage 2
+    wt=$(wt_of "$1")
+    [[ -e $wt ]] || exit 0
+    g worktree remove --force "$wt" || die 1 "suppression impossible: $wt"
+    g worktree prune ;;
+
+  commit)
+    [[ $# -eq 2 && -n $2 ]] || usage 2
+    wt=$(wt_of "$1")
+    gw "$wt" add -A
+    gw "$wt" commit -q -m "$2" || die 1 "commit en échec dans $wt"
+    gw "$wt" rev-parse HEAD ;;
+
+  cherry-pick)
+    [[ $# -eq 2 ]] || usage 2
+    wt=$(wt_of "$1"); sha=$(commit_of "$2")
+    if ! gw "$wt" cherry-pick "$sha" >/dev/null; then
+      abort_all "$wt"; die 1 "cherry-pick de $sha en conflit (annulé)"
+    fi
+    gw "$wt" rev-parse HEAD ;;
+
+  abort)
+    [[ $# -eq 1 ]] || usage 2
+    wt=$(wt_of "$1")
+    abort_all "$wt" ;;
+
+  branch-delete)
+    [[ $# -eq 1 ]] || usage 2
+    br=$1
+    case $br in
+      "hunt/$slug"|"hunt-fix/$slug/"*|"hunt-w/$slug/"*) ;;
+      *) die 1 "refusé: $br n'appartient pas à la chasse $slug" ;;
+    esac
+    g show-ref --verify --quiet "refs/heads/$br" || exit 0
+    g branch -D "$br" >/dev/null || die 1 "suppression de $br impossible (worktree encore présent ?)" ;;
+
+  integrate)
+    [[ $# -eq 1 ]] || usage 2
+    src=$1
+    case $src in "hunt/$slug"|"hunt/$slug/"*) die 1 "refusé: $src est la branche d'intégration" ;; esac
+    src_sha=$(commit_of "$src")
+    [[ -d $integ_wt ]] || die 1 "worktree d'intégration absent (integ-init d'abord)"
+    in_progress "$integ_wt" && die 1 "opération en cours dans $integ_wt (abort integ d'abord)"
+    clean_or_die "$integ_wt"
+    before=$(tip_sha)
+    # Rebase a detached copy of BRANCH (it may be checked out in a fixer's
+    # worktree), then fast-forward hunt/SLUG. Any failure: back to `before`.
+    restore() {
+      abort_all "$integ_wt"
+      gw "$integ_wt" checkout -q -f "$tip_branch" >/dev/null 2>&1 || true
+      gw "$integ_wt" reset -q --hard "$before" >/dev/null 2>&1 || true
+    }
+    if ! gw "$integ_wt" checkout -q --detach "$src_sha" >/dev/null 2>&1; then restore; die 1 "checkout de $src impossible"; fi
+    if ! gw "$integ_wt" rebase -q "$before" >/dev/null 2>&1; then
+      restore; die 1 "rebase de $src sur $before en conflit: rien n'est intégré"
+    fi
+    new=$(gw "$integ_wt" rev-parse HEAD)
+    if ! gw "$integ_wt" checkout -q "$tip_branch" >/dev/null 2>&1 \
+       || ! gw "$integ_wt" merge -q --ff-only "$new" >/dev/null 2>&1; then
+      restore; die 1 "avance rapide de $tip_branch impossible: rien n'est intégré"
+    fi
+    printf '%s\n' "$new" ;;
+
+  reset-tip)
+    [[ $# -eq 1 ]] || usage 2
+    sha=$(commit_of "$1")
+    [[ -d $integ_wt ]] || die 1 "worktree d'intégration absent"
+    cur=$(tip_sha)
+    g merge-base --is-ancestor "$sha" "$cur" || die 1 "$sha n'est pas un ancêtre du bout $cur"
+    abort_all "$integ_wt"
+    gw "$integ_wt" checkout -q -f "$tip_branch"
+    gw "$integ_wt" reset -q --hard "$sha"
+    printf '%s\n' "$sha" ;;
+
+  bundle)
+    [[ $# -eq 0 ]] || usage 2
+    tip_sha >/dev/null
+    n=$(jq '.repos | length' "$scope_f")
+    if [[ $n -le 1 ]]; then out="$ROOT/$slug/tip.bundle"; else out="$ROOT/$slug/tip-$key.bundle"; fi
+    tmp="$out.tmp.$$"
+    trap 'rm -f "$tmp"' EXIT
+    g bundle create -q "$tmp" "refs/heads/$tip_branch" 2>/dev/null || die 1 "git bundle create en échec"
+    g bundle verify -q "$tmp" >/dev/null 2>&1 || die 1 "git bundle verify en échec: $tmp"
+    mv -f "$tmp" "$out"
+    printf '%s\n' "$out" ;;
+
+  tip)
+    [[ $# -eq 0 ]] || usage 2
+    tip_sha ;;
+
+  *) usage 2 ;;
+esac
