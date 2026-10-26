@@ -15,7 +15,7 @@
 #                                             the scope_sha256 of the last `start`
 #                                             or `scope-update` event (every other
 #                                             hunt script runs it before reading
-#                                             the scope); 0 when none is recorded
+#                                             the scope); also 1 before any approval
 #
 # State lives in $HOME/.local/state/hunt/<SLUG>/ (never XDG_STATE_HOME):
 # scope.json (written before init), ledger.jsonl, ledger.lock, status.json.
@@ -535,7 +535,7 @@ cmd_scope_check() {
   want=$(ledger_complete "$d/ledger.jsonl" 2>/dev/null | jq -rnR '
     [inputs | fromjson? | objects | select((.kind == "start" or .kind == "scope-update")
       and (.scope_sha256 | type) == "string")] | last | .scope_sha256 // empty')
-  [[ -n $want ]] || return 0
+  [[ -n $want ]] || die 1 "scope.json pas encore approuvé (aucun start ni scope-update avec scope_sha256)"
   have=$(sha256sum "$d/scope.json" | cut -d' ' -f1)
   [[ $have == "$want" ]] \
     || die 1 "scope.json modifié après approbation ($have, approuvé $want): faire approuver la modification (scope-update) ou la défaire"
