@@ -14,6 +14,9 @@
 #   hunt-git SLUG REPO cherry-pick NAME SHA   in worktree NAME
 #   hunt-git SLUG REPO abort NAME             abort a rebase/cherry-pick/merge in
 #                                             progress (NAME `integ` = integration)
+#   hunt-git SLUG REPO witness-branch N SHA   hunt-w/SLUG/<N> on the witness commit
+#                                             SHA (idempotent; never moves an
+#                                             existing branch elsewhere)
 #   hunt-git SLUG REPO branch-delete BRANCH   local only; hunt/SLUG, hunt-fix/SLUG/*,
 #                                             hunt-w/SLUG/* and nothing else
 #   hunt-git SLUG REPO integrate BRANCH       rebase BRANCH on the tip, fast-forward
@@ -136,6 +139,16 @@ case $op in
     [[ $# -eq 1 ]] || usage 2
     wt=$(wt_of "$1")
     abort_all "$wt" ;;
+
+  witness-branch)
+    [[ $# -eq 2 && $1 =~ ^[0-9]+$ ]] || usage 2
+    br="hunt-w/$slug/$1"; sha=$(commit_of "$2")
+    if cur=$(g rev-parse --verify --quiet "refs/heads/$br"); then
+      [[ $cur == "$sha" ]] || die 1 "$br existe déjà sur $cur"
+    else
+      g branch "$br" "$sha" >/dev/null || die 1 "création de $br impossible"
+    fi
+    printf '%s\n' "$br" ;;
 
   branch-delete)
     [[ $# -eq 1 ]] || usage 2

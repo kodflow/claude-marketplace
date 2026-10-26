@@ -217,6 +217,12 @@ check "the integration worktree is clean, on hunt/g, nothing in progress" bash -
 hunt-git g r worktree-add sha-1 "$tip1" >/dev/null
 check "sha-<k> worktrees are detached" test "$(git -C "$T/wt/repo-hunt-g-sha-1" symbolic-ref -q HEAD || echo detached)" = detached
 check "worktree-remove" bash -c 'hunt-git g r worktree-remove sha-1 && [[ ! -e $0 ]]' "$T/wt/repo-hunt-g-sha-1"
+check "witness-branch names a witness commit hunt-w/g/<N>" \
+  bash -c '[[ $(hunt-git g r witness-branch 7 "$0") == hunt-w/g/7 ]] && hunt-git g r witness-branch 7 "$0"' "$tip1"
+hunt-git g r witness-branch 7 "$base_tip" >/dev/null 2>&1
+check "witness-branch never moves an existing branch (exit 1)" test $? -eq 1
+check "branch-delete removes a hunt-w branch" \
+  bash -c 'hunt-git g r branch-delete hunt-w/g/7 && ! git -C "$0" show-ref --quiet refs/heads/hunt-w/g/7' "$R"
 hunt-git g r branch-delete main >/dev/null 2>&1
 check "branch-delete refuses a branch outside the hunt" test $? -eq 1
 check "bundle writes a verified tip.bundle" bash -c 'hunt-git g r bundle >/dev/null && git bundle list-heads "$0" | grep -q hunt/g' "$S/g/tip.bundle"
