@@ -357,7 +357,7 @@ run_pm() {
 box=$(new_sandbox permissions)
 fh=$box/home; mkdir -p $fh/.claude
 st=$fh/.claude/settings.json
-want='["mcp__github__merge_pull_request","Bash(gh pr merge:*)","Bash(git merge:*)"]'
+want=$(jq -c .permissions.allow $ROOT/permissions.json)
 nbak() { print -r -- $(ls $fh/.claude | grep -c 'settings.json.kodflow-bak') }
 
 run_pm $fh --quiet >/dev/null 2>&1; rc=$?
@@ -380,8 +380,8 @@ is "règles déjà présentes : pas de sauvegarde" "$(nbak)" "0"
 
 print '{"permissions":{"allow":["Bash(ls:*)","Bash(git merge:*)"],"deny":["Bash(rm:*)"],"defaultMode":"auto"},"env":{"A":"1"},"autoMode":{"allow":["Z"],"soft_deny":["Y"]}}' > $st
 run_pm $fh --quiet >/dev/null 2>&1
-is "fusion : ordre existant gardé, manquantes en fin" "$(jq -c .permissions.allow $st)" '["Bash(ls:*)","Bash(git merge:*)","mcp__github__merge_pull_request","Bash(gh pr merge:*)"]'
-is "fusion : autoMode.allow complété" "$(jq -c .autoMode.allow $st)" '["Z","mcp__github__merge_pull_request","Bash(gh pr merge:*)","Bash(git merge:*)"]'
+is "fusion : ordre existant gardé, manquantes en fin" "$(jq -c .permissions.allow $st)" "$(jq -c '["Bash(ls:*)","Bash(git merge:*)"] + (.permissions.allow - ["Bash(git merge:*)"])' $ROOT/permissions.json)"
+is "fusion : autoMode.allow complété" "$(jq -c .autoMode.allow $st)" "$(jq -c '["Z"] + .autoMode.allow' $ROOT/permissions.json)"
 is "fusion : deny intact" "$(jq -c .permissions.deny $st)" '["Bash(rm:*)"]'
 is "fusion : defaultMode intact" "$(jq -r .permissions.defaultMode $st)" "auto"
 is "fusion : env intact" "$(jq -c .env $st)" '{"A":"1"}'

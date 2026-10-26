@@ -3,14 +3,30 @@
     "allow": [
       "mcp__github__merge_pull_request",
       "Bash(gh pr merge:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(hunt-ledger:*)",
+      "Bash(hunt-status:*)",
+      "Bash(hunt-queue:*)",
+      "Bash(hunt-forge:*)",
+      "Bash(hunt-git:*)",
+      "Bash(hunt-push:*)",
+      "Bash(lourd:*)",
+      "Bash(codex exec -s read-only:*)"
     ]
   },
   "autoMode": {
     "allow": [
       "mcp__github__merge_pull_request",
       "Bash(gh pr merge:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(hunt-ledger:*)",
+      "Bash(hunt-status:*)",
+      "Bash(hunt-queue:*)",
+      "Bash(hunt-forge:*)",
+      "Bash(hunt-git:*)",
+      "Bash(hunt-push:*)",
+      "Bash(lourd:*)",
+      "Bash(codex exec -s read-only:*)"
     ]
   }
 }
