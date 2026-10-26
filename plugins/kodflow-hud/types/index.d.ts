@@ -126,6 +126,65 @@ export type HudBlock = {
   rule?: string;
 };
 
+/** One notable event of a hunt, as status.json keeps the last 20. */
+export type HudHuntEvent = { seq: number; kind: string; text: string };
+
+/**
+ * A hunt's status.json (/hunt v1), cut down to what the « Chasse » view
+ * shows. Fields the reader does not know are dropped, never guessed.
+ */
+export type HudHuntStatus = {
+  seq: number;
+  /** hunting, frozen, final-pass, pushing, awaiting-merge, paused, done. */
+  state: string;
+  pause?: { reason: string; since?: number };
+  counter: { open: number; cap: number; resumeAt?: number };
+  pass: { n: number; sha?: string; done: number; total: number };
+  queue: {
+    tokens: number;
+    holders: {
+      slug: string;
+      label: string;
+      since?: number;
+      exclusive: boolean;
+    }[];
+    waiting: { slug: string; label: string; since?: number }[];
+  };
+  tip: { sha?: string; bundleAt?: number };
+  codex: { pending: number; done: number; skipped: number; abandoned: number };
+  decisions: { repo: string; issue: string; title: string }[];
+  /** Last progress event, in milliseconds since the epoch. */
+  beat?: number;
+  /** A queued job of this hunt runs; past `deadline` it counts as none. */
+  busy?: { since?: number; deadline?: number };
+  notifyFailed: boolean;
+  events: HudHuntEvent[];
+};
+
+/** One hunt of active.json, with its status.json when it could be read. */
+export type HudHuntRun = {
+  slug: string;
+  /** When the hunt was registered: a slug reused gets a new one. */
+  created: number;
+  /** active.json's own mirror of the state and the beat. */
+  state: string;
+  beat?: number;
+  status?: HudHuntStatus;
+  /** Why `status` is missing: « état illisible », « format vN non lu… ». */
+  problem?: string;
+};
+
+/** What the « Chasse » view draws: `found` false when no hunt is listed. */
+export type HudHunt = {
+  found: boolean;
+  /** The whole read failed, or active.json is of another format. */
+  problem?: string;
+  runs: HudHuntRun[];
+};
+
+/** By slug: the hunt it was (its `created`) and the last event seq toasted. */
+export type HudHuntCursor = Record<string, { created: number; seq: number }>;
+
 declare module "claude-code" {
   interface PluginState {
     "kodflow-hud": {
@@ -150,6 +209,10 @@ declare module "claude-code" {
       docs: HudDocs;
       /** blocks.jsonl of the session, newest first, for the « Refus » view. */
       blocks: HudBlock[];
+      /** active.json and each hunt's status.json, for the « Chasse » view. */
+      hunt: HudHunt;
+      /** Per hunt, the last event toasted in this session. */
+      huntCursor: HudHuntCursor;
     };
   }
 }

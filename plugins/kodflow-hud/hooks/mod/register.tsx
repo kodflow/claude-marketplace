@@ -9,7 +9,8 @@
 //               only pane, its tab counting the tasks left.
 //               Two more views in its bar: « Refus », what kodflow-hooks
 //               refused (blocks.jsonl), and « Documents », the project's
-//               documents (docs.json), panels.ts.
+//               documents (docs.json), panels.ts; a third, « Chasse », while
+//               /hunt lists a run (active.json, each status.json), hunt.ts.
 // The subagents themselves are the engine's to show, under the prompt.
 // And a few words of each reply in colour (colors.ts): the transcript draws
 // `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
@@ -27,7 +28,12 @@
 // on the model's word nor a hook's: a document ignored or brought back in
 // the project's docs/manifest.json; a permission rule, shown first and then
 // confirmed, added to the project's .claude/settings.local.json; the docs
-// prompt drafted in an EMPTY prompt box, never sent.
+// prompt, or `/hunt --resume <slug>`, drafted in an EMPTY prompt box, never
+// sent.
+//
+// /hunt's files are read on their own, after everything else of a poll and
+// inside their own try/catch: a hunt that cannot be read says « état
+// illisible » in its view, and the « Tâches » pane goes on as before.
 //
 // The logic lives in the pure modules beside this file (board.ts, tree.ts,
 // layout.tsx, models.ts, alerts.ts, ci.ts); the
@@ -44,6 +50,8 @@ import type {
   HudDoc,
   HudDocs,
   HudCi,
+  HudHunt,
+  HudHuntCursor,
   HudModel,
   HudSeen,
   HudTask,
@@ -65,6 +73,19 @@ import {
   type DocMode,
 } from "./docs.ts";
 import { addRule, parseBlocks, safeRule } from "./refusals.ts";
+import {
+  NO_HUNT,
+  UNREADABLE,
+  activeFile,
+  canResume,
+  huntOff,
+  huntRoot,
+  huntToasts,
+  readHunt,
+  resumePrompt,
+  slugsOf,
+  statusFile,
+} from "./hunt.ts";
 import {
   PROMPT_SECTION,
   SECTION_ID,
@@ -121,6 +142,14 @@ const blocksAtom = atom(
   { plugin: "kodflow-hud", key: "blocks" } as const,
   [] as HudBlock[],
 );
+const huntAtom = atom(
+  { plugin: "kodflow-hud", key: "hunt" } as const,
+  NO_HUNT as HudHunt,
+);
+const huntCursorAtom = atom(
+  { plugin: "kodflow-hud", key: "huntCursor" } as const,
+  {} as HudHuntCursor,
+);
 const primedAtom = atom({ plugin: "kodflow-hud", key: "primed" } as const, "");
 const tickAtom = atom({ plugin: "kodflow-hud", key: "tick" } as const, 0);
 
@@ -169,9 +198,14 @@ let allTasks: HudTask[] = [];
 // epic done 30 minutes ago leaves it without the file changing
 let lastText: string | undefined;
 let lastCi = 0;
-// docs.json and blocks.jsonl: re-read when their time moves
-const seenMtime: Record<string, number | undefined> = {};
+// docs.json and blocks.jsonl: re-read when their time or their size moves
+const seenStat: Record<string, string | undefined> = {};
 let home: string | undefined;
+// /hunt's files as the last poll read them, side by side: a poll that reads
+// the same text changes nothing (two whole rewrites in one tick can keep the
+// time and the size, never the text)
+let huntText = "";
+let huntEnvOff = false;
 
 // Atoms are written only when their value changed: every write redraws
 const same = (a: unknown, b: unknown): boolean =>
@@ -242,21 +276,60 @@ function ctxOf(
   return { now, agents, activity, silentMs };
 }
 
-/** A file of the session's folder, when its time moved: its text, or null. */
+/**
+ * A file of the session's folder, when its time or its size moved: its text,
+ * or null. The size too: a rewrite within the same millisecond keeps the time.
+ */
 async function changed(
   $: any,
   path: string,
 ): Promise<string | undefined | null> {
-  const mtime = await $.fs.stat(path).then(
-    (s: { mtimeMs: number }) => s.mtimeMs,
+  const stat = await $.fs.stat(path).then(
+    (s: { mtimeMs: number; size: number }) => `${s.mtimeMs}:${s.size}`,
     () => undefined,
   );
-  if (path in seenMtime && seenMtime[path] === mtime) return null;
+  if (path in seenStat && seenStat[path] === stat) return null;
   const text =
-    mtime === undefined ? undefined : await $.fs.read(path).catch(() => null);
+    stat === undefined ? undefined : await $.fs.read(path).catch(() => null);
   if (text === null) return null;
-  seenMtime[path] = mtime;
+  seenStat[path] = stat;
   return text;
+}
+
+/**
+ * /hunt's active.json, then the status.json of each hunt it lists: paths
+ * from HOME and the slug made safe, the text compared with the last poll's.
+ * Then the toasts past each hunt's cursor. Never the journal, never a scan.
+ */
+async function pollHunt($: any): Promise<void> {
+  const root = settings.hunt && !huntEnvOff ? huntRoot(home) : undefined;
+  let hunt: HudHunt = NO_HUNT;
+  if (root) {
+    const text = (path: string): Promise<string | undefined> =>
+      $.fs.read(path).catch(() => undefined);
+    const active = await text(activeFile(root));
+    const status: Record<string, string | undefined> = {};
+    for (const slug of slugsOf(active))
+      status[slug] = await text(statusFile(root, slug));
+    const now = JSON.stringify([active, status]);
+    if (now === huntText) return;
+    huntText = now;
+    hunt = readHunt(active, (slug) => status[slug]);
+  } else huntText = "";
+  if (!same(await read($, huntAtom), hunt))
+    await update($, huntAtom, () => hunt);
+  const before = await read($, huntCursorAtom);
+  const { toasts, cursor } = huntToasts(hunt, before);
+  if (!same(before, cursor)) await update($, huntCursorAtom, () => cursor);
+  for (const t of toasts) $.ui.toast(t);
+}
+
+/** A poll of /hunt's files that threw: the view says so, the rest is kept. */
+async function huntFailed($: any): Promise<void> {
+  huntText = "";
+  const hunt: HudHunt = { found: true, problem: UNREADABLE, runs: [] };
+  if (!same(await read($, huntAtom), hunt))
+    await update($, huntAtom, () => hunt);
 }
 
 /** docs.json and blocks.jsonl, beside tasks.json, kodflow-hooks' too. */
@@ -331,12 +404,8 @@ async function setIgnored($: any, id: string, ignore: boolean): Promise<void> {
   }));
 }
 
-/** The docs prompt in the prompt box, as a draft: only where the box is empty. */
-async function draftCreate(
-  $: any,
-  ids: string[],
-  mode: DocMode,
-): Promise<void> {
+/** A prompt in the prompt box, as a draft: only where the box is empty. */
+async function draft($: any, text: string): Promise<void> {
   const box = await $.prompt.read().catch(() => ({ text: "" }));
   if (box.text.trim()) {
     $.ui.toast(
@@ -344,7 +413,7 @@ async function draftCreate(
     );
     return;
   }
-  const r = await $.prompt.fill({ text: createPrompt(ids, mode) });
+  const r = await $.prompt.fill({ text });
   $.ui.toast(
     r.isFilled
       ? "kodflow-hud : brouillon prêt dans la zone de saisie (Échap, relis, puis ⏎)."
@@ -402,7 +471,13 @@ async function onMessage($: any, data: unknown): Promise<void> {
     );
     if (asked.length !== d.ids.length || (!asked.length && !missing.size))
       return;
-    return draftCreate($, asked, mode);
+    return draft($, createPrompt(asked, mode));
+  }
+  // « reprendre »: a hunt listed now, probably orphaned, its slug /hunt's shape
+  if (d.op === "resume") {
+    if (!canResume(await read($, huntAtom), d.slug, await $.clock.now()))
+      return;
+    return draft($, resumePrompt(d.slug as string));
   }
   if (d.op === "allow" && typeof d.rule === "string")
     return allowRule($, d.rule);
@@ -489,6 +564,12 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
       lastCi = now;
       void checkCi($);
     }
+    // Last, and on its own: whatever /hunt's files hold, the rest is done
+    try {
+      await pollHunt($);
+    } catch {
+      await huntFailed($).catch(() => undefined);
+    }
   } finally {
     polling = false;
   }
@@ -567,7 +648,7 @@ async function trace($: any): Promise<void> {
 }
 
 // The options, as register received them
-const settings = { silentMs: 10 * 60_000, ci: true };
+const settings = { silentMs: 10 * 60_000, ci: true, hunt: true };
 
 /** Poll now, in the background; a failure waits for the next period. */
 function kick($: any): void {
@@ -577,10 +658,13 @@ function kick($: any): void {
 export const register: Register = (on, options) => {
   settings.silentMs = Math.max(1, Number(options.silentMinutes ?? 10)) * 60_000;
   settings.ci = options.ci !== false;
+  settings.hunt = options.hunt !== false;
   const autoOpen = options.autoOpen !== false;
 
   on("session.start", async ($, e, next) => {
     home = await $.env.get("HOME");
+    huntEnvOff = huntOff(await $.env.get("KODFLOW_HUD_HUNT"));
+    huntText = "";
     await $.command.register({
       name: "hud",
       description: "kodflow-hud: open the Tasks pane (/hud off closes it)",
@@ -685,6 +769,7 @@ export const register: Register = (on, options) => {
         docs: await read($, docsAtom),
         blocks: await read($, blocksAtom),
         now: await $.clock.now(),
+        hunt: await read($, huntAtom),
       };
       // Where the surface runs modules (terminal, desktop) the tree takes
       // keys and clicks; elsewhere it is drawn still, at its first state
@@ -708,7 +793,7 @@ export const register: Register = (on, options) => {
     },
   );
 
-  // A click or a key in the pane: the only road to the three writes
+  // A click or a key in the pane: the only road to the writes and drafts
   on("ui.message", async ($, e, next) => {
     if (e.requestId === TASKS_PANE && e.module.endsWith("client.tsx"))
       await onMessage($, e.data).catch(() =>
