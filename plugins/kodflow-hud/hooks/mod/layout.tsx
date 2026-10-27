@@ -7,8 +7,9 @@
 // of a fixed width each, and every cell is drawn padded to exactly that
 // width: what goes in a cell is cut to it first, then filled with spaces,
 // both measured in terminal cells (width.ts), so a wide glyph never shifts
-// the next column. A line is one Text, so a wide board stays a small tree. No cell paints a background: colour is the text's
-// alone, so a transparent terminal shows through everywhere.
+// the next column. A line is one Text, so a wide board stays a small tree.
+// No cell paints a background: colour is the text's alone, so a transparent
+// terminal shows through everywhere.
 //
 // R12, the tree, at its full width (88 cells of body, 90 with the frame):
 //   margin 2 · tree 30 (3 a level, glyph 2, ref 7, title 18) · agent 22 ·
@@ -81,13 +82,7 @@ export type Screen = {
 
 export type View = "tree" | "graph" | "blocks" | "docs" | "hunt";
 /** « Chasse » last, and only while a hunt is listed (`BarCounts.hunt`). */
-export const VIEWS: readonly View[] = [
-  "tree",
-  "graph",
-  "blocks",
-  "docs",
-  "hunt",
-];
+export const VIEWS: readonly View[] = ["tree", "graph", "blocks", "docs", "hunt"];
 
 /**
  * The counts the views' bar shows beside « Refus » and « Documents », and
