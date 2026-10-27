@@ -50,6 +50,7 @@ import type {
   HudDoc,
   HudDocs,
   HudCi,
+  HudFault,
   HudHunt,
   HudHuntCursor,
   HudModel,
@@ -62,6 +63,7 @@ import { CI_EVERY_MS, ciState, prsToCheck } from "./ci.ts";
 import { configDir, sessionDir, tasksFile } from "./paths.ts";
 import { buildTree } from "./tree.ts";
 import { draw, initialUi } from "./layout.tsx";
+import { NO_FAULT, onFault, resting } from "./fault.ts";
 import { SETTINGS_LOCAL, viewScreen, type Extra } from "./panels.ts";
 import {
   MODES,
@@ -152,6 +154,10 @@ const huntCursorAtom = atom(
 );
 const primedAtom = atom({ plugin: "kodflow-hud", key: "primed" } as const, "");
 const tickAtom = atom({ plugin: "kodflow-hud", key: "tick" } as const, 0);
+const faultAtom = atom(
+  { plugin: "kodflow-hud", key: "fault" } as const,
+  NO_FAULT as HudFault,
+);
 
 export const TASKS_PANE = "hud-tasks";
 /**
@@ -773,12 +779,18 @@ export const register: Register = (on, options) => {
       };
       // Where the surface runs modules (terminal, desktop) the tree takes
       // keys and clicks; elsewhere it is drawn still, at its first state
-      // (the table may name Client where the surface then drops it)
+      // (the table may name Client where the surface then drops it), and so
+      // it is while the Client rests after failing too often (fault.ts)
       const { Client } = els;
-      if (Client && (e.surface === "terminal" || e.surface === "desktop"))
+      const fault = await read($, faultAtom);
+      if (
+        Client &&
+        (e.surface === "terminal" || e.surface === "desktop") &&
+        !resting(fault, await $.clock.now())
+      )
         return (
           <Client
-            key="tree"
+            key={fault.gen ? `tree-${fault.gen}` : "tree"}
             module="./client.tsx"
             props={{ model, width, rows, extra }}
             width={width}
@@ -792,6 +804,20 @@ export const register: Register = (on, options) => {
       );
     },
   );
+
+  // The tree's Client failed: a stalled process is enough (fault.ts). It is
+  // born again under a new key, its selection and view lost, as a reload
+  // loses them; failing too often, the pane rests drawn still for a while.
+  // When the rest ends the tick's redraw brings the Client back.
+  on("ui.fault", async ($, e, next) => {
+    const r = await next(e);
+    if (e.requestId === TASKS_PANE && e.module.endsWith("client.tsx")) {
+      const now = await $.clock.now();
+      await update($, faultAtom, (f) => onFault(f, now));
+      $.ui.invalidate("ui.render");
+    }
+    return r;
+  });
 
   // A click or a key in the pane: the only road to the writes and drafts
   on("ui.message", async ($, e, next) => {

@@ -185,6 +185,12 @@ export type HudHunt = {
 /** By slug: the hunt it was (its `created`) and the last event seq toasted. */
 export type HudHuntCursor = Record<string, { created: number; seq: number }>;
 
+/**
+ * The « Tâches » Client's faults (fault.ts): the generation its key carries,
+ * the recent faults in milliseconds, and until when it rests drawn still.
+ */
+export type HudFault = { gen: number; at: number[]; until: number };
+
 declare module "claude-code" {
   interface PluginState {
     "kodflow-hud": {
@@ -213,6 +219,8 @@ declare module "claude-code" {
       hunt: HudHunt;
       /** Per hunt, the last event toasted in this session. */
       huntCursor: HudHuntCursor;
+      /** The « Tâches » Client's faults, and its key's generation. */
+      fault: HudFault;
     };
   }
 }
