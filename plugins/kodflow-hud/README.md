@@ -232,6 +232,14 @@ in that instance's state, across redraws. The terminal and the desktop draw
 a `Client`; VS Code and the mobile app do not, and get the same tree drawn
 still, at its first state.
 
+The engine gives a `Client` one second of wall clock a run, so a stall of
+the whole process (the machine waking up, a long pause) can fail it, and a
+failed `Client` is never drawn again unasked. The hooks module hears the
+fault (`ui.fault`) and draws a new instance under a new key, back on the
+tree at its first state (`hooks/mod/fault.ts`). Past three faults within a
+minute the pane rests drawn still for five minutes, then the `Client` is
+tried again, so a fault that would recur cannot loop.
+
 A click never moves the row it hit. The task chosen is pinned to the line
 it was clicked on (`Ui.pin`, `hooks/mod/layout.tsx`): the next screen
 scrolls, and picks the finished branches folded or not, so that it stays
