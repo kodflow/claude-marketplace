@@ -4,11 +4,12 @@
 // screen, still, from the hooks module.
 //
 // Alignment is the point. A screen is a list of lines, a line a row of cells
-// of a fixed width each, and every cell becomes a Box of exactly that width:
-// nothing is lined up with padding spaces, and what goes in a cell is cut to
-// it first, measured in terminal cells (width.ts), so a wide glyph never
-// shifts the next column. No cell paints a background: colour is the text's
-// alone, so a transparent terminal shows through everywhere.
+// of a fixed width each, and every cell is drawn padded to exactly that
+// width: what goes in a cell is cut to it first, then filled with spaces,
+// both measured in terminal cells (width.ts), so a wide glyph never shifts
+// the next column. A line is one Text, so a wide board stays a small tree.
+// No cell paints a background: colour is the text's alone, so a transparent
+// terminal shows through everywhere.
 //
 // R12, the tree, at its full width (88 cells of body, 90 with the frame):
 //   margin 2 · tree 30 (3 a level, glyph 2, ref 7, title 18) · agent 22 ·
@@ -698,7 +699,7 @@ export function tabsLines(
     v === view ? { color: MAUVE, bold: true, underline: true } : { dim: true };
   const n = (k: number) => {
     const c = Math.min(99, Math.max(0, k));
-    return ` (${c})${"\u2007".repeat(2 - String(c).length)}`;
+    return ` (${c})${"\u2007".repeat(Math.max(0, 2 - String(c).length))}`;
   };
   const hunt = counts.hunt;
   const wide = width >= (hunt ? HUNT_WIDE : 46);
@@ -1241,42 +1242,89 @@ export function screenOf(
 
 // --- drawing --------------------------------------------------------------------------------
 
-function drawSpans({ Text }: Els, spans: Span[]) {
-  return spans.map((s) => (
-    <Text
-      {...(s.color && { color: s.color })}
-      {...(s.dim && { dimColor: true })}
-      {...(s.bold && { bold: true })}
-      {...(s.underline && { underline: true })}
-    >
-      {s.text}
-    </Text>
-  ));
+const same = (a: Span, b: Span) =>
+  a.color === b.color &&
+  !a.dim === !b.dim &&
+  !a.bold === !b.bold &&
+  !a.underline === !b.underline;
+
+/** Spans clipped to `w` cells, as a Box of that width clips them: no ellipsis. */
+function clip(spans: Span[], w: number): Span[] {
+  const out: Span[] = [];
+  let n = 0;
+  for (const s of spans) {
+    let text = "";
+    for (const ch of s.text) {
+      const c = cells(ch);
+      if (n + c > w) break;
+      text += ch;
+      n += c;
+    }
+    if (text) out.push({ ...s, text });
+    if (text !== s.text) break;
+  }
+  return out;
 }
 
-function drawCell(els: Els, c: Cell, key: string): any {
-  const { Box, Text } = els;
-  if (c.row)
-    return (
-      <Box key={key} width={c.w} flexShrink={0} flexDirection="row">
-        {c.row.map((inner, i) => drawCell(els, inner, `${key}.${i}`))}
-      </Box>
-    );
-  return (
-    <Box
-      key={key}
-      width={c.w}
-      flexShrink={0}
-      {...(c.right && { justifyContent: "flex-end" })}
-    >
-      {c.spans?.length ? (
-        <Text wrap="truncate-end">{drawSpans(els, c.spans)}</Text>
-      ) : null}
-    </Box>
+/**
+ * A cell as spans of exactly its width: its text, padded with spaces on the
+ * side it does not hug, a row of cells one after the other; too wide (a
+ * row's cells summing past it), clipped as a Box of that width would.
+ */
+function flat(c: Cell): Span[] {
+  const inner = c.row ? c.row.flatMap(flat) : (c.spans ?? []);
+  const kept = clip(inner, c.w);
+  const pad = c.w - cells(kept.map((s) => s.text).join(""));
+  if (pad <= 0) return kept;
+  const fill = { text: " ".repeat(pad) };
+  return c.right ? [fill, ...kept] : [...kept, fill];
+}
+
+const blank = (s: Span) => !s.underline && !s.text.trim();
+
+/**
+ * A line's spans, neighbours of one style merged, plain text left bare. No
+ * cell paints a background, so a blank takes its neighbour's style unseen
+ * (unless underlined), and the blanks closing the line go: the Box fills it.
+ */
+function drawLine({ Text }: Els, line: Cell[]) {
+  const runs: Span[] = [];
+  for (const s of line.flatMap(flat)) {
+    const last = runs[runs.length - 1];
+    if (last && (same(last, s) || (blank(s) && !last.underline)))
+      last.text += s.text;
+    else if (last && blank(last) && !s.underline)
+      runs[runs.length - 1] = { ...s, text: last.text + s.text };
+    else runs.push({ ...s });
+  }
+  const end = runs[runs.length - 1];
+  if (end && !end.underline) {
+    end.text = end.text.trimEnd();
+    if (!end.text) runs.pop();
+  }
+  return runs.map((s) =>
+    s.color || s.dim || s.bold || s.underline ? (
+      <Text
+        {...(s.color && { color: s.color })}
+        {...(s.dim && { dimColor: true })}
+        {...(s.bold && { bold: true })}
+        {...(s.underline && { underline: true })}
+      >
+        {s.text}
+      </Text>
+    ) : (
+      s.text
+    ),
   );
 }
 
-/** A screen as Boxes: one row a line, one Box of its fixed width a cell. */
+/**
+ * A screen as one Box a line and one Text in it: each cell padded with spaces
+ * to its width (width.ts counts them), so the columns line up as Boxes of a
+ * fixed width would, at a node a span rather than three a cell. A Client's
+ * tree is checked and shipped on every tick, within a second and under
+ * 100,000 characters: a Box a cell crossed both on a wide board.
+ */
 export function draw(els: Els, screen: Screen | string, width: number) {
   const { Box, Text } = els;
   if (typeof screen === "string")
@@ -1290,8 +1338,8 @@ export function draw(els: Els, screen: Screen | string, width: number) {
   return (
     <Box key="tasks" flexDirection="column" width={width}>
       {screen.lines.map((line, i) => (
-        <Box key={`l${i}`} flexDirection="row" height={1} width={width}>
-          {line.map((c, j) => drawCell(els, c, `l${i}.${j}`))}
+        <Box key={`l${i}`} height={1} width={width}>
+          <Text wrap="truncate-end">{drawLine(els, line)}</Text>
         </Box>
       ))}
     </Box>
