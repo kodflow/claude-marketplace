@@ -223,7 +223,9 @@ test("R4 at 90 by 20: the graph by state, junctions and no crossing", async ($, 
   // tab goes on to « Refus », « Documents », then back to the tree; a click
   // on « Arbre » is the tree too
   await ui.key({ key: "tab" });
-  expect(await ui.find({ in: "tree", text: /Aucun refus dans cette session/ })).toBeTruthy();
+  expect(
+    await ui.find({ in: "tree", text: /Aucun refus dans cette session/ }),
+  ).toBeTruthy();
   await ui.key({ key: "tab" });
   expect(await ui.find({ in: "tree", text: /Pas de docs\.json/ })).toBeTruthy();
   await ui.key({ key: "tab" });
@@ -783,10 +785,16 @@ test("a title of 30 characters is cut at 18 cells in the tree and in the graph, 
   const text = capture(await drawnIn(ui));
   const rows = text.split("\n");
   // Cut with « … » in the 18 cells of the column, the neighbours aligned
-  expect(rows.find((l) => l.includes("C1"))).toContain("● C1     Réécrire la gesti…  ↳");
+  expect(rows.find((l) => l.includes("C1"))).toContain(
+    "● C1     Réécrire la gesti…  ↳",
+  );
   // 18 characters fit as they are; 19 do not
-  expect(rows.find((l) => l.includes("C2"))).toContain("▶ C2     AAAAAAAAAAAAAAAAAA ");
-  expect(rows.find((l) => l.includes("T0"))).toContain("Corriger texte IWFS".slice(0, 17) + "…");
+  expect(rows.find((l) => l.includes("C2"))).toContain(
+    "▶ C2     AAAAAAAAAAAAAAAAAA ",
+  );
+  expect(rows.find((l) => l.includes("T0"))).toContain(
+    "Corriger texte IWFS".slice(0, 17) + "…",
+  );
   // The detail line of the selection carries the whole title
   expect(rows[16]).toContain(`● C1  ${LONG}`);
   expect(widths(await drawnIn(ui))).toEqual(Array(20).fill(88));
@@ -864,4 +872,66 @@ test("the finished branches fold above the open ones, and only the last row turn
   );
   expect(a.join("\n")).toContain("  └─ ✓ fait (30)");
   expect(a.join("\n")).not.toContain("├─");
+});
+
+// A wide board on a wide pane: 3 epics of 25 tasks, 3 subtasks each, the
+// first ones unfolded. The Client's tree is checked and shipped on every
+// tick, refused past 100,000 characters (the instance unmounts) and given a
+// second a run: one Box a cell crossed both. One Text a line stays far under.
+test("a 200 by 70 pane on 3 epics of 25 tasks draws, its tree well under the engine's 100,000 characters", async ($, on) => {
+  const tasks: object[] = [];
+  let id = 1;
+  for (let e = 1; e <= 3; e++)
+    for (let t = 0; t < 25; t++) {
+      const top = String(id++);
+      tasks.push(
+        task(
+          top,
+          `Tâche ${top} de l'épopée ${e}`,
+          (["pending", "in_progress", "completed", "waiting"] as const)[t % 4],
+          {
+            epic: e,
+            ...(t % 3 && { blockedBy: [String(id - 5)] }),
+          },
+        ),
+      );
+      for (let s = 0; s < 3; s++) {
+        const sid = String(id++);
+        tasks.push(
+          task(sid, `Sous-tâche ${sid}`, s ? "pending" : "completed", {
+            epic: e,
+            parent: top,
+          }),
+        );
+      }
+    }
+  const epics = [1, 2, 3].map((n) => ({
+    id: n,
+    agent: "main",
+    title: `Épopée ${n}`,
+    created: SEC,
+    touched: SEC,
+  }));
+  const { h, clock } = host(on);
+  h.files.set(TASKS, {
+    text: tasksJson(tasks, {
+      epics,
+      active: { main: 1 },
+      next_id: id,
+      next_epic: 4,
+    }),
+    mtimeMs: 1,
+  });
+  await start($, clock);
+  const ui = await mount($, 200, 70);
+  for (const key of ["return", "down", "return", "down", "return"])
+    await ui.key({ key });
+  const tree = await drawnIn(ui);
+  expect(capture(tree)).toContain("Épopée 3");
+  expect(widths(tree)).toEqual(Array(70).fill(200));
+  expect(JSON.stringify(tree).length).toBeLessThan(50_000);
+  await ui.key({ key: "tab" });
+  const graph = await drawnIn(ui);
+  expect(widths(graph)).toEqual(Array(70).fill(200));
+  expect(JSON.stringify(graph).length).toBeLessThan(50_000);
 });

@@ -5,7 +5,7 @@
 // docs/manifest.json, the docs prompt drafted in an empty prompt box.
 import { test, expect } from "claude-code/testing";
 import { NOW, PANE, T, host, start, writeTasks } from "./host.ts";
-import { capture } from "./capture.ts";
+import { capture, widths } from "./capture.ts";
 import {
   BLOCKS,
   DOCS,
@@ -13,6 +13,7 @@ import {
   SETTINGS,
   blocksJsonl,
   docsJson,
+  iso,
   manifestJson,
 } from "./fixtures.ts";
 import {
@@ -223,6 +224,37 @@ test("the bar: Arbre, Graphe, Refus counting the last hour, Documents counting t
   );
   await click(ui, 1, 19);
   expect((await screen(ui))[0]).toContain("SDK status-line");
+});
+
+test("150 refusals in the hour: the bar says 99, every tab where it was, every line at its width", async ($, on) => {
+  const { h, clock } = host(on);
+  writeTasks(h, [T("1", "in_progress")], 1);
+  const many = Array.from({ length: 150 }, (_, i) =>
+    JSON.stringify({
+      ts: iso(NOW - (150 - i) * 10_000),
+      kind: "hook",
+      tool: "Bash",
+      summary: "TRIAGE FIRST",
+      motif: "triage",
+      agent: "main",
+    }),
+  );
+  h.files.set(BLOCKS, { text: `${many.join("\n")}\n`, mtimeMs: 1 });
+  await start($, clock);
+  const ui = await $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-tasks",
+    props: PANE(88, 20),
+  });
+  const bar = (await screen(ui))[19]!;
+  expect(bar).toMatch(/^Arbre {3}Graphe {3}Refus \(99\) {3}Documents \(0\)/);
+  expect(bar.indexOf("Documents")).toBe(30);
+  await click(ui, 18, 19);
+  const refus = await ui.drawn({ in: "tree" });
+  expect(capture(refus).split("\n")[0]).toContain("150 dans la dernière heure");
+  expect(widths(refus)).toEqual(Array(20).fill(88));
 });
 
 test("Refus: newest first, what piled up, the rule shown; a click asks, only « ajouter » writes", async ($, on) => {
