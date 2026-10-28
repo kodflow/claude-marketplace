@@ -17,8 +17,10 @@ And it holds one capability rule (#105): an agent whose `## Command scope`
 grants a Go or Cargo test runner and sends that work to "the scratch
 directory" must be able to write there. Without `Write` the reproduction it
 promises cannot be created, and every behavioural claim it makes stays
-unverified. An absent `tools` key inherits every tool; `disallowedTools`
-removes `Write` whatever `tools` says.
+unverified. The same holds for an agent with a `## Report file` section: it
+is told to write its findings to a file, so it needs `Write` too. An absent
+`tools` key inherits every tool; `disallowedTools` removes `Write` whatever
+`tools` says.
 """
 import pathlib, re, sys, yaml
 
@@ -66,14 +68,24 @@ def tool_tokens(v):
     items = v if isinstance(v, list) else [v]
     return {x.strip() for i in items for x in str(i).split(",") if x.strip()}
 
+def write_fault(rel, fm, why):
+    """The fault when `why` needs Write and the frontmatter does not give it."""
+    if "Write" in tool_tokens(fm.get("disallowedTools")):
+        return f"{rel}: {why} but disallowedTools removes Write"
+    if "tools" in fm and "Write" not in tool_tokens(fm.get("tools")):
+        return f"{rel}: {why} but tools lack Write"
+    return None
+
 def scratch_write_fault(rel, fm, body):
     scope = command_scope(body)
-    if "scratch directory" not in scope or not any(f"`{r}`" in scope for r in SCRATCH_RUNNERS):
-        return None
-    if "Write" in tool_tokens(fm.get("disallowedTools")):
-        return f"{rel}: Command scope runs tests under the scratch directory but disallowedTools removes Write"
-    if "tools" in fm and "Write" not in tool_tokens(fm.get("tools")):
-        return f"{rel}: Command scope runs tests under the scratch directory but tools lack Write"
+    if "scratch directory" in scope and any(f"`{r}`" in scope for r in SCRATCH_RUNNERS):
+        if bad := write_fault(rel, fm, "Command scope runs tests under the scratch directory"):
+            return bad
+    # A `## Report file…` section tells the agent to write its findings to a
+    # file the caller reads back; without Write the caller only ever finds
+    # no file, which it must read as an incomplete pass.
+    if re.search(r"^## Report file\b", body, re.M):
+        return write_fault(rel, fm, "a Report file section asks for a report file")
     return None
 
 def frontmatter(p):

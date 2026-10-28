@@ -106,6 +106,24 @@ for name, fm, body in (
     rc, out = run(fixture(agent_fm=fm, agent_body=body))
     check(f"passes {name}", rc == 0, out)
 
+# An agent told to write a report file needs Write as much as one told to
+# write a reproduction.
+REPORT = "## Report file and compact return\n\nWrite the JSON to the report file.\n\n## Output\n\nJSON."
+for name, fm, reason in (
+    ("a Report file section without Write", agent("Read, Bash"), "a Report file section asks for a report file but tools lack Write"),
+    ("a Report file section with Write disallowed", agent(None, "[Write]"),
+     "a Report file section asks for a report file but disallowedTools removes Write"),
+):
+    rc, out = run(fixture(agent_fm=fm, agent_body=REPORT))
+    check(f"refuses {name}", rc == 1 and AGENT in out and reason in out, out)
+for name, fm, body in (
+    ("a Report file section with Write", agent("Read, Write, Bash"), REPORT),
+    ("a report file mentioned outside a Report file heading", agent("Read, Bash"),
+     "## Role\n\nThe caller keeps a report file; this agent returns JSON."),
+):
+    rc, out = run(fixture(agent_fm=fm, agent_body=body))
+    check(f"passes {name}", rc == 0, out)
+
 rc, out = run(pathlib.Path(__file__).resolve().parents[2])
 check("this repository passes", rc == 0, out)
 
