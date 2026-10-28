@@ -4,7 +4,7 @@ description: Algorithmic correctness analyzer — invariant violations, state ma
   concurrency bugs, off-by-one and swallowed errors; returns JSON with counterexamples and patches.
   Use when a diff or module needs a proof-style correctness pass. Escalate to opus/max when a
   counterexample search one xhigh pass did not settle.
-tools: Read, Glob, Grep, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebFetch,
+tools: Read, Glob, Grep, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebFetch,
   SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 model: opus
 effort: xhigh
@@ -172,6 +172,11 @@ reviewed. Create it with a `status: in-progress` line BEFORE you read anything, 
 finding as soon as it is established rather than batching them at the end, and flip it to
 `status: complete` as your very last action — a caller that finds no file, or one still
 `in-progress`, must treat your pass as incomplete, not as a clean bill of health.
+
+`Write` creates that one report file, at the path the brief names under the caller's scratch
+directory, and nothing else: never a file inside the reviewed repository, never over another
+file the brief supplies, never through the shell (redirection, heredoc, `tee`, `cp`). With no
+report-file path in the brief, write nothing.
 
 Then return at most ~1500 characters to the caller: the summary line your brief specifies,
 followed by one line per finding as `SEVERITY | file:line | expected fix`, and nothing else
