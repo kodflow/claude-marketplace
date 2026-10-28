@@ -12,6 +12,15 @@ knows and an `effort` among the five levels, on agents and skills alike, and
 no agent pinned to a gated model (_shared/gated-models.txt, model-policy.md
 §6). The gated list is read from the canonical copy; without it nothing can
 be judged, so its absence fails the run rather than passing everything.
+
+And it holds one capability rule (#105): an agent whose `## Command scope`
+grants a Go or Cargo test runner and sends that work to "the scratch
+directory" must be able to write there. Without `Write` the reproduction it
+promises cannot be created, and every behavioural claim it makes stays
+unverified. The same holds for an agent with a `## Report file` section: it
+is told to write its findings to a file, so it needs `Write` too. An absent
+`tools` key inherits every tool; `disallowedTools` removes `Write` whatever
+`tools` says.
 """
 import pathlib, re, sys, yaml
 
@@ -41,6 +50,48 @@ def effort_fault(rel, e):
     if e is not None and str(e) not in EFFORTS:
         return f"{rel}: effort {e!r} is not one of {sorted(EFFORTS)}"
 
+# Test-runner grants that, next to "scratch directory", promise a reproduction
+# the agent must write before it can run: the broad `Bash(go:*)` and
+# `Bash(cargo:*)`, and `go test` / `cargo test` with or without narrowing
+# flags (`Bash(go test -race:*)`). Matched backticked.
+SCRATCH_RUNNER = re.compile(r"`Bash\((?:go|cargo)(?::\*| test(?: [^`]*)?:\*)\)`")
+
+def command_scope(body):
+    """The `## Command scope` section, up to the next `## ` heading, or ''."""
+    m = re.search(r"^## Command scope[ \t]*\n(.*?)(?=^## |\Z)", body, re.M | re.S)
+    return m.group(1) if m else ""
+
+def tool_tokens(v):
+    """Exact tool names of a `tools`/`disallowedTools` value: a comma-separated
+    string, or a YAML list (`disallowedTools: [Write]`), whose entries may
+    themselves be comma-separated. A specifier is dropped: `Write(/repo/**)`
+    names the Write tool, and in disallowedTools a specifier removes the whole
+    tool."""
+    if v is None:
+        return set()
+    items = v if isinstance(v, list) else [v]
+    return {x.split("(", 1)[0].strip() for i in items for x in str(i).split(",") if x.strip()}
+
+def write_fault(rel, fm, why):
+    """The fault when `why` needs Write and the frontmatter does not give it."""
+    if "Write" in tool_tokens(fm.get("disallowedTools")):
+        return f"{rel}: {why} but disallowedTools removes Write"
+    if "tools" in fm and "Write" not in tool_tokens(fm.get("tools")):
+        return f"{rel}: {why} but tools lack Write"
+    return None
+
+def scratch_write_fault(rel, fm, body):
+    scope = command_scope(body)
+    runs = "scratch directory" in scope and SCRATCH_RUNNER.search(scope)
+    if runs and (bad := write_fault(rel, fm, "Command scope runs tests under the scratch directory")):
+        return bad
+    # A `## Report file…` section tells the agent to write its findings to a
+    # file the caller reads back; without Write the caller only ever finds
+    # no file, which it must read as an incomplete pass.
+    if re.search(r"^## Report file\b", body, re.M):
+        return write_fault(rel, fm, "a Report file section asks for a report file")
+    return None
+
 def frontmatter(p):
     raw = p.read_text()
     if not raw.startswith("---\n"):
@@ -62,7 +113,7 @@ def main(root):
         gated = []
 
     for f in sorted(root.rglob("agents/*.md")):
-        fm, _, err = frontmatter(f)
+        fm, body, err = frontmatter(f)
         if err: faults.append(f"{f}: {err}"); continue
         n_a += 1
         rel = f.relative_to(root)
@@ -76,6 +127,8 @@ def main(root):
         if bad := effort_fault(rel, fm.get("effort")): faults.append(bad)
         if m is not None and any(t in str(m).lower() for t in gated):
             faults.append(f"{rel}: pins the gated model {m!r} — no agent may (model-policy.md §6)")
+        if not isinstance(fm.get("tools"), list) and (bad := scratch_write_fault(rel, fm, body)):
+            faults.append(bad)
 
     for f in sorted(root.rglob("skills/*/SKILL.md")):
         fm, body, err = frontmatter(f)

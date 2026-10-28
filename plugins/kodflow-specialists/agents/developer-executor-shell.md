@@ -4,7 +4,7 @@ description: Shell script, Dockerfile and CI/CD safety analyzer — dangerous pa
   safeguards, config issues, via deterministic pattern matching; returns JSON. Use when a change
   touches .sh files, Dockerfiles or CI pipeline files. Escalate to sonnet/medium when findings need
   judgement beyond pattern matching or are ambiguous.
-tools: Read, Glob, Grep, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, WebFetch, mcp__context7__*
+tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, WebFetch, mcp__context7__*
 model: haiku
 effort: low
 color: blue
@@ -219,12 +219,19 @@ ci_cd:
 
 ## Report file and compact return
 
+Unless in Plan review mode: there, no report file is created even when the brief names a path, and the ~1500-character cap does not apply; the objections go in the return value, in the caller's format.
+
 When your brief names a report-file path, that file — not your return value — is where the
 JSON below goes. It lives in the caller's scratch dir, never inside the repository being
 reviewed. Create it with a `status: in-progress` line BEFORE you read anything, append each
 finding as soon as it is established rather than batching them at the end, and flip it to
 `status: complete` as your very last action — a caller that finds no file, or one still
 `in-progress`, must treat your pass as incomplete, not as a clean bill of health.
+
+`Write` creates that one report file, at the path the brief names under the caller's scratch
+directory, and nothing else: never a file inside the reviewed repository, never over another
+file the brief supplies, never through the shell (redirection, heredoc, `tee`, `cp`). With no
+report-file path in the brief, write nothing.
 
 Then return at most ~1500 characters to the caller: the summary line your brief specifies,
 followed by one line per finding as `SEVERITY | file:line | expected fix`, and nothing else

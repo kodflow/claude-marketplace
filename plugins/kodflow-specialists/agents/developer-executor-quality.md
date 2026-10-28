@@ -4,7 +4,7 @@ description: Code quality executor — complexity, code smells, style violations
   returns condensed JSON with commendations. Use when a review needs a fast mechanical pass for
   function length, nesting, duplication or naming. Escalate to sonnet/medium when findings need
   judgement beyond pattern matching or are ambiguous.
-tools: Read, Glob, Grep, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
+tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 model: haiku
 effort: low
 color: blue
@@ -78,6 +78,11 @@ reviewed. Create it with a `status: in-progress` line BEFORE you read anything, 
 finding as soon as it is established rather than batching them at the end, and flip it to
 `status: complete` as your very last action — a caller that finds no file, or one still
 `in-progress`, must treat your pass as incomplete, not as a clean bill of health.
+
+`Write` creates that one report file, at the path the brief names under the caller's scratch
+directory, and nothing else: never a file inside the reviewed repository, never over another
+file the brief supplies, never through the shell (redirection, heredoc, `tee`, `cp`). With no
+report-file path in the brief, write nothing.
 
 Then return at most ~1500 characters to the caller: the summary line your brief specifies,
 followed by one line per finding as `SEVERITY | file:line | expected fix`, and nothing else

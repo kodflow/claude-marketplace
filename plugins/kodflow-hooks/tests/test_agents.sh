@@ -137,6 +137,34 @@ for d in "Port the Terraform module" "Fix the Valkey failover" "Review protobuf 
     [ "$RC" -eq 2 ] && motif route && ok "routed: $d" || bad "routed: $d" "rc=$RC"
 done
 
+echo "== the routing gate · systemd semantics apart from host administration"
+# specialists.md splits the old "systemd units" row: what a directive, an Exec
+# prefix or sd_notify means goes to the review-tier systemd specialist, a
+# host's live state stays with the Linux router. Asserted on the agents named,
+# not on the exit code alone: both rows refuse, only the name says which.
+SYD=kodflow-specialists:domain-specialist-systemd LNX=kodflow-specialists:devops-executor-linux
+names() { printf '%s' "$ERR" | grep -q "$1"; }
+run on-tool.sh "$(agent "Review the sd_notify watchdog of the systemd unit")"
+[ "$RC" -eq 2 ] && names "$SYD" && ! names "$LNX" \
+    && ok "sd_notify, systemd: the systemd specialist alone" || bad "route systemd" "rc=$RC $ERR"
+run on-tool.sh "$(agent "Check KillMode= in app.service")"
+[ "$RC" -eq 2 ] && names "$SYD" && ! names "$LNX" \
+    && ok "a .service file: the systemd specialist" || bad "route .service" "rc=$RC $ERR"
+run on-tool.sh "$(agent "systemctl restart nginx on the box")"
+[ "$RC" -eq 2 ] && names "$LNX" && ! names "$SYD" \
+    && ok "systemctl restart: the Linux router, not the systemd specialist" || bad "route systemctl" "rc=$RC $ERR"
+run on-tool.sh "$(agent "Tune journald rotation")"
+[ "$RC" -eq 2 ] && names "$LNX" && ! names "$SYD" \
+    && ok "journald rotation: the Linux router, not the systemd specialist" || bad "route journald" "rc=$RC $ERR"
+run on-tool.sh "$(agent "Fix the systemd unit then systemctl restart it")"
+[ "$RC" -eq 2 ] && names "$SYD" && names "$LNX" \
+    && ok "a mixed description: both named" || bad "route mixed" "rc=$RC $ERR"
+installed some-other-plugin
+run on-tool.sh "$(agent "Review the sd_notify watchdog of the systemd unit")"
+[ "$RC" -eq 0 ] && ! names "$SYD" && ! names "$LNX" \
+    && ok "kodflow-specialists absent: no systemd agent named" || bad "route systemd absent" "rc=$RC $ERR"
+installed kodflow-specialists
+
 echo "== the routing gate · every deliberate general-purpose dispatch is marked"
 for f in kodflow-workflow/skills/challenge/debate.md kodflow-review/skills/debug/SKILL.md \
          kodflow-workflow/skills/search/parallel.md kodflow-workflow/skills/plan/explore.md \

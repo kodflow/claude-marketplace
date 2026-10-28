@@ -62,4 +62,40 @@ check("debate.md brief carries prior objections with their text",
       "Prior objections" in brief and all(f in brief for f in ("ID, claim verbatim", "remedy", "disposition")))
 check("debate.md brief names a scratch directory", "Scratch directory: <$SCRATCH>" in brief and "mktemp -d" in brief)
 check("debate.md brief names the project records", "Project records:" in brief)
+# kodflow/claude-marketplace#107. Sources that settle a technology claim are
+# named per topic before round 1, and a topic with none blocks dispatch.
+check("debate.md brief carries the reference sources", "Reference sources:" in brief
+      and "topic — URL or path" in brief and "A topic with no entry blocks dispatch" in brief)
+check("debate.md ties a technology objection to a reference source",
+      "A technology objection cites in consulted at least one reference\nsource that substantiates the claim" in brief
+      and "a cited\nentry that does not say what the objection says is no evidence" in brief
+      and "citing no source, listed or outside,\nthat substantiates it" in brief)
+check("debate.md triage adds a substantiating outside source to the list, covered topic or not",
+      "add that source to the list for\nthe next round" in brief
+      and "whether the list covers that topic or not" in brief)
+# A reviewer reporting an accepted fix as wrong reopens that ID before the
+# convergence check, or the run converges with the defect still there.
+check("debate.md reopens a negative prior-objection verdict under its ID",
+      "Negative verdicts reopen, under their existing IDs." in brief
+      and "A negative verdict reopens that\nID" in brief
+      and "**no accepted objection**, new or reopened" in brief)
+# Codex answers the same contract only if it is handed the same brief.
+check("debate.md feeds Codex the complete reviewer brief",
+      '< "$SCRATCH/codex-brief-r$ROUND.md"' in brief and "< plan.md" not in brief
+      and "The **complete reviewer brief** goes in on **stdin**" in brief)
+# Each reviewer gets back its own numbering against the triage IDs, merged
+# objections included, and answers by triage ID.
+check("debate.md brief hands each reviewer its triage ID table",
+      "| triage ID | your local number | round |" in brief and "merged ones included" in brief
+      and "one verdict per triage ID" in brief)
+check("debate.md triage records the local number and keeps merged ones",
+      "that reviewer's local\nnumber" in brief and "keeps every contributing reviewer and local number" in brief)
+# A count, not a length: a word limit cannot hold the six fields.
+check("debate.md brief states the objection budget",
+      "At most 8 objections, each with the six fields" in brief
+      and '"at most 8\nobjections, each with the six fields"' in brief)
+check("debate.md forbids a word or character limit",
+      "no brief sets a word or character\nlimit" in brief
+      and "| Set a word or character limit on a reviewer's response | **FORBIDDEN**" in brief)
+check("debate.md has no word limit left", re.search(r"\b\d+\s*(?:-|–|to)?\s*\d*\s*words\b", brief) is None)
 sys.exit(1 if fails else 0)

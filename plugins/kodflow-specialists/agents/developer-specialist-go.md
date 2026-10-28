@@ -4,7 +4,7 @@ description: Go specialist — idiomatic Go, concurrency patterns, error handlin
   the race detector. Use when a change touches .go files, go.mod or go.work, or a Go API or design
   question. Escalate to opus/high when the change spans several packages, shared state across
   goroutines, or a wire protocol.
-tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+tools: Read, Glob, Grep, Write, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: high
 color: blue
@@ -30,7 +30,8 @@ The git commands stay read-only: never pass an option that writes a file or runs
 
 Verification in Plan review mode, which writes nothing in the reviewed repository:
 
-- A throwaway measurement (a module with a `_test.go` file, `go test -bench`, `go build -gcflags=-m`) runs only under the scratch directory the brief names, never inside a reviewed repository; with no scratch directory named, report the claim under `unverified`. The module imports the standard library or a copied minimal reproduction, and runs with `GOPROXY=off`, `GOFLAGS=-mod=readonly` and `GOCACHE` under the scratch directory. Record it in `consulted` as the command and its result.
+- A throwaway measurement (a module with a `_test.go` file, `go test -bench`, `go build -gcflags=-m` on a non-test `.go` file) runs only under the scratch directory the brief names, never inside a reviewed repository; with no scratch directory named, report the claim under `unverified`. The module imports the standard library or a copied minimal reproduction, and runs with `GOPROXY=off`, `GOFLAGS=-mod=readonly`, and `GOCACHE`, `GOTMPDIR` and `TMPDIR` under the scratch directory: without `GOTMPDIR` the go command puts its build work files in the system temporary directory, outside scratch. Record it in `consulted` as the command and its result.
+- `Write` creates files only under the scratch directory the brief names: the reproduction module (`go.mod`, its `*_test.go` files, and the non-test `.go` files a copied reproduction or a `go build` measurement needs, since Go refuses to build a package with no non-test Go file) and, where this agent keeps one, its report file. Never write inside the reviewed repository, never overwrite a file the brief supplies, and never create a file through the shell (redirection, heredoc, `tee`, `cp`). With no scratch directory named, write nothing and report the claim under `unverified`.
 - Local GOROOT source (`go env GOROOT`) is read with Read and recorded as `path@go1.x`.
 - When a pkg.go.dev page exceeds the WebFetch limit (large packages such as `net` or `simd/archsimd`), read the doc comment from the release-branch source instead, `https://raw.githubusercontent.com/golang/go/release-branch.go1.NN/src/<pkg>/<file>.go`, with WebFetch, and cite that URL in `consulted`.
 

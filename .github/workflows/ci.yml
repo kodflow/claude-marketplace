@@ -150,6 +150,13 @@ jobs:
       - name: Every routed agent carries the plan review mode
         run: python3 scripts/tests/test_plan_review_mode.py
 
+      # The systemd specialist exists for its evidence rules (#106): raw man
+      # pages fetched by a scoped curl, never a WebFetch summary, a version
+      # cited, writes in the brief's scratch directory only. Asserted in the
+      # agent and its Codex copy, with the routing split it depends on.
+      - name: The systemd specialist keeps its evidence contract
+        run: python3 scripts/tests/test_systemd_specialist.py
+
       - name: Shell scripts parse
         run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -n1 bash -n
 

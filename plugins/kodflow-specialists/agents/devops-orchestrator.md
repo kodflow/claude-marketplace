@@ -68,6 +68,11 @@ devops-orchestrator (opus)
     │   └─→ devops-executor-linux → routes to OS specialist
     │         Detects: /etc/os-release → os-specialist-{distro}
     │
+    ├─→ Domain specialists (opus):
+    │   └─→ domain-specialist-systemd
+    │         Focus: unit-file directives, Exec prefixes, sd_notify,
+    │         checked against the raw freedesktop.org man pages
+    │
     ├─→ OS Specialists (haiku):
     │   ├─→ os-specialist-debian      (apt, systemd, AppArmor)
     │   ├─→ os-specialist-ubuntu      (apt/snap, systemd, UFW)
@@ -105,7 +110,8 @@ strategy:
       qemu: "*.xml (libvirt), cloud-init/"
       vmware: "*.vmx, *.ovf"
     sysadmin:
-      linux: "systemd/, *.service, /etc/"
+      linux: "/etc/, packages, host and live service state (systemctl, journald)"
+      systemd: "*.service, *.socket, *.timer, *.path, *.mount, unit drop-ins, sd_notify → domain-specialist-systemd"
       bsd: "rc.conf, pf.conf, jail.conf"
       osx: "*.plist, Brewfile"
       windows: "*.ps1, *.psm1, GPO/"
@@ -134,6 +140,7 @@ strategy:
 | K8s deploy | kubernetes | devsecops |
 | Security audit | security | infrastructure |
 | Linux setup | linux (→ os-specialist) | security |
+| Unit-file or sd_notify semantics | domain-specialist-systemd | linux |
 | CI/CD workflow | github-actions | security |
 | Secrets / PKI | hashicorp | security |
 
@@ -179,6 +186,10 @@ Task:
 # The executor routes internally:
 #   devops-executor-linux → os-specialist-{debian|ubuntu|alpine}
 #   any other distro      → handled generically inside devops-executor-linux
+# systemd semantics (does a directive exist, what a unit setting, an Exec*= prefix
+# or sd_notify readiness means) skip the router: dispatch domain-specialist-systemd,
+# with a scratch directory (mktemp -d, outside the project) named in its brief
+# so its downloads and checksums can be kept.
 ```
 
 ### Cloud Task
