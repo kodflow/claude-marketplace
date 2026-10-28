@@ -58,8 +58,10 @@ its command and result) and `unverified` (what it could not confirm). Put that
 requirement in every specialist brief.
 
 In a technology objection, `consulted` cites at least one entry of the
-brief's **reference sources** (Phase 2), or a source outside that list together
-with the topic the list does not cover. A `path@rev` read and a scratch
+brief's **reference sources** (Phase 2), or an authoritative source outside
+that list that substantiates the claim — the vendor's documentation, a raw
+manual page, the source read at a revision — with the topic it settles, whether
+the list already covers that topic or not. A `path@rev` read and a scratch
 measurement stay valid evidence beside it.
 
 **A technology objection with an empty `consulted` list is a memory claim.**
@@ -219,7 +221,8 @@ line it contradicts), remedy, consulted (the sources you checked, one entry per
 source: a URL, a file read at a revision as path@rev, or a scratch measurement
 with its command and result), unverified (what you could not confirm, and what
 you tried). A technology objection cites at least one reference source in
-consulted; a source outside the list names the topic the list does not cover.
+consulted, or an authoritative outside source that substantiates the claim,
+naming the topic it settles.
 With more than 8, keep the most severe; never shorten a field to fit more. An
 objection with no concrete failure behind it is noise — leave it out. If the
 plan is sound from your lens, say so and stop; do not manufacture an objection
@@ -246,10 +249,13 @@ the ID keeps every contributing reviewer and local number, and the claim text
 of each. That mapping is what each reviewer's table in the next brief is cut
 from, so no reviewer has to rebuild it from summaries.
 
-A reviewer that cites a source outside the reference sources, naming the topic
-the list missed, has found a gap: add that source to the list for the next
-round. A technology objection citing neither a list entry nor a justified
-outside source falls under the empty-`consulted` rule of 1.3.
+A reviewer that cites an authoritative source outside the reference sources
+has found a gap or a better source, whether the list covers that topic or not
+(the raw freedesktop.org page where the list named a Context7 entry): when it
+substantiates the claim, take it as evidence and add that source to the list for
+the next round. A technology objection citing neither a list entry nor an
+outside source that substantiates it falls under the empty-`consulted` rule of
+1.3.
 
 Then judge each objection against the plan and the codebase:
 

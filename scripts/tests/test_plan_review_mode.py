@@ -68,9 +68,10 @@ check("debate.md brief carries the reference sources", "Reference sources:" in b
       and "topic — URL or path" in brief and "A topic with no entry blocks dispatch" in brief)
 check("debate.md ties a technology objection to a reference source",
       "A technology objection cites at least one reference source" in brief
-      and "names the topic the list does not cover" in brief)
-check("debate.md triage adds a justified outside source to the list",
-      "add that source to the list for the next" in brief)
+      and "an authoritative outside source that substantiates the claim" in brief)
+check("debate.md triage adds a substantiating outside source to the list, covered topic or not",
+      "add that source to the list for\nthe next round" in brief
+      and "whether the list covers that topic or not" in brief)
 # Codex answers the same contract only if it is handed the same brief.
 check("debate.md feeds Codex the complete reviewer brief",
       '< "$SCRATCH/codex-brief-r$ROUND.md"' in brief and "< plan.md" not in brief
