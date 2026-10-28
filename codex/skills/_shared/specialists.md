@@ -48,7 +48,8 @@ ls ~/.codex/agents/*.md | xargs -n1 basename | sed 's/\.md$//'
 | `.sh`, a CI shell step, `Makefile` recipes | `developer-executor-shell` | bash shellcheck .sh .bash |
 | auth, crypto, input handling, a trust boundary **in code** | `developer-executor-security` | owasp taint injection xss csrf sqli |
 | secrets in config, image/dependency CVEs, compliance **in infrastructure** | `devops-specialist-security` | cve trivy grype sbom |
-| systemd units, packaging, host configuration | `devops-executor-linux` | systemd systemctl journald |
+| systemd semantics — unit-file directives and sections, `Exec*=` prefixes, `sd_notify`, readiness and watchdog, in a plan or code review | `domain-specialist-systemd` | systemd sd_notify .service .socket .timer |
+| a Linux host — administration, packaging, host configuration, live service state | `devops-executor-linux` | systemctl journald |
 | reading a codebase to locate code, no change (built-in) | `Explore` | explore locate |
 
 **Keywords** are what the routing gate of kodflow-hooks matches, on the

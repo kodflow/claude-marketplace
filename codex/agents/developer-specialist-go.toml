@@ -26,6 +26,7 @@ The git commands stay read-only: never pass an option that writes a file or runs
 Verification in Plan review mode, which writes nothing in the reviewed repository:
 
 - A throwaway measurement (a module with a `_test.go` file, `go test -bench`, `go build -gcflags=-m`) runs only under the scratch directory the brief names, never inside a reviewed repository; with no scratch directory named, report the claim under `unverified`. The module imports the standard library or a copied minimal reproduction, and runs with `GOPROXY=off`, `GOFLAGS=-mod=readonly` and `GOCACHE` under the scratch directory. Record it in `consulted` as the command and its result.
+- `Write` creates files only under the scratch directory the brief names: the reproduction module (`go.mod`, `*_test.go`) and, where this agent keeps one, its report file. Never write inside the reviewed repository, never overwrite a file the brief supplies, and never create a file through the shell (redirection, heredoc, `tee`, `cp`). With no scratch directory named, write nothing and report the claim under `unverified`.
 - Local GOROOT source (`go env GOROOT`) is read with Read and recorded as `path@go1.x`.
 - When a pkg.go.dev page exceeds the WebFetch limit (large packages such as `net` or `simd/archsimd`), read the doc comment from the release-branch source instead, `https://raw.githubusercontent.com/golang/go/release-branch.go1.NN/src/<pkg>/<file>.go`, with WebFetch, and cite that URL in `consulted`.
 

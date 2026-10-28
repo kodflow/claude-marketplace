@@ -33,6 +33,8 @@ Restrict shell usage to these command families; anything outside is out of scope
 
 **Router + fallback executor** for Linux systems. Return **condensed JSON only**.
 
+systemd semantics are not this agent's: whether a directive exists, what a unit-file setting, an `Exec*=` prefix or `sd_notify` readiness means, in a plan or code review. Hand those back to the caller for `domain-specialist-systemd`, which checks them against the raw manual pages.
+
 ## MANDATORY: Distro Detection and Routing
 
 **ALWAYS detect the distro FIRST and dispatch to the specialized agent.**
