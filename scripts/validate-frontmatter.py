@@ -12,6 +12,13 @@ knows and an `effort` among the five levels, on agents and skills alike, and
 no agent pinned to a gated model (_shared/gated-models.txt, model-policy.md
 §6). The gated list is read from the canonical copy; without it nothing can
 be judged, so its absence fails the run rather than passing everything.
+
+And it holds one capability rule (#105): an agent whose `## Command scope`
+grants a Go or Cargo test runner and sends that work to "the scratch
+directory" must be able to write there. Without `Write` the reproduction it
+promises cannot be created, and every behavioural claim it makes stays
+unverified. An absent `tools` key inherits every tool; `disallowedTools`
+removes `Write` whatever `tools` says.
 """
 import pathlib, re, sys, yaml
 
@@ -41,6 +48,31 @@ def effort_fault(rel, e):
     if e is not None and str(e) not in EFFORTS:
         return f"{rel}: effort {e!r} is not one of {sorted(EFFORTS)}"
 
+# Test-runner grants that, next to "scratch directory", promise a reproduction
+# the agent must write before it can run. Matched backticked and exact.
+SCRATCH_RUNNERS = ("Bash(go test:*)", "Bash(cargo test:*)", "Bash(go:*)", "Bash(cargo:*)")
+
+def command_scope(body):
+    """The `## Command scope` section, up to the next `## ` heading, or ''."""
+    m = re.search(r"^## Command scope[ \t]*\n(.*?)(?=^## |\Z)", body, re.M | re.S)
+    return m.group(1) if m else ""
+
+def tool_tokens(v):
+    """Exact tool names of a comma-separated `tools`/`disallowedTools` value."""
+    if v is None:
+        return set()
+    return {x.strip() for x in str(v).split(",") if x.strip()}
+
+def scratch_write_fault(rel, fm, body):
+    scope = command_scope(body)
+    if "scratch directory" not in scope or not any(f"`{r}`" in scope for r in SCRATCH_RUNNERS):
+        return None
+    if "Write" in tool_tokens(fm.get("disallowedTools")):
+        return f"{rel}: Command scope runs tests under the scratch directory but disallowedTools removes Write"
+    if "tools" in fm and "Write" not in tool_tokens(fm.get("tools")):
+        return f"{rel}: Command scope runs tests under the scratch directory but tools lack Write"
+    return None
+
 def frontmatter(p):
     raw = p.read_text()
     if not raw.startswith("---\n"):
@@ -62,7 +94,7 @@ def main(root):
         gated = []
 
     for f in sorted(root.rglob("agents/*.md")):
-        fm, _, err = frontmatter(f)
+        fm, body, err = frontmatter(f)
         if err: faults.append(f"{f}: {err}"); continue
         n_a += 1
         rel = f.relative_to(root)
@@ -76,6 +108,8 @@ def main(root):
         if bad := effort_fault(rel, fm.get("effort")): faults.append(bad)
         if m is not None and any(t in str(m).lower() for t in gated):
             faults.append(f"{rel}: pins the gated model {m!r} — no agent may (model-policy.md §6)")
+        if not isinstance(fm.get("tools"), list) and (bad := scratch_write_fault(rel, fm, body)):
+            faults.append(bad)
 
     for f in sorted(root.rglob("skills/*/SKILL.md")):
         fm, body, err = frontmatter(f)
