@@ -67,8 +67,9 @@ check("debate.md brief names the project records", "Project records:" in brief)
 check("debate.md brief carries the reference sources", "Reference sources:" in brief
       and "topic — URL or path" in brief and "A topic with no entry blocks dispatch" in brief)
 check("debate.md ties a technology objection to a reference source",
-      "A technology objection cites at least one reference source" in brief
-      and "an authoritative outside source that substantiates the claim" in brief)
+      "A technology objection cites in consulted at least one reference\nsource that substantiates the claim" in brief
+      and "a cited\nentry that does not say what the objection says is no evidence" in brief
+      and "citing no source, listed or outside,\nthat substantiates it" in brief)
 check("debate.md triage adds a substantiating outside source to the list, covered topic or not",
       "add that source to the list for\nthe next round" in brief
       and "whether the list covers that topic or not" in brief)
