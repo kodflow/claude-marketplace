@@ -133,7 +133,8 @@ Resolve the argument to a plan. Read the project's constraint ledger too
 Same for the project's documents (the `ok` entries of
 `bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute`)
 and the ADRs that concern the plan: hand them to every reviewer, and treat a
-contradiction with one as a finding citing `fichier:ligne`.
+contradiction with one as a finding citing `fichier:ligne`. Every brief also
+names the reference sources per technology topic of the plan (`debate.md`).
 
 **If there is no plan**, do not invent one to have something to debate. Say so
 and point at `/plan`. A description given inline is acceptable: structure it into
@@ -181,6 +182,7 @@ in the room.
 | Claim Codex participated when its CLI is absent | **FORBIDDEN** — say who actually reviewed |
 | Run the panel without the specialists the plan's technology matched | **FORBIDDEN** — every match is dispatched |
 | Accept a technology objection whose `consulted` list is empty | **FORBIDDEN** — that is a memory claim, not evidence |
+| Cap a reviewer's response in words instead of objections | **FORBIDDEN** — at most 8 objections, each with the six fields |
 | Leave a matched-but-uninstalled specialist unreported | **FORBIDDEN** — the plan went unreviewed from that angle |
 | Start implementing the plan | **FORBIDDEN** — this skill produces a directive |
 | Pad the directive toward 4000 characters | **FORBIDDEN** — shortest that carries the contract |

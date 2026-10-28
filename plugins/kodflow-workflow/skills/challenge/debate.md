@@ -57,6 +57,11 @@ source file read at a named revision as `path@rev`, or a scratch measurement wit
 its command and result) and `unverified` (what it could not confirm). Put that
 requirement in every specialist brief.
 
+In a technology objection, `consulted` cites at least one entry of the
+brief's **reference sources** (Phase 2), or a source outside that list together
+with the topic the list does not cover. A `path@rev` read and a scratch
+measurement stay valid evidence beside it.
+
 **A technology objection with an empty `consulted` list is a memory claim.**
 Route it to *needs the user* or send it back for verification — do not accept it
 as evidence. That is the whole reason for dispatching a specialist rather than
@@ -88,7 +93,7 @@ Why each flag earns its place:
 
 | Flag | Why |
 |------|-----|
-| `--output-schema` | the same objection schema the Claude reviewers return, so triage treats every panel member identically instead of parsing prose |
+| `--output-schema` | the same objection schema the Claude reviewers return, so triage treats every panel member identically instead of parsing prose; the objections come back as an array, and its order gives their local numbers |
 | `-o <file>` | the verdict lands in a file rather than being scraped out of progress output |
 | `-s read-only` | a reviewer has no business writing; the sandbox makes that structural rather than a request |
 | `--ephemeral` | no session state for a one-shot review |
@@ -143,6 +148,17 @@ makes a performance claim. Find them in the repository and the plan; each goes
 in the brief as a path with a one-line purpose, so a specialist reads the
 domain's founding decisions instead of rediscovering them.
 
+Build the **reference sources** once too, and before round 1. Walk the plan
+section by section and list every technology topic it touches — a socket unit,
+a service unit, kill behaviour, a notify protocol, an API at a named version —
+using the same evidence that routed the specialists in 1.1, so the topic list
+and the panel agree. For each topic record at least one source, found in the
+order "What every specialist owes back" in `../_shared/specialists.md` sets.
+Each entry is a topic, a URL or a path, and a one-line purpose; a page already
+downloaded as plain text into `$SCRATCH` is cited by its scratch path and its
+URL. **A topic with no entry blocks dispatch**: fill the gap first, or a missing
+page (the `systemd.socket(5)` the plan relied on) surfaces only in round 2.
+
 ### 2.1 Argue — all reviewers, one message, in parallel
 
 Each reviewer gets the **plan text inline**, not a path. A reviewer that has to
@@ -170,21 +186,33 @@ Constraints this project has already accepted:
 Project records:
 <path — one-line purpose, per record>
 
+Reference sources:
+<topic — URL or path (and its scratch copy, if downloaded) — one-line purpose, per entry>
+
 Scratch directory: <$SCRATCH>
 
 Prior objections (round 2 on; omit in round 1):
 <per objection: ID, claim verbatim, remedy, disposition (accepted / rejected /
 needs the user / unverified), and the rejection proof or the plan location where
 the fix was applied>
-For each prior ID, say whether the fix is correct, or why the rejection is wrong.
+
+Your objections by triage ID (round 2 on; omit in round 1):
+| triage ID | your local number | round |
+<one row per objection you raised, merged ones included>
+Under a heading "Prior objections", give one verdict per triage ID: whether the
+fix is correct, or why the rejection is wrong. These verdicts do not count
+against the budget below.
 
 Return objections only; the output format of
-your own definition does not apply here. For each objection, six fields:
+your own definition does not apply here. Number your new objections 1, 2, 3…
+(a label, not a field). At most 8 objections, each with the six fields:
 severity (blocking / material / minor), claim, evidence (file:line, or the plan
 line it contradicts), remedy, consulted (the sources you checked, one entry per
 source: a URL, a file read at a revision as path@rev, or a scratch measurement
 with its command and result), unverified (what you could not confirm, and what
-you tried). An
+you tried). A technology objection cites at least one reference source in
+consulted; a source outside the list names the topic the list does not cover.
+With more than 8, keep the most severe; never shorten a field to fit more. An
 objection with no concrete failure behind it is noise — leave it out. If the
 plan is sound from your lens, say so and stop; do not manufacture an objection
 to look useful.
@@ -194,10 +222,28 @@ Structured return per objection: `severity`, `claim`, `evidence`, `remedy`,
 `consulted`, `unverified` — the six fields of the contract, the same for the
 lenses, the specialists and Codex.
 
+**The budget is a count, never a length.** Every brief states "at most 8
+objections, each with the six fields", and no brief sets a word or character
+limit on the response: under a word limit, eight objections fit only by
+compressing the very fields triage needs. A reviewer's local number is a label
+on the objection, not a seventh field; it restarts at 1 in every round, and
+each later round's new objections are mapped exactly like round 1's.
+
 ### 2.2 Triage — you, not a reviewer
 
-Give each objection a stable ID, `R<round>-<n>`, kept for the rest of the run.
-Then judge each one against the plan and the codebase:
+Give each objection a stable ID, `R<round>-<n>`, kept for the rest of the run,
+and record against it the reviewer, the round and that reviewer's local
+number. When objections from several reviewers are merged into one triage ID,
+the ID keeps every contributing reviewer and local number, and the claim text
+of each. That mapping is what each reviewer's table in the next brief is cut
+from, so no reviewer has to rebuild it from summaries.
+
+A reviewer that cites a source outside the reference sources, naming the topic
+the list missed, has found a gap: add that source to the list for the next
+round. A technology objection citing neither a list entry nor a justified
+outside source falls under the empty-`consulted` rule of 1.3.
+
+Then judge each objection against the plan and the codebase:
 
 | Verdict | Meaning | Effect |
 |---------|---------|--------|
@@ -274,10 +320,11 @@ result at all, it is a plan that needs another pass.
 
 ## Recording
 
-Per round, keep: objections raised, verdict on each, questions asked and
-answered, what changed in the plan. This becomes the *What changed* / *What you
-decided* / *What is still open* sections of the handover, and — when the plan
-belongs to a `/feature` or `/fix` subject — the comment posted on its issue.
+Per round, keep: objections raised, the triage ID ↔ reviewer local number
+mapping, verdict on each, questions asked and answered, what changed in the
+plan, and any source added to the reference sources. This becomes the *What
+changed* / *What you decided* / *What is still open* sections of the handover,
+and — when the plan belongs to a `/feature` or `/fix` subject — the comment posted on its issue.
 
 ## Guardrails
 
@@ -293,3 +340,6 @@ belongs to a `/feature` or `/fix` subject — the comment posted on its issue.
 | Defend the plan instead of rewriting it | **FORBIDDEN** |
 | Re-argue a question the user already answered | **FORBIDDEN** |
 | Run past `--concurrency` | **FORBIDDEN** |
+| Dispatch a brief with a technology topic missing from its reference sources | **FORBIDDEN** |
+| Set a word or character limit on a reviewer's response | **FORBIDDEN** — the budget is at most 8 objections, each with the six fields |
+| Hand a reviewer prior objections without its own triage ID table | **FORBIDDEN** |
