@@ -71,6 +71,10 @@ check("debate.md ties a technology objection to a reference source",
       and "names the topic the list does not cover" in brief)
 check("debate.md triage adds a justified outside source to the list",
       "add that source to the list for the next" in brief)
+# Codex answers the same contract only if it is handed the same brief.
+check("debate.md feeds Codex the complete reviewer brief",
+      '< "$SCRATCH/codex-brief-r$ROUND.md"' in brief and "< plan.md" not in brief
+      and "The **complete reviewer brief** goes in on **stdin**" in brief)
 # Each reviewer gets back its own numbering against the triage IDs, merged
 # objections included, and answers by triage ID.
 check("debate.md brief hands each reviewer its triage ID table",

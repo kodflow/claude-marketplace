@@ -85,8 +85,8 @@ codex exec --skip-git-repo-check --ephemeral -s read-only \
   -c model_reasoning_effort="high" \
   --output-schema  "$SCHEMA"   \
   -o               "$OUT"      \
-  "Argue against this plan from an outside-the-Claude-family lens.
-   Return objections only." < plan.md
+  "Follow the reviewer brief on stdin. Return objections only." \
+  < "$SCRATCH/codex-brief-r$ROUND.md"
 ```
 
 Why each flag earns its place:
@@ -100,8 +100,16 @@ Why each flag earns its place:
 | `-c model_reasoning_effort=` | effort is a config key on this CLI, not a flag |
 | `-m <model>` | set it from `../_shared/model-policy.md`, resolved — never hardcoded |
 
-The plan goes in on **stdin**; a prompt argument and stdin are both accepted, and
-stdin arrives as a `<stdin>` block.
+The **complete reviewer brief** goes in on **stdin**, never `plan.md` alone: the
+brief 2.1 builds for every reviewer, opening with `Plan review mode` like a
+specialist's, argued from the outside-the-Claude-family lens, with the plan
+inline, the constraints, the project records, the reference sources, the
+scratch directory and, from round 2, the prior objections and Codex's own
+triage-ID table. Write it to `$SCRATCH/codex-brief-r$ROUND.md`, `ROUND` being
+the round number, when the round's briefs are built. Fed the plan alone,
+Codex has neither the sources its objections must cite nor the mapping its
+prior-objection verdicts answer. A prompt argument and stdin are both
+accepted, and stdin arrives as a `<stdin>` block.
 
 A non-zero exit, a timeout, an empty output file or output that does not validate
 against the schema all mean the same thing: **Codex did not review.** Say so in
