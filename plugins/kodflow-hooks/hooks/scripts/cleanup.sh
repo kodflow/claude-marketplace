@@ -144,11 +144,17 @@ one() {   # $1 = the worktree as the mod noted it
     bounded "$tmp" git -C "$main" push "$remote" --delete "$rb"
     case $? in
         0) say "$p" removed "removed $p, branch $br locally and on $remote (PR #$num merged)." ;;
-        *) if grep -q "remote ref does not exist" "$tmp.err" 2>/dev/null; then
+        *) # Why the push failed is asked to the remote, never read from
+           # git's message: git translates it, and a branch the forge already
+           # deleted must not read as a failure where git speaks French
+           # (#109). ls-remote --exit-code answers 2 when no ref matches.
+           bounded "$tmp.ls" git -C "$main" ls-remote --exit-code "$remote" "refs/heads/$rb"
+           if [ $? -eq 2 ]; then
                say "$p" removed "removed $p and branch $br locally (PR #$num merged); $remote had already deleted it."
            else
                say "$p" removed "removed $p and branch $br locally (PR #$num merged); the branch on $remote was not deleted: git push $remote --delete $rb failed or timed out."
-           fi ;;
+           fi
+           rm -f "$tmp.ls" "$tmp.ls.err" ;;
     esac
     rm -f "$tmp" "$tmp.err" "$DIR/.cleanup.$$.err"
     return 0

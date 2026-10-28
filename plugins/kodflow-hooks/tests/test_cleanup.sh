@@ -139,6 +139,51 @@ clean "$J"
 check "worktree and local branch removed" '[ ! -e "$J" ] && ! local_branch feat/j'
 check "said as removed, no failure" 'notices | grep "repo-j" | grep -q "removed" && ! notices | grep "repo-j" | grep -q "not deleted"'
 
+# A git double for the push only: `push ... --delete` fails with what
+# FAKE_PUSH names, every other call goes to the real git. CI runners speak
+# English and may lack the French catalogue, so the translated message is
+# printed here rather than hoped for (#109).
+REAL_GIT=$(command -v git)
+mkdir -p "$T/fakegit"
+cat > "$T/fakegit/git" <<EOF
+#!/bin/bash
+case " \$* " in
+    *" push "*" --delete "*)
+        case "\${FAKE_PUSH:-}" in
+            fr) echo "error: impossible de supprimer 'x' : la référence distante n'existe pas" >&2
+                echo "error: impossible de pousser des références vers '$T/remote.git'" >&2
+                exit 1 ;;
+            refused) echo "remote: refusé par une règle de protection" >&2; exit 1 ;;
+        esac ;;
+esac
+exec "$REAL_GIT" "\$@"
+EOF
+chmod +x "$T/fakegit/git"
+
+echo "== remote branch already deleted, git speaking French"
+L=$(wt l feat/l); pr feat/l MERGED "$(sha "$L")"
+git -C "$T/remote.git" branch -q -D feat/l
+PATH=$T/fakegit:$PATH FAKE_PUSH=fr clean "$L"
+check "worktree and local branch removed" '[ ! -e "$L" ] && ! local_branch feat/l'
+check "said as already deleted, no failure" 'notices | grep "repo-l" | grep -q "had already deleted it" && ! notices | grep "repo-l" | grep -q "not deleted"'
+
+echo "== remote refuses the deletion: the failure is said, whatever the language"
+M=$(wt m feat/m); pr feat/m MERGED "$(sha "$M")"
+PATH=$T/fakegit:$PATH FAKE_PUSH=refused clean "$M"
+check "worktree and local branch removed" '[ ! -e "$M" ] && ! local_branch feat/m'
+check "remote branch still there" 'remote_branch feat/m'
+check "said as not deleted on the remote" 'notices | grep "repo-m" | grep -q "not deleted"'
+
+# The real git in French, where this machine has the locale: the double
+# above covers the CI runners that do not.
+if locale -a 2>/dev/null | grep -qiE '^fr_FR\.utf-?8$'; then
+    echo "== remote branch already deleted, real git under LC_ALL=fr_FR.UTF-8"
+    N=$(wt n feat/n); pr feat/n MERGED "$(sha "$N")"
+    git -C "$T/remote.git" branch -q -D feat/n
+    LC_ALL=fr_FR.UTF-8 LANGUAGE=fr clean "$N"
+    check "said as already deleted, no failure" 'notices | grep "repo-n" | grep -q "had already deleted it" && ! notices | grep "repo-n" | grep -q "not deleted"'
+fi
+
 echo "== a refusal first, then a removal: the removal is still said"
 K=$(wt k feat/k); pr feat/k OPEN "$(sha "$K")"
 : > "$SD/cleanup-notices"
