@@ -15,6 +15,7 @@ import pathlib, re, sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 AGENT = ROOT / "plugins/kodflow-specialists/agents/domain-specialist-systemd.md"
 LINUX = ROOT / "plugins/kodflow-specialists/agents/devops-executor-linux.md"
+ORCH = ROOT / "plugins/kodflow-specialists/agents/devops-orchestrator.md"
 TOML = ROOT / "codex/agents/domain-specialist-systemd.toml"
 INDEX = ROOT / "plugins/kodflow-hooks/hooks/routing-index.tsv"
 SYD = "kodflow-specialists:domain-specialist-systemd"
@@ -66,6 +67,14 @@ else:
     check("codex copy exists", False, f"no {TOML.relative_to(ROOT)} - run scripts/build-codex.py")
 
 check("the Linux router hands systemd semantics back", "`domain-specialist-systemd`" in LINUX.read_text())
+# The DevOps orchestrator dispatches by file pattern: unit files go to the
+# systemd specialist, never to the Linux router.
+orch = ORCH.read_text()
+linux_rule = next((l for l in orch.splitlines() if l.strip().startswith("linux:")), "")
+check("the orchestrator no longer sends *.service to the Linux router", ".service" not in linux_rule, linux_rule)
+check("the orchestrator sends unit files to the systemd specialist",
+      any(l.strip().startswith("systemd:") and "*.service" in l and "domain-specialist-systemd" in l
+          for l in orch.splitlines()))
 
 rows = [l.split("\t") for l in INDEX.read_text().splitlines()[1:]]
 owners = {}
