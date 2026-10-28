@@ -18,7 +18,7 @@ cd claude-marketplace && ./scripts/install.sh
 | `kodflow-review` | `/review` `/debug` `/adr` `/learn` `/lint` |
 | `kodflow-devops` | `/infra` `/audit` `/update` `/ktn` |
 | `kodflow-shell` | `/shell` — and `super-claude` on your PATH |
-| `kodflow-specialists` | 34 language, platform and concern agents |
+| `kodflow-specialists` | 35 language, platform and concern agents |
 | `kodflow-hud` (optional) | `/hud` — a Tasks pane beside the status line (a mod, Claude Code 2.1.293+) |
 | `kodflow-ktn` (optional) | `/ktn-view` — ktn-linter's daemon and findings in a Go project (a mod, Claude Code 2.1.299+) |
 

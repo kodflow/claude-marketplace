@@ -17,9 +17,12 @@
 .proto	ext	kodflow-specialists:developer-specialist-protobuf
 .py	ext	kodflow-specialists:developer-specialist-python
 .rs	ext	kodflow-specialists:developer-specialist-rust
+.service	ext	kodflow-specialists:domain-specialist-systemd
 .sh	ext	kodflow-specialists:developer-executor-shell
+.socket	ext	kodflow-specialists:domain-specialist-systemd
 .tf	ext	kodflow-specialists:devops-specialist-infrastructure
 .tfvars	ext	kodflow-specialists:devops-specialist-infrastructure
+.timer	ext	kodflow-specialists:domain-specialist-systemd
 .ts	ext	kodflow-specialists:developer-specialist-nodejs
 .tsx	ext	kodflow-specialists:developer-specialist-react
 .zig	ext	kodflow-specialists:developer-specialist-zig
@@ -115,12 +118,13 @@ ruff	word	kodflow-specialists:developer-specialist-python
 rust	word	kodflow-specialists:developer-specialist-rust
 rustc	word	kodflow-specialists:developer-specialist-rust
 sbom	word	kodflow-specialists:devops-specialist-security
+sd_notify	word	kodflow-specialists:domain-specialist-systemd
 shellcheck	word	kodflow-specialists:developer-executor-shell
 smf	word	kodflow-specialists:domain-specialist-telecom
 sqli	word	kodflow-specialists:developer-executor-security
 supi	word	kodflow-specialists:domain-specialist-telecom
 systemctl	word	kodflow-specialists:devops-executor-linux
-systemd	word	kodflow-specialists:devops-executor-linux
+systemd	word	kodflow-specialists:domain-specialist-systemd
 taint	word	kodflow-specialists:developer-executor-security
 terraform	word	kodflow-specialists:devops-specialist-infrastructure
 terragrunt	word	kodflow-specialists:devops-specialist-infrastructure

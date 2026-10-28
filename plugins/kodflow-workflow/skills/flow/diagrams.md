@@ -541,7 +541,7 @@ they are the only part of the system that can say no to you.
 
 ## AGENTS
 
-Twenty-nine specialists, three levels deep at most. A skill never picks a leaf
+Thirty-five specialists, three levels deep at most. A skill never picks a leaf
 itself: it routes on evidence through the shared table, and every match is
 dispatched in one message.
 
@@ -586,6 +586,14 @@ dispatched in one message.
       ├─▶ devops-executor-linux ──▶ reads /etc/os-release ──▶
       │       os-specialist-{debian · ubuntu · alpine}, else handles it itself
       └─▶ tooling-specialist-github-actions
+
+  DOMAIN   no orchestrator: routed by evidence, from /challenge /feature /fix
+  ─────────────────────────────────────────────────────────────────────────────
+  domain-specialist-telecom   3GPP/ETSI mobile core, Diameter, GTP, PFCP, NAS
+  domain-specialist-systemd   unit-file directives, Exec prefixes, sd_notify,
+                              each one confirmed on a raw man-page line
+  ◆ systemd semantics go to domain-specialist-systemd; a Linux host's state,
+    packages and journald stay with devops-executor-linux.
 
   ◆ Every specialist verifies an API, a default, a limit or a deprecation
     against documentation before asserting it, and returns what it consulted.
@@ -633,6 +641,14 @@ dispatched in one message.
       +-> devops-executor-linux --> reads /etc/os-release -->
       |       os-specialist-{debian . ubuntu . alpine}, else handles it itself
       +-> tooling-specialist-github-actions
+
+  DOMAIN   no orchestrator: routed by evidence, from /challenge /feature /fix
+  ------------------------------------------------------------------------------
+  domain-specialist-telecom   3GPP/ETSI mobile core, Diameter, GTP, PFCP, NAS
+  domain-specialist-systemd   unit-file directives, Exec prefixes, sd_notify,
+                              each one confirmed on a raw man-page line
+  <> systemd semantics go to domain-specialist-systemd; a Linux host's state,
+     packages and journald stay with devops-executor-linux.
 
   <> Every specialist verifies an API, a default, a limit or a deprecation
      against documentation before asserting it, and returns what it consulted.
