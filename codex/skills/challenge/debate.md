@@ -58,8 +58,10 @@ its command and result) and `unverified` (what it could not confirm). Put that
 requirement in every specialist brief.
 
 In a technology objection, `consulted` cites at least one entry of the
-brief's **reference sources** (Phase 2), or a source outside that list together
-with the topic the list does not cover. A `path@rev` read and a scratch
+brief's **reference sources** (Phase 2), or an authoritative source outside
+that list that substantiates the claim — the vendor's documentation, a raw
+manual page, the source read at a revision — with the topic it settles, whether
+the list already covers that topic or not. A `path@rev` read and a scratch
 measurement stay valid evidence beside it.
 
 **A technology objection with an empty `consulted` list is a memory claim.**
@@ -85,8 +87,8 @@ codex exec --skip-git-repo-check --ephemeral -s read-only \
   -c model_reasoning_effort="high" \
   --output-schema  "$SCHEMA"   \
   -o               "$OUT"      \
-  "Argue against this plan from an outside-the-Claude-family lens.
-   Return objections only." < plan.md
+  "Follow the reviewer brief on stdin. Return objections only." \
+  < "$SCRATCH/codex-brief-r$ROUND.md"
 ```
 
 Why each flag earns its place:
@@ -100,8 +102,16 @@ Why each flag earns its place:
 | `-c model_reasoning_effort=` | effort is a config key on this CLI, not a flag |
 | `-m <model>` | set it from `../_shared/model-policy.md`, resolved — never hardcoded |
 
-The plan goes in on **stdin**; a prompt argument and stdin are both accepted, and
-stdin arrives as a `<stdin>` block.
+The **complete reviewer brief** goes in on **stdin**, never `plan.md` alone: the
+brief 2.1 builds for every reviewer, opening with `Plan review mode` like a
+specialist's, argued from the outside-the-Claude-family lens, with the plan
+inline, the constraints, the project records, the reference sources, the
+scratch directory and, from round 2, the prior objections and Codex's own
+triage-ID table. Write it to `$SCRATCH/codex-brief-r$ROUND.md`, `ROUND` being
+the round number, when the round's briefs are built. Fed the plan alone,
+Codex has neither the sources its objections must cite nor the mapping its
+prior-objection verdicts answer. A prompt argument and stdin are both
+accepted, and stdin arrives as a `<stdin>` block.
 
 A non-zero exit, a timeout, an empty output file or output that does not validate
 against the schema all mean the same thing: **Codex did not review.** Say so in
@@ -200,7 +210,8 @@ Your objections by triage ID (round 2 on; omit in round 1):
 | triage ID | your local number | round |
 <one row per objection you raised, merged ones included>
 Under a heading "Prior objections", give one verdict per triage ID: whether the
-fix is correct, or why the rejection is wrong. These verdicts do not count
+fix is correct, or why the rejection is wrong. A negative verdict reopens that
+ID; do not raise it again as a new objection. These verdicts do not count
 against the budget below.
 
 Return objections only; the output format of
@@ -211,7 +222,8 @@ line it contradicts), remedy, consulted (the sources you checked, one entry per
 source: a URL, a file read at a revision as path@rev, or a scratch measurement
 with its command and result), unverified (what you could not confirm, and what
 you tried). A technology objection cites at least one reference source in
-consulted; a source outside the list names the topic the list does not cover.
+consulted, or an authoritative outside source that substantiates the claim,
+naming the topic it settles.
 With more than 8, keep the most severe; never shorten a field to fit more. An
 objection with no concrete failure behind it is noise — leave it out. If the
 plan is sound from your lens, say so and stop; do not manufacture an objection
@@ -238,10 +250,22 @@ the ID keeps every contributing reviewer and local number, and the claim text
 of each. That mapping is what each reviewer's table in the next brief is cut
 from, so no reviewer has to rebuild it from summaries.
 
-A reviewer that cites a source outside the reference sources, naming the topic
-the list missed, has found a gap: add that source to the list for the next
-round. A technology objection citing neither a list entry nor a justified
-outside source falls under the empty-`consulted` rule of 1.3.
+**Negative verdicts reopen, under their existing IDs.** From round 2, read
+every reviewer's "Prior objections" verdicts before the new objections. A
+verdict that an accepted objection's fix is wrong or missing, or that a
+rejection is wrong, reopens that objection under its existing ID, never a new
+one: judge it again below, with the reviewer's reason as fresh evidence and the
+contributing reviewer added to its record. A reopened objection judged
+accepted is an accepted objection of this round for the stopping rule, so a
+round cannot converge while an accepted defect is reported unfixed.
+
+A reviewer that cites an authoritative source outside the reference sources
+has found a gap or a better source, whether the list covers that topic or not
+(the raw freedesktop.org page where the list named a Context7 entry): when it
+substantiates the claim, take it as evidence and add that source to the list for
+the next round. A technology objection citing neither a list entry nor an
+outside source that substantiates it falls under the empty-`consulted` rule of
+1.3.
 
 Then judge each objection against the plan and the codebase:
 
@@ -298,8 +322,8 @@ what changed. Arguing back is how three rounds produce zero improvement.
 
 Stop at the first of:
 
-- a round produces **no accepted objection** *and* the plan was not rewritten
-  during it — only then is it converged. A round where the user's answers
+- a round produces **no accepted objection**, new or reopened, *and* the plan
+  was not rewritten during it — only then is it converged. A round where the user's answers
   changed the plan ends with a version nobody reviewed; that is not
   convergence, and calling it so is how an unreviewed rewrite ships.
 - `N` rounds are done
@@ -321,7 +345,8 @@ result at all, it is a plan that needs another pass.
 ## Recording
 
 Per round, keep: objections raised, the triage ID ↔ reviewer local number
-mapping, verdict on each, questions asked and answered, what changed in the
+mapping, verdict on each, the verdicts on prior objections and the IDs they
+reopened, questions asked and answered, what changed in the
 plan, and any source added to the reference sources. This becomes the *What
 changed* / *What you decided* / *What is still open* sections of the handover,
 and — when the plan belongs to a `/feature` or `/fix` subject — the comment posted on its issue.

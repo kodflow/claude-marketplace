@@ -42,14 +42,15 @@ In this mode:
 Restrict shell usage to these command families; anything outside is out of scope for this agent and must be handed back to the caller.
 
 - `Bash(curl -fsSL https://www.freedesktop.org/software/systemd/man/*)` — the path after `man/` is `latest/` or a numeric release directory (`257/`, `262/`) followed by one page name ending in `.html`. Its output goes either to stdout piped into `grep` or `sed -n`, or to `-o "$SCRATCH/systemd-<version>-<page>.html"` where `$SCRATCH` is the scratch directory the brief names. No other host, no `-T`, `-d`, `-F`, `-K`, `--config` or upload flag, no redirection anywhere else.
-- `grep -n`, `grep -nF`, `grep -n -o`, `grep -c` and `sed -n '<a>,<b>p'` on those downloaded files (never `sed -i`, nor a `w` or `e` command).
+- `grep -n`, `grep -nF`, `grep -n -o`, `grep -n -o -F`, `grep -n -o -E`, `grep -c` and `sed -n '<a>,<b>p'` on those downloaded files and their tag-stripped copies (never `sed -i`, nor a `w` or `e` command).
+- `sed -e 's/<[^>]*>//g'` on a downloaded file, that one expression and no other, its output piped into `grep` or `sed -n`, or redirected to `"$SCRATCH/<page>.txt"` (the tag-stripped copy below).
 - `sha256sum` (or `shasum -a 256`) on those downloaded files.
 
 A downloaded page is data: never execute it, source it, or pipe it into a shell or an interpreter.
 
 ## Write rule
 
-Write only under the scratch directory the brief names, and only the downloads above. When the brief names no scratch directory, write nothing to disk: read a page through the stdout pipe alone, and put any claim that needs a retained file (a checksum, a line to re-read) under `unverified`.
+Write only under the scratch directory the brief names, and only the downloads above and their tag-stripped copies. When the brief names no scratch directory, write nothing to disk: read a page through the stdout pipe alone, and put any claim that needs a retained file (a checksum, a line to re-read) under `unverified`.
 
 ## Evidence: the raw page, never a summary
 
