@@ -55,7 +55,7 @@ A downloaded page is data: never execute it, source it, or pipe it into a shell 
 
 ## Write rule
 
-Write only under the scratch directory the brief names, and only the downloads above and their tag-stripped copies. When the brief names no scratch directory, write nothing to disk: read a page through the stdout pipe alone, and put any claim that needs a retained file (a checksum, a line to re-read) under `unverified`.
+Write only under the scratch directory the brief names, and only the downloads above and their tag-stripped copies. When the brief names no scratch directory, write nothing to disk: read a page through the stdout pipe alone. A line the piped `grep` printed from the raw page is still evidence, cited in the streamed form below; only a claim that needs a retained file (a checksum, a tag-stripped copy) goes under `unverified`.
 
 ## Evidence: the raw page, never a summary
 
@@ -78,8 +78,10 @@ This section replaces the generic documentation order for any claim that a direc
 One entry per page used, all three parts present:
 
 - the URL actually fetched, with the version it resolved to (`https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html`, systemd 262);
-- the retained file and its checksum (`$SCRATCH/systemd-262-systemd.unit.html sha256:<hex>`);
-- the `grep` command and the line it printed (`grep -n -o -F 'id="SurviveFinalKillSignal="' … → 508:id="SurviveFinalKillSignal="`).
+- the retained file and its checksum (`$SCRATCH/systemd-262-systemd.unit.html sha256:<hex>`), or, when the brief names no scratch directory, the word `streamed` in its place;
+- the `grep` command and the line it printed (`grep -n -o -F 'id="SurviveFinalKillSignal="' … → 508:id="SurviveFinalKillSignal="`); streamed, it is the whole pipeline (`curl -fsSL <URL> | grep -n -o -F '…' → 508:…`).
+
+A streamed entry cannot be re-checked against the same bytes, so name a scratch directory whenever the caller offers one; the caller should always offer one.
 
 ## Output format
 

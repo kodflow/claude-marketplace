@@ -187,7 +187,9 @@ Task:
 #   devops-executor-linux → os-specialist-{debian|ubuntu|alpine}
 #   any other distro      → handled generically inside devops-executor-linux
 # systemd semantics (does a directive exist, what a unit setting, an Exec*= prefix
-# or sd_notify readiness means) skip the router: dispatch domain-specialist-systemd.
+# or sd_notify readiness means) skip the router: dispatch domain-specialist-systemd,
+# with a scratch directory (mktemp -d, outside the project) named in its brief
+# so its downloads and checksums can be kept.
 ```
 
 ### Cloud Task
