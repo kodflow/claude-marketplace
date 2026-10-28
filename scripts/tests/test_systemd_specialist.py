@@ -10,7 +10,7 @@ copy, since neutralise() rewrites the body on the way there. The routing split
 itself is asserted too: systemd semantics on this agent, the host on the Linux
 router, never the same keyword on both.
 """
-import pathlib, sys
+import pathlib, re, sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 AGENT = ROOT / "plugins/kodflow-specialists/agents/domain-specialist-systemd.md"
@@ -48,6 +48,15 @@ tools = next((l for l in fm.splitlines() if l.startswith("tools:")), "")
 check("no Edit or Write tool: downloads go through the curl scope", "Edit" not in tools and "Write" not in tools, tools)
 for name, text in RULES.items():
     check(f"agent carries {name}", text in body)
+
+# Every grep or sed form the checks prescribe must be one the Command scope
+# grants, or an agent that keeps to its scope cannot run its own checks.
+scope = body.split("## Command scope", 1)[-1].split("\n## ", 1)[0]
+rest = body.replace(scope, "")
+forms = sorted(set(re.findall(r"`((?:grep|sed)(?: -[A-Za-z]+)+)", rest)))
+check("the checks prescribe grep and sed forms", len(forms) >= 3, forms)
+for form in forms:
+    check(f"the Command scope grants `{form}`", f"`{form}" in scope)
 
 if TOML.is_file():
     gen = TOML.read_text()
