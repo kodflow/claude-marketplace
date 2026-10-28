@@ -58,10 +58,11 @@ its command and result) and `unverified` (what it could not confirm). Put that
 requirement in every specialist brief.
 
 In a technology objection, `consulted` cites at least one entry of the
-brief's **reference sources** (Phase 2), or an authoritative source outside
-that list that substantiates the claim — the vendor's documentation, a raw
-manual page, the source read at a revision — with the topic it settles, whether
-the list already covers that topic or not. A `path@rev` read and a scratch
+brief's **reference sources** (Phase 2) that substantiates the claim — a cited
+entry that does not say what the objection says is no evidence — or an
+authoritative source outside that list that substantiates it (the vendor's
+documentation, a raw manual page, the source read at a revision), with the
+topic it settles, whether the list already covers that topic or not. A `path@rev` read and a scratch
 measurement stay valid evidence beside it.
 
 **A technology objection with an empty `consulted` list is a memory claim.**
@@ -221,9 +222,9 @@ severity (blocking / material / minor), claim, evidence (file:line, or the plan
 line it contradicts), remedy, consulted (the sources you checked, one entry per
 source: a URL, a file read at a revision as path@rev, or a scratch measurement
 with its command and result), unverified (what you could not confirm, and what
-you tried). A technology objection cites at least one reference source in
-consulted, or an authoritative outside source that substantiates the claim,
-naming the topic it settles.
+you tried). A technology objection cites in consulted at least one reference
+source that substantiates the claim, or an authoritative outside source that
+does, naming the topic it settles.
 With more than 8, keep the most severe; never shorten a field to fit more. An
 objection with no concrete failure behind it is noise — leave it out. If the
 plan is sound from your lens, say so and stop; do not manufacture an objection
@@ -263,9 +264,8 @@ A reviewer that cites an authoritative source outside the reference sources
 has found a gap or a better source, whether the list covers that topic or not
 (the raw freedesktop.org page where the list named a Context7 entry): when it
 substantiates the claim, take it as evidence and add that source to the list for
-the next round. A technology objection citing neither a list entry nor an
-outside source that substantiates it falls under the empty-`consulted` rule of
-1.3.
+the next round. A technology objection citing no source, listed or outside,
+that substantiates it falls under the empty-`consulted` rule of 1.3.
 
 Then judge each objection against the plan and the codebase:
 
