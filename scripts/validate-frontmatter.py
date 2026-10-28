@@ -51,8 +51,10 @@ def effort_fault(rel, e):
         return f"{rel}: effort {e!r} is not one of {sorted(EFFORTS)}"
 
 # Test-runner grants that, next to "scratch directory", promise a reproduction
-# the agent must write before it can run. Matched backticked and exact.
-SCRATCH_RUNNERS = ("Bash(go test:*)", "Bash(cargo test:*)", "Bash(go:*)", "Bash(cargo:*)")
+# the agent must write before it can run: the broad `Bash(go:*)` and
+# `Bash(cargo:*)`, and `go test` / `cargo test` with or without narrowing
+# flags (`Bash(go test -race:*)`). Matched backticked.
+SCRATCH_RUNNER = re.compile(r"`Bash\((?:go|cargo)(?::\*| test(?: [^`]*)?:\*)\)`")
 
 def command_scope(body):
     """The `## Command scope` section, up to the next `## ` heading, or ''."""
@@ -62,11 +64,13 @@ def command_scope(body):
 def tool_tokens(v):
     """Exact tool names of a `tools`/`disallowedTools` value: a comma-separated
     string, or a YAML list (`disallowedTools: [Write]`), whose entries may
-    themselves be comma-separated."""
+    themselves be comma-separated. A specifier is dropped: `Write(/repo/**)`
+    names the Write tool, and in disallowedTools a specifier removes the whole
+    tool."""
     if v is None:
         return set()
     items = v if isinstance(v, list) else [v]
-    return {x.strip() for i in items for x in str(i).split(",") if x.strip()}
+    return {x.split("(", 1)[0].strip() for i in items for x in str(i).split(",") if x.strip()}
 
 def write_fault(rel, fm, why):
     """The fault when `why` needs Write and the frontmatter does not give it."""
@@ -78,9 +82,9 @@ def write_fault(rel, fm, why):
 
 def scratch_write_fault(rel, fm, body):
     scope = command_scope(body)
-    if "scratch directory" in scope and any(f"`{r}`" in scope for r in SCRATCH_RUNNERS):
-        if bad := write_fault(rel, fm, "Command scope runs tests under the scratch directory"):
-            return bad
+    runs = "scratch directory" in scope and SCRATCH_RUNNER.search(scope)
+    if runs and (bad := write_fault(rel, fm, "Command scope runs tests under the scratch directory")):
+        return bad
     # A `## Report file…` section tells the agent to write its findings to a
     # file the caller reads back; without Write the caller only ever finds
     # no file, which it must read as an incomplete pass.

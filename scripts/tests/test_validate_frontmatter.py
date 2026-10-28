@@ -90,6 +90,9 @@ for name, fm, body, reason in (
     ("Write disallowed with tools inherited", agent(None, "Edit, Write"), scope("Bash(go test:*)"), DENIED),
     ("Write disallowed as a YAML list", agent("Read, Write, Bash", "[Write]"), scope("Bash(go test:*)"), DENIED),
     ("Write disallowed in a block list", agent(None, "\n  - Edit\n  - Write"), scope("Bash(go test:*)"), DENIED),
+    ("Write disallowed with a specifier", agent("Read, Write, Bash", "Write(/repo/**)"), scope("Bash(go test:*)"), DENIED),
+    ("a narrowed Bash(go test -race:*) without Write", agent("Read, Bash"), scope("Bash(go test -race:*)"), LACK),
+    ("a narrowed Bash(cargo test --release:*) without Write", agent("Read, Bash"), scope("Bash(cargo test --release:*)"), LACK),
     ("a tool that only contains the substring Write", agent("Read, NotebookWrite, Bash"), scope("Bash(go test:*)"), LACK),
 ):
     rc, out = run(fixture(agent_fm=fm, agent_body=body))
@@ -99,6 +102,8 @@ for name, fm, body in (
     ("Bash(go test:*) under scratch with Write", agent("Read, Write, Bash"), scope("Bash(go test:*)")),
     ("Bash(go test:*) under scratch with tools inherited", agent(None), scope("Bash(go test:*)")),
     ("Bash(go vet:*) under scratch without Write", agent("Read, Bash"), scope("Bash(go vet:*)")),
+    ("Bash(go testjson:*) is not go test", agent("Read, Bash"), scope("Bash(go testjson:*)")),
+    ("a Write(spec) grant still grants Write", agent("Read, Write(/tmp/**), Bash"), scope("Bash(go test:*)")),
     ("broad Bash(cargo:*) with no scratch wording", agent("Read, Bash"), scope("Bash(cargo:*)", scratch=False)),
     ("cargo test outside Command scope", agent("Read, Bash"),
      "## Command scope\n\n- `Bash(git diff:*)`\n\n## Role\n\n- `Bash(cargo test:*)` under the scratch directory."),
