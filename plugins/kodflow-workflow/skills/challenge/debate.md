@@ -210,7 +210,8 @@ Your objections by triage ID (round 2 on; omit in round 1):
 | triage ID | your local number | round |
 <one row per objection you raised, merged ones included>
 Under a heading "Prior objections", give one verdict per triage ID: whether the
-fix is correct, or why the rejection is wrong. These verdicts do not count
+fix is correct, or why the rejection is wrong. A negative verdict reopens that
+ID; do not raise it again as a new objection. These verdicts do not count
 against the budget below.
 
 Return objections only; the output format of
@@ -248,6 +249,15 @@ number. When objections from several reviewers are merged into one triage ID,
 the ID keeps every contributing reviewer and local number, and the claim text
 of each. That mapping is what each reviewer's table in the next brief is cut
 from, so no reviewer has to rebuild it from summaries.
+
+**Negative verdicts reopen, under their existing IDs.** From round 2, read
+every reviewer's "Prior objections" verdicts before the new objections. A
+verdict that an accepted objection's fix is wrong or missing, or that a
+rejection is wrong, reopens that objection under its existing ID, never a new
+one: judge it again below, with the reviewer's reason as fresh evidence and the
+contributing reviewer added to its record. A reopened objection judged
+accepted is an accepted objection of this round for the stopping rule, so a
+round cannot converge while an accepted defect is reported unfixed.
 
 A reviewer that cites an authoritative source outside the reference sources
 has found a gap or a better source, whether the list covers that topic or not
@@ -312,8 +322,8 @@ what changed. Arguing back is how three rounds produce zero improvement.
 
 Stop at the first of:
 
-- a round produces **no accepted objection** *and* the plan was not rewritten
-  during it — only then is it converged. A round where the user's answers
+- a round produces **no accepted objection**, new or reopened, *and* the plan
+  was not rewritten during it — only then is it converged. A round where the user's answers
   changed the plan ends with a version nobody reviewed; that is not
   convergence, and calling it so is how an unreviewed rewrite ships.
 - `N` rounds are done
@@ -335,7 +345,8 @@ result at all, it is a plan that needs another pass.
 ## Recording
 
 Per round, keep: objections raised, the triage ID ↔ reviewer local number
-mapping, verdict on each, questions asked and answered, what changed in the
+mapping, verdict on each, the verdicts on prior objections and the IDs they
+reopened, questions asked and answered, what changed in the
 plan, and any source added to the reference sources. This becomes the *What
 changed* / *What you decided* / *What is still open* sections of the handover,
 and — when the plan belongs to a `/feature` or `/fix` subject — the comment posted on its issue.

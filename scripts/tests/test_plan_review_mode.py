@@ -72,6 +72,12 @@ check("debate.md ties a technology objection to a reference source",
 check("debate.md triage adds a substantiating outside source to the list, covered topic or not",
       "add that source to the list for\nthe next round" in brief
       and "whether the list covers that topic or not" in brief)
+# A reviewer reporting an accepted fix as wrong reopens that ID before the
+# convergence check, or the run converges with the defect still there.
+check("debate.md reopens a negative prior-objection verdict under its ID",
+      "Negative verdicts reopen, under their existing IDs." in brief
+      and "A negative verdict reopens that\nID" in brief
+      and "**no accepted objection**, new or reopened" in brief)
 # Codex answers the same contract only if it is handed the same brief.
 check("debate.md feeds Codex the complete reviewer brief",
       '< "$SCRATCH/codex-brief-r$ROUND.md"' in brief and "< plan.md" not in brief
