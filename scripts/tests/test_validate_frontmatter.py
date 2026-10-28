@@ -88,6 +88,8 @@ for name, fm, body, reason in (
     ("Bash(cargo test:*) under scratch without Write", agent("Read, Bash"), scope("Bash(cargo test:*)"), LACK),
     ("Write granted then disallowed", agent("Read, Write, Bash", "Write"), scope("Bash(go test:*)"), DENIED),
     ("Write disallowed with tools inherited", agent(None, "Edit, Write"), scope("Bash(go test:*)"), DENIED),
+    ("Write disallowed as a YAML list", agent("Read, Write, Bash", "[Write]"), scope("Bash(go test:*)"), DENIED),
+    ("Write disallowed in a block list", agent(None, "\n  - Edit\n  - Write"), scope("Bash(go test:*)"), DENIED),
     ("a tool that only contains the substring Write", agent("Read, NotebookWrite, Bash"), scope("Bash(go test:*)"), LACK),
 ):
     rc, out = run(fixture(agent_fm=fm, agent_body=body))

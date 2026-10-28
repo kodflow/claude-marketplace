@@ -58,10 +58,13 @@ def command_scope(body):
     return m.group(1) if m else ""
 
 def tool_tokens(v):
-    """Exact tool names of a comma-separated `tools`/`disallowedTools` value."""
+    """Exact tool names of a `tools`/`disallowedTools` value: a comma-separated
+    string, or a YAML list (`disallowedTools: [Write]`), whose entries may
+    themselves be comma-separated."""
     if v is None:
         return set()
-    return {x.strip() for x in str(v).split(",") if x.strip()}
+    items = v if isinstance(v, list) else [v]
+    return {x.strip() for i in items for x in str(i).split(",") if x.strip()}
 
 def scratch_write_fault(rel, fm, body):
     scope = command_scope(body)
