@@ -196,6 +196,25 @@ for ph in lens-1-correctness lens-2-security lens-3-edge-cases lens-4-rollback l
     run /refine "$ph"; [ "$RC" -eq 0 ] || fails="$fails $ph"
 done
 [ -z "$fails" ] && ok "all ten lenses resolve" || bad "all ten lenses resolve" "$fails"
+# Every agent of the specialists.md table resolves through the router from
+# the shipped agents, and the systemd split holds: the review-tier systemd
+# specialist on opus/high, the Linux router left on its own tier.
+fails=""
+for a in $(sed -n 's/^|[^|]*| `\([a-z0-9-]*\)` |.*/\1/p' "$SRC/specialists.md" | sort -u); do
+    [ -f "$AG/$a.md" ] || continue
+    table "{\"id\":\"s\",\"skill\":\"/x\",\"phase\":\"p\",\"agent\":\"$a\"}"
+    run /x p
+    [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -r '.[0].subagent_type')" = "kodflow-specialists:$a" ] || fails="$fails $a(rc=$RC)"
+done
+[ -z "$fails" ] && ok "every specialists.md agent resolves, namespaced" || bad "every specialists.md agent resolves, namespaced" "$fails"
+table '{"id":"s","skill":"/x","phase":"p","agent":"domain-specialist-systemd"}'
+run /x p
+field '.[0].subagent_type' kodflow-specialists:domain-specialist-systemd "systemd semantics resolve to the systemd specialist"
+field '.[0].resolved_model + "/" + .[0].effort' opus/high "at the review tier, from its frontmatter"
+table '{"id":"s","skill":"/x","phase":"p","agent":"devops-executor-linux"}'
+run /x p
+field '.[0].resolved_model + "/" + .[0].effort' haiku/low "the Linux router keeps its own tier"
+unset CLAUDE_ROUTING_TABLE
 
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

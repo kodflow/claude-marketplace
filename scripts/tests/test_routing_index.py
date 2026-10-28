@@ -54,6 +54,7 @@ for a in sorted(agents):
         check(f"{a} exists", (ROOT / "plugins" / plugin / "agents" / f"{name}.md").is_file())
 for want in ("kodflow-specialists:tooling-specialist-ansible", "kodflow-specialists:tooling-specialist-gitlab-ci",
              "kodflow-specialists:data-specialist-valkey", "kodflow-specialists:domain-specialist-telecom",
+             "kodflow-specialists:domain-specialist-systemd", "kodflow-specialists:devops-executor-linux",
              "kodflow-specialists:developer-specialist-protobuf", "Explore"):
     check(f"{want} is routed", want in agents)
 
