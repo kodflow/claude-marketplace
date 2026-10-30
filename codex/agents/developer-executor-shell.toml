@@ -340,6 +340,10 @@ yourself.
 - that something is deprecated, removed, or new in a version
 - which version introduced or changed a behaviour
 - a security property (what an algorithm guarantees, what a setting protects)
+- what Claude Code hands a hook or takes back from it (SessionStart, SubagentStart,
+  `additionalContext`, caps, timeouts): check it against
+  https://code.claude.com/docs/en/hooks before stating it; without that fetch, the
+  claim goes under `unverified`
 
 In that order:
 
