@@ -1,0 +1,5 @@
+# Plugins of this marketplace that a project enables for itself, in its own
+# .claude/settings.json (enabledPlugins), and that install.sh never installs
+# for the user: their agents and hooks only make sense in such a project.
+# One name a line. Read by scripts/install.sh; held by scripts/tests/test_install.sh.
+kodflow-gamedev

@@ -34,7 +34,14 @@ plugin_names() {
   else
     grep -o '"name"[[:space:]]*:[[:space:]]*"kodflow-[^"]*"' "$m" 2>/dev/null |
       sed 's/.*"\(kodflow-[^"]*\)"/\1/'
-  fi
+  fi | grep -vxF -f <(per_project) 2>/dev/null
+}
+# Plugins a project enables for itself (enabledPlugins in its own
+# .claude/settings.json), never installed for the user: one name a line in
+# scripts/install-exclude.txt, # comments allowed. Read here, so the list is
+# data the tests can check, not a second hand-kept list of what to install.
+per_project() {
+  sed -e 's/#.*//' -e 's/[[:space:]]//g' "$HERE/scripts/install-exclude.txt" 2>/dev/null | grep . || echo '#none'
 }
 run() { [ "$CHECK" -eq 1 ] && { say "would: $*"; return 0; }; "$@"; }
 

@@ -32,6 +32,14 @@ def main():
     write(plug / "agents" / "maxed.md", "---\nname: maxed\ndescription: d.\nmodel: opus\neffort: max\n---\n\nx\n")
     write(plug / "agents" / "cheap.md", "---\nname: cheap\ndescription: d.\nmodel: haiku\neffort: medium\n---\n\nx\n")
 
+    # --- a plugin a project enables for itself: never generated for Codex ---
+    write(root / "scripts" / "install-exclude.txt", "# per project\nkodflow-local  # enabled per project\n")
+    loc = root / "plugins" / "kodflow-local"
+    write(loc / "skills" / "localskill" / "SKILL.md", SKILL.format(n="localskill"))
+    write(loc / "skills" / "_shared" / "x.md", "an excluded plugin's shared file\n")
+    write(loc / "agents" / "localagent.md", AGENT.format(n="localagent"))
+    write(plug / "skills" / "_shared" / "keep.md", "the demo plugin's shared file\n")
+
     # --- output left over from a previous run whose sources are gone ---
     codex = root / "codex"
     write(codex / "skills" / "removed" / "SKILL.md", "stale skill\n")
@@ -55,6 +63,10 @@ def main():
         ("the emptied directory is removed",          codex / "skills" / "removed",        False),
         ("a support file deleted at source is removed", codex / "skills" / "alpha" / "orphan.md", False),
         ("an agent whose source is gone is removed",  codex / "agents" / "retired.toml",   False),
+        ("an excluded plugin's skill is not generated",  codex / "skills" / "localskill", False),
+        ("an excluded plugin's agent is not generated",  codex / "agents" / "localagent.toml", False),
+        ("an excluded plugin's _shared does not overwrite", codex / "skills" / "_shared" / "x.md", False),
+        ("the others' _shared survives",                 codex / "skills" / "_shared" / "keep.md", True),
     ]
     ok = 0
     for label, path, want in cases:
@@ -79,7 +91,7 @@ def main():
             print(f"FAIL {name}.toml carries effort {want}\n  {[l for l in text.splitlines() if 'effort' in l]}")
 
     total = len(cases) + 1 + len(efforts)
-    print(f"build-codex: {ok}/{total} pruning and effort cases correct")
+    print(f"build-codex: {ok}/{total} pruning, exclusion and effort cases correct")
     return 0 if ok == total else 1
 
 if __name__ == "__main__":
