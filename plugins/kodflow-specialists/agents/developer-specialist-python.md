@@ -252,7 +252,8 @@ In this mode:
       "line": 15,
       "rule": "ANN001",
       "message": "Missing type annotation for parameter",
-      "fix": "Add type hint: def func(param: str) -> None:"
+      "fix": "Add type hint: def func(param: str) -> None:",
+      "needs_confirmation_by": "<optional: domain whose facts this issue rests on; omit when none>"
     }
   ],
   "recommendations": [
@@ -303,6 +304,16 @@ In that order:
 asserting it anyway. `"unverified": ["<claim>, could not reach <source>"]` is a
 useful result; a confident wrong claim is worse than an admitted gap, because the
 orchestrator will act on it.
+
+**Repository tooling.** When the review covers a repository's own tooling
+(`scripts/`, CI helpers) rather than a packaged project, run the scripts
+read-only in the scratch directory. When a dependency is missing, use
+`uv run --no-project --with <pkg>` and never install into the system interpreter.
+
+**Out-of-domain facts.** A finding that rests on another domain's facts
+(animation, anatomy, a protocol) is emitted with
+`"needs_confirmation_by": "<domain>"` rather than asserted, so the orchestrator
+routes it to that domain's specialist.
 
 ## Question your own finding first
 
