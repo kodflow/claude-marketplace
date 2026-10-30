@@ -135,8 +135,9 @@ No owner feedback ADR yet in docs/adr/feedback/."
 fi
 
 if [ "$HAVE" != "$WANT" ]; then
+    STATE=absent; [ -n "$HAVE" ] && STATE=stale
     out="RULES digest unavailable: read docs/adr/feedback/ yourself
-.RULES.md is ${HAVE:+stale}${HAVE:-absent}: read these $TOTAL ADR(s), newest first, before proposing anything:$NOTE"
+.RULES.md is $STATE: read these $TOTAL ADR(s), newest first, before proposing anything:$NOTE"
     for n in $(printf '%s\n' "$NAMES" | LC_ALL=C sort -r); do
         line="
 - docs/adr/feedback/$n"

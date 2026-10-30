@@ -97,17 +97,31 @@ def get(url, limit=LIMIT):
     return body, final
 
 
-def commons_title(url, page):
-    for u in (page or "", url):
-        p = urllib.parse.urlparse(u)
-        if p.netloc == "commons.wikimedia.org" and "/wiki/" in p.path:
-            return urllib.parse.unquote(p.path.split("/wiki/", 1)[1])
-        if p.netloc == "upload.wikimedia.org":
-            name = urllib.parse.unquote(p.path.rstrip("/").split("/")[-1])
-            if "/thumb/" in p.path:
-                name = urllib.parse.unquote(p.path.split("/")[-2])
-            return "File:" + name
+def file_title(u):
+    """The Commons file a URL names — a file page, Special:FilePath, an upload or a
+    thumbnail URL — as "File:<name>" with spaces for underscores, or None."""
+    p = urllib.parse.urlparse(u or "")
+    if p.netloc == "commons.wikimedia.org" and "/wiki/" in p.path:
+        t = urllib.parse.unquote(p.path.split("/wiki/", 1)[1])
+        if t.startswith("Special:FilePath/"):
+            t = "File:" + t[len("Special:FilePath/"):]
+        return t.replace("_", " ") if t.startswith("File:") else None
+    if p.netloc == "upload.wikimedia.org":
+        parts = p.path.rstrip("/").split("/")
+        name = parts[-2] if "/thumb/" in p.path else parts[-1]
+        return "File:" + urllib.parse.unquote(name).replace("_", " ")
     return None
+
+
+def commons_title(url, page):
+    """The Commons file whose licence applies, or None when neither URL is Commons'."""
+    return file_title(page) or file_title(url)
+
+
+def same_file(title, url, final):
+    """Commons metadata vouches only for the bytes of that very file: the URL asked
+    for and the URL the bytes came from must both name it."""
+    return file_title(url) == title and file_title(final) == title
 
 
 def strip_tags(s):
@@ -177,6 +191,8 @@ def run(a, getter=get, meta_getter=commons_meta):
         lid, author, verified = a.licence_id, a.author or "", False
     private = a.private or lid not in ALLOWED
     body, final = getter(a.url)
+    if title and not same_file(title.replace("_", " "), a.url, final):
+        raise Refused(f"the licence read for {title} does not cover the bytes of {final}")
     ext = kind_of(body[:16])
     if not ext:
         raise Refused("the body is not a PNG, JPEG, GIF or WebP image")

@@ -271,7 +271,9 @@ def cmd_export(root, a):
         if not isinstance(d, dict) or "clip" not in d:
             skipped.append(name)
             continue
-        d = dict(d, status="confirmed", severity="hard", source=name)
+        # Two ADRs may carry the same definition id; the ADR's own name is unique.
+        d = dict(d, status="confirmed", severity="hard", source=name,
+                 id=f"{d.get('id', 'fb')}-{name[:-3]}")
         constraints.append(d)
     doc = {"schema_version": "move-constraints/v1", "move": "owner-feedback", "fps": 30,
            "rig_map": "docs/anim/rig-map.json", "clip": "", "constraints": constraints}

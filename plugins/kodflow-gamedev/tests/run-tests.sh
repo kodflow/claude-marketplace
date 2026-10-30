@@ -131,7 +131,7 @@ u=$(cat "$T"/par.* | sort -u | shasum -a 256); one=$(sort -u "$T/par.1" | shasum
 [ "$u" = "$one" ] && [ -s "$T/par.1" ] && ok "ten hooks at once print the same lines" || bad "parallel" "$(head -3 "$T"/par.*)"
 adr 20261030-130000-new-dddd.md "A newer rule." '[]' '"unmeasured"'
 c=$(ctx kodflow-gamedev:anatomy-specialist-biomechanics)
-printf '%s' "$c" | head -1 | grep -q '^RULES digest unavailable' && printf '%s' "$c" | grep -q '\.RULES\.md is stale' \
+printf '%s' "$c" | head -1 | grep -q '^RULES digest unavailable' && printf '%s' "$c" | grep -q '\.RULES\.md is stale: read' \
     && ok "an ADR added after build: stale, unavailable" || bad "stale" "$c"
 long=$(printf 'Règle numéro %s, assez longue pour remplir le budget de deux mille caractères du digest. ' 1 2 3 4)
 for i in 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20; do

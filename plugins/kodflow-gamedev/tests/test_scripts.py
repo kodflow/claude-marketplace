@@ -330,6 +330,8 @@ class Rules(unittest.TestCase):
         doc = json.loads((tmp / "x.json").read_text())
         self.assertEqual(len(doc["constraints"]), 3)
         self.assertTrue(all(c["severity"] == "hard" and c["status"] == "confirmed" for c in doc["constraints"]))
+        self.assertEqual(len({c["id"] for c in doc["constraints"]}), 3)
+        self.assertEqual(cc.structural(doc), [])
         (tmp / "run.json").write_text(json.dumps({"slug": "run", "agents": [], "verdict": "pending"}))
         rc, out, _ = self.cli("record-run", "--file", str(tmp / "run.json"))
         self.assertEqual(rc, 0)
@@ -389,8 +391,9 @@ class References(unittest.TestCase):
         self.assertIsNone(fx.kind_of(b"<html><body>"))
 
     def test_commons(self):
-        self.assertEqual(fx.commons_title("https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/X_y.jpg/320px-X_y.jpg", None), "File:X_y.jpg")
+        self.assertEqual(fx.commons_title("https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/X_y.jpg/320px-X_y.jpg", None), "File:X y.jpg")
         self.assertEqual(fx.commons_title("https://x.example/i.png", "https://commons.wikimedia.org/wiki/File:Z.png"), "File:Z.png")
+        self.assertEqual(fx.file_title("https://commons.wikimedia.org/wiki/Special:FilePath/A_b.png"), "File:A b.png")
         with self.assertRaises(fx.Refused):
             fx.commons_licence({"Artist": {"value": "A"}})
         with self.assertRaises(fx.Refused):
@@ -411,6 +414,11 @@ class References(unittest.TestCase):
         self.assertEqual((root / ".cache/anim-ref/.gitignore").read_text(), "*\n")
         with self.assertRaises(fx.Refused):
             fx.run(self.args(root, url="https://museum.example/i.png"), getter=get, meta_getter=meta)
+        with self.assertRaises(fx.Refused):   # a Commons page cannot license another host's bytes
+            fx.run(self.args(root, url="https://museum.example/i.png", page="https://commons.wikimedia.org/wiki/File:Plate.png"),
+                   getter=get, meta_getter=meta)
+        with self.assertRaises(fx.Refused):   # nor another Commons file's
+            fx.run(self.args(root, page="https://commons.wikimedia.org/wiki/File:Other.png"), getter=get, meta_getter=meta)
         rec3 = fx.run(self.args(root, url="https://museum.example/i.png", licence_id="CC0-1.0", author="M"), getter=get, meta_getter=meta)
         self.assertFalse(rec3["licence_verified"])
         man = (root / "art/reference/manifest.json").read_text()

@@ -157,6 +157,9 @@ async function fromGlb(path) {
       if (!action || action.getClip() !== byName[c]) {
         mixer.stopAllAction();
         action = mixer.clipAction(byName[c]);
+        // once, clamped: a looping action wraps t = duration back to the first pose
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
         action.play();
       }
       mixer.setTime(t);
