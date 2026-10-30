@@ -1,0 +1,97 @@
+# kodflow-gamedev
+
+Combat animation that is anatomically and martially right, for a game project
+that enables this plugin in its own `.claude/settings.json`:
+
+```json
+{ "enabledPlugins": { "kodflow-gamedev@kodflow": true } }
+```
+
+`scripts/install.sh` never installs it for the user, and no Codex copy is
+generated: its agents and its hook only make sense inside such a project.
+
+## Why
+
+A run where the fists, the pommel and the blade beat with every stride; a
+diagonal cut that reads as a dagger stab; a right hand that reads as a left
+one. Each looked fine to whoever animated it, and each is measurable. This
+plugin designs a move from sources before it is animated, measures the clip
+against what the sources say, and keeps every verdict of the owner, good or
+bad, as a rule the next run reads first.
+
+## Skills
+
+| Skill | What it does | Writes |
+|---|---|---|
+| `/move <slug> --tradition <area> --weapon <w>` | Briefs the panel in parallel, checks every quoted excerpt against its page, has the director keep the governing technique whole, writes the spec and its constraints. Ends **pending verdict**. | `docs/anim/<slug>.md`, `docs/anim/<slug>.constraints.json`, `docs/anim/sources/`, `docs/anim/runs/` |
+| `/anim-review <slug>` | Samples the clip (three.js adapter or GLB, Godot scene) into pose tracks, measures the move's constraints and every owner-confirmed one, then asks the owner's verdict. | nothing itself; hands over to `/anim-feedback` |
+| `/anim-feedback <slug> --verdict good\|bad "<words>"` | Records the verdict as an ADR (JSON header, the owner's words verbatim), written once, superseded never edited. | `docs/adr/feedback/<YYYYMMDD-HHMMSS>-<slug>-<4hex>.md` |
+| `/reference <slug>` | Finds reference images with their licence; fetches the ones kept — committable ones with a manifest, non-commercial ones into an ignored study cache. | `art/reference/`, `.cache/anim-ref/` |
+
+The main thread writes these paths directly — the `root-write-allow` of this
+plugin, honoured by kodflow-hooks only where the project enables the plugin —
+and each skill ends by handing the untracked files to one permanent PR on
+`chore/anim-trail` (`skills/_shared/trail.md`).
+
+## Agents
+
+Launched by the skills only (`subagent_type: "kodflow-gamedev:<name>"`); no
+routing keyword brings them into another conversation.
+
+| Agent | Area |
+|---|---|
+| `gamedev-animation-director` | merges the panel, arbitrates, attributes, refuses |
+| `anatomy-specialist-biomechanics` | joint ranges, pronation, grip, sequencing |
+| `martial-specialist-europe` | HEMA: German, Italian, I.33, destreza, polearms |
+| `martial-specialist-antiquity` | Greco-Roman: hoplite, legionary, gladiators, pankration |
+| `martial-specialist-south-asia` | Kalaripayattu, Gatka, Silambam, Dhanurveda |
+| `martial-specialist-east-asia` | koryū, Chinese military manuals, Korean |
+| `martial-specialist-southeast-asia` | Arnis, silat, krabi-krabong, Muay Thai, Bokator |
+| `martial-specialist-unarmed` | boxing, wrestling, judo, grappling, kicks |
+| `animation-specialist-combat` | key poses, timing, arcs, readability per view |
+| `rig-specialist-ik` | hierarchy, swing/twist, IK, the grip block |
+| `reference-specialist-imagery` | images and their licences |
+| `engine-specialist-threejs` | three.js r186 sampling and adapters |
+| `engine-specialist-godot` | Godot 4.7 Skeleton3D sampling |
+
+All six martial agents answer on every move; the declared tradition's agent
+**governs** (its sourced technique is adopted whole) and the five others only
+remark or name an alternative. Arbitration: owner ADR > anatomy > governing
+technique > animation craft. The martial agents stay `experimental` until a
+`good` verdict with `reach: general` credits their culture.
+
+Every agent names a technique in its original language and script, with a
+transliteration, a translation and a tier-1 or tier-2 source, or files it under
+`unverified`. Their starting sources are `skills/_shared/source-map.md`,
+dated, with its gaps marked as gaps.
+
+## The measuring
+
+- `move-constraints/v1` (`skills/_shared/move-constraints.schema.json`):
+  `joint_angle`, `frame_pose`, `vector_angle`, `velocity`, `trajectory`,
+  `phase_offset`, `reach_ratio`, `grip`, `handedness`, each `hard` or `soft`,
+  `proposed` until the owner confirms it, observable per view.
+- `pose-track/v1` (`pose-track.schema.json`): world transforms of bones and
+  props and world points of mesh landmarks, per frame, under the rig map's
+  logical names (`rig-map.example.json`).
+- `check-constraints.py` exits non-zero when a hard constraint fails, when
+  nothing applies, or when fewer were evaluated than apply.
+
+Samplers: `sample-threejs.mjs` (Node; a project adapter exporting `clips()`,
+`meta(clip)`, `rest()`, `sampleWorld(clip, t)`, or a GLB with baked clips) and
+`sample-godot.gd` (headless Godot). The adapter is the project's code.
+
+## The owner's feedback
+
+`docs/adr/feedback/.RULES.md` is generated by `feedback-rules.py` (never
+committed): hard rules, then proposed, then advisory, newest first. The
+SubagentStart hook `hooks/scripts/rules-digest.sh` is read-only: it checks
+that file against the ADRs by hash and hands each agent its areas' rules
+(2000 characters at most), or says the digest is unavailable and lists the
+ADRs to read.
+
+## Scripts
+
+Python 3.9+, standard library only, run as `python3 -I`: `check-constraints.py`,
+`feedback-rules.py`, `cache-source.py`, `fetch-reference.py`. Tests:
+`tests/run-tests.sh` (no claude CLI, synthetic fixtures only).

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pose-track/v1",
+  "title": "World transforms of one clip, sampled frame by frame",
+  "description": "Written by a sampler (sample-threejs.mjs, sample-godot.gd, or a project adapter), read by check-constraints.py. Names are the rig map's logical names, never the engine's. Positions in metres, quaternions [x, y, z, w], right-handed, +Y up.",
+  "type": "object",
+  "required": ["schema_version", "clip", "fps", "frames"],
+  "properties": {
+    "schema_version": {"const": "pose-track/v1"},
+    "clip": {"type": "string"},
+    "fps": {"type": "number", "exclusiveMinimum": 0},
+    "duration": {"type": "number", "exclusiveMinimum": 0},
+    "source": {
+      "type": "object",
+      "description": "Where the samples come from: engine, revision, adapter. Never asset bytes.",
+      "properties": {"engine": {"type": "string"}, "revision": {"type": "string"}, "adapter": {"type": "string"}}
+    },
+    "markers": {
+      "type": "object",
+      "description": "Named instants as a share of the clip (0 to 1), e.g. impact.",
+      "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+    },
+    "rest": {"$ref": "#/$defs/pose", "description": "The bind or neutral pose; joint angles are measured from it when present."},
+    "frames": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "allOf": [{"$ref": "#/$defs/pose"}],
+        "required": ["t"],
+        "properties": {"t": {"type": "number", "description": "Seconds from the start of the clip."}}
+      }
+    }
+  },
+  "$defs": {
+    "vec3": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3},
+    "transform": {
+      "type": "object", "required": ["p"],
+      "properties": {
+        "p": {"$ref": "#/$defs/vec3"},
+        "q": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4}
+      }
+    },
+    "pose": {
+      "type": "object",
+      "properties": {
+        "bones": {"type": "object", "additionalProperties": {"$ref": "#/$defs/transform"}},
+        "props": {"type": "object", "additionalProperties": {"$ref": "#/$defs/transform"}},
+        "landmarks": {"type": "object", "additionalProperties": {"$ref": "#/$defs/vec3"}}
+      }
+    }
+  }
+}

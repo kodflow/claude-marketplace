@@ -1,0 +1,8 @@
+{
+  "description": "One event. SubagentStart, for this plugin's agents only: the owner's feedback rules (docs/adr/feedback/.RULES.md, checked against the ADRs by hash) are handed to the agent before it proposes anything. Read-only; fails open; always says whether the digest is current, truncated or unavailable.",
+  "hooks": {
+    "SubagentStart": [
+      { "matcher": "^kodflow-gamedev:", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/rules-digest.sh", "timeout": 5 } ] }
+    ]
+  }
+}

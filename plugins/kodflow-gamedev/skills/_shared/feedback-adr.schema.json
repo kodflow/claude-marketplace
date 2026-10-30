@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "feedback-adr/v1",
+  "title": "Header of an owner feedback ADR",
+  "description": "The JSON block that opens docs/adr/feedback/<YYYYMMDD-HHMMSS>-<slug>-<4hex>.md, between the lines ```json and ```. The raw feedback, verbatim, is in the body under ## Observed. Written once, never edited: a correction is a new ADR that names this one in supersedes.",
+  "type": "object",
+  "required": ["schema", "verdict", "rule", "scope", "supersedes", "reach", "subject", "constraint"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "feedback-adr/v1"},
+    "verdict": {"enum": ["good", "bad"]},
+    "rule": {"type": "string", "minLength": 1, "description": "What to repeat (good) or never do again (bad), as one imperative sentence."},
+    "scope": {"type": "array", "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9:.-]*$"}, "description": "Tags an agent filters on: move:<slug>, weapon:<w>, tradition:<t>, area:anatomy, area:grip, area:locomotion, …"},
+    "supersedes": {"type": "array", "items": {"type": "string", "pattern": "^[0-9]{8}-[0-9]{6}-[a-z0-9-]+-[0-9a-f]{4}\\.md$"}},
+    "reach": {"enum": ["project", "general"]},
+    "subject": {
+      "type": "object", "required": ["spec", "constraints_sha256", "clip", "commit", "credits"],
+      "properties": {
+        "spec": {"type": "string", "description": "Path of the move spec judged."},
+        "constraints_sha256": {"type": ["string", "null"]},
+        "clip": {"type": "string"},
+        "commit": {"type": "string"},
+        "credits": {"type": "array", "items": {"type": "string"}, "description": "Agents (or cultures) whose recommendation the verdict judges."}
+      }
+    },
+    "constraint": {
+      "oneOf": [
+        {"const": "unmeasured"},
+        {"type": "object", "required": ["kind", "measured", "threshold", "status"],
+         "properties": {
+           "kind": {"type": "string"},
+           "measured": {"type": ["number", "null"]},
+           "threshold": {"type": "object"},
+           "status": {"enum": ["proposed", "confirmed"]},
+           "definition": {"type": "object", "description": "A full move-constraints/v1 entry, so /anim-review can evaluate it."}
+         }}
+      ]
+    }
+  }
+}

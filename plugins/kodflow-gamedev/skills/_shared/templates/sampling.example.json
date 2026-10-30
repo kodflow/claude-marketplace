@@ -1,0 +1,14 @@
+{
+  "schema": "anim-sampling/v1",
+  "note": "Example. A project copies this to docs/anim/sampling.json. engine threejs: adapter is project code exporting clips(), meta(clip), rest(), sampleWorld(clip, t) (see sample-threejs.mjs); or glb, a file with baked clips. engine godot: scene holds a Skeleton3D and an AnimationPlayer. render is the project's own command that writes a viewable clip for the owner; {clip} and {out} are substituted.",
+  "engine": "threejs",
+  "fps": 60,
+  "adapter": "tools/anim-adapter.mjs",
+  "glb": null,
+  "godot": {"binary": "godot", "scene": "res://characters/fighter.tscn"},
+  "render": "npm run --silent render-clip -- --clip {clip} --out {out}",
+  "moves": {
+    "run-guard": {"clips": ["run"]},
+    "diagonal-cut": {"clips": ["attack_cut"]}
+  }
+}

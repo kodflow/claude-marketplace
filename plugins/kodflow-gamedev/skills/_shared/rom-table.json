@@ -1,0 +1,408 @@
+{
+  "schema": "rom-table/v1",
+  "as_of": "2026-10-30",
+  "note": "Every value comes from the plugin's research of 2026-10-30 and nothing else. passive_max_deg is a measured passive ceiling, not a combat amplitude: a pose that reaches it is at the edge of the normal adult range and reads as strained. functional is the comfort arc or the minimum needed for daily tasks (Ryu 1991, Morrey 1981), the zone a natural move stays in. Angles are clinical, measured from the anatomical neutral position, not from a rig's rest pose (T-pose or A-pose): convert before comparing with a joint_angle measured on a track. Norms diverge by 5 to 12 degrees between CDC and AAOS/AMA (protocol, population): name the reference applied and keep thresholds soft. Tier 3 entries may inform a proposed threshold only, said so in its rationale. approx true means the research gives the value as approximate (~).",
+  "joints": [
+    {
+      "joint": "shoulder",
+      "motion": "flexion",
+      "passive_max_deg": 170,
+      "approx": true,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://archive.cdc.gov/www_cdc_gov/ncbddd/jointrom/index.html",
+        "tier": 1,
+        "status": "confirmed"
+      },
+      "conflict": "AAOS gives about 180; CDC kept as the measured ceiling (primary data, published protocol)"
+    },
+    {
+      "joint": "elbow",
+      "motion": "flexion",
+      "passive_max_deg": 148,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://stacks.cdc.gov/view/cdc/153156/cdc_153156_DS1.pdf",
+        "tier": 1,
+        "status": "confirmed"
+      }
+    },
+    {
+      "joint": "forearm",
+      "motion": "pronation",
+      "passive_max_deg": 80.2,
+      "sd_deg": 6.85,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://stacks.cdc.gov/view/cdc/153156/cdc_153156_DS1.pdf",
+        "tier": 1,
+        "status": "confirmed"
+      }
+    },
+    {
+      "joint": "forearm",
+      "motion": "supination",
+      "passive_max_deg": 87.1,
+      "sd_deg": 7.6,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://stacks.cdc.gov/view/cdc/153156/cdc_153156_DS1.pdf",
+        "tier": 1,
+        "status": "confirmed"
+      }
+    },
+    {
+      "joint": "hip",
+      "motion": "flexion",
+      "passive_max_deg": 132,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://stacks.cdc.gov/view/cdc/153156/cdc_153156_DS1.pdf",
+        "tier": 1,
+        "status": "confirmed"
+      },
+      "conflict": "AAOS gives about 120; CDC kept (primary data)"
+    },
+    {
+      "joint": "hip",
+      "motion": "extension",
+      "passive_max_deg": 18.5,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://stacks.cdc.gov/view/cdc/153156/cdc_153156_DS1.pdf",
+        "tier": 1,
+        "status": "confirmed"
+      }
+    },
+    {
+      "joint": "knee",
+      "motion": "flexion",
+      "passive_max_deg": 140,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://stacks.cdc.gov/view/cdc/153156/cdc_153156_DS1.pdf",
+        "tier": 1,
+        "status": "confirmed"
+      }
+    },
+    {
+      "joint": "ankle",
+      "motion": "dorsiflexion",
+      "passive_max_deg": 15,
+      "approx": true,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://stacks.cdc.gov/view/cdc/153156/cdc_153156_DS1.pdf",
+        "tier": 1,
+        "status": "confirmed"
+      }
+    },
+    {
+      "joint": "ankle",
+      "motion": "plantarflexion",
+      "passive_max_deg": 57,
+      "approx": true,
+      "functional": null,
+      "source": {
+        "ref": "CDC normal joint ROM (Soucie 2011), all ages, passive",
+        "url": "https://stacks.cdc.gov/view/cdc/153156/cdc_153156_DS1.pdf",
+        "tier": 1,
+        "status": "confirmed"
+      }
+    },
+
+    {
+      "joint": "wrist",
+      "motion": "extension",
+      "passive_max_deg": null,
+      "functional": {
+        "min_needed_deg": 60,
+        "meaning": "minimum functional ROM for activities of daily living, n=40"
+      },
+      "source": {
+        "ref": "Ryu 1991",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1861019/",
+        "tier": 1,
+        "status": "single-source (abstract only)"
+      }
+    },
+    {
+      "joint": "wrist",
+      "motion": "flexion",
+      "passive_max_deg": null,
+      "functional": {
+        "min_needed_deg": 54,
+        "meaning": "minimum functional ROM for activities of daily living, n=40"
+      },
+      "source": {
+        "ref": "Ryu 1991",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1861019/",
+        "tier": 1,
+        "status": "single-source (abstract only)"
+      }
+    },
+    {
+      "joint": "wrist",
+      "motion": "ulnar_deviation",
+      "passive_max_deg": null,
+      "functional": {
+        "min_needed_deg": 40,
+        "meaning": "minimum functional ROM for activities of daily living, n=40"
+      },
+      "source": {
+        "ref": "Ryu 1991",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1861019/",
+        "tier": 1,
+        "status": "single-source (abstract only)"
+      }
+    },
+    {
+      "joint": "wrist",
+      "motion": "radial_deviation",
+      "passive_max_deg": null,
+      "functional": {
+        "min_needed_deg": 17,
+        "meaning": "minimum functional ROM for activities of daily living, n=40"
+      },
+      "source": {
+        "ref": "Ryu 1991",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1861019/",
+        "tier": 1,
+        "status": "single-source (abstract only)"
+      }
+    },
+    {
+      "joint": "wrist",
+      "motion": "flexion_extension_70pct_tasks",
+      "passive_max_deg": null,
+      "functional": {
+        "flexion_deg": 40,
+        "extension_deg": 40,
+        "radial_plus_ulnar_deg": 40,
+        "meaning": "about 40 flexion, 40 extension and 40 combined radial plus ulnar deviation cover 70 percent of the tasks studied"
+      },
+      "source": {
+        "ref": "Ryu 1991",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/1861019/",
+        "tier": 1,
+        "status": "single-source (abstract only)"
+      }
+    },
+
+    {
+      "joint": "forearm",
+      "motion": "pronation",
+      "passive_max_deg": null,
+      "functional": {
+        "arc_deg": [0, 50],
+        "meaning": "functional arc, 50 pronation"
+      },
+      "source": {
+        "ref": "Morrey 1981",
+        "url": null,
+        "tier": 3,
+        "status": "single-source (secondary reports; JBJS original not open, not read)"
+      }
+    },
+    {
+      "joint": "forearm",
+      "motion": "supination",
+      "passive_max_deg": null,
+      "functional": {
+        "arc_deg": [0, 50],
+        "meaning": "functional arc, 50 supination"
+      },
+      "source": {
+        "ref": "Morrey 1981",
+        "url": null,
+        "tier": 3,
+        "status": "single-source (secondary reports; JBJS original not open, not read)"
+      }
+    },
+    {
+      "joint": "elbow",
+      "motion": "flexion",
+      "passive_max_deg": null,
+      "functional": {
+        "arc_deg": [30, 130],
+        "meaning": "functional flexion arc 30 to 130"
+      },
+      "source": {
+        "ref": "Morrey 1981",
+        "url": null,
+        "tier": 3,
+        "status": "single-source (secondary reports; JBJS original not open, not read)"
+      }
+    },
+
+    {
+      "joint": "shoulder",
+      "motion": "abduction",
+      "passive_max_deg": 180,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    },
+    {
+      "joint": "shoulder",
+      "motion": "internal_rotation",
+      "passive_max_deg": 90,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    },
+    {
+      "joint": "shoulder",
+      "motion": "external_rotation",
+      "passive_max_deg": 90,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    },
+    {
+      "joint": "hip",
+      "motion": "abduction",
+      "passive_max_deg": 40,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    },
+    {
+      "joint": "hip",
+      "motion": "internal_rotation",
+      "passive_max_deg": 40,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    },
+    {
+      "joint": "hip",
+      "motion": "external_rotation",
+      "passive_max_deg": 50,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    },
+    {
+      "joint": "cervical_spine",
+      "motion": "rotation",
+      "passive_max_deg": 80,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    },
+    {
+      "joint": "cervical_spine",
+      "motion": "lateral_flexion",
+      "passive_max_deg": 45,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    },
+    {
+      "joint": "thoracolumbar_spine",
+      "motion": "rotation",
+      "passive_max_deg": 30,
+      "approx": false,
+      "functional": null,
+      "source": {
+        "ref": "WikEM Joint ROM table",
+        "url": "https://wikem.org/wiki/Joint_ROM_(Table)",
+        "tier": 3,
+        "status": "single-source"
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "what": "wrist passive ROM",
+      "why": "the CDC study covers 11 motions on 5 joints and no wrist; only Ryu 1991 functional minima are known"
+    },
+    {
+      "what": "spine passive ROM (cervical, thoracic, lumbar)",
+      "why": "not in CDC; only WikEM tier 3 values"
+    },
+    {
+      "what": "shoulder and hip abduction and rotation from a tier-1 source",
+      "why": "not in CDC; WikEM tier 3 only"
+    },
+    {
+      "what": "horizontal shoulder abduction and adduction",
+      "why": "no source found by the research"
+    },
+    {
+      "what": "thoracic versus lumbar rotation, separately",
+      "why": "only a combined thoracolumbar value (WikEM, tier 3)"
+    },
+    {
+      "what": "centre-of-mass margins (support polygon, safety margin in a lunge or a cut)",
+      "why": "no source found by the research"
+    },
+    {
+      "what": "the two CDC motions not listed in the research",
+      "why": "CDC reports 11 motions; the research records 9 values; read the CDC PDF before adding them"
+    },
+    {
+      "what": "age- and sex-stratified values",
+      "why": "a sex-stratified pronation value for ages 20 to 44 was rejected at verification; use all-ages values"
+    },
+    {
+      "what": "measured kinematics of a sword cut",
+      "why": "Kluwak et al. 2020 and EUROCAST 2022 not accessed, licence unknown; the only figures (250 to 350 ms, 1000 to 2000 deg/s) are tier 4"
+    }
+  ]
+}
