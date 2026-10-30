@@ -69,6 +69,44 @@ run "$(file "$CFG/settings.json" Edit)";                    expect_rc "settings 
 run "$(file "$CFG/agents/x.md")";                           expect_rc "other files of that repo denied" 2
 rm -rf "$CFG/.git"
 
+echo "== a plugin's root-write-allow, where the repository enables it"
+# A kodflow plugin installed with a root-write-allow; repo enables it, repo2 does not.
+PL=$T/plugcache/kodflow-demo; mkdir -p "$PL" "$CFG/plugins"
+printf '# comment\ndocs/adr/feedback/**\ndocs/anim/**\n/abs/**\n../up/**\n' > "$PL/root-write-allow"
+OTHER=$T/plugcache/other-demo; mkdir -p "$OTHER"; printf 'notes/**\n' > "$OTHER/root-write-allow"
+jq -n --arg p "$PL" --arg o "$OTHER" '{version:2,plugins:{"kodflow-demo@kodflow":[{scope:"user",installPath:$p}],
+    "other-demo@elsewhere":[{scope:"user",installPath:$o}]}}' > "$CFG/plugins/installed_plugins.json"
+mkdir -p "$T/repo/.claude"
+printf '{"enabledPlugins":{"kodflow-demo@kodflow":true,"other-demo@elsewhere":true}}\n' > "$T/repo/.claude/settings.json"
+REPO2=$T/repo2; mkdir -p "$REPO2"; git -C "$REPO2" init -q
+run "$(file "$T/repo/docs/adr/feedback/20261030-120000-run-guard-ab12.md")"; expect_rc "enabled here: an allowed glob is writable" 0
+run "$(file "$T/repo/docs/anim/sources/x/y.md")";           expect_rc "enabled here: ** crosses directories" 0
+run "$(file "$T/repo/docs/other.md")";                      expect_rc "enabled here: a path no glob matches denied" 2
+run "$(file "$T/repo/node_modules/pkg/docs/anim/x.md")";    expect_rc "a glob matches from the root only (node_modules/…/docs/anim denied)" 2
+run "$(file "$T/repo/src/../docs/anim/n.md")";              expect_rc "a .. path is judged after normalisation (allowed)" 0
+run "$(file "$T/repo/docs/anim/../../src/main.rs")";        expect_rc "a .. path out of the glob denied" 2
+run "$(file "$T/repo/notes/a.md")";                         expect_rc "a plugin of another marketplace grants nothing" 2
+run "$(file "$REPO2/docs/anim/x.md")";                      expect_rc "enabled in repo, a write in repo2 denied" 2
+mkdir -p "$REPO2/.claude"; printf '{"enabledPlugins":{"kodflow-demo@kodflow":false}}\n' > "$REPO2/.claude/settings.json"
+run "$(file "$REPO2/docs/anim/x.md")";                      expect_rc "installed but disabled in repo2 denied" 2
+printf '{"enabledPlugins":{"kodflow-demo@kodflow":true}}\n' > "$REPO2/.claude/settings.local.json"
+run "$(file "$REPO2/docs/anim/x.md")";                      expect_rc "settings.local.json enabling it wins over settings.json" 0
+printf '{"enabledPlugins":{"kodflow-demo@kodflow":false}}\n' > "$REPO2/.claude/settings.local.json"
+printf '{"enabledPlugins":{"kodflow-demo@kodflow":true}}\n' > "$REPO2/.claude/settings.json"
+run "$(file "$REPO2/docs/anim/x.md")";                      expect_rc "settings.local.json disabling it wins over settings.json" 2
+printf 'not json' > "$REPO2/.claude/settings.local.json"
+run "$(file "$REPO2/docs/anim/x.md")";                      expect_rc "an unreadable settings file refuses" 2
+rm -f "$REPO2/.claude/settings.local.json"
+NOJQ=$T/nojq; mkdir -p "$NOJQ"
+for b in bash git cat env mkdir dirname sed tr date printf grep head cut awk sort wc ls rm mv basename id uname tail tee; do
+    w=$(command -v "$b" 2>/dev/null) && [ -n "$w" ] && ln -sf "$w" "$NOJQ/$b"
+done
+ERR=$(printf '%s' "$(file "$T/repo/docs/anim/x.md")" | env PATH="$NOJQ" bash "$S/on-tool.sh" 2>&1 >/dev/null); RC=$?
+expect_rc "without jq the hook stays out of the way (no exception, no crash)" 0
+run "$(file "$T/repo/.git/config")";                        expect_rc "never into .git" 2
+run "$(file "$T/repo/docs/anim/x.md" Write "$AGENT")";      expect_rc "a subagent is not gated at all" 0
+rm -rf "$T/repo/.claude" "$CFG/plugins" "$REPO2"
+
 echo "== a subagent is never gated"
 run "$(file "$SRC" Write "$AGENT")";                        expect_rc "a Write in a repo from a subagent allowed" 0
 run "$(cmd 'git push origin feat/x' "$AGENT")";             expect_rc "git push from a subagent allowed" 0

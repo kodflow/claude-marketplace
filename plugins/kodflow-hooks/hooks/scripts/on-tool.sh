@@ -1053,6 +1053,43 @@ _root_deny() {
         "[motif:root]"
 }
 
+# The one exception a plugin can ask for: a plugin of the kodflow marketplace
+# ships root-write-allow, globs relative to a repository's root (`**` reads as
+# `*`, which crosses directories), and the main thread may write a matching
+# path of a repository whose own .claude/settings.local.json, else
+# .claude/settings.json, sets enabledPlugins["<plugin>@kodflow"] to true.
+# Enabled elsewhere, installed but not enabled here, a glob that only matches
+# deeper (node_modules/…/docs/anim) or a path into .git: refused. No jq, or a
+# file that does not parse: refused, as before. $1 the normalised path, $2 the
+# work tree's root → 0 when allowed. This file never names a plugin.
+_root_write_allowed() {
+    local f=$1 d=$2 rel key path glob s v enabled cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+    command -v jq >/dev/null 2>&1 || return 1
+    [ -n "$d" ] || return 1
+    rel=${f#"$d"/}
+    [ "$rel" != "$f" ] && [ -n "$rel" ] || return 1
+    case "/$rel/" in */.git/*|*/../*|*/./*) return 1 ;; esac
+    while IFS=$'\t' read -r key path; do
+        [ -n "$key" ] && [ -n "$path" ] && [ -r "$path/root-write-allow" ] || continue
+        enabled=""
+        for s in "$d/.claude/settings.local.json" "$d/.claude/settings.json"; do
+            [ -r "$s" ] || continue
+            v=$(jq -r --arg k "$key" '(.enabledPlugins // {}) | if has($k) then (.[$k] | tostring) else "unset" end' "$s" 2>/dev/null) || { enabled=false; break; }
+            [ "$v" = unset ] && continue
+            enabled=$v; break
+        done
+        [ "$enabled" = true ] || continue
+        while IFS= read -r glob || [ -n "$glob" ]; do
+            case "$glob" in ""|"#"*|/*|*..*) continue ;; esac
+            glob=${glob//\*\*/*}
+            # shellcheck disable=SC2254 # the glob is the pattern
+            case "$rel" in $glob) return 0 ;; esac
+        done < "$path/root-write-allow"
+    done < <(jq -r '(.plugins // {}) | to_entries[] | select(.key | endswith("@kodflow")) | .key as $k
+                    | .value[]? | [$k, (.installPath // empty)] | @tsv' "$cfg/plugins/installed_plugins.json" 2>/dev/null)
+    return 1
+}
+
 # GATE · Write/Edit. Refused only inside a git work tree: the file's
 # directory and its parents are walked up looking for .git (a directory, or
 # the gitdir file of a worktree or submodule) — plain tests, no exec. The path
@@ -1079,7 +1116,10 @@ _root_gate_edit() {
     esac
     d=${f%/*}
     while :; do
-        [ -e "${d:-}/.git" ] && _root_deny "$f is inside the git work tree ${d:-/}."
+        if [ -e "${d:-}/.git" ]; then
+            _root_write_allowed "$f" "${d:-}" && return 0
+            _root_deny "$f is inside the git work tree ${d:-/}."
+        fi
         [ -z "$d" ] && break
         d=${d%/*}
     done
