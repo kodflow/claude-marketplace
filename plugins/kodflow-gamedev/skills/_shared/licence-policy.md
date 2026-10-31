@@ -136,7 +136,7 @@ Rules that come with it:
   the Meshy **mesh** onto the project's rig is the Customer Output itself and
   is not affected.
 - **Community page.** Terms 3.3: a model posted to the Meshy Community page
-  is licensed to the public under CC0 1.0. Never post a Lucky asset there
+  is licensed to the public under CC0 1.0. Never post a project asset there
   without the owner's decision.
 - **Downgrades.** Whether a model made on a paid plan keeps its terms after
   a downgrade is stated only in a help-centre article the research did not

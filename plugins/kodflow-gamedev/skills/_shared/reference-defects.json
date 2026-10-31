@@ -1,28 +1,69 @@
 {
-  "schema": "reference-defects/v1",
+  "schema": "reference-defects/v2",
   "rule": "coverage",
-  "note": "The coverage rule, held in one place: check-constraints.py --coverage reads this file. A move's constraints file maps every defect below either to the ids of hard constraints whose `source` is the sha256 of a verified source (match exact or normalised, in docs/anim/sources/ or this plugin's skills/_shared/sources/), or to {\"not_applicable\": \"<reason>\"}. A defect whose `required_when` holds cannot be not_applicable. Anything else refuses the spec.",
+  "note": "The coverage rule, held in one place: check-constraints.py --coverage reads this file. A move's constraints file maps every defect below either to the ids of hard constraints, or to {\"not_applicable\": \"<reason>\"}. A covering constraint counts only when it (1) is hard, (2) cites as `source` the sha256 of a verified source (match exact or normalised, in docs/anim/sources/ or this plugin's skills/_shared/sources/), (3) has one of the defect's `natures`, so it measures the defect itself rather than a sign or a side, and (4) is evaluable on the project: every bone, prop and landmark it names is in the rig map, and every marker it names is declared for its clip (rig map `clips.<clip>.markers`). A defect whose `required_when` holds cannot be not_applicable, and a not_applicable whose reason matches `deferral` points at another move: each move covers the defects that apply to it. Anything else refuses the spec.",
+  "deferral": "(?i)\\b(covered|handled|checked|measured|tested|caught|couvert)\\b|\\b(another|other|sibling|neighbou?ring|separate)\\s+(move|spec|clip file)\\b|\\bsee\\s+[a-z0-9][a-z0-9-]*\\b",
   "defects": [
     {
       "id": "locomotion-carry",
       "what": "A held weapon, a closed fist or a shield beats against the body during locomotion instead of riding with the torso.",
       "required_when": {},
-      "kinds": ["velocity", "frame_pose", "trajectory"],
+      "natures": [
+        {
+          "kind": "velocity",
+          "present": ["relative_to"],
+          "label": "velocity relative to the torso (relative_to)"
+        },
+        {
+          "kind": "frame_pose",
+          "match": { "test.stat": ["peak_to_peak"] },
+          "label": "frame_pose stability in the torso's frame (stat peak_to_peak)"
+        },
+        {
+          "kind": "trajectory",
+          "present": ["relative_to"],
+          "match": { "metric": ["path_length"] },
+          "label": "trajectory path_length relative to the torso (relative_to)"
+        }
+      ],
       "hint": "Speed or peak-to-peak displacement of the hands, pommel and tip in the chest's frame, on the locomotion clips."
     },
     {
       "id": "cut-reads-as-thrust",
       "what": "A cut whose tip travels along its own blade axis, driven by the wrist rather than the shoulder: it reads as a stab.",
       "required_when": {},
-      "kinds": ["trajectory", "reach_ratio", "phase_offset", "vector_angle"],
-      "hint": "Tip velocity against the blade axis (velocity_axis_angle), arm extension at contact, the shoulder leading the hand, the line the source draws."
+      "natures": [
+        {
+          "kind": "trajectory",
+          "match": {
+            "metric": [
+              "velocity_axis_angle",
+              "chord_arc_ratio",
+              "displacement_angle"
+            ]
+          },
+          "label": "tip trajectory (velocity_axis_angle, chord_arc_ratio or displacement_angle)"
+        },
+        {
+          "kind": "vector_angle",
+          "match": { "test.stat": ["at"] },
+          "label": "edge angle at contact (vector_angle, stat at)"
+        }
+      ],
+      "hint": "Tip velocity against the blade axis (velocity_axis_angle), the arc of the tip, the edge's angle at the contact marker."
     },
     {
       "id": "hand-reads-as-other-hand",
       "what": "A weapon hand that reads as the other hand: the forearm turned past its range, the hand mirrored, or the fingers closed on the wrong side of the grip.",
       "required_when": { "weapon": "any" },
-      "kinds": ["handedness", "grip", "joint_angle"],
-      "hint": "handedness on the weapon hand, the grip checks (palm_distance, fingers_wrap, index_toward_blade), forearm rotation against the anatomy table."
+      "natures": [
+        {
+          "kind": "joint_angle",
+          "pattern": { "bone": "(?i)(forearm|hand|wrist)" },
+          "label": "rotation of the forearm or the wrist (joint_angle on a forearm, hand or wrist bone)"
+        }
+      ],
+      "hint": "Forearm twist and wrist rotation against the anatomy table; handedness and the grip checks are sign tests that a pronated hand passes, so they may be added but never cover."
     }
   ]
 }

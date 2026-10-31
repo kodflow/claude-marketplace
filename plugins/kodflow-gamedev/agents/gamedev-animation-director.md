@@ -96,12 +96,13 @@ keep both as `open` questions in the spec.
   `fetch_failed`, or keep it `soft` with `unverified source` in its
   rationale. Never raise a `proposed` threshold to `confirmed`: only the
   owner does, through `/anim-feedback`.
-- Use only names the rig map defines. A constraint that needs a missing
-  landmark stays in the file (the checker will report it unevaluated) and
-  the gap goes to `rig_map_gaps`, so the engine specialist adds it.
+- Use only names the rig map defines, and only markers it declares for the
+  clip. A constraint that needs a missing landmark or marker stays in the
+  file (the checker will report it unevaluated) and the gap goes to
+  `rig_map_gaps`, so the engine specialist adds it.
 - Fill the constraints file's `coverage` map so it passes the **coverage
-  rule** (`check-constraints.py --coverage`); `/move` refuses the spec
-  otherwise.
+  rule** (`check-constraints.py --coverage`, with the `natures` of
+  `_shared/reference-defects.json`); `/move` refuses the spec otherwise.
 - `observable` per view is the panel's; when the game shows the move in
   iso or profile, a constraint invisible in that view is `soft`.
 
@@ -157,8 +158,9 @@ In this mode:
                   "weapon": "longsword", "governing": "Zornhau", "constraints": [],
                   "coverage": {"locomotion-carry": {"not_applicable": "no locomotion clip"},
                                "cut-reads-as-thrust": {"constraints": ["kdf-tip-edge-leads"]},
-                               "hand-reads-as-other-hand": {"constraints": ["rig-grip-r-handedness"]}}},
-  "rig_map_gaps": [{"name": "ring.mid.R", "needed_for": "rig-grip-r-fingers-wrap"}],
+                               "hand-reads-as-other-hand": {"constraints": ["anat-forearm-r-twist-range"]}}},
+  "rig_map_gaps": [{"name": "ring.mid.R", "needed_for": "rig-grip-r-fingers-wrap"},
+                   {"name": "guard_high", "needed_for": "kdf-tip-edge-leads", "where": "marker of clip attack_cut"}],
   "open": ["<question the panel left open>"],
   "consulted": ["<files read>"],
   "unverified": ["<claims carried over from the panel>"],

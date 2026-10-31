@@ -37,7 +37,7 @@ and what it could not.
 ```bash
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 P="${CLAUDE_PLUGIN_ROOT}"
-SCRATCH=$(mktemp -d)          # or the session's scratchpad directory
+SCRATCH=$(mktemp -d)          # new and empty, this run's only
 python3 -I "$P/skills/_shared/scripts/feedback-rules.py" build --root "$ROOT"
 ```
 

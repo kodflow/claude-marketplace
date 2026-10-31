@@ -9,11 +9,17 @@
 
 --coverage holds the coverage rule, here and nowhere else: every defect of
 ../reference-defects.json is either marked not applicable (when its
-`required_when` allows it) or covered by at least one hard constraint whose
-`source` is the sha256 of a verified source — a cache entry whose match is
-exact or normalised, in <project>/docs/anim/sources/, this plugin's
-skills/_shared/sources/, or a --sources directory. A spec that fails it is
-refused. With tracks as well, the coverage verdict joins the run's.
+`required_when` allows it, and the reason does not defer to another move)
+or covered by at least one hard constraint of this file whose `source` is
+the sha256 of a verified source — a cache entry whose match is exact or
+normalised, in <project>/docs/anim/sources/, this plugin's
+skills/_shared/sources/, or a --sources directory —, whose nature is one the
+defect admits (its `natures`), and which is evaluable on the project: every
+name it uses is in the rig map (the constraints' `rig_map`, under --root),
+every marker it uses is declared for its clip there (`clips.<clip>.markers`),
+and its clip is one docs/anim/sampling.json samples for the move, when that
+file lists the move. A spec that fails it is refused. With tracks as well,
+the coverage verdict joins the run's.
 
 Inputs are move-constraints/v1 (what the panel wrote) and pose-track/v1 (what
 a sampler measured: world transforms of bones and props, world points of
@@ -530,12 +536,113 @@ def verified_source(sha, dirs):
     return None
 
 
-def coverage(doc, dirs, catalogue_path=None):
-    """Faults of the coverage rule; an empty list means the spec may ship."""
+# Fields whose values name bones, props or landmarks, at any depth of a
+# constraint except its window, test and observable (those name markers or views).
+NAME_KEYS = ("bone", "parent", "target", "ref", "point", "relative_to", "palm", "index", "pinky",
+             "middle", "wrist", "center", "from", "to", "of", "chain", "fingers")
+NOT_NAMES = ("window", "test", "observable")
+
+
+def names_used(c, top=True):
+    out = []
+    for k, v in c.items():
+        if top and k in NOT_NAMES:
+            continue
+        if isinstance(v, dict):
+            out += names_used(v, top=False)
+        elif k in NAME_KEYS and isinstance(v, str):
+            out.append(v)
+        elif k in NAME_KEYS and isinstance(v, list):
+            out += [x for x in v if isinstance(x, str)]
+    return out
+
+
+def markers_used(c):
+    w = c.get("window") or {}
+    out = [w[k] for k in ("from", "to") if isinstance(w.get(k), str)]
+    at = (c.get("test") or {}).get("at")
+    return out + ([at] if isinstance(at, str) else [])
+
+
+def load_project(root, doc):
+    """What the project declares: the rig map's names and clip markers, and the move's sampled clips."""
+    rel = str(doc.get("rig_map") or "docs/anim/rig-map.json")
+    path = rel if os.path.isabs(rel) else os.path.join(root, rel)
+    try:
+        rig = load_json(path)
+    except (OSError, ValueError) as e:
+        return {"error": f"rig map {rel} unreadable ({e})"}
+    names = set()
+    for k in ("bones", "props", "landmarks"):
+        names |= set((rig.get(k) or {}).keys())
+    markers = {}
+    for clip, spec in (rig.get("clips") or {}).items():
+        m = (spec or {}).get("markers") or []
+        markers[clip] = set(m.keys() if isinstance(m, dict) else m)
+    clips = None
+    try:
+        move = (load_json(os.path.join(root, "docs", "anim", "sampling.json")).get("moves") or {}).get(doc.get("move"))
+        if isinstance(move, dict) and move.get("clips"):
+            clips = set(move["clips"])
+    except (OSError, ValueError):
+        pass
+    return {"rig_map": rel, "names": names, "markers": markers, "clips": clips}
+
+
+def unevaluable(c, doc, project):
+    """Why the constraint cannot be measured on this project, or None."""
+    if project.get("error"):
+        return f"{project['error']}: evaluability cannot be shown"
+    clip = c.get("clip", doc.get("clip"))
+    if project["clips"] is not None and clip not in project["clips"]:
+        return (f"runs on clip {clip!r}, which sampling.json does not sample for {doc.get('move')!r}: "
+                f"sample it, or report the gap in rig_map_gaps")
+    for n in names_used(c):
+        if n not in project["names"]:
+            return (f"names {n!r}, which {project['rig_map']} does not define: "
+                    f"add it to the rig map, or report it in rig_map_gaps ({{\"name\": \"{n}\", \"needed_for\": \"{c.get('id')}\"}})")
+    declared = project["markers"].get(clip, set())
+    for m in markers_used(c):
+        if m not in declared:
+            return (f"needs marker {m!r}, which clip {clip!r} does not declare ({project['rig_map']} clips.{clip}.markers): "
+                    f"declare it if the clip has it, or report it in rig_map_gaps ({{\"name\": \"{m}\", \"needed_for\": \"{c.get('id')}\"}})")
+    return None
+
+
+def field(c, dotted):
+    v = c
+    for part in dotted.split("."):
+        v = v.get(part) if isinstance(v, dict) else None
+    return v
+
+
+def nature_of(c, natures):
+    """The first nature of the defect the constraint has, or None."""
+    for n in natures:
+        if c.get("kind") != n["kind"]:
+            continue
+        if any(field(c, k) in (None, "", []) for k in n.get("present", [])):
+            continue
+        if any(field(c, k) not in allowed for k, allowed in n.get("match", {}).items()):
+            continue
+        if any(not re.search(rx, str(field(c, k) or "")) for k, rx in n.get("pattern", {}).items()):
+            continue
+        return n
+    return None
+
+
+def coverage(doc, dirs, project, catalogue_path=None):
+    """Faults of the coverage rule; an empty list means the spec may ship.
+
+    project is load_project()'s answer: what the project declares, against
+    which each covering constraint must be evaluable.
+    """
     catalogue_path = catalogue_path or os.path.join(SHARED, "reference-defects.json")
     try:
-        defects = load_json(catalogue_path)["defects"]
-    except (OSError, ValueError, KeyError) as e:
+        cat = load_json(catalogue_path)
+        defects = cat["defects"]
+        deferral = re.compile(cat["deferral"])
+    except (OSError, ValueError, KeyError, re.error) as e:
         return [f"reference defects unreadable ({e}): nothing can be judged"]
     cov = doc.get("coverage")
     if not isinstance(cov, dict):
@@ -550,10 +657,14 @@ def coverage(doc, dirs, catalogue_path=None):
             faults.append(f"{did}: neither covered nor marked not_applicable")
             continue
         if "not_applicable" in entry:
+            why = str(entry["not_applicable"]).strip()
             if d.get("required_when", {}).get("weapon") == "any" and weapon not in ("", "none"):
                 faults.append(f"{did}: required for an armed move (weapon {weapon}), cannot be not_applicable")
-            elif not str(entry["not_applicable"]).strip():
+            elif not why:
                 faults.append(f"{did}: not_applicable without a reason")
+            elif deferral.search(why):
+                faults.append(f"{did}: not_applicable defers to another move ({why!r}); "
+                              f"a defect that applies to this move is covered in this move's own constraints")
             continue
         ids = entry.get("constraints") or []
         good = []
@@ -567,10 +678,17 @@ def coverage(doc, dirs, catalogue_path=None):
                 faults.append(f"{did}: {cid} has no source sha256")
             elif not verified_source(c["source"], dirs):
                 faults.append(f"{did}: {cid} cites {c['source'][:12]}…, which is not a verified source")
+            elif not nature_of(c, d["natures"]):
+                faults.append(f"{did}: {cid} ({c.get('kind')}) does not measure this defect; it admits "
+                              + "; ".join(n["label"] for n in d["natures"]))
             else:
-                good.append(cid)
+                why = unevaluable(c, doc, project)
+                if why:
+                    faults.append(f"{did}: {cid} is not evaluable on this project: it {why}")
+                else:
+                    good.append(cid)
         if not good:
-            faults.append(f"{did}: no hard constraint with a verified source covers it")
+            faults.append(f"{did}: no hard, sourced, evaluable constraint of a nature this defect admits covers it")
     return faults
 
 
@@ -649,7 +767,7 @@ def main(argv=None):
     ap.add_argument("--constraints", required=True)
     ap.add_argument("--track", action="append", default=[])
     ap.add_argument("--coverage", action="store_true", help="hold the coverage rule (reference-defects.json)")
-    ap.add_argument("--root", default=".", help="project root, for docs/anim/sources/ (coverage)")
+    ap.add_argument("--root", default=".", help="project root, for docs/anim/sources/, the rig map and sampling.json (coverage)")
     ap.add_argument("--sources", action="append", default=[], help="another directory of verified sources (coverage)")
     ap.add_argument("--view", default="3d", choices=("3d", "iso", "profile"))
     ap.add_argument("--all-hard", action="store_true", help="treat every constraint as hard (evaluation runs)")
@@ -678,7 +796,7 @@ def main(argv=None):
     cov_faults = None
     if a.coverage:
         dirs = [os.path.join(a.root, "docs", "anim", "sources"), os.path.join(SHARED, "sources")] + a.sources
-        cov_faults = coverage(doc, dirs)
+        cov_faults = coverage(doc, dirs, load_project(a.root, doc))
     if not a.track:
         if a.json:
             print(json.dumps({"schema": "coverage-report/v1", "move": doc["move"],

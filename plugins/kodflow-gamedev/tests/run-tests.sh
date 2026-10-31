@@ -66,6 +66,25 @@ for a in rig-specialist-ik engine-specialist-threejs engine-specialist-godot; do
     grep -q "_shared/project-boundary.md" "$PLUG/agents/$a.md" && ok "$a points to project-boundary.md" || bad "$a boundary reference"
 done
 grep -q "check-constraints.py --coverage" "$PLUG/skills/move/SKILL.md" && ok "/move accepts a spec through the coverage rule" || bad "move coverage"
+# No trace of an evaluated project in what an agent reads: a commit hash
+# (7 to 40 hex digits, at least one digit and one letter) in an agent or a
+# skill is a leak, and an example carrying one teaches it. The evaluation
+# reports under docs/eval/ keep theirs.
+leaks=$(python3 -I - "$PLUG" <<'EOF'
+import pathlib, re, sys
+plug = pathlib.Path(sys.argv[1])
+hexa = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+for p in sorted(list(plug.glob("agents/*.md")) + list(plug.glob("skills/**/*.md"))):
+    for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+        for m in hexa.findall(line):
+            if re.search(r"[0-9]", m) and re.search(r"[a-f]", m):
+                print(f"{p.relative_to(plug)}:{n}: {m}")
+EOF
+)
+[ -z "$leaks" ] && ok "no commit hash in an agent or a skill" || bad "commit hash in an agent or a skill" "$leaks"
+n=$(grep -rliwE "wren|lucky" "$PLUG/agents" "$PLUG/skills" "$PLUG/hooks" "$PLUG/README.md" | wc -l | tr -d ' ')
+[ "$n" -eq 0 ] && ok "no name of an evaluated project in the plugin" || bad "evaluated project named" "$n file(s)"
+grep -q 'mktemp -d "${TMPDIR:-/tmp}/move-<slug>.XXXXXX")' "$PLUG/skills/move/SKILL.md" && ok "/move works in a scratch directory unique to the run" || bad "move scratch"
 grep -q "coverage" "$PLUG/agents/gamedev-animation-director.md" && ok "the director names the coverage rule" || bad "director coverage"
 
 # Meshy: the API facts live in meshy-api.md, the licence rule in

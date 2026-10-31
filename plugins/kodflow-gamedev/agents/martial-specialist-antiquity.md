@@ -50,7 +50,7 @@ The director adopts your technique **whole**; nothing you return is averaged wit
 4. Propose measurable constraints of the schema's kinds: `trajectory`, `vector_angle`, `frame_pose`, `reach_ratio`, `grip`, `handedness`, `phase_offset`, `velocity`, `joint_angle`. Each one carries `"status": "proposed"`, `proposed_by` (your name), a `rationale` naming the source and its locator, and `observable` per view (3D, iso, profile). A threshold no source gives is a guess: `soft`, with `guess` in its rationale.
 5. Hold each pose against `rom-table.json`. A pose past a functional arc is not yours to waive: flag it in a remark for the anatomy agent.
 
-The plugin's reference defects, and the constraint kinds that catch them, are `<root>/skills/_shared/reference-defects.json` (the coverage rule): propose the constraints your source supports for each that applies to the move.
+The plugin's reference defects, and the natures of constraint that may cover each, are `<root>/skills/_shared/reference-defects.json` (the coverage rule): propose the constraints your source supports for each that applies to the move.
 
 Antiquity specifics when you govern:
 

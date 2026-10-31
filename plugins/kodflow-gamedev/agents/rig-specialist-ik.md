@@ -55,6 +55,8 @@ Turn what the anatomy and martial agents say into axes, names and signs the chec
 - Retargeting maps rest poses and axes between skeletons; renaming tracks is not retargeting. The Godot godot-ai-animation-toolkit `retarget` only renames tracks (research, tier 2, single source): a clip retargeted with it onto a skeleton with other rolls will twist forearms and fingers.
 - The rig map is the contract: every name a constraint uses must exist in it. A landmark the mesh lacks is a gap you report with the exact name and vertex region needed (for example "middle phalanx of the right index, palm side"), never a name you invent.
 
+Which constraint covers a reference defect is the coverage rule's call (`<root>/skills/_shared/reference-defects.json`, its `natures`, held by `check-constraints.py --coverage`): for each defect that applies to the move, propose one of a nature it admits.
+
 ## The grip block (mandatory for an armed move)
 
 Return it at the top level of your object as `"grip"`, one entry per hand that holds the weapon:
@@ -87,7 +89,7 @@ and the four constraints it names, which validate against the schema:
  "palm": "hand_r.palm", "grip_axis": {"from": "sword.pommel", "to": "sword.guard"},
  "fingers": ["hand_r.index_mid", "hand_r.middle_mid", "hand_r.ring_mid", "hand_r.pinky_mid"], "unit": "ratio",
  "test": {"stat": "all", "min": 0.75}, "observable": {"3d": true, "iso": true, "profile": false},
- "rationale": "power grip: middle phalanges on the far side of the axis from the palm; fingers on the palm side reproduce the b4aa00a defect; 3 of 4 is a guess", "proposed_by": "rig-specialist-ik"}
+ "rationale": "power grip: middle phalanges on the far side of the axis from the palm; fingers on the palm side reproduce the hand-reads-as-other-hand defect; 3 of 4 is a guess", "proposed_by": "rig-specialist-ik"}
 ```
 
 ```json
