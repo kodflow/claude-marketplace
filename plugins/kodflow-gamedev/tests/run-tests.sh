@@ -55,6 +55,19 @@ python3 -c 'import json,sys; [json.load(open(p)) for p in sys.argv[1:]]' "$SH"/*
     "$PLUG"/.claude-plugin/plugin.json && ok "every JSON file parses" || bad "JSON parses"
 grep -q '"matcher": "^kodflow-gamedev:"' "$PLUG/hooks/hooks.json" && ok "the hook fires for this plugin's agents only" || bad "hook matcher"
 
+# One text per rule (owner decision, 2026-10-31): the coverage rule lives in
+# reference-defects.json and check-constraints.py; the project boundary in
+# project-boundary.md. Elsewhere, a reference by name, never a copy.
+n=$(grep -rl "only a hard constraint covers" "$PLUG" | grep -v '/check-constraints.py$' | grep -v /test_scripts.py$ | grep -v /run-tests.sh$ | wc -l | tr -d ' ')
+[ "$n" -eq 0 ] && ok "the coverage rule is written in check-constraints.py only" || bad "coverage rule copied" "$n file(s)"
+n=$(grep -rl "Read only the repository of the calling project" "$PLUG" | grep -v /run-tests.sh$ | wc -l | tr -d ' ')
+[ "$n" -eq 1 ] && ok "the project boundary is written once (project-boundary.md)" || bad "boundary copies" "$n"
+for a in rig-specialist-ik engine-specialist-threejs engine-specialist-godot; do
+    grep -q "_shared/project-boundary.md" "$PLUG/agents/$a.md" && ok "$a points to project-boundary.md" || bad "$a boundary reference"
+done
+grep -q "check-constraints.py --coverage" "$PLUG/skills/move/SKILL.md" && ok "/move accepts a spec through the coverage rule" || bad "move coverage"
+grep -q "coverage" "$PLUG/agents/gamedev-animation-director.md" && ok "the director names the coverage rule" || bad "director coverage"
+
 echo "== Python scripts ($($PY --version 2>&1))"
 for f in "$SH"/scripts/*.py "$HERE"/test_scripts.py "$HERE"/fixtures/gen_tracks.py; do
     $PY -I -c 'import ast,sys; ast.parse(open(sys.argv[1]).read(), feature_version=(3, 9))' "$f" 2>/dev/null \

@@ -111,10 +111,21 @@ with: the brief, every member's JSON (or its `failed`/`timeout` status), and
   re-run. Nothing is written but the run record.
 - `status: ok` → step 5.
 
-## 5. Write
+## 5. Acceptance, then write
 
-- `docs/anim/<slug>.constraints.json` ← the director's `constraints`, as
-  JSON, two-space indent. Then its hash:
+The spec is accepted only if the director's `constraints`, written first
+to the scratch directory, pass the **coverage rule** — held in one place,
+`check-constraints.py --coverage` (reading `../_shared/reference-defects.json`):
+
+```bash
+python3 -I "$P/skills/_shared/scripts/check-constraints.py" \
+    --constraints "$SCRATCH/<slug>.constraints.json" --coverage --root "$ROOT"
+```
+
+A failure refuses the spec: show its faults as they are, write nothing but
+the run record, and name the agents to re-run. Otherwise:
+
+- `docs/anim/<slug>.constraints.json` ← that same file, unchanged. Then its hash:
   `shasum -a 256 docs/anim/<slug>.constraints.json`.
 - `docs/anim/<slug>.md` ← `spec_markdown`, with the hash written into its
   header. The constraints file is never edited after this point: a change

@@ -18,7 +18,7 @@ Make a move measurable and buildable in Godot 4.7: say how the GLB skeleton arri
 - `curl -sSL --max-time 20 <https url>` to stdout; `shasum -a 256` or `sha256sum` on stdin.
 - Read-only: `godot --version`, `grep` in the project (`.tscn`, `.tres`, `.gd`, `.import`, `project.godot`, the rig map).
 - Read, Glob and Grep for files. No `godot` run other than `--version`, no import, no export, no write anywhere.
-- Read only the repository of the calling project (the project root the brief names) and the plugin root. Never read another repository, a sibling checkout, another revision of the project, or an evaluation fixture, even when one is reachable on disk: a constraint calibrated on code the brief did not give you measures that code, not the move. When the project lacks what you need, put it under `unverified` or `rig_map_gaps` instead.
+- What you may read at all: `<root>/skills/_shared/project-boundary.md`, read before anything else.
 
 ## Inputs
 

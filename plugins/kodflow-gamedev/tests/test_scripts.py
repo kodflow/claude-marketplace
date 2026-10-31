@@ -430,5 +430,59 @@ class References(unittest.TestCase):
         shutil.rmtree(root)
 
 
+class Coverage(unittest.TestCase):
+    """The coverage rule: reference-defects.json, held by check-constraints.py --coverage only."""
+
+    def setUp(self):
+        self.root = pathlib.Path(tempfile.mkdtemp())
+        self.src = self.root / "docs/anim/sources"
+        self.src.mkdir(parents=True)
+        self.good = "a" * 64
+        self.bad = "b" * 64
+        for sha, mode in ((self.good, "exact"), (self.bad, "not_found")):
+            (self.src / f"{sha}.md").write_text(f"```json\n{json.dumps({'sha256': sha, 'match_mode': mode})}\n```\n")
+        self.dirs = [str(self.src)]
+
+    def tearDown(self):
+        shutil.rmtree(self.root)
+
+    def doc(self, cov, weapon="sword", sev="hard", src=None):
+        c = C("frame_pose", {"stat": "all", "max": 1}, target="a", ref="a", severity=sev, source=src or self.good)
+        return {"schema_version": "move-constraints/v1", "move": "m", "fps": 30, "rig_map": "r", "clip": "c",
+                "weapon": weapon, "constraints": [c], "coverage": cov}
+
+    def full(self):
+        return {"locomotion-carry": {"constraints": ["x"]}, "cut-reads-as-thrust": {"not_applicable": "no cut in this move"},
+                "hand-reads-as-other-hand": {"constraints": ["x"]}}
+
+    def test_passes_when_every_defect_is_covered_or_excused(self):
+        self.assertEqual(cc.coverage(self.doc(self.full()), self.dirs), [])
+
+    def test_refusals(self):
+        cov = self.full()
+        self.assertTrue(cc.coverage(self.doc(cov, sev="soft"), self.dirs))                      # soft never covers
+        self.assertTrue(cc.coverage(self.doc(cov, src=self.bad), self.dirs))                    # unverified source
+        self.assertTrue(cc.coverage(self.doc(cov, src="see I.33"), self.dirs))                  # no sha256
+        miss = dict(cov); del miss["locomotion-carry"]
+        self.assertTrue(cc.coverage(self.doc(miss), self.dirs))                                  # a defect left out
+        armed = dict(cov, **{"hand-reads-as-other-hand": {"not_applicable": "no hand"}})
+        self.assertTrue(any("armed" in f for f in cc.coverage(self.doc(armed), self.dirs)))     # required when armed
+        self.assertEqual(cc.coverage(self.doc(armed, weapon="none"), self.dirs), [])            # but not unarmed
+        ghost = dict(cov, **{"locomotion-carry": {"constraints": ["nope"]}})
+        self.assertTrue(cc.coverage(self.doc(ghost), self.dirs))                                 # unknown id
+        doc = self.doc(cov); del doc["coverage"]
+        self.assertTrue(cc.coverage(doc, self.dirs))                                             # no map at all
+
+    def test_cli_coverage_only(self):
+        p = self.root / "c.json"
+        p.write_text(json.dumps(self.doc(self.full())))
+        rc, out, _ = run_cli(cc, ["--constraints", str(p), "--coverage", "--root", str(self.root)])
+        self.assertEqual(rc, 0, out)
+        p.write_text(json.dumps(self.doc(self.full(), sev="soft")))
+        rc, out, _ = run_cli(cc, ["--constraints", str(p), "--coverage", "--root", str(self.root)])
+        self.assertEqual(rc, 1)
+        self.assertIn("soft", out)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

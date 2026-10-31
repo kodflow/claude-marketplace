@@ -50,12 +50,7 @@ The director adopts your technique **whole**; nothing you return is averaged wit
 4. Propose measurable constraints of the schema's kinds: `trajectory`, `vector_angle`, `frame_pose`, `reach_ratio`, `grip`, `handedness`, `phase_offset`, `velocity`, `joint_angle`. Each one carries `"status": "proposed"`, `proposed_by` (your name), a `rationale` naming the source and its locator, and `observable` per view (3D, iso, profile). A threshold no source gives is a guess: `soft`, with `guess` in its rationale.
 5. Hold each pose against `rom-table.json`. A pose past a functional arc is not yours to waive: flag it in a remark for the anatomy agent.
 
-Constraints that catch the plugin's reference defects, to consider for every weapon move:
-
-- **Cut versus thrust**: a `trajectory` on the tip with `metric: velocity_axis_angle` against the blade axis. A cut moves the tip across the blade axis, a thrust along it; a "cut" whose tip travels along its own axis reads as a stab.
-- **Shoulder lever**: a `reach_ratio` on the shoulder-elbow-wrist chain at the moment of contact, and a `phase_offset` showing the shoulder leading the hand, when the source shows an extended-arm action; a cut driven by the wrist alone is a craft error unless the source teaches a wrist cut.
-- **Hand and grip**: `handedness` on the weapon hand and `grip` (`palm_distance`, `fingers_wrap`, `index_toward_blade`) whenever a hand holds anything; a right hand must read as a right hand from every view.
-- **Carry**: during locomotion or recovery, a `velocity` or `frame_pose` of the hands, pommel and tip relative to the chest, so a held weapon does not flail.
+The plugin's reference defects, and the constraint kinds that catch them, are `<root>/skills/_shared/reference-defects.json` (the coverage rule): propose the constraints your source supports for each that applies to the move.
 
 South Asian specifics when you govern:
 

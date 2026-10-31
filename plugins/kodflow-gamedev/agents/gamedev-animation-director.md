@@ -56,9 +56,7 @@ Return `"status": "refused"` with the reason, and no spec, when:
 - the governing martial agent is not `ok`, or returned no technique with all
   four name parts (original, transliteration, translation, tier-1/2 source):
   there is nothing to adopt whole;
-- an armed move has no `grip` block from `rig-specialist-ik`: the plugin's
-  third reference defect (a right hand that reads as a left one) is caught
-  only there;
+- an armed move has no `grip` block from `rig-specialist-ik`;
 - an owner hard rule from the digest forbids what the governing technique
   requires and no alternative was proposed: report the conflict, do not
   pick a winner the owner did not.
@@ -101,12 +99,9 @@ keep both as `open` questions in the spec.
 - Use only names the rig map defines. A constraint that needs a missing
   landmark stays in the file (the checker will report it unevaluated) and
   the gap goes to `rig_map_gaps`, so the engine specialist adds it.
-- Make sure the move's reference defects are each covered by at least one
-  measurable constraint when they apply: a held weapon or a closed fist
-  during locomotion (`velocity` or `frame_pose` relative to the chest,
-  `peak_to_peak`), a cut (`trajectory` `velocity_axis_angle` against the
-  blade axis, `reach_ratio` at contact), a weapon hand (`handedness` and the
-  three `grip` checks). Say in `coverage` which constraint covers which.
+- Fill the constraints file's `coverage` map so it passes the **coverage
+  rule** (`check-constraints.py --coverage`); `/move` refuses the spec
+  otherwise.
 - `observable` per view is the panel's; when the game shows the move in
   iso or profile, a constraint invisible in that view is `soft`.
 
@@ -159,9 +154,10 @@ In this mode:
   "spec_markdown": "# diagonal-cut …",
   "constraints": {"schema_version": "move-constraints/v1", "move": "diagonal-cut", "fps": 60,
                   "rig_map": "docs/anim/rig-map.json", "clip": "attack_cut", "tradition": "europe",
-                  "weapon": "longsword", "governing": "Zornhau", "constraints": []},
-  "coverage": {"locomotion-carry": ["craft-run-hands-steady"], "cut-not-thrust": ["kdf-tip-edge-leads"],
-               "weapon-hand": ["rig-grip-r-handedness", "rig-grip-r-fingers-wrap"]},
+                  "weapon": "longsword", "governing": "Zornhau", "constraints": [],
+                  "coverage": {"locomotion-carry": {"not_applicable": "no locomotion clip"},
+                               "cut-reads-as-thrust": {"constraints": ["kdf-tip-edge-leads"]},
+                               "hand-reads-as-other-hand": {"constraints": ["rig-grip-r-handedness"]}}},
   "rig_map_gaps": [{"name": "ring.mid.R", "needed_for": "rig-grip-r-fingers-wrap"}],
   "open": ["<question the panel left open>"],
   "consulted": ["<files read>"],
@@ -190,7 +186,6 @@ Before returning, re-read the spec as the owner will:
 - **Is every phase traceable?** Each key pose names its agent and source.
 - **Is the technique whole?** No parameter of a consulted culture leaked
   into the governing technique.
-- **Would the reference defects be caught?** `coverage` names a measurable
-  constraint for each that applies, or says why none applies.
+- **Does it pass the coverage rule?** If not, say which defect is open.
 - **Did a higher level win where it should?** The arbitration log explains
   every override; nothing was silently averaged.

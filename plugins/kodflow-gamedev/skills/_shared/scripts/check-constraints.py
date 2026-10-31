@@ -4,6 +4,16 @@
     python3 -I check-constraints.py --constraints <move>.constraints.json \
         --track run.pose.json [--track …] [--view 3d|iso|profile] \
         [--all-hard] [--status confirmed] [--allow-unevaluated] [--json]
+    python3 -I check-constraints.py --constraints <move>.constraints.json --coverage \
+        [--root <project>] [--sources <dir>]…
+
+--coverage holds the coverage rule, here and nowhere else: every defect of
+../reference-defects.json is either marked not applicable (when its
+`required_when` allows it) or covered by at least one hard constraint whose
+`source` is the sha256 of a verified source — a cache entry whose match is
+exact or normalised, in <project>/docs/anim/sources/, this plugin's
+skills/_shared/sources/, or a --sources directory. A spec that fails it is
+refused. With tracks as well, the coverage verdict joins the run's.
 
 Inputs are move-constraints/v1 (what the panel wrote) and pose-track/v1 (what
 a sampler measured: world transforms of bones and props, world points of
@@ -20,6 +30,8 @@ Standard library only, Python 3.9 or later. Coordinates are right-handed,
 +Y up; angles are degrees, lengths metres, time seconds.
 """
 import argparse
+import os
+import re
 import hashlib
 import json
 import math
@@ -496,6 +508,72 @@ def judge(tr, series, t):
     return v, inside(v, t)
 
 
+# --------------------------------------------------------------- coverage
+
+SHARED = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SHA = re.compile(r"^[0-9a-f]{64}$")
+HEADER = re.compile(r"```json[ \t]*\n(.*?)\n```", re.S)
+
+
+def verified_source(sha, dirs):
+    """The cache entry of a verified source with this sha256, or None."""
+    for d in dirs:
+        path = os.path.join(d, f"{sha}.md")
+        try:
+            with open(path, encoding="utf-8") as f:
+                m = HEADER.search(f.read())
+            rec = json.loads(m.group(1)) if m else {}
+        except (OSError, ValueError):
+            continue
+        if rec.get("sha256") == sha and rec.get("match_mode") in ("exact", "normalised"):
+            return path
+    return None
+
+
+def coverage(doc, dirs, catalogue_path=None):
+    """Faults of the coverage rule; an empty list means the spec may ship."""
+    catalogue_path = catalogue_path or os.path.join(SHARED, "reference-defects.json")
+    try:
+        defects = load_json(catalogue_path)["defects"]
+    except (OSError, ValueError, KeyError) as e:
+        return [f"reference defects unreadable ({e}): nothing can be judged"]
+    cov = doc.get("coverage")
+    if not isinstance(cov, dict):
+        return ["no coverage map: every reference defect must be covered or marked not_applicable"]
+    by_id = {c.get("id"): c for c in doc.get("constraints") or []}
+    weapon = str(doc.get("weapon") or "").strip().lower()
+    faults = []
+    for d in defects:
+        did = d["id"]
+        entry = cov.get(did)
+        if not isinstance(entry, dict):
+            faults.append(f"{did}: neither covered nor marked not_applicable")
+            continue
+        if "not_applicable" in entry:
+            if d.get("required_when", {}).get("weapon") == "any" and weapon not in ("", "none"):
+                faults.append(f"{did}: required for an armed move (weapon {weapon}), cannot be not_applicable")
+            elif not str(entry["not_applicable"]).strip():
+                faults.append(f"{did}: not_applicable without a reason")
+            continue
+        ids = entry.get("constraints") or []
+        good = []
+        for cid in ids:
+            c = by_id.get(cid)
+            if c is None:
+                faults.append(f"{did}: {cid} is not a constraint of this file")
+            elif c.get("severity") != "hard":
+                faults.append(f"{did}: {cid} is soft; only a hard constraint covers a defect")
+            elif not SHA.match(str(c.get("source", ""))):
+                faults.append(f"{did}: {cid} has no source sha256")
+            elif not verified_source(c["source"], dirs):
+                faults.append(f"{did}: {cid} cites {c['source'][:12]}…, which is not a verified source")
+            else:
+                good.append(cid)
+        if not good:
+            faults.append(f"{did}: no hard constraint with a verified source covers it")
+    return faults
+
+
 # ------------------------------------------------------------------- main
 
 def sha256_file(path):
@@ -569,7 +647,10 @@ def evaluate(doc, tracks, view="3d", all_hard=False, status=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--constraints", required=True)
-    ap.add_argument("--track", action="append", default=[], required=True)
+    ap.add_argument("--track", action="append", default=[])
+    ap.add_argument("--coverage", action="store_true", help="hold the coverage rule (reference-defects.json)")
+    ap.add_argument("--root", default=".", help="project root, for docs/anim/sources/ (coverage)")
+    ap.add_argument("--sources", action="append", default=[], help="another directory of verified sources (coverage)")
     ap.add_argument("--view", default="3d", choices=("3d", "iso", "profile"))
     ap.add_argument("--all-hard", action="store_true", help="treat every constraint as hard (evaluation runs)")
     ap.add_argument("--status", choices=("proposed", "confirmed"), help="only constraints with this status")
@@ -577,6 +658,8 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     a = ap.parse_args(argv)
 
+    if not a.track and not a.coverage:
+        ap.error("--track is required unless --coverage is given")
     try:
         doc = load_json(a.constraints)
         tracks = {}
@@ -591,6 +674,21 @@ def main(argv=None):
         for b in bad:
             print(f"check-constraints: {a.constraints}: {b}", file=sys.stderr)
         return EXIT_USAGE
+
+    cov_faults = None
+    if a.coverage:
+        dirs = [os.path.join(a.root, "docs", "anim", "sources"), os.path.join(SHARED, "sources")] + a.sources
+        cov_faults = coverage(doc, dirs)
+    if not a.track:
+        if a.json:
+            print(json.dumps({"schema": "coverage-report/v1", "move": doc["move"],
+                              "constraints_sha256": sha256_file(a.constraints),
+                              "verdict": "fail" if cov_faults else "pass", "faults": cov_faults}, indent=2))
+        else:
+            print(f"{doc['move']}: coverage {'fail' if cov_faults else 'pass'}")
+            for f in cov_faults:
+                print(f"  -> {f}")
+        return EXIT_FAIL if cov_faults else EXIT_OK
 
     results = evaluate(doc, tracks, a.view, a.all_hard, a.status)
     total = len(results)
@@ -614,6 +712,9 @@ def main(argv=None):
         reasons.append("no constraint applies (total 0)")
     if evaluated < total and not a.allow_unevaluated:
         reasons.append(f"only {evaluated}/{total} evaluated")
+    if cov_faults:
+        reasons.append(f"coverage rule: {len(cov_faults)} fault(s)")
+    report["coverage"] = cov_faults
     report["verdict"] = "fail" if reasons else "pass"
     report["why"] = reasons
 

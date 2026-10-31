@@ -14,26 +14,80 @@
   ],
   "additionalProperties": false,
   "properties": {
-    "schema_version": { "const": "move-constraints/v1" },
-    "move": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
-    "fps": { "type": "number", "exclusiveMinimum": 0 },
+    "schema_version": {
+      "const": "move-constraints/v1"
+    },
+    "move": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "fps": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
     "rig_map": {
       "description": "Path, relative to the project root, of the rig map whose logical names the constraints use, or the map itself.",
-      "type": ["string", "object"]
+      "type": [
+        "string",
+        "object"
+      ]
     },
     "clip": {
       "type": "string",
       "description": "Default clip the constraints are measured on."
     },
-    "tradition": { "type": "string" },
-    "weapon": { "type": "string" },
+    "tradition": {
+      "type": "string"
+    },
+    "weapon": {
+      "type": "string"
+    },
     "governing": {
       "type": "string",
       "description": "Name of the governing technique, in its original language."
     },
     "constraints": {
       "type": "array",
-      "items": { "$ref": "#/$defs/constraint" }
+      "items": {
+        "$ref": "#/$defs/constraint"
+      }
+    },
+    "coverage": {
+      "description": "The coverage rule (reference-defects.json, held by check-constraints.py --coverage): every reference defect maps to the ids of hard constraints with a verified source, or to a reason it does not apply.",
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "constraints"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "constraints": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "not_applicable"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "not_applicable": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        ]
+      }
     }
   },
   "$defs": {
@@ -43,7 +97,9 @@
     },
     "vec3": {
       "type": "array",
-      "items": { "type": "number" },
+      "items": {
+        "type": "number"
+      },
       "minItems": 3,
       "maxItems": 3
     },
@@ -52,27 +108,47 @@
       "oneOf": [
         {
           "type": "object",
-          "required": ["from", "to"],
+          "required": [
+            "from",
+            "to"
+          ],
           "additionalProperties": false,
           "properties": {
-            "from": { "$ref": "#/$defs/name" },
-            "to": { "$ref": "#/$defs/name" }
+            "from": {
+              "$ref": "#/$defs/name"
+            },
+            "to": {
+              "$ref": "#/$defs/name"
+            }
           }
         },
         {
           "type": "object",
-          "required": ["axis", "of"],
+          "required": [
+            "axis",
+            "of"
+          ],
           "additionalProperties": false,
           "properties": {
-            "axis": { "$ref": "#/$defs/vec3" },
-            "of": { "$ref": "#/$defs/name" }
+            "axis": {
+              "$ref": "#/$defs/vec3"
+            },
+            "of": {
+              "$ref": "#/$defs/name"
+            }
           }
         },
         {
           "type": "object",
-          "required": ["world"],
+          "required": [
+            "world"
+          ],
           "additionalProperties": false,
-          "properties": { "world": { "$ref": "#/$defs/vec3" } }
+          "properties": {
+            "world": {
+              "$ref": "#/$defs/vec3"
+            }
+          }
         }
       ]
     },
@@ -80,32 +156,78 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "from": { "type": ["number", "string"] },
-        "to": { "type": ["number", "string"] }
+        "from": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "to": {
+          "type": [
+            "number",
+            "string"
+          ]
+        }
       }
     },
     "test": {
       "description": "How the per-frame series is judged. all/any: every/some frame inside [min, max]. mean, max, min, peak_to_peak: that statistic inside [min, max]. at: the value at the share `at` of the clip.",
       "type": "object",
-      "required": ["stat"],
+      "required": [
+        "stat"
+      ],
       "additionalProperties": false,
       "properties": {
         "stat": {
-          "enum": ["all", "any", "mean", "max", "min", "peak_to_peak", "at"]
+          "enum": [
+            "all",
+            "any",
+            "mean",
+            "max",
+            "min",
+            "peak_to_peak",
+            "at"
+          ]
         },
-        "at": { "type": ["number", "string"] },
-        "min": { "type": "number" },
-        "max": { "type": "number" }
+        "at": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        }
       },
-      "anyOf": [{ "required": ["min"] }, { "required": ["max"] }]
+      "anyOf": [
+        {
+          "required": [
+            "min"
+          ]
+        },
+        {
+          "required": [
+            "max"
+          ]
+        }
+      ]
     },
     "observable": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "3d": { "type": "boolean" },
-        "iso": { "type": "boolean" },
-        "profile": { "type": "boolean" }
+        "3d": {
+          "type": "boolean"
+        },
+        "iso": {
+          "type": "boolean"
+        },
+        "profile": {
+          "type": "boolean"
+        }
       }
     },
     "constraint": {
@@ -120,7 +242,10 @@
         "test"
       ],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
         "kind": {
           "enum": [
             "joint_angle",
@@ -134,14 +259,38 @@
             "handedness"
           ]
         },
-        "severity": { "enum": ["hard", "soft"] },
-        "status": { "enum": ["proposed", "confirmed"] },
-        "clip": { "type": "string" },
-        "window": { "$ref": "#/$defs/window" },
-        "observable": { "$ref": "#/$defs/observable" },
-        "rationale": { "type": "string", "minLength": 1 },
-        "proposed_by": { "type": "string" },
-        "source": { "type": "string" },
+        "severity": {
+          "enum": [
+            "hard",
+            "soft"
+          ]
+        },
+        "status": {
+          "enum": [
+            "proposed",
+            "confirmed"
+          ]
+        },
+        "clip": {
+          "type": "string"
+        },
+        "window": {
+          "$ref": "#/$defs/window"
+        },
+        "observable": {
+          "$ref": "#/$defs/observable"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "proposed_by": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "description": "sha256 of the verified source the constraint rests on (a cache entry of cache-source.py, or of the plugin's skills/_shared/sources/); required for a constraint that covers a reference defect."
+        },
         "unit": {
           "enum": [
             "deg",
@@ -154,73 +303,181 @@
             "count"
           ]
         },
-        "test": { "$ref": "#/$defs/test" }
+        "test": {
+          "$ref": "#/$defs/test"
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "kind": { "const": "joint_angle" } } },
-          "then": {
-            "required": ["bone", "parent", "component"],
+          "if": {
             "properties": {
-              "bone": { "$ref": "#/$defs/name" },
-              "parent": { "$ref": "#/$defs/name" },
-              "component": { "enum": ["swing", "twist", "euler", "total"] },
+              "kind": {
+                "const": "joint_angle"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "bone",
+              "parent",
+              "component"
+            ],
+            "properties": {
+              "bone": {
+                "$ref": "#/$defs/name"
+              },
+              "parent": {
+                "$ref": "#/$defs/name"
+              },
+              "component": {
+                "enum": [
+                  "swing",
+                  "twist",
+                  "euler",
+                  "total"
+                ]
+              },
               "axis": {
                 "$ref": "#/$defs/vec3",
                 "description": "Twist axis in the bone's local frame (swing and twist)."
               },
-              "order": { "enum": ["XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"] },
-              "euler_axis": { "enum": ["x", "y", "z"] }
+              "order": {
+                "enum": [
+                  "XYZ",
+                  "XZY",
+                  "YXZ",
+                  "YZX",
+                  "ZXY",
+                  "ZYX"
+                ]
+              },
+              "euler_axis": {
+                "enum": [
+                  "x",
+                  "y",
+                  "z"
+                ]
+              }
             }
           }
         },
         {
-          "if": { "properties": { "kind": { "const": "frame_pose" } } },
-          "then": {
-            "required": ["target", "ref"],
+          "if": {
             "properties": {
-              "target": { "$ref": "#/$defs/name" },
-              "ref": { "$ref": "#/$defs/name" },
-              "component": { "enum": ["x", "y", "z", "distance"] },
+              "kind": {
+                "const": "frame_pose"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "target",
+              "ref"
+            ],
+            "properties": {
+              "target": {
+                "$ref": "#/$defs/name"
+              },
+              "ref": {
+                "$ref": "#/$defs/name"
+              },
+              "component": {
+                "enum": [
+                  "x",
+                  "y",
+                  "z",
+                  "distance"
+                ]
+              },
               "orientation": {
                 "type": "object",
-                "required": ["axis", "ref_axis"],
+                "required": [
+                  "axis",
+                  "ref_axis"
+                ],
                 "properties": {
-                  "axis": { "$ref": "#/$defs/vec3" },
-                  "ref_axis": { "$ref": "#/$defs/vec3" }
+                  "axis": {
+                    "$ref": "#/$defs/vec3"
+                  },
+                  "ref_axis": {
+                    "$ref": "#/$defs/vec3"
+                  }
                 }
               }
             }
           }
         },
         {
-          "if": { "properties": { "kind": { "const": "vector_angle" } } },
-          "then": {
-            "required": ["a", "b"],
+          "if": {
             "properties": {
-              "a": { "$ref": "#/$defs/vector" },
-              "b": { "$ref": "#/$defs/vector" }
+              "kind": {
+                "const": "vector_angle"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "a",
+              "b"
+            ],
+            "properties": {
+              "a": {
+                "$ref": "#/$defs/vector"
+              },
+              "b": {
+                "$ref": "#/$defs/vector"
+              }
             }
           }
         },
         {
-          "if": { "properties": { "kind": { "const": "velocity" } } },
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "velocity"
+              }
+            }
+          },
           "then": {
             "properties": {
-              "point": { "$ref": "#/$defs/name" },
-              "bone": { "$ref": "#/$defs/name" },
-              "relative_to": { "$ref": "#/$defs/name" },
-              "mode": { "enum": ["linear", "angular"] }
+              "point": {
+                "$ref": "#/$defs/name"
+              },
+              "bone": {
+                "$ref": "#/$defs/name"
+              },
+              "relative_to": {
+                "$ref": "#/$defs/name"
+              },
+              "mode": {
+                "enum": [
+                  "linear",
+                  "angular"
+                ]
+              }
             }
           }
         },
         {
-          "if": { "properties": { "kind": { "const": "trajectory" } } },
-          "then": {
-            "required": ["point", "metric"],
+          "if": {
             "properties": {
-              "point": { "$ref": "#/$defs/name" },
-              "relative_to": { "$ref": "#/$defs/name" },
+              "kind": {
+                "const": "trajectory"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "point",
+              "metric"
+            ],
+            "properties": {
+              "point": {
+                "$ref": "#/$defs/name"
+              },
+              "relative_to": {
+                "$ref": "#/$defs/name"
+              },
               "metric": {
                 "enum": [
                   "velocity_axis_angle",
@@ -229,66 +486,148 @@
                   "path_length"
                 ]
               },
-              "blade_axis": { "$ref": "#/$defs/vector" },
-              "against": { "$ref": "#/$defs/vector" }
+              "blade_axis": {
+                "$ref": "#/$defs/vector"
+              },
+              "against": {
+                "$ref": "#/$defs/vector"
+              }
             }
           }
         },
         {
-          "if": { "properties": { "kind": { "const": "phase_offset" } } },
-          "then": {
-            "required": ["a", "b"],
+          "if": {
             "properties": {
-              "a": { "$ref": "#/$defs/series" },
-              "b": { "$ref": "#/$defs/series" }
+              "kind": {
+                "const": "phase_offset"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "a",
+              "b"
+            ],
+            "properties": {
+              "a": {
+                "$ref": "#/$defs/series"
+              },
+              "b": {
+                "$ref": "#/$defs/series"
+              }
             }
           }
         },
         {
-          "if": { "properties": { "kind": { "const": "reach_ratio" } } },
-          "then": {
-            "required": ["from", "to", "chain"],
+          "if": {
             "properties": {
-              "from": { "$ref": "#/$defs/name" },
-              "to": { "$ref": "#/$defs/name" },
+              "kind": {
+                "const": "reach_ratio"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "from",
+              "to",
+              "chain"
+            ],
+            "properties": {
+              "from": {
+                "$ref": "#/$defs/name"
+              },
+              "to": {
+                "$ref": "#/$defs/name"
+              },
               "chain": {
                 "type": "array",
-                "items": { "$ref": "#/$defs/name" },
+                "items": {
+                  "$ref": "#/$defs/name"
+                },
                 "minItems": 2
               }
             }
           }
         },
         {
-          "if": { "properties": { "kind": { "const": "grip" } } },
-          "then": {
-            "required": ["palm", "grip_axis", "check"],
+          "if": {
             "properties": {
-              "palm": { "$ref": "#/$defs/name" },
-              "grip_axis": { "$ref": "#/$defs/vector" },
+              "kind": {
+                "const": "grip"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "palm",
+              "grip_axis",
+              "check"
+            ],
+            "properties": {
+              "palm": {
+                "$ref": "#/$defs/name"
+              },
+              "grip_axis": {
+                "$ref": "#/$defs/vector"
+              },
               "fingers": {
                 "type": "array",
-                "items": { "$ref": "#/$defs/name" }
+                "items": {
+                  "$ref": "#/$defs/name"
+                }
               },
-              "index": { "$ref": "#/$defs/name" },
-              "pinky": { "$ref": "#/$defs/name" },
+              "index": {
+                "$ref": "#/$defs/name"
+              },
+              "pinky": {
+                "$ref": "#/$defs/name"
+              },
               "check": {
-                "enum": ["palm_distance", "fingers_wrap", "index_toward_blade"]
+                "enum": [
+                  "palm_distance",
+                  "fingers_wrap",
+                  "index_toward_blade"
+                ]
               }
             }
           }
         },
         {
-          "if": { "properties": { "kind": { "const": "handedness" } } },
-          "then": {
-            "required": ["index", "pinky", "wrist", "middle", "palm", "center"],
+          "if": {
             "properties": {
-              "index": { "$ref": "#/$defs/name" },
-              "pinky": { "$ref": "#/$defs/name" },
-              "wrist": { "$ref": "#/$defs/name" },
-              "middle": { "$ref": "#/$defs/name" },
-              "palm": { "$ref": "#/$defs/name" },
-              "center": { "$ref": "#/$defs/name" }
+              "kind": {
+                "const": "handedness"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "index",
+              "pinky",
+              "wrist",
+              "middle",
+              "palm",
+              "center"
+            ],
+            "properties": {
+              "index": {
+                "$ref": "#/$defs/name"
+              },
+              "pinky": {
+                "$ref": "#/$defs/name"
+              },
+              "wrist": {
+                "$ref": "#/$defs/name"
+              },
+              "middle": {
+                "$ref": "#/$defs/name"
+              },
+              "palm": {
+                "$ref": "#/$defs/name"
+              },
+              "center": {
+                "$ref": "#/$defs/name"
+              }
             }
           }
         }
@@ -296,12 +635,25 @@
     },
     "series": {
       "type": "object",
-      "required": ["point", "component"],
+      "required": [
+        "point",
+        "component"
+      ],
       "additionalProperties": false,
       "properties": {
-        "point": { "$ref": "#/$defs/name" },
-        "ref": { "$ref": "#/$defs/name" },
-        "component": { "enum": ["x", "y", "z"] }
+        "point": {
+          "$ref": "#/$defs/name"
+        },
+        "ref": {
+          "$ref": "#/$defs/name"
+        },
+        "component": {
+          "enum": [
+            "x",
+            "y",
+            "z"
+          ]
+        }
       }
     }
   }
