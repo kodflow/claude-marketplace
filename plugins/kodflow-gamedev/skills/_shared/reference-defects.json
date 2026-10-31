@@ -1,0 +1,28 @@
+{
+  "schema": "reference-defects/v1",
+  "rule": "coverage",
+  "note": "The coverage rule, held in one place: check-constraints.py --coverage reads this file. A move's constraints file maps every defect below either to the ids of hard constraints whose `source` is the sha256 of a verified source (match exact or normalised, in docs/anim/sources/ or this plugin's skills/_shared/sources/), or to {\"not_applicable\": \"<reason>\"}. A defect whose `required_when` holds cannot be not_applicable. Anything else refuses the spec.",
+  "defects": [
+    {
+      "id": "locomotion-carry",
+      "what": "A held weapon, a closed fist or a shield beats against the body during locomotion instead of riding with the torso.",
+      "required_when": {},
+      "kinds": ["velocity", "frame_pose", "trajectory"],
+      "hint": "Speed or peak-to-peak displacement of the hands, pommel and tip in the chest's frame, on the locomotion clips."
+    },
+    {
+      "id": "cut-reads-as-thrust",
+      "what": "A cut whose tip travels along its own blade axis, driven by the wrist rather than the shoulder: it reads as a stab.",
+      "required_when": {},
+      "kinds": ["trajectory", "reach_ratio", "phase_offset", "vector_angle"],
+      "hint": "Tip velocity against the blade axis (velocity_axis_angle), arm extension at contact, the shoulder leading the hand, the line the source draws."
+    },
+    {
+      "id": "hand-reads-as-other-hand",
+      "what": "A weapon hand that reads as the other hand: the forearm turned past its range, the hand mirrored, or the fingers closed on the wrong side of the grip.",
+      "required_when": { "weapon": "any" },
+      "kinds": ["handedness", "grip", "joint_angle"],
+      "hint": "handedness on the weapon hand, the grip checks (palm_distance, fingers_wrap, index_toward_blade), forearm rotation against the anatomy table."
+    }
+  ]
+}

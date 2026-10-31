@@ -46,6 +46,20 @@ TIER = {
 
 CODEX_EFFORTS = {"low", "medium", "high", "xhigh"}
 
+# Plugins a project enables for itself and nobody installs for the user
+# (scripts/install-exclude.txt, which install.sh reads too): their skills and
+# agents only make sense inside such a project, so Codex gets none of them.
+def excluded_plugins(root):
+    f = root / "scripts" / "install-exclude.txt"
+    if not f.is_file():
+        return set()
+    return {l.split("#", 1)[0].strip() for l in f.read_text().splitlines()} - {""}
+
+EXCLUDE_PLUGINS = excluded_plugins(ROOT)
+
+def plugin_of(path):
+    return path.relative_to(ROOT).parts[1]
+
 def neutralise(t):
     for pat, rep in NEUTRALISE:
         t = re.sub(pat, rep, t)
@@ -72,7 +86,7 @@ for d in (skills_out, agents_out):
 written = set()
 n_sk = 0
 for src in sorted(ROOT.glob("plugins/*/skills/*")):
-    if not src.is_dir(): continue
+    if not src.is_dir() or plugin_of(src) in EXCLUDE_PLUGINS: continue
     name = src.name
     dst = skills_out / name
     dst.mkdir(parents=True, exist_ok=True)
@@ -104,6 +118,7 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
 # ---- agents ---------------------------------------------------------------
 n_ag = 0
 for src in sorted(ROOT.glob("plugins/*/agents/*.md")):
+    if plugin_of(src) in EXCLUDE_PLUGINS: continue
     fm, body = split(src.read_text())
     name = fm.get("name", src.stem)
     model, effort = TIER.get(str(fm.get("model", "sonnet")), TIER["sonnet"])

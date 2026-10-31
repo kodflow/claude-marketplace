@@ -1,0 +1,10 @@
+{
+  "name": "kodflow-gamedev",
+  "description": "Combat animation that is anatomically and martially right, for game projects that enable it. /move briefs a panel (director, anatomy, six martial areas, animation craft, rig, imagery, Godot and three.js) and turns its sourced proposals into measurable constraints; /anim-review measures a sampled clip against them and asks the owner's verdict; /anim-feedback records that verdict as an ADR that every later run reads first; /reference fetches licensed reference images. Enabled per project, never installed by the user installer.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "license": "MIT"
+}

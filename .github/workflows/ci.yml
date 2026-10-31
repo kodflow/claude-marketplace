@@ -240,6 +240,11 @@ jobs:
       - name: The code-home locator picks the right folder
         run: bash scripts/tests/test_locate_code_home.sh
 
+      # A plugin a project enables for itself (scripts/install-exclude.txt)
+      # is never installed for the user, and the rest of the manifest is.
+      - name: The installer skips the per-project plugins, and only them
+        run: bash scripts/tests/test_install.sh
+
       # Pruning is invisible to the freshness check below: a generator that
       # stopped deleting produces no diff, it just leaves a dropped skill
       # installed for ever. So it is exercised against a seeded fixture.
@@ -278,6 +283,10 @@ jobs:
         run: RECAP_BASH=/bin/bash /bin/bash scripts/tests/test_recap.sh
       - name: Documents state under /bin/bash 3.2
         run: DOCS_BASH=/bin/bash /bin/bash scripts/tests/test_docs.sh
+      # kodflow-gamedev's SubagentStart hook (rules-digest.sh) and the rest of
+      # its suite, under the shell macOS runs hooks with.
+      - name: kodflow-gamedev's suite under /bin/bash 3.2
+        run: /bin/bash plugins/kodflow-gamedev/tests/run-tests.sh
 
   # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
   # are checked by the engine itself, at the version the README names as
@@ -349,6 +358,26 @@ jobs:
 
       - name: kodflow-hud's tests, in the engine (claude plugin test)
         run: claude plugin test plugins/kodflow-hud
+
+      # kodflow-gamedev: agents, skills and one command hook, no mod. Held to
+      # the same validator; only the "version" warning is tolerated.
+      - name: The engine reads kodflow-gamedev as meant
+        run: |
+          set +e
+          claude plugin validate --strict --json plugins/kodflow-gamedev > validate-gamedev.json
+          set -e
+          cat validate-gamedev.json
+          python3 - <<'PY'
+          import json, sys
+          r = json.load(open("validate-gamedev.json"))
+          parts = [r["manifest"]] + r.get("contents", [])
+          errors = [e for p in parts for e in p.get("errors", [])]
+          warnings = [w for p in parts for w in p.get("warnings", []) if w.get("path") != "version"]
+          bad = errors + warnings
+          for item in bad:
+              print("::error::%s" % item)
+          sys.exit(1 if bad else 0)
+          PY
 
       # Also the bash-guard corpus against the mod's guards (the same rows the
       # shell job plays against on-tool.sh) and the module's invariants.

@@ -46,6 +46,18 @@ for a in routed:
     if got is not None:
         check(f"{a} copy is identical", got == canon)
 
+# Plugins whose agents no routing table lists — a skill of theirs briefs them
+# by subagent_type — carry the same section: every agent file of the plugin
+# is read, so an agent added there is covered without touching this test.
+for plugin in ("kodflow-gamedev",):
+    files = sorted((ROOT / "plugins" / plugin / "agents").glob("*.md"))
+    check(f"{plugin} has agents", len(files) > 0, "none found")
+    for f in files:
+        got = section(f.read_text())
+        check(f"{plugin}:{f.stem} carries the section", got is not None)
+        if got is not None:
+            check(f"{plugin}:{f.stem} copy is identical", got == canon)
+
 brief = DEBATE.read_text()
 check("debate.md brief uses the Plan review mode marker", "Plan review\nmode" in brief or "Plan review mode" in brief)
 check("debate.md names the six fields", all(f in brief for f in ("severity", "claim", "evidence", "remedy", "consulted", "unverified")))

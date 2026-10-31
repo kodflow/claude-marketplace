@@ -160,7 +160,7 @@ fails by accident blocks every shell call of the session.
 |-------|--------|------|-------|-----------|---------|
 | `PreToolUse` · Bash | `on-tool.sh` | no `git`/`gh`/`glab`/`curl`/`wget`/`http` on the line once unquoted (and no `$'…'`) | read by the shell reader below: the main thread producing into a repository (delegation gate) · `--no-verify`, `-n` on a commit, `-c core.hooksPath` · AI attribution or workflow leak in a commit message, AI attribution in a PR/MR title or body · credential shapes in the staged blobs · a forced push (`--force`, `-f`, `+refspec`), with the command to run instead · from a subagent: any merge, any push to the default branch | none: the input is never rewritten | log; a main-thread merge is tagged `root_guard: merge` |
 | `PreToolUse` · task tools | `on-tool.sh` | the mod's task tools never reach it (a call a function hook answers fires no `PreToolUse`); the old MCP names are logged and passed | built-in `TaskCreate`/`TodoWrite` while the mod beats: their chat panel duplicates the status line, the refusal points at the kodflow task tools | — | log |
-| `PreToolUse` · Write/Edit | `on-tool.sh` | main thread writing inside a git work tree (memory and Claude configuration excepted) · no file path | the main thread producing into a repository (delegation gate) · protected path (defaults or `.claude/protected-paths`) | — | log (no linter call: ktn-linter reports through its own command hooks) |
+| `PreToolUse` · Write/Edit | `on-tool.sh` | main thread writing inside a git work tree (memory and Claude configuration excepted, and a plugin's `root-write-allow` where the repository enables that plugin) · no file path | the main thread producing into a repository (delegation gate) · protected path (defaults or `.claude/protected-paths`) | — | log (no linter call: ktn-linter reports through its own command hooks) |
 | `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` | — | log; a main-thread merge is tagged `root_guard: merge` |
 | `PostToolUse` · Write/Edit | `on-tool.sh` | file absent; then markdown, `.claude/` | — | `docs.json` rebuilt after a write under `docs/` (markdown included), at most every 30 s otherwise · `document concerné` for each document the file concerns, once per session (below) · format (Makefile `fmt`/`format` first, then the formatter for the extension) and say so when the bytes changed · then, for a Go file (Write/Edit/MultiEdit), the ktn-linter findings of that file with the instruction to fix them now, unless ktn-linter's own PostToolUse hook is installed or `KODFLOW_LINT=off` (below) | edited-file tracker · risky construct warning once per session · log |
 | `PreToolUse` · Agent/Task | `on-tool.sh` | gated-model fallback first, every caller, no jq; then the main thread only | a gated model when the mod does not beat · from the main thread, a `general-purpose` dispatch whose description names an installed specialist's technology (routing gate, below) · from the main thread, `isolation: "worktree"` on work in another repository (isolation gate, below) | — | log, `root_guard: route-deny`, `route-override`, `route-noindex`, `isolation-deny` or `isolation-override` |
@@ -353,6 +353,18 @@ does not carry them in clear.
 The denial is short: it is code production in a repository, so dispatch the
 epic's subagent (focus the epic first, so the subagent is attributed to it)
 or `SendMessage` it if it is running; `ROOT_OK=1` for a genuine exception.
+
+One exception a plugin can ask for, by data rather than by name: a plugin of
+this marketplace may ship `root-write-allow`, globs relative to a
+repository's root (`**` crosses directories). A Write or Edit of the main
+thread on a matching path is let through only in a repository whose own
+`.claude/settings.local.json` (else `.claude/settings.json`) sets
+`enabledPlugins["<plugin>@kodflow"]` to `true`: installed but not enabled
+there, enabled in another repository, a match deeper than the root
+(`node_modules/…/docs/anim`), a path into `.git`, or a settings file `jq`
+cannot read are all refused. The path is judged after lexical normalisation,
+like every other. The list is the plugin's data: these hooks name no
+plugin.
 
 The Stop rule closes the other side: a main-agent task `in_progress` on an
 epic with no running subagent attributed to it (`agents.json` `epic`, not

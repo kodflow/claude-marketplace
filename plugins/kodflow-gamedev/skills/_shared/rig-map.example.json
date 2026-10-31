@@ -1,0 +1,43 @@
+{
+  "schema": "rig-map/v1",
+  "note": "Example only. A project copies this to docs/anim/rig-map.json and maps each logical name to its own engine names. Constraints and pose tracks use the logical names on the left.",
+  "bones": {
+    "root": "Root",
+    "hips": "Hips",
+    "chest": "Spine2",
+    "head": "Head",
+    "shoulder.R": "RightArm",
+    "elbow.R": "RightForeArm",
+    "upper_arm.R": "RightArm",
+    "forearm.R": "RightForeArm",
+    "hand.R": "RightHand",
+    "upper_arm.L": "LeftArm",
+    "forearm.L": "LeftForeArm",
+    "hand.L": "LeftHand",
+    "thigh.R": "RightUpLeg",
+    "shin.R": "RightLeg",
+    "foot.R": "RightFoot",
+    "thigh.L": "LeftUpLeg",
+    "shin.L": "LeftLeg",
+    "foot.L": "LeftFoot"
+  },
+  "props": {
+    "blade": "Sword"
+  },
+  "landmarks": {
+    "blade.tip": {"node": "Sword", "offset": [0, 0.95, 0]},
+    "blade.base": {"node": "Sword", "offset": [0, 0.12, 0]},
+    "grip.pommel": {"node": "Sword", "offset": [0, -0.18, 0]},
+    "grip.guard": {"node": "Sword", "offset": [0, 0.1, 0]},
+    "wrist.R": {"node": "RightHand", "offset": [0, 0, 0]},
+    "palm.R": {"node": "RightHand", "offset": [0, 0.05, 0.03]},
+    "hand.center.R": {"node": "RightHand", "offset": [0, 0.05, 0]},
+    "index.base.R": {"node": "RightHandIndex1", "offset": [0, 0, 0]},
+    "middle.base.R": {"node": "RightHandMiddle1", "offset": [0, 0, 0]},
+    "pinky.base.R": {"node": "RightHandPinky1", "offset": [0, 0, 0]},
+    "index.mid.R": {"node": "RightHandIndex2", "offset": [0, 0, 0]},
+    "middle.mid.R": {"node": "RightHandMiddle2", "offset": [0, 0, 0]},
+    "ring.mid.R": {"node": "RightHandRing2", "offset": [0, 0, 0]},
+    "pinky.mid.R": {"node": "RightHandPinky2", "offset": [0, 0, 0]}
+  }
+}

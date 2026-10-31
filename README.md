@@ -21,6 +21,7 @@ cd claude-marketplace && ./scripts/install.sh
 | `kodflow-specialists` | 35 language, platform and concern agents |
 | `kodflow-hud` (optional) | `/hud` — a Tasks pane beside the status line (a mod, Claude Code 2.1.293+) |
 | `kodflow-ktn` (optional) | `/ktn-view` — ktn-linter's daemon and findings in a Go project (a mod, Claude Code 2.1.299+) |
+| `kodflow-gamedev` (per project) | `/move` `/anim-review` `/anim-feedback` `/reference` — 13 agents for combat animation that is anatomically and martially right; enabled in a game project's own settings, never by `install.sh`, never generated for Codex |
 
 ## The three ideas worth the install
 
@@ -75,6 +76,15 @@ Pin when a change to the skills would be a change to the work — a release
 branch, a shared CI image, an audit whose findings have to be reproducible —
 and leave it unpinned everywhere else, where getting the fix the day it lands
 is the reason to install from a marketplace at all.
+
+A plugin that only makes sense inside some projects is listed in
+`scripts/install-exclude.txt`: `install.sh` never installs it for the user and
+`build-codex.py` never generates it. A project turns it on for itself, in the
+same file:
+
+```json
+{ "enabledPlugins": { "kodflow-gamedev@kodflow": true } }
+```
 
 ## Both CLIs, one source
 

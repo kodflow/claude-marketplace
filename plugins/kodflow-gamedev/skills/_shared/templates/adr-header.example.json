@@ -1,0 +1,28 @@
+{
+  "schema": "feedback-adr/v1",
+  "verdict": "bad",
+  "rule": "Keep the sword hand and the blade steady relative to the chest while running.",
+  "scope": ["move:run-guard", "weapon:longsword", "area:locomotion"],
+  "supersedes": [],
+  "reach": "project",
+  "subject": {
+    "spec": "docs/anim/run-guard.md",
+    "constraints_sha256": "<sha256 of docs/anim/run-guard.constraints.json>",
+    "clip": "run",
+    "commit": "<git rev-parse HEAD>",
+    "credits": ["animation-specialist-combat"]
+  },
+  "constraint": {
+    "kind": "frame_pose",
+    "measured": 0.31,
+    "threshold": {"stat": "peak_to_peak", "max": 0.08},
+    "status": "proposed",
+    "definition": {
+      "id": "fb-run-hand-steady", "kind": "frame_pose", "severity": "hard", "status": "proposed",
+      "clip": "run", "target": "hand.R", "ref": "chest", "component": "distance",
+      "observable": {"3d": true, "iso": true, "profile": true},
+      "rationale": "owner feedback: the fist beats during the run", "unit": "m",
+      "test": {"stat": "peak_to_peak", "max": 0.08}
+    }
+  }
+}
