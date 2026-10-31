@@ -24,8 +24,8 @@ type Host = {
   version: string;
 };
 
-// A file system and the five commands the mod runs, enough to hold it to
-// its protocol: mkdir for the lock, mv for the swap, rm and rmdir after.
+// A file system and the commands the mod runs, enough to hold it to its
+// protocol: mkdir and ln for the lock, mv for the swap, rm and rmdir after.
 function host(on: any, env: Record<string, string>): Host {
   const h: Host = {
     files: new Map(),
@@ -108,6 +108,14 @@ function host(on: any, env: Record<string, string>): Host {
           return done(1);
         h.dirs.add(argv[1]!);
         return done(0);
+      case "ln": {
+        // ln -s TARGET PATH: refused on an existing path, as symlink(2) is
+        const path = argv[3]!;
+        if (h.files.has(path) || h.dirs.has(path) || !h.dirs.has(parent(path)))
+          return done(1);
+        h.files.set(path, argv[2]!);
+        return done(0);
+      }
       case "rmdir":
         return done(h.dirs.delete(argv[1]!) ? 0 : 1);
       case "rm":
@@ -185,7 +193,9 @@ test("a task call writes tasks.json through a temporary file and mv, under the l
   expect(verbs.slice(verbs.indexOf("mkdir"))).toEqual([
     "mkdir",
     "mkdir",
+    "ln",
     "mv",
+    "rm",
     "rmdir",
     "bash",
   ]);

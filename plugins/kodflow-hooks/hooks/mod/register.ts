@@ -38,7 +38,7 @@ import {
   resolveWorkers,
   type ToolName,
 } from "./tasks.ts";
-import { load, lock, mutate, unique, type Port } from "./store.ts";
+import { load, lock, mutate, unique, unlock, type Port } from "./store.ts";
 import { LINT_SETUP, lintSetup, type LintPort } from "./lint.ts";
 import {
   argsOf,
@@ -379,7 +379,7 @@ async function settleTriage(
     if ((await io.run(["mv", "-f", tmp, file])).exitCode !== 0)
       await io.run(["rm", "-f", tmp]);
   } finally {
-    if (held) await io.run(["rmdir", lockDir]);
+    if (held) await unlock(io, lockDir);
   }
 }
 
