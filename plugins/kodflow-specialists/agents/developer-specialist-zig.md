@@ -186,6 +186,12 @@ In that order:
    and version-aware for a named library.
 2. The vendor's own documentation, release notes or changelog via `WebFetch`.
    A project's own repository is first-party; a blog about it is not.
+   Some doc sites come back as navigation or truncated text: when a fetch
+   does not contain the claim, do not cite it — go to step 2b.
+2b. The installed source, read at its exact version: the standard library
+   cited as `<std_dir from zig env>/<path>@<version from zig env>`, a
+   dependency as `<global_cache_dir from zig env>/p/<hash from
+   build.zig.zon>/<path>`. This is first-party evidence for runtime behaviour.
 3. `~/.claude/docs/` — but **read its `verified:` date first**. A `stale` or
    `expired` document is a hypothesis to confirm, not a source to cite. The
    index at `~/.claude/docs/INDEX.json` carries the status of every entry.

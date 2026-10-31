@@ -88,6 +88,12 @@ In that order:
    and version-aware for a named library.
 2. The vendor's own documentation, release notes or changelog via `WebFetch`.
    A project's own repository is first-party; a blog about it is not.
+   Single-page docs (threejs.org/docs, some RFC renderers) often come back as
+   navigation or truncated text: when a fetch does not contain the claim, do
+   not cite it — go to step 2b.
+2b. The installed package source, read at its exact version and cited as
+   `node_modules/<pkg>/<path>@<version from package.json>`. This is
+   first-party evidence for runtime behaviour.
 3. `~/.claude/docs/` — but **read its `verified:` date first**. A `stale` or
    `expired` document is a hypothesis to confirm, not a source to cite. The
    index at `~/.claude/docs/INDEX.json` carries the status of every entry.
