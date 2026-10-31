@@ -1,6 +1,6 @@
 {
   "schema": "rig-map/v1",
-  "note": "Example only. A project copies this to docs/anim/rig-map.json and maps each logical name to its own engine names. Constraints and pose tracks use the logical names on the left.",
+  "note": "Example only. A project copies this to docs/anim/rig-map.json and maps each logical name to its own engine names. Constraints and pose tracks use the logical names on the left. clips (optional) declares, per clip, the markers its adapter or scene emits; a constraint that windows on a marker its clip does not declare cannot cover a reference defect (check-constraints.py --coverage).",
   "bones": {
     "root": "Root",
     "hips": "Hips",
@@ -39,5 +39,9 @@
     "middle.mid.R": {"node": "RightHandMiddle2", "offset": [0, 0, 0]},
     "ring.mid.R": {"node": "RightHandRing2", "offset": [0, 0, 0]},
     "pinky.mid.R": {"node": "RightHandPinky2", "offset": [0, 0, 0]}
+  },
+  "clips": {
+    "run": {"markers": ["contact_l_start", "contact_l_end", "contact_r_start", "contact_r_end"]},
+    "attack_cut": {"markers": ["coil", "contact", "end"]}
   }
 }

@@ -8,7 +8,8 @@ exit codes (hard failure, total 0, unevaluated, malformed input).
 feedback-rules.py: the hash rules-digest.sh recomputes, the section order,
 and each named failure (unreadable, unknown schema, dangling, cycle, fork);
 an ADR is created exclusively and never overwritten.
-cache-source.py: exact, normalised, not found and fetch failures, offline.
+cache-source.py: exact, normalised, not found and fetch failures, offline; a body
+cut short is fetched once more, then named (no network: an injected opener).
 fetch-reference.py: magic bytes, Commons licence refusals, placement of
 committable and study copies, a manifest with no timestamp.
 meshy.py, with an injected transport (no network, no real key): the dry run,
@@ -381,6 +382,31 @@ class Sources(unittest.TestCase):
     def test_http_is_refused(self):
         self.assertEqual(cs.fetch("http://example.com/")[0], "not_https")
 
+    def test_a_body_cut_short_is_retried_once_then_a_named_failure(self):
+        import http.client
+
+        class Opener:
+            def __init__(self, cuts):
+                self.cuts, self.calls = cuts, 0
+
+            def open(self, req, timeout=None):
+                self.calls += 1
+                resp = FakeResp(200, b"<p>quick brown fox</p>", url=req.full_url)
+                if self.calls <= self.cuts:
+                    resp.read = lambda n=-1: (_ for _ in ()).throw(http.client.IncompleteRead(b"<p>qu", 17))
+                return contextlib.closing(resp)
+
+        once = Opener(1)
+        self.assertEqual(cs.fetch("https://ex.example/a", once), (200, "https://ex.example/a", b"<p>quick brown fox</p>"))
+        self.assertEqual(once.calls, 2)
+        always = Opener(9)
+        self.assertEqual(cs.fetch("https://ex.example/a", always), ("IncompleteRead", "https://ex.example/a", None))
+        self.assertEqual(always.calls, 2)
+        with tempfile.TemporaryDirectory() as root:
+            out = cs.entry({"url": "https://ex.example/a", "excerpt": "fox"}, "x",
+                           lambda u: cs.fetch(u, Opener(9)), pathlib.Path(root), "2026-10-31")
+        self.assertEqual((out["match_mode"], out["verified"]), ("fetch_failed:IncompleteRead", False))
+
 
 class References(unittest.TestCase):
     PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
@@ -451,36 +477,125 @@ class Coverage(unittest.TestCase):
         for sha, mode in ((self.good, "exact"), (self.bad, "not_found")):
             (self.src / f"{sha}.md").write_text(f"```json\n{json.dumps({'sha256': sha, 'match_mode': mode})}\n```\n")
         self.dirs = [str(self.src)]
+        rig = {"bones": {n: n for n in ("chest", "upper_arm.R", "forearm.R", "hand.R")},
+               "props": {"blade": "Sword"},
+               "landmarks": {"blade.tip": {"node": "Sword"}, "blade.base": {"node": "Sword"},
+                             "palm.R": {"node": "hand.R"}, "index.base.R": {"node": "hand.R"},
+                             "pinky.base.R": {"node": "hand.R"}, "middle.base.R": {"node": "hand.R"},
+                             "wrist.R": {"node": "hand.R"}, "hand.center.R": {"node": "hand.R"}},
+               "clips": {"attack": {"markers": ["coil", "contact", "end"]}}}
+        (self.root / "docs/anim/rig-map.json").write_text(json.dumps(rig))
 
     def tearDown(self):
         shutil.rmtree(self.root)
 
-    def doc(self, cov, weapon="sword", sev="hard", src=None):
-        c = C("frame_pose", {"stat": "all", "max": 1}, target="a", ref="a", severity=sev, source=src or self.good)
-        return {"schema_version": "move-constraints/v1", "move": "m", "fps": 30, "rig_map": "r", "clip": "c",
-                "weapon": weapon, "constraints": [c], "coverage": cov}
+    def project(self, doc):
+        return cc.load_project(str(self.root), doc)
+
+    def faults(self, doc):
+        return cc.coverage(doc, self.dirs, self.project(doc))
+
+    def carry(self, **kw):
+        d = dict(id="carry", clip="run", point="hand.R", relative_to="chest")
+        d.update(kw)
+        return C("velocity", {"stat": "max", "max": 0.6}, **d)
+
+    def cut(self, **kw):
+        d = dict(id="cut", clip="attack", point="blade.tip", metric="velocity_axis_angle",
+                 blade_axis={"from": "blade.base", "to": "blade.tip"}, window={"from": "coil", "to": "contact"})
+        d.update(kw)
+        return C("trajectory", d.pop("test", {"stat": "mean", "min": 45}), **d)
+
+    def pronation(self, **kw):
+        d = dict(id="hand", clip="attack", bone="forearm.R", parent="upper_arm.R", component="twist", axis=[0, 1, 0])
+        d.update(kw)
+        return C("joint_angle", {"stat": "all", "max": 87}, **d)
+
+    def doc(self, cov, weapon="sword", sev="hard", src=None, constraints=None):
+        cs_ = constraints or [self.carry(), self.cut(), self.pronation()]
+        for c in cs_:
+            c.update(severity=sev, source=src or self.good)
+        return {"schema_version": "move-constraints/v1", "move": "m", "fps": 30, "rig_map": "docs/anim/rig-map.json",
+                "clip": "attack", "weapon": weapon, "constraints": cs_, "coverage": cov}
 
     def full(self):
-        return {"locomotion-carry": {"constraints": ["x"]}, "cut-reads-as-thrust": {"not_applicable": "no cut in this move"},
-                "hand-reads-as-other-hand": {"constraints": ["x"]}}
+        return {"locomotion-carry": {"constraints": ["carry"]}, "cut-reads-as-thrust": {"constraints": ["cut"]},
+                "hand-reads-as-other-hand": {"constraints": ["hand"]}}
 
     def test_passes_when_every_defect_is_covered_or_excused(self):
-        self.assertEqual(cc.coverage(self.doc(self.full()), self.dirs), [])
+        self.assertEqual(self.faults(self.doc(self.full())), [])
+        excused = dict(self.full(), **{"cut-reads-as-thrust": {"not_applicable": "no cut in this move"}})
+        self.assertEqual(self.faults(self.doc(excused)), [])
 
     def test_refusals(self):
         cov = self.full()
-        self.assertTrue(cc.coverage(self.doc(cov, sev="soft"), self.dirs))                      # soft never covers
-        self.assertTrue(cc.coverage(self.doc(cov, src=self.bad), self.dirs))                    # unverified source
-        self.assertTrue(cc.coverage(self.doc(cov, src="see I.33"), self.dirs))                  # no sha256
+        self.assertTrue(self.faults(self.doc(cov, sev="soft")))                      # soft never covers
+        self.assertTrue(self.faults(self.doc(cov, src=self.bad)))                    # unverified source
+        self.assertTrue(self.faults(self.doc(cov, src="see I.33")))                  # no sha256
         miss = dict(cov); del miss["locomotion-carry"]
-        self.assertTrue(cc.coverage(self.doc(miss), self.dirs))                                  # a defect left out
+        self.assertTrue(self.faults(self.doc(miss)))                                  # a defect left out
         armed = dict(cov, **{"hand-reads-as-other-hand": {"not_applicable": "no hand"}})
-        self.assertTrue(any("armed" in f for f in cc.coverage(self.doc(armed), self.dirs)))     # required when armed
-        self.assertEqual(cc.coverage(self.doc(armed, weapon="none"), self.dirs), [])            # but not unarmed
+        self.assertTrue(any("armed" in f for f in self.faults(self.doc(armed))))     # required when armed
+        self.assertEqual(self.faults(self.doc(armed, weapon="none")), [])            # but not unarmed
         ghost = dict(cov, **{"locomotion-carry": {"constraints": ["nope"]}})
-        self.assertTrue(cc.coverage(self.doc(ghost), self.dirs))                                 # unknown id
+        self.assertTrue(self.faults(self.doc(ghost)))                                 # unknown id
         doc = self.doc(cov); del doc["coverage"]
-        self.assertTrue(cc.coverage(doc, self.dirs))                                             # no map at all
+        self.assertTrue(self.faults(doc))                                             # no map at all
+
+    def test_a_constraint_on_an_undeclared_marker_does_not_cover(self):
+        # The cut constraints of the evaluation opened their window on a marker the clip lacks.
+        doc = self.doc(self.full(), constraints=[self.carry(), self.cut(window={"from": "guardia_alta", "to": "contact"}),
+                                                 self.pronation()])
+        f = [x for x in self.faults(doc) if x.startswith("cut-reads-as-thrust")]
+        self.assertTrue(any("'guardia_alta'" in x and "rig_map_gaps" in x for x in f), f)
+        doc = self.doc(self.full(), constraints=[self.carry(), self.cut(window=None, test={"stat": "at", "at": "impact", "min": 45}),
+                                                 self.pronation()])
+        self.assertTrue(any("'impact'" in x for x in self.faults(doc)))               # a marker in the test, too
+
+    def test_a_constraint_on_an_unmapped_name_or_clip_does_not_cover(self):
+        doc = self.doc(self.full(), constraints=[self.carry(relative_to="spine.03"), self.cut(), self.pronation()])
+        f = self.faults(doc)
+        self.assertTrue(any("'spine.03'" in x and "rig_map_gaps" in x for x in f), f)
+        (self.root / "docs/anim/sampling.json").write_text(json.dumps({"moves": {"m": {"clips": ["attack"]}}}))
+        f = self.faults(self.doc(self.full()))
+        self.assertTrue(any(x.startswith("locomotion-carry") and "'run'" in x for x in f), f)
+        (self.root / "docs/anim/rig-map.json").unlink()
+        self.assertTrue(any("unreadable" in x for x in self.faults(self.doc(self.full()))))
+
+    def test_a_sign_test_does_not_cover_the_hand(self):
+        # The evaluation's hand was "covered" by handedness and fingers_wrap, which a pronated hand passes.
+        sign = C("handedness", {"stat": "all", "min": 0}, id="sign", clip="attack", index="index.base.R",
+                 pinky="pinky.base.R", middle="middle.base.R", wrist="wrist.R", palm="palm.R", center="hand.center.R")
+        doc = self.doc(dict(self.full(), **{"hand-reads-as-other-hand": {"constraints": ["sign"]}}),
+                       constraints=[self.carry(), self.cut(), sign])
+        f = self.faults(doc)
+        self.assertTrue(any(x.startswith("hand-reads-as-other-hand: sign (handedness) does not measure") for x in f), f)
+        elbow = self.pronation(bone="upper_arm.R", parent="chest")
+        doc = self.doc(self.full(), constraints=[self.carry(), self.cut(), elbow])
+        self.assertTrue(any("does not measure" in x for x in self.faults(doc)))       # a rotation, but not the forearm's
+
+    def test_a_position_does_not_cover_the_carry(self):
+        # A hand ahead of the chest is a side, not the beating: stability or speed in the chest's frame is.
+        ahead = C("frame_pose", {"stat": "all", "min": 0}, id="carry", clip="run", target="hand.R", ref="chest", component="z")
+        f = self.faults(self.doc(self.full(), constraints=[ahead, self.cut(), self.pronation()]))
+        self.assertTrue(any(x.startswith("locomotion-carry: carry (frame_pose) does not measure") for x in f), f)
+        steady = C("frame_pose", {"stat": "peak_to_peak", "max": 0.08}, id="carry", clip="run", target="hand.R", ref="chest")
+        self.assertEqual(self.faults(self.doc(self.full(), constraints=[steady, self.cut(), self.pronation()])), [])
+        world = self.carry(); del world["relative_to"]
+        self.assertTrue(self.faults(self.doc(self.full(), constraints=[world, self.cut(), self.pronation()])))
+
+    def test_each_move_covers_its_own_defects(self):
+        for why in ("covered by run-guard", "see diagonal-cut", "handled in another move"):
+            cov = dict(self.full(), **{"locomotion-carry": {"not_applicable": why}})
+            self.assertTrue(any("defers to another move" in x for x in self.faults(self.doc(cov))), why)
+
+    def test_the_catalogue_names_known_kinds(self):
+        cat = json.loads((SCRIPTS.parent / "reference-defects.json").read_text())
+        for d in cat["defects"]:
+            self.assertTrue(d["natures"], d["id"])
+            for n in d["natures"]:
+                self.assertIn(n["kind"], cc.KINDS)
+                self.assertTrue(n["label"])
 
     def test_cli_coverage_only(self):
         p = self.root / "c.json"

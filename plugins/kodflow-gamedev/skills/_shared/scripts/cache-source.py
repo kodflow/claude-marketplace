@@ -26,6 +26,7 @@ import argparse
 import datetime
 import hashlib
 import html
+import http.client
 import json
 import os
 import pathlib
@@ -51,22 +52,30 @@ class HttpsOnly(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def fetch(url):
-    """(status, final url, body bytes or None)."""
+def fetch(url, opener=None):
+    """(status, final url, body bytes or None).
+
+    A body cut short (http.client.IncompleteRead) is fetched once more, then
+    reported as its reason, like any other failure: never a crash.
+    """
     if not url.lower().startswith("https://"):
         return "not_https", url, None
-    opener = urllib.request.build_opener(HttpsOnly())
+    opener = opener or urllib.request.build_opener(HttpsOnly())
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    try:
-        with opener.open(req, timeout=TIMEOUT) as r:
-            body = r.read(LIMIT + 1)
-            if len(body) > LIMIT:
-                return "too_large", r.geturl(), None
-            return r.status, r.geturl(), body
-    except urllib.error.HTTPError as e:
-        return e.code, url, None
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        return type(e).__name__, url, None
+    for attempt in (1, 2):
+        try:
+            with opener.open(req, timeout=TIMEOUT) as r:
+                body = r.read(LIMIT + 1)
+                if len(body) > LIMIT:
+                    return "too_large", r.geturl(), None
+                return r.status, r.geturl(), body
+        except urllib.error.HTTPError as e:
+            return e.code, url, None
+        except http.client.IncompleteRead as e:
+            if attempt == 2:
+                return type(e).__name__, url, None
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
+            return type(e).__name__, url, None
 
 
 def normalise(text):

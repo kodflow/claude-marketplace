@@ -53,10 +53,14 @@ and asks the owner.
 ```bash
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 P="${CLAUDE_PLUGIN_ROOT}"
-SCRATCH=$(mktemp -d)          # or the session's scratchpad directory
+SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/move-<slug>.XXXXXX")   # new and empty, this run's only
 python3 -I "$P/skills/_shared/scripts/feedback-rules.py" build --root "$ROOT"
 ```
 
+- `$SCRATCH` is unique to this run. Never use a fixed `move-<slug>`
+  path or a directory shared with another run, and never read a file this
+  run did not write there: an answer left by an earlier run, aborted or
+  not, is not a member's answer to this brief.
 - `build` regenerates `docs/adr/feedback/.RULES.md` once, before any agent
   starts, so their `RULES digest` is current. A named failure (unreadable
   ADR, dangling `supersedes`, cycle, fork) **stops the run**: show it; an
@@ -123,7 +127,9 @@ python3 -I "$P/skills/_shared/scripts/check-constraints.py" \
 ```
 
 A failure refuses the spec: show its faults as they are, write nothing but
-the run record, and name the agents to re-run. Otherwise:
+the run record, and name the agents to re-run. A fault that names a missing
+marker, landmark or clip goes to the owner as a `rig_map_gaps` entry.
+Otherwise:
 
 - `docs/anim/<slug>.constraints.json` ← that same file, unchanged. Then its hash:
   `shasum -a 256 docs/anim/<slug>.constraints.json`.

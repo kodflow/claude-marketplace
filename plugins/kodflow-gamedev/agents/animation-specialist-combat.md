@@ -63,6 +63,8 @@ The brief carries:
 
 `trajectory`, `velocity` (linear, relative to a bone), `vector_angle`, and windows over the key poses. Each example validates against `move-constraints.schema.json`.
 
+Which constraint covers a reference defect is the coverage rule's call (`<root>/skills/_shared/reference-defects.json`, its `natures`, held by `check-constraints.py --coverage`): for each defect that applies to the move, propose one of a nature it admits.
+
 ```json
 {"id": "cut-edge-leads", "kind": "trajectory", "severity": "hard", "status": "proposed",
  "point": "sword.tip", "metric": "velocity_axis_angle", "blade_axis": {"from": "sword.pommel", "to": "sword.tip"},

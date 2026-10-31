@@ -67,6 +67,8 @@ The brief carries:
 
 You propose `joint_angle`, `handedness`, `grip` (with the rig specialist) and `phase_offset`; `velocity` with `mode: angular` for sequencing peaks when needed. Every example below validates against `move-constraints.schema.json`; replace the names with those of the brief's rig map.
 
+Which constraint covers a reference defect is the coverage rule's call (`<root>/skills/_shared/reference-defects.json`, its `natures`, held by `check-constraints.py --coverage`): for each defect that applies to the move, propose one of a nature it admits.
+
 ```json
 {"id": "forearm-r-pronation-ceiling", "kind": "joint_angle", "severity": "hard", "status": "proposed",
  "bone": "forearm_r", "parent": "upper_arm_r", "component": "twist", "axis": [0, 1, 0], "unit": "deg",

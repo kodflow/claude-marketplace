@@ -53,7 +53,7 @@
       }
     },
     "coverage": {
-      "description": "The coverage rule (reference-defects.json, held by check-constraints.py --coverage): every reference defect maps to the ids of hard constraints with a verified source, or to a reason it does not apply.",
+      "description": "The coverage rule (reference-defects.json, held by check-constraints.py --coverage): every reference defect maps to the ids of this file's constraints that cover it, or to a reason it does not apply to this move.",
       "type": "object",
       "additionalProperties": {
         "oneOf": [
