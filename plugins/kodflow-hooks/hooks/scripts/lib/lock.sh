@@ -2,8 +2,13 @@
 # shellcheck shell=bash
 #
 # macOS ships no flock(1), so `exec 9>>.lock; flock -w 2 9` fails in silence
-# there and serialises nothing. mkdir is atomic on every POSIX filesystem: the
-# process that creates the directory holds the lock.
+# there and serialises nothing. A lock directory stands in for it, but mkdir
+# alone does not hold it: uutils' mkdir (Ubuntu 26.04's) checks the path is
+# free, then creates it, and exits 0 when the creation fails on a directory
+# that now exists, so two racing callers both succeed. The process that then
+# creates the `owner` symlink inside holds the lock: symlink(2) fails on an
+# existing path in every ln, uutils' included. mod/store.ts takes the same
+# directories the same way.
 #
 #   . "$LIB/lock.sh"
 #   ( kf_lock "$dir/.agents.lock.d" 2; ...critical section... )
@@ -29,18 +34,18 @@ _kf_mtime() {   # GNU stat first: BSD stat rejects -c without printing a value
 }
 
 kf_unlock() {
-    [ -n "${KF_LOCK_DIR:-}" ] && rmdir "$KF_LOCK_DIR" 2>/dev/null
+    [ -n "${KF_LOCK_DIR:-}" ] && { rm -f "$KF_LOCK_DIR/owner"; rmdir "$KF_LOCK_DIR"; } 2>/dev/null
     KF_LOCK_DIR=
 }
 
 # kf_lock DIR [WAIT_SECONDS] → 0 holding the lock, 1 gave up
 kf_lock() {
     local d=$1 tries=$(( ${2:-2} * 10 )) stale=${KF_LOCK_STALE:-10} m grave
-    while ! mkdir "$d" 2>/dev/null; do
+    while ! { mkdir "$d" && ln -s "$$.$RANDOM" "$d/owner"; } 2>/dev/null; do
         [ -d "${d%/*}" ] || return 1
         if m=$(_kf_mtime "$d") && [ $(( $(date +%s) - m )) -ge "$stale" ]; then
             grave=$d.stale.$$.$RANDOM
-            mv "$d" "$grave" 2>/dev/null && { rmdir "$grave" 2>/dev/null; continue; }
+            mv "$d" "$grave" 2>/dev/null && { rm -f "$grave/owner"; rmdir "$grave" 2>/dev/null; continue; }
         fi
         # Counted on every pass, so a lock that can be neither taken nor
         # broken still ends the wait

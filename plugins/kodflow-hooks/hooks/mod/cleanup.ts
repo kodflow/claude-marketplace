@@ -15,7 +15,7 @@
 // candidates go to hooks/scripts/cleanup.sh, which removes nothing unless
 // the PR is merged at the very commit the branch holds, the worktree is
 // clean, and it is neither the main worktree nor the default branch.
-import { lock, unique, type Port } from "./store.ts";
+import { lock, unique, unlock, type Port } from "./store.ts";
 import { MAIN, type Data } from "./tasks.ts";
 
 export const worktreesFile = (dir: string): string => `${dir}/worktrees.json`;
@@ -144,7 +144,7 @@ async function withRegistry<T>(
     }
     return out;
   } finally {
-    if (held) await port.run(["rmdir", lockDir]);
+    if (held) await unlock(port, lockDir);
   }
 }
 

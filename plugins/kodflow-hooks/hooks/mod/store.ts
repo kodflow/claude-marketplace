@@ -10,10 +10,17 @@
 // Two writers are kept apart twice. Inside this process (the main loop and
 // every subagent share one copy of the mod) a promise queue per directory
 // runs one mutation at a time. Across processes (a second session on the
-// same id) a lock directory, created by `mkdir`, which is atomic: the same
-// protocol as the shell's lib/lock.sh, stale after KF_LOCK_STALE seconds and
-// broken by renaming it to a unique name. A lock not obtained in time is
-// written through, as lib/lock.sh's callers do: hooks fail open.
+// same id) a lock directory: the same protocol as the shell's lib/lock.sh,
+// stale after KF_LOCK_STALE seconds and broken by renaming it to a unique
+// name. A lock not obtained in time is written through, as lib/lock.sh's
+// callers do: hooks fail open.
+//
+// `mkdir` alone does not hold it. uutils' mkdir (Ubuntu 26.04's) checks
+// that the path is free, then creates it, and answers success when the
+// creation fails on a directory that now exists: two racing callers both
+// exit 0. The lock is held by whoever then creates the `owner` symlink
+// inside it, and symlink(2) fails on an existing path in every ln, uutils'
+// included.
 import { parse, serialize, type Data } from "./tasks.ts";
 import { tasksFile } from "./paths.ts";
 
@@ -36,6 +43,8 @@ export type Port = {
 export const LOCK_STALE_MS = 10_000;
 export const LOCK_WAIT_MS = 2_000;
 const LOCK_POLL_MS = 50;
+/** The entry inside a lock directory that says it is held. */
+export const LOCK_OWNER = "owner";
 
 let counter = 0;
 export const unique = (): string =>
@@ -68,20 +77,31 @@ export async function lock(
 ): Promise<boolean> {
   const deadline = port.now() + waitMs;
   for (;;) {
-    if ((await port.run(["mkdir", lockDir])).exitCode === 0) return true;
+    if (
+      (await port.run(["mkdir", lockDir])).exitCode === 0 &&
+      (await port.run(["ln", "-s", unique(), `${lockDir}/${LOCK_OWNER}`]))
+        .exitCode === 0
+    )
+      return true;
     const m = await port.mtime(lockDir);
     if (m !== undefined && port.now() - m >= LOCK_STALE_MS) {
       // Of two waiters that both see it stale, one rename wins; the other
       // finds nothing to move and goes round again.
       const grave = `${lockDir}.stale.${unique()}`;
       if ((await port.run(["mv", lockDir, grave])).exitCode === 0) {
-        await port.run(["rmdir", grave]);
+        await unlock(port, grave);
         continue;
       }
     }
     if (port.now() >= deadline) return false;
     await port.sleep(LOCK_POLL_MS);
   }
+}
+
+/** Release a lock directory taken by lock(): its owner, then itself. */
+export async function unlock(port: Port, lockDir: string): Promise<void> {
+  await port.run(["rm", "-f", `${lockDir}/${LOCK_OWNER}`]);
+  await port.run(["rmdir", lockDir]);
 }
 
 /** Replace tasks.json through a temporary file and `mv`. */
@@ -132,7 +152,7 @@ export function mutate<T>(
       await save(port, dir, data);
       return result;
     } finally {
-      if (held) await port.run(["rmdir", lockDir]);
+      if (held) await unlock(port, lockDir);
     }
   });
 }

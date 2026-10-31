@@ -25,7 +25,7 @@ import { join, dirname } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { conformance } from "./conformance.ts";
-import { lock, mutate, type Port } from "../../hooks/mod/store.ts";
+import { lock, mutate, unlock, type Port } from "../../hooks/mod/store.ts";
 import { plan } from "../../hooks/mod/tasks.ts";
 import { goModuleOf } from "../../hooks/mod/lint.ts";
 import { decide, replay, type Row } from "./corpus.ts";
@@ -163,6 +163,26 @@ try {
     "the wait lasts the whole budget before writing through",
   );
   rmSync(join(dir, ".lock.d"), { recursive: true });
+
+  // uutils' mkdir (Ubuntu 26.04) answers 0 to the caller that lost the race
+  // for a directory; this one says so of every directory already there
+  const racing: Port = {
+    ...disk,
+    run: async (argv) => {
+      const r = await disk.run(argv);
+      return argv[0] === "mkdir" && existsSync(argv[1]!)
+        ? { ...r, exitCode: 0 }
+        : r;
+    },
+  };
+  const held = join(dir, ".lock.d");
+  check(await lock(disk, held), "a free lock is taken");
+  check(
+    !(await lock(racing, held, 200)),
+    "a held lock is not taken by a mkdir that lies about the race",
+  );
+  await unlock(disk, held);
+  check(!existsSync(held), "released, the lock directory is gone");
 
   // A refusal writes nothing
   const before = readFileSync(join(dir, "tasks.json"), "utf8");

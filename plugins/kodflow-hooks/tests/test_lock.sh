@@ -1,7 +1,8 @@
 #!/bin/bash
 # test_lock.sh — hooks/scripts/lib/lock.sh, the mkdir lock that stands in for
-# flock(1), absent on macOS: exclusion, timeout, release on exit, a stale lock
-# broken, and on-agent.sh keeping every concurrent start in agents.json.
+# flock(1), absent on macOS: exclusion (even under a mkdir that lies),
+# timeout, release on exit, a stale lock broken, and on-agent.sh keeping
+# every concurrent start in agents.json.
 set -u
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 S=$ROOT/plugins/kodflow-hooks/hooks/scripts
@@ -29,6 +30,14 @@ left=$(find "$T" -maxdepth 1 -name '*stale*')
 mkdir "$L"
 ( KF_LOCK_STALE=3600 kf_lock "$L" 1 ) && bad "fresh" "a fresh lock was broken" || ok "a fresh lock is not broken"
 rmdir "$L"
+# uutils' mkdir (Ubuntu 26.04) exits 0 for the caller that lost the race
+# for the directory; this one says so of every directory already there
+( kf_lock "$L" 1 && [ -L "$L/owner" ] ) && ok "the lock carries its owner" || bad "owner" "no owner link"
+mkdir "$L"; ln -s held "$L/owner"
+# shellcheck disable=SC2329  # called by kf_lock
+( mkdir() { command mkdir "$@" 2>/dev/null; [ -d "${!#}" ]; }
+  KF_LOCK_STALE=3600 kf_lock "$L" 1 ) && bad "lying mkdir" "a held lock was taken" || ok "a held lock is refused to a mkdir that lies about the race"
+rm -f "$L/owner"; rmdir "$L"
 
 echo "== on-agent.sh · concurrent starts"
 i=0
