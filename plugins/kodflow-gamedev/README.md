@@ -27,6 +27,7 @@ bad, as a rule the next run reads first.
 | `/anim-review <slug>` | Samples the clip (three.js adapter or GLB, Godot scene) into pose tracks, measures the move's constraints and every owner-confirmed one, then asks the owner's verdict. | nothing itself; hands over to `/anim-feedback` |
 | `/anim-feedback <slug> --verdict good\|bad "<words>"` | Records the verdict as an ADR (JSON header, the owner's words verbatim), written once, superseded never edited. | `docs/adr/feedback/<YYYYMMDD-HHMMSS>-<slug>-<4hex>.md` |
 | `/reference <slug>` | Finds reference images with their licence; fetches the ones kept — committable ones with a manifest, non-commercial ones into an ignored study cache. | `art/reference/`, `.cache/anim-ref/` |
+| `/meshy <asset> --kind character\|weapon\|prop` | Has the asset agent write the Meshy request, shows its credits and licence in a dry run, and after the owner's go creates, polls and fetches the GLB; then the asset agent and the rig specialist judge it (polycount, scale, orientation, pivot, grip axis) and prepare the retarget of Meshy's skeleton. | `art/meshy/`, `docs/anim/assets/`, `.cache/meshy/` |
 
 The main thread writes these paths directly — the `root-write-allow` of this
 plugin, honoured by kodflow-hooks only where the project enables the plugin —
@@ -53,6 +54,7 @@ routing keyword brings them into another conversation.
 | `reference-specialist-imagery` | images and their licences |
 | `engine-specialist-threejs` | three.js r186 sampling and adapters |
 | `engine-specialist-godot` | Godot 4.7 Skeleton3D sampling |
+| `asset-specialist-meshy` | Meshy requests, judging a generated GLB, the retarget of its auto-rig |
 
 All six martial agents answer on every move; the declared tradition's agent
 **governs** (its sourced technique is adopted whole) and the five others only
@@ -90,8 +92,23 @@ that file against the ADRs by hash and hands each agent its areas' rules
 (2000 characters at most), or says the digest is unavailable and lists the
 ADRs to read.
 
+## Meshy
+
+`meshy.py` is the only code that talks to Meshy. The key comes from
+`MESHY_API_KEY` and nowhere else, goes to `api.meshy.ai` only and is masked
+in every line printed; `--dry-run` builds a request with no key and no call.
+A create is never resent; polling follows `Retry-After` and stops at
+`--max-wait` with the task id (exit 3). `fetch` downloads nothing unless
+`--plan` names a plan whose licence `skills/_shared/licence-policy.md`
+(*Meshy outputs*) states, names each file by its sha256 and lists it in
+`art/meshy/manifest.json` with task id, endpoint, parameters, prompt, plan,
+licence, the task's creation date and the credits it consumed. `inspect`
+reads a GLB's JSON chunk for the review. The API facts it follows are dated
+in `skills/_shared/meshy-api.md`.
+
 ## Scripts
 
 Python 3.9+, standard library only, run as `python3 -I`: `check-constraints.py`,
-`feedback-rules.py`, `cache-source.py`, `fetch-reference.py`. Tests:
-`tests/run-tests.sh` (no claude CLI, synthetic fixtures only).
+`feedback-rules.py`, `cache-source.py`, `fetch-reference.py`, `meshy.py`.
+Tests: `tests/run-tests.sh` (no claude CLI, no network, no key, synthetic
+fixtures only).

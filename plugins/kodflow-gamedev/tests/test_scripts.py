@@ -11,14 +11,20 @@ an ADR is created exclusively and never overwritten.
 cache-source.py: exact, normalised, not found and fetch failures, offline.
 fetch-reference.py: magic bytes, Commons licence refusals, placement of
 committable and study copies, a manifest with no timestamp.
+meshy.py, with an injected transport (no network, no real key): the dry run,
+bounded polling, the refusal of an undetermined licence, the key absent from
+output, manifest and record, sha256 names, and inspect on a synthetic GLB.
 """
 import contextlib
 import importlib.util
+import hashlib
 import io
 import json
 import math
+import os
 import pathlib
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -40,6 +46,7 @@ cc = load("check-constraints")
 fr = load("feedback-rules")
 cs = load("cache-source")
 fx = load("fetch-reference")
+mz = load("meshy")
 
 
 def qaxis(axis, deg):
@@ -484,6 +491,255 @@ class Coverage(unittest.TestCase):
         rc, out, _ = run_cli(cc, ["--constraints", str(p), "--coverage", "--root", str(self.root)])
         self.assertEqual(rc, 1)
         self.assertIn("soft", out)
+
+
+class FakeResp:
+    def __init__(self, status, body=b"", headers=None, url="https://api.meshy.ai/x"):
+        self.status, self._body, self.headers, self._url = status, io.BytesIO(body), headers or {}, url
+
+    def read(self, n=-1):
+        return self._body.read(n)
+
+    def geturl(self):
+        return self._url
+
+    def close(self):
+        pass
+
+
+class FakeMeshy:
+    """api.meshy.ai and its asset host, in memory. Records every request it is sent."""
+    GLB = b"glTF" + struct.pack("<II", 2, 0) + b"\0" * 40
+
+    def __init__(self, statuses=("SUCCEEDED",), retry_after="2", leak=False):
+        self.statuses, self.retry_after, self.leak, self.seen = list(statuses), retry_after, leak, []
+
+    def __call__(self, req, timeout):
+        url, auth = req.full_url, req.get_header("Authorization")
+        self.seen.append((req.get_method(), url, auth))
+        if url.startswith("https://assets.meshy.ai/"):
+            return FakeResp(200, self.GLB, url=url)
+        if req.get_method() == "POST":
+            if self.leak:     # a server that echoes the header back must not get the key printed
+                return FakeResp(400, json.dumps({"message": f"bad {auth}"}).encode())
+            return FakeResp(202, b'{"result": "task-1"}')
+        st = self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+        if st == 503:
+            return FakeResp(503, b"", {"Retry-After": "1"})
+        task = {"id": "task-1", "status": st, "created_at": 1793448000000, "consumed_credits": 20,
+                "model_urls": {"glb": "https://assets.meshy.ai/t/model.glb?Expires=1&Signature=s",
+                               "fbx": "https://assets.meshy.ai/t/model.fbx?Expires=1"},
+                "task_error": {"message": "boom" if st == "FAILED" else ""}}
+        return FakeResp(200, json.dumps(task).encode(), {"Retry-After": self.retry_after})
+
+
+class Meshy(unittest.TestCase):
+    KEY = "msy_TESTKEY_0123456789abcdef"
+
+    def setUp(self):
+        self.root = pathlib.Path(tempfile.mkdtemp())
+        self.params = self.root / "req.json"
+        self.params.write_text(json.dumps({"mode": "preview", "prompt": "a bronze kopis, game asset",
+                                           "model_type": "smart-topology", "ai_model": "meshy-t2.5",
+                                           "target_polycount": 8000}))
+        self.env = os.environ.get("MESHY_API_KEY")
+        os.environ["MESHY_API_KEY"] = self.KEY
+        self.t = [0.0]
+
+    def tearDown(self):
+        shutil.rmtree(self.root)
+        if self.env is None:
+            os.environ.pop("MESHY_API_KEY", None)
+        else:
+            os.environ["MESHY_API_KEY"] = self.env
+
+    def clock(self):
+        return self.t[0]
+
+    def sleep(self, s):
+        self.t[0] += s
+
+    def cli(self, argv, fake):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc = mz.main(argv, opener=fake, clock=self.clock, sleep=self.sleep)
+        return rc, out.getvalue(), err.getvalue()
+
+    def everything_written(self):
+        return "".join(p.read_text(errors="replace") for p in self.root.rglob("*") if p.is_file() and p != self.params)
+
+    def test_dry_run_sends_nothing_and_needs_no_key(self):
+        os.environ.pop("MESHY_API_KEY")
+        fake = FakeMeshy()
+        rc, out, err = self.cli(["create", "--endpoint", "text-to-3d", "--params", str(self.params), "--dry-run"], fake)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(fake.seen, [])
+        doc = json.loads(out)
+        self.assertEqual(doc["url"], "https://api.meshy.ai/openapi/v2/text-to-3d")
+        self.assertEqual(doc["body"]["target_polycount"], 8000)
+        self.assertEqual(doc["headers"]["Authorization"], "Bearer ***")
+        self.assertFalse((self.root / ".cache").exists())
+
+    def test_no_key_no_call(self):
+        os.environ.pop("MESHY_API_KEY")
+        fake = FakeMeshy()
+        rc, _, err = self.cli(["create", "--endpoint", "text-to-3d", "--params", str(self.params)], fake)
+        self.assertEqual((rc, fake.seen), (1, []))
+        self.assertIn("MESHY_API_KEY", err)
+
+    def test_key_is_not_an_option_nor_a_parameter(self):
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            mz.main(["create", "--endpoint", "text-to-3d", "--params", str(self.params), "--api-key", "x"])
+        self.params.write_text(json.dumps({"prompt": "x", "api_key": "x"}))
+        rc, _, err = self.cli(["create", "--endpoint", "text-to-3d", "--params", str(self.params)], FakeMeshy())
+        self.assertEqual(rc, 1)
+
+    def test_polling_waits_retry_after_and_times_out(self):
+        fake = FakeMeshy(statuses=("IN_PROGRESS",), retry_after="7")
+        client = mz.Client(self.KEY, fake)
+        with self.assertRaises(mz.StillRunning) as e:
+            mz.wait(client, "text-to-3d", "task-1", max_wait=30, clock=self.clock, sleep=self.sleep)
+        self.assertIn("task-1", str(e.exception))
+        self.assertEqual(self.t[0], 30)                        # bounded: never past max_wait
+        self.assertEqual(len(fake.seen), 6)                    # polls at 0, 7, 14, 21, 28, 30
+        self.assertTrue(all(m == "GET" for m, _, _ in fake.seen))  # never a second create
+
+    def test_polling_survives_503_and_ends_on_success_or_failure(self):
+        fake = FakeMeshy(statuses=(503, "PENDING", "IN_PROGRESS", "SUCCEEDED"))
+        task = mz.wait(mz.Client(self.KEY, fake), "text-to-3d", "task-1", max_wait=600, clock=self.clock, sleep=self.sleep)
+        self.assertEqual(task["status"], "SUCCEEDED")
+        with self.assertRaises(mz.Refused):
+            mz.wait(mz.Client(self.KEY, FakeMeshy(statuses=("FAILED",))), "text-to-3d", "task-1", 60, self.clock, self.sleep)
+        rc, _, err = self.cli(["wait", "--endpoint", "text-to-3d", "--task-id", "task-1", "--max-wait", "10"],
+                              FakeMeshy(statuses=("IN_PROGRESS",)))
+        self.assertEqual(rc, 3, err)
+        self.assertIn("do not create it again", err)
+
+    def test_undetermined_licence_is_refused_before_any_download_or_credit(self):
+        for plan in (None, "", "trial", "unknown"):
+            with self.assertRaises(mz.Refused):
+                mz.licence_for(plan)
+        fake = FakeMeshy()
+        args = ["fetch", "--endpoint", "text-to-3d", "--task-id", "task-1", "--asset", "kopis", "--root", str(self.root)]
+        rc, _, err = self.cli(args, fake)
+        self.assertEqual(rc, 1)
+        self.assertIn("licence undetermined", err)
+        self.assertFalse(any("assets.meshy.ai" in u for _, u, _ in fake.seen))
+        self.assertFalse((self.root / "art").exists())
+        fake = FakeMeshy()
+        rc, _, _ = self.cli(["run", "--endpoint", "text-to-3d", "--params", str(self.params), "--asset", "k",
+                             "--plan", "trial", "--root", str(self.root)], fake)
+        self.assertEqual((rc, fake.seen), (1, []))          # run refuses before spending credits
+
+    def test_run_writes_sha256_names_and_a_manifest_without_the_key(self):
+        fake = FakeMeshy(statuses=("PENDING", "SUCCEEDED"))
+        args = ["run", "--endpoint", "text-to-3d", "--params", str(self.params), "--plan", "Pro",
+                "--asset", "kopis", "--root", str(self.root)]
+        rc, out, err = self.cli(args, fake)
+        self.assertEqual(rc, 0, err)
+        digest = hashlib.sha256(FakeMeshy.GLB).hexdigest()
+        self.assertTrue((self.root / "art/meshy" / f"{digest}.glb").is_file())
+        self.assertFalse(list((self.root / "art/meshy").glob("*.fbx")))      # default outputs: glb only
+        man = json.loads((self.root / "art/meshy/manifest.json").read_text())
+        (e,) = man["assets"]
+        self.assertEqual((e["sha256"], e["task_id"], e["endpoint"], e["plan"], e["licence_id"]),
+                         (digest, "task-1", "text-to-3d", "pro", "LicenseRef-Meshy-Paid"))
+        self.assertEqual((e["prompt"], e["consumed_credits"], e["created"]), ("a bronze kopis, game asset", 20, "2026-10-31"))
+        self.assertEqual(e["params"]["target_polycount"], 8000)
+        for (m, url, auth) in fake.seen:
+            self.assertEqual(auth is not None, url.startswith("https://api.meshy.ai/"), url)   # key to the API only
+        written = self.everything_written()
+        self.assertNotIn(self.KEY, written + out + err)
+        self.assertEqual((self.root / ".cache/meshy/.gitignore").read_text(), "*\n")
+        before = (self.root / "art/meshy/manifest.json").read_bytes()
+        self.cli(["fetch", "--endpoint", "text-to-3d", "--task-id", "task-1", "--plan", "pro", "--asset", "kopis",
+                  "--root", str(self.root)], FakeMeshy())
+        self.assertEqual((self.root / "art/meshy/manifest.json").read_bytes(), before)   # same task, same bytes
+
+    def test_free_plan_carries_the_attribution(self):
+        rc, _, err = self.cli(["fetch", "--endpoint", "text-to-3d", "--task-id", "task-1", "--plan", "free",
+                               "--asset", "k", "--root", str(self.root), "--outputs", "*glb*,*fbx*"], FakeMeshy())
+        self.assertEqual(rc, 0, err)
+        man = json.loads((self.root / "art/meshy/manifest.json").read_text())
+        self.assertEqual({a["licence_id"] for a in man["assets"]}, {"CC-BY-4.0"})
+        self.assertTrue(all("Meshy" in a["attribution"] for a in man["assets"]))
+        self.assertEqual(len(man["assets"]), 2)
+        self.assertEqual(man["assets"][0]["params_source"], "unknown: task not created by meshy.py")
+
+    def test_a_key_echoed_by_the_server_is_masked(self):
+        rc, out, err = self.cli(["create", "--endpoint", "text-to-3d", "--params", str(self.params)], FakeMeshy(leak=True))
+        self.assertEqual(rc, 1)
+        self.assertIn("no task was created", err)
+        self.assertIn("***", err)
+        self.assertNotIn(self.KEY, out + err)
+
+    def test_local_image_is_sent_inline_and_recorded_by_hash(self):
+        png = self.root / "concept.png"
+        png.write_bytes(References.PNG)
+        self.params.write_text(json.dumps({"image_url": "@concept.png", "should_texture": True}))
+        rc, out, err = self.cli(["create", "--endpoint", "image-to-3d", "--params", str(self.params), "--root", str(self.root), "--dry-run"], FakeMeshy())
+        self.assertEqual(rc, 0, err)
+        body = json.loads(out)["body"]
+        self.assertIn(hashlib.sha256(References.PNG).hexdigest(), body["image_url"])
+        self.assertNotIn("base64", out)
+        png.write_bytes(b"<html>")
+        rc, _, _ = self.cli(["create", "--endpoint", "image-to-3d", "--params", str(self.params), "--root", str(self.root), "--dry-run"], FakeMeshy())
+        self.assertEqual(rc, 1)
+
+    def test_download_refusals(self):
+        dest = self.root / "d"
+        with self.assertRaises(mz.Refused):
+            mz.download("http://assets.meshy.ai/x.glb", "model_urls.glb", dest, opener=FakeMeshy())
+        with self.assertRaises(mz.Refused):
+            mz.download("https://assets.meshy.ai/x", "model_urls.glb", dest,
+                        opener=lambda r, t: FakeResp(200, b"<html>", url=r.full_url))
+        with self.assertRaises(mz.Refused):
+            mz.download("https://assets.meshy.ai/x", "model_urls.glb", dest,
+                        opener=lambda r, t: FakeResp(403, b"", url=r.full_url))
+        with self.assertRaises(mz.Refused):
+            mz.download("https://assets.meshy.ai/x.glb", "model_urls.glb", dest, opener=FakeMeshy(), limit=10)
+        self.assertEqual([p.name for p in dest.iterdir()], [])     # no temp file left behind
+
+    def test_a_redirect_off_the_api_drops_the_key(self):
+        import urllib.request
+        h = mz.HttpsOnly()
+        req = urllib.request.Request("https://api.meshy.ai/openapi/v2/text-to-3d/t",
+                                     headers={"Authorization": f"Bearer {self.KEY}"})
+        new = h.redirect_request(req, None, 302, "Found", {}, "https://assets.meshy.ai/t/model.glb")
+        self.assertIsNone(new.get_header("Authorization"))
+        same = h.redirect_request(req, None, 302, "Found", {}, "https://api.meshy.ai/openapi/v2/text-to-3d/u")
+        self.assertIsNotNone(same.get_header("Authorization"))
+        with self.assertRaises(mz.Refused):
+            h.redirect_request(req, None, 302, "Found", {}, "http://api.meshy.ai/x")
+
+    def test_inspect_a_synthetic_glb(self):
+        g = {"asset": {"version": "2.0", "generator": "synthetic"}, "scene": 0, "scenes": [{"nodes": [0, 2]}],
+             "nodes": [{"name": "Root", "translation": [0, 0, 1], "children": [1]},
+                       {"name": "Blade", "mesh": 0, "rotation": [0, 0, 0.7071068, 0.7071068]},
+                       {"name": "Hips"}],
+             "meshes": [{"name": "blade", "primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+             "accessors": [{"count": 4, "min": [0, -0.1, -0.02], "max": [0.9, 0.1, 0.02]}, {"count": 6},
+                           {"count": 2, "max": [1.25]}],
+             "skins": [{"name": "Armature", "joints": [2], "skeleton": 2}],
+             "animations": [{"name": "Swing", "samplers": [{"input": 2, "output": 0}], "channels": [{}]}],
+             "materials": [{"name": "steel", "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}, "normalTexture": {"index": 1}}],
+             "extensionsUsed": ["KHR_draco_mesh_compression"]}
+        js = json.dumps(g).encode()
+        js += b" " * (-len(js) % 4)
+        path = self.root / "x.glb"
+        path.write_bytes(b"glTF" + struct.pack("<II", 2, 20 + len(js)) + struct.pack("<I4s", len(js), b"JSON") + js)
+        r = mz.inspect(path)
+        self.assertEqual(r["triangles"], 2)
+        self.assertEqual(r["bounds"]["height_axis"], "y")              # the blade, rotated 90 degrees about Z, stands up
+        self.assertAlmostEqual(r["bounds"]["size"][1], 0.9, 5)
+        self.assertAlmostEqual(r["bounds"]["min"][2], 0.98, 5)         # parent translation applied
+        self.assertEqual(r["skins"][0]["joint_names"], ["Hips"])
+        self.assertEqual(r["animations"], [{"name": "Swing", "duration": 1.25, "channels": 1}])
+        self.assertEqual(r["materials"][0]["maps"], ["baseColorTexture", "normalTexture"])
+        self.assertEqual(r["extensions_used"], ["KHR_draco_mesh_compression"])
+        (self.root / "bad.glb").write_bytes(b"PK\x03\x04")
+        with self.assertRaises(mz.Refused):
+            mz.inspect(self.root / "bad.glb")
 
 
 if __name__ == "__main__":

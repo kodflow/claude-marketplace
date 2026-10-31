@@ -113,7 +113,7 @@
     },
     {
       "name": "kodflow-gamedev",
-      "description": "Combat animation that is anatomically and martially right, for a game project that enables it in its own settings (never installed by install.sh). /move briefs a panel — anatomy, six martial areas with the declared tradition governing, animation craft, rig, Godot and three.js — and writes measurable constraints with their sources; /anim-review measures sampled clips against them and asks the owner's verdict; /anim-feedback keeps every verdict as an ADR that later runs read first; /reference fetches reference images with their licence.",
+      "description": "Combat animation that is anatomically and martially right, for a game project that enables it in its own settings (never installed by install.sh). /move briefs a panel — anatomy, six martial areas with the declared tradition governing, animation craft, rig, Godot and three.js — and writes measurable constraints with their sources; /anim-review measures sampled clips against them and asks the owner's verdict; /anim-feedback keeps every verdict as an ADR that later runs read first; /reference fetches reference images with their licence; /meshy generates characters, weapons and props with Meshy, fetches them with their licence and judges them against the rig.",
       "author": {
         "name": "kodflow"
       },

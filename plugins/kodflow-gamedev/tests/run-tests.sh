@@ -3,7 +3,7 @@
 # project: every input is synthetic (tests/fixtures, or built in a tempdir).
 # Runs under bash 3.2 (macOS /bin/bash) and bash 5; CI's guard job finds it.
 #
-#   1. layout: 13 agents, 4 skills, the martial six experimental, executable
+#   1. layout: 14 agents, 5 skills, the martial six experimental, executable
 #      scripts, every `_shared/…` reference of a skill or agent resolving.
 #   2. the Python scripts (test_scripts.py), on Python 3.9 when present.
 #   3. the fixtures are what gen_tracks.py writes; the sound set passes; each
@@ -24,9 +24,9 @@ command -v python3.9 >/dev/null 2>&1 && PY=python3.9
 
 echo "== layout"
 n=$(ls "$PLUG"/agents/*.md | wc -l | tr -d ' ')
-[ "$n" -eq 13 ] && ok "13 agents" || bad "13 agents" "$n"
+[ "$n" -eq 14 ] && ok "14 agents" || bad "14 agents" "$n"
 n=$(ls "$PLUG"/skills/*/SKILL.md | wc -l | tr -d ' ')
-[ "$n" -eq 4 ] && ok "4 skills" || bad "4 skills" "$n"
+[ "$n" -eq 5 ] && ok "5 skills" || bad "5 skills" "$n"
 for a in europe antiquity south-asia east-asia southeast-asia unarmed; do
     f=$PLUG/agents/martial-specialist-$a.md
     sed -n '2,/^---$/p' "$f" | grep -qx 'experimental: true' && ok "martial-specialist-$a is experimental" \
@@ -67,6 +67,22 @@ for a in rig-specialist-ik engine-specialist-threejs engine-specialist-godot; do
 done
 grep -q "check-constraints.py --coverage" "$PLUG/skills/move/SKILL.md" && ok "/move accepts a spec through the coverage rule" || bad "move coverage"
 grep -q "coverage" "$PLUG/agents/gamedev-animation-director.md" && ok "the director names the coverage rule" || bad "director coverage"
+
+# Meshy: the API facts live in meshy-api.md, the licence rule in
+# licence-policy.md and meshy.py's PLANS table; the agent and the skill cite
+# them by name. The key is read from the environment only.
+n=$(grep -rl "380,000 triangles" "$PLUG" | grep -v /run-tests.sh$ | wc -l | tr -d ' ')
+[ "$n" -eq 1 ] && grep -q "380,000 triangles" "$SH/meshy-api.md" && ok "the Meshy API facts are written once (meshy-api.md)" || bad "Meshy API facts copied" "$n"
+n=$(grep -rl "LicenseRef-Meshy-Paid" "$PLUG" | grep -v /run-tests.sh$ | grep -v /test_scripts.py$ | sort | tr '\n' ' ')
+[ "$n" = "$SH/licence-policy.md $SH/scripts/meshy.py " ] && ok "the Meshy licence table is in licence-policy.md and meshy.py only" || bad "Meshy licence copies" "$n"
+for f in "$PLUG/agents/asset-specialist-meshy.md" "$PLUG/skills/meshy/SKILL.md"; do
+    grep -q "meshy-api.md" "$f" && grep -q "licence-policy.md" "$f" && ok "$(basename "$(dirname "$f")")/$(basename "$f") cites meshy-api.md and licence-policy.md" \
+        || bad "Meshy references" "$f"
+done
+grep -q "_shared/project-boundary.md" "$PLUG/agents/asset-specialist-meshy.md" && ok "asset-specialist-meshy points to project-boundary.md" || bad "asset boundary reference"
+grep -qE "add_argument\(\"--(api-)?key" "$SH/scripts/meshy.py" && bad "meshy.py takes the key as an argument" || ok "meshy.py has no key option"
+out=$(cd "$T" && env -u MESHY_API_KEY $PY -I "$SH/scripts/meshy.py" create --endpoint text-to-3d --params - --dry-run <<<'{"mode":"preview","prompt":"a bronze kopis"}' 2>&1); rc=$?
+[ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '"dry_run": true' && ok "meshy.py --dry-run runs with no key and no network" || bad "meshy dry run" "rc=$rc $out"
 
 echo "== Python scripts ($($PY --version 2>&1))"
 for f in "$SH"/scripts/*.py "$HERE"/test_scripts.py "$HERE"/fixtures/gen_tracks.py; do
@@ -132,6 +148,9 @@ printf '%s' "$c" | head -1 | grep -qx "RULES digest: ok $want" && ok "current: o
 printf '%s' "$c" | grep -q "immobile" && printf '%s' "$c" | grep -q "own language" && ! printf '%s' "$c" | grep -q "along the blade" \
     && ok "anatomy gets its area and the untagged rule, not craft's" || bad "area filter" "$c"
 printf '%s' "$c" | grep -q "pending: 3 feedback ADR" && ok "the ADRs not committed are counted" || bad "pending" "$c"
+c=$(ctx kodflow-gamedev:asset-specialist-meshy)
+! printf '%s' "$c" | grep -q "immobile" && ! printf '%s' "$c" | grep -q "along the blade" && printf '%s' "$c" | grep -q "own language" \
+    && ok "the Meshy agent gets its areas and the untagged rule, not anatomy's or craft's" || bad "asset area filter" "$c"
 c=$(ctx kodflow-gamedev:gamedev-animation-director)
 printf '%s' "$c" | grep -q "along the blade" && printf '%s' "$c" | grep -q "immobile" && ok "the director gets every rule" || bad "director" "$c"
 hard=$(printf '%s' "$c" | grep -n "immobile" | cut -d: -f1); adv=$(printf '%s' "$c" | grep -n "own language" | cut -d: -f1)
