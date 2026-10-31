@@ -21,7 +21,7 @@ cd claude-marketplace && ./scripts/install.sh
 | `kodflow-specialists` | 35 language, platform and concern agents |
 | `kodflow-hud` (optional) | `/hud` — a Tasks pane beside the status line (a mod, Claude Code 2.1.293+) |
 | `kodflow-ktn` (optional) | `/ktn-view` — ktn-linter's daemon and findings in a Go project (a mod, Claude Code 2.1.299+) |
-| `kodflow-gamedev` (per project) | `/move` `/anim-review` `/anim-feedback` `/reference` — 13 agents for combat animation that is anatomically and martially right; enabled in a game project's own settings, never by `install.sh`, never generated for Codex |
+| `kodflow-gamedev` (per project) | `/move` `/anim-review` `/anim-feedback` `/reference` `/meshy` — 14 agents for combat animation that is anatomically and martially right, and Meshy-generated assets checked against the rig; enabled in a game project's own settings, never by `install.sh`, never generated for Codex |
 
 ## The three ideas worth the install
 

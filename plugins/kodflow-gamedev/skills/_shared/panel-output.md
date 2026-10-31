@@ -1,7 +1,7 @@
 # Panel output — what every kodflow-gamedev agent returns
 
-The skills of this plugin (`/move`, `/anim-review`, `/reference`) brief one
-agent per role and merge what comes back. A subagent writes nothing in the
+The skills of this plugin (`/move`, `/anim-review`, `/reference`, `/meshy`)
+brief one agent per role and merge what comes back. A subagent writes nothing in the
 project: it returns one JSON object, and only the main thread writes, through
 the plugin's scripts. This file is the contract of that object
 (`panel-member/v1`). An agent receives this file's absolute path in its brief.
@@ -12,7 +12,7 @@ the plugin's scripts. This file is the contract of that object
 {
   "schema": "panel-member/v1",
   "agent": "martial-specialist-europe",
-  "role": "governing | consulted | anatomy | craft | rig | engine | imagery | director",
+  "role": "governing | consulted | anatomy | craft | rig | engine | imagery | asset | director",
   "status": "ok | partial",
   "summary": "<one line>",
   "rules_applied": ["<feedback ADR file name the answer follows>"],

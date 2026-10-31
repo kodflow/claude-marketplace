@@ -109,6 +109,7 @@ case "$AGENT" in
     rig-specialist-*) AREAS="rig grip" ;;
     reference-specialist-*) AREAS="imagery licence" ;;
     engine-specialist-*) AREAS="engine rig" ;;
+    asset-specialist-*) AREAS="asset rig licence" ;;
     *) AREAS="*" ;;
 esac
 wanted() {   # $1 a rule line of .RULES.md

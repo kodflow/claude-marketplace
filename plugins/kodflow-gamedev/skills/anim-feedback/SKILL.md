@@ -39,7 +39,7 @@ Build one `feedback-adr/v1` object (`../_shared/feedback-adr.schema.json`;
 - `scope`: tags an agent filters on — `move:<slug>`, `weapon:<w>`,
   `tradition:<t>`, and `area:` tags: `anatomy`, `grip`, `locomotion`,
   `martial`, `technique`, `craft`, `timing`, `readability`, `rig`, `engine`,
-  `imagery`, `licence`. A rule with no `area:` tag reaches every agent.
+  `imagery`, `licence`, `asset`. A rule with no `area:` tag reaches every agent.
 - `supersedes`: the ADR files this one replaces (`--supersedes`, or an
   active rule with the same scope that this verdict contradicts — ask the
   owner before superseding one they did not name).

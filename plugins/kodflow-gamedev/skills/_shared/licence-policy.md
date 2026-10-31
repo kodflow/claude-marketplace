@@ -1,8 +1,8 @@
-# Licence policy — reference images and motion data
+# Licence policy — reference images, motion data and generated assets
 
 As of **2026-10-30**, from the plugin's research of that date. Binding for the
-`/reference` skill, `fetch-reference.py` and every agent that proposes an
-image or a dataset. A rule marked *tier 3* rests on snippets or secondary
+`/reference` and `/meshy` skills, `fetch-reference.py`, `meshy.py` and every
+agent that proposes an image, a dataset or a generated asset. A rule marked *tier 3* rests on snippets or secondary
 reports, not on the source's own page: treat it as a hypothesis to confirm on
 the object's own record. The project is assumed **commercial** unless its
 `CLAUDE.md` says otherwise.
@@ -83,6 +83,70 @@ the same bytes:
 When the image was fetched is the commit's business, not the manifest's. An
 image whose licence is not on the committable list goes to `.cache/anim-ref/`
 (which ignores itself) with the same fields, never to `art/reference/`.
+
+## Meshy outputs
+
+Read on **2026-10-31** from Meshy's own pages: the Terms of Service
+(https://www.meshy.ai/terms-of-use, "Last Updated: September 19, 2026",
+sections 2.3, 2.4, 3.1 to 3.3; body sha256
+`801c18a55054776b6945f2523af615c42440969e21589acb68de9fcda9f84a5a`) and the
+web app's pricing page (https://docs.meshy.ai/en/webapp/pricing, section
+*Licensing*, read through https://docs.meshy.ai/llms-full.txt). Tier 1 for
+what they say; this table is not legal advice. Binding for `meshy.py`, which
+writes the `licence_id` below from the plan the owner declares.
+
+The licence of a Meshy model follows the **plan of the account when the task
+was created**. The API does not return it: the owner states the plan
+(`--plan`), and a model whose plan is not stated, or not one of the five
+names below, is **never downloaded**.
+
+| Plan at creation | `licence_id` | Who owns the model | Commit? | Condition |
+|------------------|--------------|--------------------|---------|-----------|
+| `free` | `CC-BY-4.0` | Meshy, licensed to you under CC BY 4.0 | yes | credit Meshy: the manifest's `attribution` and the game's credits ("3D model generated with Meshy, meshy.ai, CC BY 4.0") |
+| `pro`, `premium`, `ultra`, `studio`, `enterprise` | `LicenseRef-Meshy-Paid` | you, "to the extent possible under applicable law" | yes | none from Meshy; keep the manifest entry |
+| anything else, or not stated | — | unknown | **never** | not downloaded |
+
+Excerpts relied on (Terms of Service, 3.2): "Customers using Meshy's Services
+under the free plan, acknowledge and agree that Meshy owns all right, title,
+and interest, including all intellectual property rights, in and to the
+Customer Output and makes such rights available to free plan customers under
+the Creative Commons Attribution 4.0 International License"; "such customers
+on a paid Meshy plan own their Customer Output". Pricing page: "Free | CC BY
+4.0 | Yes, with attribution | You own the output" and "Pro, Premium, Ultra,
+Studio, and Enterprise | Private | Yes, full commercial use | You own the
+output" (the page and the terms differ on who owns a free output: the terms,
+which bind, say Meshy).
+
+Rules that come with it:
+
+- **Do not strip the AI marks.** Terms 2.4: "You agree not to remove, alter,
+  disable, or otherwise tamper with such identifiers" (machine-readable
+  metadata, digital watermarks). An import step or an optimiser that rewrites
+  a GLB keeps its `asset` block and `extras` untouched. Which fields Meshy
+  writes is *unverified* (`meshy-api.md`): until it is known, keep the
+  downloaded GLB as the source of truth in the manifest, and treat any
+  rewrite as a derivative that keeps every field it can.
+- **Rigs and preset animations are Meshy's.** Terms 2.3 and 3.1: animations
+  and character rigs Meshy makes available are *Service Assets*, licensed
+  "solely to the extent incorporated into and necessary for Customer to use
+  and otherwise exploit the Customer Output". A library clip on the Meshy
+  character it was applied to ships with that character. Extracting the
+  clip to drive **another** character, or the project's own rig, is not
+  clearly covered: it needs an owner ADR before it is committed. Retargeting
+  the Meshy **mesh** onto the project's rig is the Customer Output itself and
+  is not affected.
+- **Community page.** Terms 3.3: a model posted to the Meshy Community page
+  is licensed to the public under CC0 1.0. Never post a Lucky asset there
+  without the owner's decision.
+- **Downgrades.** Whether a model made on a paid plan keeps its terms after
+  a downgrade is stated only in a help-centre article the research did not
+  load (*unverified*): record the plan at creation, which is what the table
+  keys on.
+- **Inputs.** An `image_url` sent to Meshy is Customer Input: the owner must
+  hold the rights to it (terms 2.2). A reference image from `/reference` is
+  sent only when its manifest says `committable: true`.
+- **Retention.** Files are deleted three days after generation (terms 2.5):
+  download within that window or regenerate.
 
 ## When a rule here is wrong
 
