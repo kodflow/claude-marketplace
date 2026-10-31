@@ -143,7 +143,7 @@ write_record() {
 
 jobtmp=""
 child=""
-# shellcheck disable=SC2317  # invoked by the EXIT trap
+# shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap
 cleanup() {
   if [[ -n $child ]]; then kill -TERM "$child" 2>/dev/null || true; fi
   if [[ -n $jobtmp ]]; then rm -rf "$jobtmp"; fi
