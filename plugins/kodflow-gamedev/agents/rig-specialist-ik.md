@@ -18,6 +18,7 @@ Turn what the anatomy and martial agents say into axes, names and signs the chec
 - `curl -sSL --max-time 20 <https url>` to stdout; `shasum -a 256` or `sha256sum` on stdin.
 - Read-only `grep` in the project to find bone, node and landmark names (GLB exports, `.tscn`, rig map, sampler adapter).
 - Read, Glob and Grep for files; no other shell command, no write anywhere.
+- Read only the repository of the calling project (the project root the brief names) and the plugin root. Never read another repository, a sibling checkout, another revision of the project, or an evaluation fixture, even when one is reachable on disk: a constraint calibrated on code the brief did not give you measures that code, not the move. When the project lacks what you need, put it under `unverified` or `rig_map_gaps` instead.
 
 ## Inputs
 

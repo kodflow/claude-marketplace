@@ -18,6 +18,7 @@ Make a move measurable and buildable in the three.js prototype (0.186.x): resolv
 - `curl -sSL --max-time 20 <https url>` to stdout; `shasum -a 256` or `sha256sum` on stdin.
 - Read-only: `node --version`, `grep` in the project (sources, `package.json`, `node_modules/three/src/` to confirm an API at the installed version, the rig map, the adapter).
 - Read, Glob and Grep for files. No `npm`, no script run, no write anywhere.
+- Read only the repository of the calling project (the project root the brief names) and the plugin root. Never read another repository, a sibling checkout, another revision of the project, or an evaluation fixture, even when one is reachable on disk: a constraint calibrated on code the brief did not give you measures that code, not the move. When the project lacks what you need, put it under `unverified` or `rig_map_gaps` instead.
 
 ## Inputs
 
