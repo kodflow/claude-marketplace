@@ -1,0 +1,104 @@
+{
+  "images": [
+    {
+      "author": "Unknown author",
+      "committable": true,
+      "file": "5cc021b5ff240762c638f0a2e9413e482c3739d3d233a9d97658109ed4aaece6.jpg",
+      "final_url": "https://upload.wikimedia.org/wikipedia/commons/a/af/Ms_I33_fol_10r.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "licence_id": "PD",
+      "licence_verified": true,
+      "move": "sword-and-buckler-wards",
+      "page": "https://commons.wikimedia.org/wiki/File:Ms_I33_fol_10r.jpg",
+      "sha256": "5cc021b5ff240762c638f0a2e9413e482c3739d3d233a9d97658109ed4aaece6",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/af/Ms_I33_fol_10r.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+    },
+    {
+      "author": "Unknown author",
+      "committable": true,
+      "file": "68e5d3ac2bf58f60bdacb63870c8f71ef3001ba80cec3aa44d7f85cc34a154ab.jpg",
+      "final_url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/Ms_I33_fol_20r.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "licence_id": "PD",
+      "licence_verified": true,
+      "move": "sword-and-buckler-wards",
+      "page": "https://commons.wikimedia.org/wiki/File:Ms_I33_fol_20r.jpg",
+      "sha256": "68e5d3ac2bf58f60bdacb63870c8f71ef3001ba80cec3aa44d7f85cc34a154ab",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/Ms_I33_fol_20r.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+    },
+    {
+      "author": "Unknown author",
+      "committable": true,
+      "file": "97f1dcb3a65935214794f0e4d2b6c0c9502e8ead47d16e4753fedcfec0bbd03e.jpg",
+      "final_url": "https://upload.wikimedia.org/wikipedia/commons/a/ac/Ms_I33_fol_09r.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "licence_id": "PD",
+      "licence_verified": true,
+      "move": "sword-and-buckler-wards",
+      "page": "https://commons.wikimedia.org/wiki/File:Ms_I33_fol_09r.jpg",
+      "sha256": "97f1dcb3a65935214794f0e4d2b6c0c9502e8ead47d16e4753fedcfec0bbd03e",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/ac/Ms_I33_fol_09r.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+    },
+    {
+      "author": "Unknown author",
+      "committable": true,
+      "file": "9844c0e3707ee6ffb78467afdc0461d58e48a147182b7133b9ab764cf441acfb.jpg",
+      "final_url": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Ms_I33_fol_01r.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+      "licence_id": "PD",
+      "licence_verified": true,
+      "move": "sword-and-buckler-wards",
+      "page": "https://commons.wikimedia.org/wiki/File:Ms_I33_fol_01r.jpg",
+      "sha256": "9844c0e3707ee6ffb78467afdc0461d58e48a147182b7133b9ab764cf441acfb",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Ms_I33_fol_01r.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+    }
+  ],
+  "links": [
+    {
+      "committable": false,
+      "licence": "scan: Royal Armouries, non-commercial (licence-policy.md); transcription: see the page",
+      "page": "https://wiktenauer.com/wiki/Page:MS_I.33_01r.jpg",
+      "what": "MS I.33 fol. 01r, Wiktenauer page (transcription beside the scan)"
+    },
+    {
+      "committable": false,
+      "licence": "scan: Royal Armouries, non-commercial (licence-policy.md); transcription: see the page",
+      "page": "https://wiktenauer.com/wiki/Page:MS_I.33_02r.jpg",
+      "what": "MS I.33 fol. 02r, Wiktenauer page (transcription beside the scan)"
+    },
+    {
+      "committable": false,
+      "licence": "scan: Royal Armouries, non-commercial (licence-policy.md); transcription: see the page",
+      "page": "https://wiktenauer.com/wiki/Page:MS_I.33_09r.jpg",
+      "what": "MS I.33 fol. 09r, Wiktenauer page (transcription beside the scan)"
+    },
+    {
+      "committable": false,
+      "licence": "scan: Royal Armouries, non-commercial (licence-policy.md); transcription: see the page",
+      "page": "https://wiktenauer.com/wiki/Page:MS_I.33_09v.jpg",
+      "what": "MS I.33 fol. 09v, Wiktenauer page (transcription beside the scan)"
+    },
+    {
+      "committable": false,
+      "licence": "scan: Royal Armouries, non-commercial (licence-policy.md); transcription: see the page",
+      "page": "https://wiktenauer.com/wiki/Page:MS_I.33_10r.jpg",
+      "what": "MS I.33 fol. 10r, Wiktenauer page (transcription beside the scan)"
+    },
+    {
+      "committable": false,
+      "licence": "scan: Royal Armouries, non-commercial (licence-policy.md); transcription: see the page",
+      "page": "https://wiktenauer.com/wiki/Page:MS_I.33_10v.jpg",
+      "what": "MS I.33 fol. 10v, Wiktenauer page (transcription beside the scan)"
+    },
+    {
+      "committable": false,
+      "licence": "scan: Royal Armouries, non-commercial (licence-policy.md); transcription: see the page",
+      "page": "https://wiktenauer.com/wiki/Page:MS_I.33_11r.jpg",
+      "what": "MS I.33 fol. 11r, Wiktenauer page (transcription beside the scan)"
+    },
+    {
+      "committable": false,
+      "licence": "scan: Royal Armouries, non-commercial (licence-policy.md); transcription: see the page",
+      "page": "https://wiktenauer.com/wiki/Page:MS_I.33_20r.jpg",
+      "what": "MS I.33 fol. 20r, Wiktenauer page (transcription beside the scan)"
+    }
+  ],
+  "note": "Images: Wikimedia Commons files whose licence and author were read from the Commons API (extmetadata) by fetch-reference.py, the only bytes committed. Commons marks these folio scans public domain; licence-policy.md records Royal Armouries' own scans of MS I.33 as non-commercial. Commons' statement is what was verified; a project shipping them commercially should confirm it. Links: pages kept as URL and licence only, no bytes.",
+  "schema": "reference-manifest/v1"
+}

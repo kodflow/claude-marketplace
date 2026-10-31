@@ -399,6 +399,8 @@ class References(unittest.TestCase):
         with self.assertRaises(fx.Refused):
             fx.commons_licence({"LicenseShortName": {"value": "CC BY-SA 4.0"}})
         self.assertEqual(fx.commons_licence({"LicenseShortName": {"value": "CC BY-SA 4.0"}, "Artist": {"value": "<a>Me</a>"}}), ("CC-BY-SA-4.0", "Me"))
+        hidden = 'Unknown author<span style="display: none;">Unknown author</span>'
+        self.assertEqual(fx.commons_licence({"LicenseShortName": {"value": "Public domain"}, "Artist": {"value": hidden}}), ("PD", "Unknown author"))
 
     def test_placement(self):
         root = pathlib.Path(tempfile.mkdtemp())

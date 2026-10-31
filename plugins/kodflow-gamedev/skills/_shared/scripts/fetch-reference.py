@@ -125,7 +125,10 @@ def same_file(title, url, final):
 
 
 def strip_tags(s):
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s or "")).strip()
+    # Commons repeats some values in a hidden span ("Unknown author<span style=
+    # "display: none;">Unknown author</span>"): the hidden copy is not text.
+    s = re.sub(r"(?is)<(\w+)[^>]*display:\s*none[^>]*>.*?</\1>", " ", s or "")
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s)).strip()
 
 
 def commons_licence(meta):
@@ -170,12 +173,12 @@ def atomic_write(path, data):
 
 def add_to_manifest(path, rec):
     try:
-        items = json.loads(path.read_text(encoding="utf-8")).get("images", [])
+        doc = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        items = []
-    items = [i for i in items if i.get("file") != rec["file"]] + [rec]
+        doc = {}
+    items = [i for i in doc.get("images", []) if i.get("file") != rec["file"]] + [rec]
     items.sort(key=lambda i: i["file"])
-    doc = {"schema": "reference-manifest/v1", "images": items}
+    doc = dict(doc, schema="reference-manifest/v1", images=items)   # other keys (links) are kept
     atomic_write(path, (json.dumps(doc, indent=2, ensure_ascii=False, sort_keys=True) + "\n").encode())
 
 

@@ -168,3 +168,42 @@ Never fill a gap from memory and present it as sourced.
   Mixamo, Pexels and Unsplash read only as snippets.
 - **Engines.** Actual compatibility of godot-ai-animation-toolkit with
   Godot 4.7.2 (2 stars, no reports).
+
+## Verified sources shipped with the plugin
+
+Cached in the plugin's `sources/` directory beside this file, one file per page, named by the sha256 of the page body when it was checked: URL, check date, match status, the excerpts found, and the hash. A constraint that covers a reference defect may cite one of these hashes as its `source` (the coverage rule accepts them like a project's own `docs/anim/sources/`). They come from the first evaluation run, 2026-10-30, and keep only what is generic: treatises, papers, references, library documentation. Re-check a page before relying on a changed reading of it.
+
+| Source | Tier | Checked | Match | sha256 | First excerpt |
+|---|---|---|---|---|---|
+| https://arxiv.org/html/2507.05419 | 2 | 2026-10-30 | normalised | `a5dbcfcbd7a82f6213b16067895d0959cfb915710f7ed7fcfe67e90b10280c15` | Foot Sliding Distance measures the average sliding of the foot joints when contact with th |
+| https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=19181900&rettype=abstract&retmode=text | 1 | 2026-10-30 | normalised | `7239e2b0e95c6582711db4a48edbf0f06d52a82462bd2ce2f292dff8cdb3ead7` | the arms act as passive mass dampers which reduce torso and head rotation, and upper body  |
+| https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=25031455&rettype=abstract&retmode=text | 1 | 2026-10-30 | normalised | `68b6f1a2ea3b02b4e18e7e8af440c8ba4db72d7bd5fefcecc3cbe9ee0f290a35` | We also found that when running without arm swing, subjects significantly increased the pe |
+| https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=8505347&rettype=abstract&retmode=text | 1 | 2026-10-31 | normalised | `385cff656d4ade83aa614678d6c67d762f0bf5d9e20b22be8cc649c0345ad1f2` | The motions of segments participating in striking and throwing skills are generally sequen |
+| https://nodejs.org/docs/latest-v26.x/api/module.html | 1 | 2026-10-30 | exact | `5f4608a1ea82d14cc519c7076052dfd87e242aec3f561b23e3a361b2a7f1039b` | module.registerHooks(options) |
+| https://pubmed.ncbi.nlm.nih.gov/1861019/ | 1 | 2026-10-31 | exact | `fe233b957c191ae90a3e737838a444b0e7d8310d50388075db1a3f15858a3224` | This converts to 40 degrees each of wrist flexion and extension, and 40 degrees of combine |
+| https://pubmed.ncbi.nlm.nih.gov/25031455/ | 1 | 2026-10-31 | exact | `0bda8ef4706f19e5a5fb5c124db244f4e6fceb329f3671ff46a60597e7b61dd5` | significantly increased the peak-to-peak amplitudes of both shoulder and pelvis rotation |
+| https://raw.githubusercontent.com/mrdoob/three.js/r186/src/animation/AnimationMixer.js | 2 | 2026-10-31 | exact | `7b05af5507aa4edfe3d6b5debcda23c8f0d9b910928debff7fc50748954d533c` | Sets the global mixer to a specific time and updates the animation accordingly. |
+| https://science-and-fiction.org/swordfighting/cuts.html | 4 | 2026-10-31 | exact | `7b71dda8ceb46bb5ade793ad9b5624c3075d3a58e55dee307ee1d3d5fdded76f` | Note that generally cuts are fast - with top angular velocities between 1000 and 2000 deg/ |
+| https://wikem.org/wiki/Joint_ROM_(Table) | 3 | 2026-10-31 | normalised | `b0d2d31c1d771bb9fc06e41bac0f765f252e78a362bf92189454893fe6d8deba` | Lumbar-thoracic Spine Flexion 45-50 Hyperextension 25 Lateral Flexion 25 Rotation 30 |
+| https://wiktenauer.com/wiki/I.33 | 2 | 2026-10-30 | exact | `fbc8f5b80c45c99a31a71c956ace99dffd93ebb871a763a3f08a559348fd3ae7` | have been conceptually restored by artist |
+| https://wiktenauer.com/wiki/Liber_de_Arte_Dimicatoria | 2 | 2026-10-31 | exact | `02e0690564136e55fbdef8c3421f0a01cffb9361b006a80386154ce66fe6a9b5` | reach the bare hands of him who executes the abovementioned strikes |
+| https://wiktenauer.com/wiki/Liber_de_Arte_Dimicatoria | 2 | 2026-10-31 | exact | `2d987abb24538786a4f9cf656cb36f6fd1ce1aac0f1a84fc4c1b0ad2e2e47da1` | all actions of the guards or the sword terminate, i.e. they end in it and not in the other |
+| https://wiktenauer.com/wiki/Liber_de_Arte_Dimicatoria | 2 | 2026-10-31 | exact | `3add49b141e2064e95d6377df65eff8db22edcda32bf21215e7c9c40f2120197` | we speak of the second ward, which is given to the right shoulder |
+| https://wiktenauer.com/wiki/Liber_de_Arte_Dimicatoria | 2 | 2026-10-31 | exact | `63da8c302ae1b9b9fb3c1adf95bab6d6e8f0bcd210c607278c07a25d517be57d` | to execute (not to receive) a blow |
+| https://wiktenauer.com/wiki/Liber_de_Arte_Dimicatoria | 2 | 2026-10-31 | exact | `7140db80710a30f2d7b492df6255c96c9f4661cf8699cb18e9abf5a5cee9f94c` | Fencing is the ordering of various strikes |
+| https://wiktenauer.com/wiki/Liber_de_Arte_Dimicatoria | 2 | 2026-10-31 | exact | `8ad2928e2978d8edfdc201232dcec8dbb2a2048893a11699e4b13c4d037cd160` | a strike from the one assuming the ward is always to be expected, which could divide sword |
+| https://wiktenauer.com/wiki/Liber_de_Arte_Dimicatoria | 2 | 2026-10-31 | exact | `949f7dbaecdbeed774f65ebfae7a0abe9d4c6306db7899452374e7339472218f` | from the right side; thirdly, he can execute a blow from the left side |
+| https://wiktenauer.com/wiki/Page:MS_I.33_01r.jpg | 2 | 2026-10-30 | exact | `961f77031d3f95688ec3d902de47def894ece3863b706b5473c27e44c79ee0f1` | Humero dextrali datur alter terna sinistro |
+| https://wiktenauer.com/wiki/Page:MS_I.33_01v.jpg | 2 | 2026-10-31 | exact | `c50a8dcddafe23d4fd3d4b92569e63e476dabc07d8e8f21946b44b96dc281f8f` | omnes actus custodiarum siue gladij determinantur in ea |
+| https://wiktenauer.com/wiki/Page:MS_I.33_02r.jpg | 2 | 2026-10-31 | exact | `2eeeecd1dce53d8d49e809dea85662f55edcd93191ffd3cfcb3adbd48caa1190` | manus regens scutum includitur in manu regente gladium |
+| https://wiktenauer.com/wiki/Page:MS_I.33_09r.jpg | 2 | 2026-10-30 | exact | `a2ab430c612c290d38e57cf7b6bdadb405fe3f20a5cd82e17426f61255691655` | sed hic loquimur de secunda custodia que datur humero dextro |
+| https://wiktenauer.com/wiki/Page:MS_I.33_09v.jpg | 2 | 2026-10-31 | exact | `41c603ab96634161357faa3d667cde64c3a0a9a01f7177ab47ecb24c6cd95600` | manus nudas ducentis plagas supradictas |
+| https://wiktenauer.com/wiki/Page:MS_I.33_10r.jpg | 2 | 2026-10-30 | exact | `67c057cbe3757e0d38f4e155477ec8824a04fd06caaf91c07747cd6f6a4e887e` | Hvmero dextrali datur altera .i. custodia |
+| https://wiktenauer.com/wiki/Page:MS_I.33_10v.jpg | 2 | 2026-10-30 | exact | `524c439b8fbee56f76967fd679a02ef53529ef6e236eb52ae76afdfb388a3cee` | contra primam custodiam videlicet sub brachio |
+| https://wiktenauer.com/wiki/Page:MS_I.33_11r.jpg | 2 | 2026-10-31 | exact | `d16f05954cf3f288472816f68a028acedb4389dec16329b3231ac7f3e22f44c8` | sacerdos esset in actu ducendi plagam superiorem |
+| https://wiktenauer.com/wiki/Page:MS_I.33_20r.jpg | 2 | 2026-10-31 | exact | `05f6c30307b57f75fee7d42b48975a7f250e6317ffe91033be804cd324c857f5` | vltima custodia que nuncupatur langort quam in hoc loco regit sacerdos |
+| https://wiktenauer.com/wiki/Page:MS_I.33_20r.jpg | 2 | 2026-10-31 | exact | `0d72b977d621d154321f12967db0e6b7962ffb40cff09099e9b25cb87774146a` | HIc iterum ducitur vltima custodia que nuncupatur langort |
+
+## Reference images shipped with the plugin
+
+The plugin's `references/` directory beside this file: four folios of MS I.33 (fol. 1r, 9r, 10r, 20r) fetched from Wikimedia Commons by `fetch-reference.py` on 2026-10-31, licence read from the Commons API (public domain, author unknown), named by sha256, listed in its `manifest.json` with the Wiktenauer pages kept as links only. See the manifest's note on the Royal Armouries non-commercial statement.

@@ -1,0 +1,23 @@
+```json
+{
+  "agent": "martial-specialist-europe",
+  "checked": "2026-10-31",
+  "final_url": "https://wiktenauer.com/wiki/Page:MS_I.33_02r.jpg",
+  "http_status": 200,
+  "match_mode": "exact",
+  "note": "Checked by cache-source.py during the plugin's first evaluation (2026-10-30): the excerpts below were found on the page whose body had this sha256. Short quotations for citation; the page's own licence applies to the page.",
+  "read": "full",
+  "sha256": "2eeeecd1dce53d8d49e809dea85662f55edcd93191ffd3cfcb3adbd48caa1190",
+  "status": "verified",
+  "tier": 2,
+  "url": "https://wiktenauer.com/wiki/Page:MS_I.33_02r.jpg"
+}
+```
+
+## Excerpt
+
+> manus regens scutum includitur in manu regente gladium
+
+## Excerpt
+
+> hic continetur prima custodia, videlicet sub
