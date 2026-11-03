@@ -86,6 +86,7 @@ for name, fm, body, reason in (
     ("Bash(go test:*) under scratch without Write", agent("Read, Bash"), scope("Bash(go test:*)"), LACK),
     ("broad Bash(go:*) under scratch without Write", agent("Read, Bash"), scope("Bash(go:*)"), LACK),
     ("Bash(cargo test:*) under scratch without Write", agent("Read, Bash"), scope("Bash(cargo test:*)"), LACK),
+    ("broad Bash(node:*) under scratch without Write", agent("Read, Bash"), scope("Bash(node:*)"), LACK),
     ("Write granted then disallowed", agent("Read, Write, Bash", "Write"), scope("Bash(go test:*)"), DENIED),
     ("Write disallowed with tools inherited", agent(None, "Edit, Write"), scope("Bash(go test:*)"), DENIED),
     ("Write disallowed as a YAML list", agent("Read, Write, Bash", "[Write]"), scope("Bash(go test:*)"), DENIED),
@@ -105,6 +106,7 @@ for name, fm, body in (
     ("Bash(go testjson:*) is not go test", agent("Read, Bash"), scope("Bash(go testjson:*)")),
     ("a Write(spec) grant still grants Write", agent("Read, Write(/tmp/**), Bash"), scope("Bash(go test:*)")),
     ("broad Bash(cargo:*) with no scratch wording", agent("Read, Bash"), scope("Bash(cargo:*)", scratch=False)),
+    ("Bash(node:*) under scratch with Write", agent("Read, Write, Bash"), scope("Bash(node:*)")),
     ("cargo test outside Command scope", agent("Read, Bash"),
      "## Command scope\n\n- `Bash(git diff:*)`\n\n## Role\n\n- `Bash(cargo test:*)` under the scratch directory."),
 ):

@@ -24,6 +24,7 @@ Restrict shell usage to these command families; anything outside is out of scope
 - `Bash(cargo-audit:*)`
 - `Bash(cargo-deny:*)`
 - `Bash(git log:*)`, `Bash(git show:*)`, `Bash(git diff:*)` — read-only history and diff inspection
+- `Bash(gh issue view:*)`, `Bash(gh release view:*)`, `Bash(gh api:*)` — read-only GitHub research (issues, releases, files at a tag) through the logged-in CLI, since `mcp__github__*` needs an interactive authorisation a subagent usually lacks; `gh api` sends GET only, never `-X`/`--method` other than GET, `-f`, `-F`, `--field`, `--raw-field` or `--input`
 - `Bash(grep:*)`, `Bash(ls:*)` — read-only search and listing, for when Read, Glob and Grep do not fit
 - Find files with Glob, scoped to the repository or the reviewed path; never walk `~` or `/` (no `find` over the home directory).
 
@@ -268,14 +269,17 @@ impl Email {
 
 ## Plan review mode
 
-This mode is on when the brief starts with `Plan review mode`, asks for objections to a plan (nothing built yet), or asks for a read-only review of a plan or code in the caller's own format. One rule decides the format: the caller's format replaces this agent's output format, and no output-format section of this file overrides it. Outside this mode the output format of this file applies unchanged.
+This mode is on when the brief starts with `Plan review mode`, asks for objections to a plan (nothing built yet), or asks for a read-only review of a plan or code in the caller's own format. One rule decides the format: the caller's format replaces this agent's output format, and no output-format section of this file overrides it. Outside this mode the output format of this file applies unchanged. The validation checklist of this file (its linters, tests and formatters) applies to a code change; a review of a plan, prose or issue drafts runs the caller's checks only.
 
 In this mode:
 
 - Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command and result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
+- A measurement made on data the plan's author produced (extracts such as `.npy` or `.npz` files, caches) is usable, but its `consulted` entry says "author-derived, raw source not re-read", and an `unverified` entry names the raw source whenever it could not be read.
+- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`) when this agent's Command scope lists one, else with WebFetch on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`; never through Claude in Chrome. A documentation page that redirects or cannot be reached is replaced by the first-party source read at the pinned version, not cited from memory.
+- From round 2 on, the brief carries the previous version of the plan and the triage of the earlier objections: first say, objection by objection, whether each fix holds, then attack the new version. Never rebuild the earlier state from conversation history.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
-- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
+- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing, unless a section of this file gives a fallback for that case. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
 
 ## Output Format (JSON)
 
@@ -344,6 +348,10 @@ In that order:
    `~/.cargo/registry/src/<index>/<crate>-<version from Cargo.lock>/<path>`
    (`$CARGO_HOME` when it is set). This is first-party evidence for runtime
    behaviour.
+2c. A clippy lint whose page in the lint index redirects or does not load:
+   read its source in `rust-lang/rust-clippy` at the toolchain's tag
+   (`rust-1.NN.0`, from `rustc --version` or `rust-toolchain.toml`) and cite it
+   as `rust-lang/rust-clippy:<path>@rust-1.NN.0`.
 3. `~/.claude/docs/` — but **read its `verified:` date first**. A `stale` or
    `expired` document is a hypothesis to confirm, not a source to cite. The
    index at `~/.claude/docs/INDEX.json` carries the status of every entry.
