@@ -122,7 +122,8 @@ echo "== PreToolUse · no forge through Claude in Chrome (#127)"
 # forges; a navigation there, or a script naming one or a GitLab API path, is
 # refused for every caller with the MCP path then the CLI path.
 br() {   # $1 tool suffix, $2 tool_input JSON, $3 extra fragment (agent_id)
-    run PreToolUse "mcp__claude-in-chrome__$1" "$(jq -n -c --argjson i "$2" --argjson x "${3:-{\}}" '{tool_input:$i} + $x')" on-tool.sh
+    local x=${3:-}; [ -n "$x" ] || x='{}'   # not ${3:-{\}}: bash 3.2 reads that brace differently
+    run PreToolUse "mcp__claude-in-chrome__$1" "$(jq -n -c --argjson i "$2" --argjson x "$x" '{tool_input:$i} + $x')" on-tool.sh
 }
 expect_br() {
     if [ "$RC" -eq 2 ] && printf '%s' "$ERR" | grep -q '\[motif:forge-browser\]' \
