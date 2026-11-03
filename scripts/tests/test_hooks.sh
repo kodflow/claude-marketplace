@@ -117,6 +117,48 @@ printf '{}\n' > "$T/repo/sub/nested/.mcp.json"; git -C "$T/repo/sub/nested" add 
 bash_cmd 'cd sub && git -C nested commit -m "feat: x"';                expect_mj "cd sub && git -C nested commit reads sub/nested's index"
 rm -rf "$T/repo/sub"
 
+echo "== PreToolUse · no forge through Claude in Chrome (#127)"
+# github.com, gitlab.com, every git remote's host and KODFLOW_FORGE_HOSTS are
+# forges; a navigation there, or a script naming one or a GitLab API path, is
+# refused for every caller with the MCP path then the CLI path.
+br() {   # $1 tool suffix, $2 tool_input JSON, $3 extra fragment (agent_id)
+    run PreToolUse "mcp__claude-in-chrome__$1" "$(jq -n -c --argjson i "$2" --argjson x "${3:-{\}}" '{tool_input:$i} + $x')" on-tool.sh
+}
+expect_br() {
+    if [ "$RC" -eq 2 ] && printf '%s' "$ERR" | grep -q '\[motif:forge-browser\]' \
+        && printf '%s' "$ERR" | grep -q 'mcp__github__\* / mcp__gitlab__\*' && printf '%s' "$ERR" | grep -q 'gh or glab'; then
+        ok "$1"
+    else bad "$1" "rc=$RC err=${ERR:0:200}"; fi
+}
+git -C "$T/repo" remote add origin "git@forge.example.org:team/app.git"
+git -C "$T/repo" remote add mirror "https://user@Code.Example.NET:8443/team/app.git"
+br navigate '{"url":"https://github.com/o/r/pulls","tabId":1}';            expect_br "navigate to github.com refused, MCP then CLI named"
+br navigate '{"url":"gitlab.com/o/r/-/pipelines","tabId":1}';              expect_br "navigate to gitlab.com without a scheme refused"
+br navigate '{"url":"https://api.GitHub.com/repos/o/r","tabId":1}';        expect_br "a forge subdomain, any case, refused"
+br navigate '{"url":"https://forge.example.org/team/app/-/jobs/1","tabId":1}'; expect_br "the host of an scp-like remote refused"
+br navigate '{"url":"https://code.example.net/x","tabId":1}';              expect_br "the host of an https remote (user, port, case) refused"
+br navigate '{"url":"https://github.com/o/r","tabId":1}' '{"agent_id":"agt_br"}'; expect_br "a subagent is refused too"
+br javascript_tool '{"action":"javascript_exec","text":"fetch(\"https://gitlab.com/api/v4/projects/1/pipelines\")","tabId":1}'; expect_br "a script fetching a forge refused"
+br javascript_tool '{"action":"javascript_exec","text":"await fetch(\"/api/v4/projects/562/jobs?per_page=5\")","tabId":1}'; expect_br "a script on a GitLab API path, no host, refused"
+br navigate '{"url":"https://example.com/github.com","tabId":1}';           expect_rc "a forge name in the path of another host passes" 0
+br navigate '{"url":"https://notgithub.com/","tabId":1}';                  expect_rc "a host that only ends with a forge name passes" 0
+br navigate '{"url":"https://docs.python.org/3/","tabId":1}';              expect_rc "any other site passes" 0
+br javascript_tool '{"action":"javascript_exec","text":"document.title","tabId":1}'; expect_rc "a script naming no forge passes" 0
+OUT=$(jq -n -c --arg cwd "$T/repo" '{session_id:"sess-1",hook_event_name:"PreToolUse",tool_name:"mcp__claude-in-chrome__navigate",cwd:$cwd,tool_input:{url:"https://git.corp.example/x"}}' \
+    | KODFLOW_FORGE_HOSTS="other.example, GIT.corp.example" bash "$S/on-tool.sh" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err")
+expect_br "KODFLOW_FORGE_HOSTS adds a forge (comma, case)"
+OUT=$(jq -n -c --arg cwd "$T/repo" '{session_id:"sess-1",hook_event_name:"PreToolUse",tool_name:"mcp__claude-in-chrome__navigate",cwd:$cwd,tool_input:{url:"https://github.com/o/r"}}' \
+    | KODFLOW_FORGE_BROWSER=ask bash "$S/on-tool.sh" 2>"$T/err"); RC=$?
+[ "$RC" -eq 0 ] && printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision == "ask" and (.hookSpecificOutput.permissionDecisionReason | test("mcp__github__"))' >/dev/null 2>&1 \
+    && ok "KODFLOW_FORGE_BROWSER=ask turns the refusal into a permission prompt" || bad "forge browser ask" "rc=$RC out=$OUT"
+OUT=$(jq -n -c --arg cwd "$T/repo" '{session_id:"sess-1",hook_event_name:"PreToolUse",tool_name:"mcp__claude-in-chrome__navigate",cwd:$cwd,tool_input:{url:"https://github.com/o/r"}}' \
+    | KODFLOW_FORGE_BROWSER=off bash "$S/on-tool.sh" 2>"$T/err"); RC=$?
+[ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "KODFLOW_FORGE_BROWSER=off turns the check off" || bad "forge browser off" "rc=$RC out=$OUT"
+git -C "$T/repo" remote remove origin; git -C "$T/repo" remote remove mirror
+run PostToolUseFailure mcp__github__get_me '{"error":"MCP error: 401 Bad credentials"}' on-tool.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("not authenticated") and test("GITHUB_PERSONAL_ACCESS_TOKEN") and test("never Claude in Chrome")' >/dev/null 2>&1 \
+    && ok "a forge MCP answering 401 is reported with the steps to configure it" || bad "forge 401" "$OUT"
+
 echo "== PreToolUse Bash · the input is never rewritten"
 bash_cmd 'git push --force origin feat'
 [ "$RC" -eq 2 ] && [ -z "$OUT" ] && printf '%s' "$ERR" | grep -q 'Run instead: git push --force-with-lease origin feat' \
@@ -736,8 +778,12 @@ run SessionStart "" '{"source":"compact"}' on-session.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("POST-COMPACTION")' >/dev/null 2>&1 && ok "post-compaction rules injected" || bad "compact context" "$OUT"
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("refused: use --force-with-lease") and (test("rtk rewrites") | not)' >/dev/null 2>&1 \
     && ok "post-compaction text: forced push refused, no rtk rewrite claimed" || bad "compact text" "$OUT"
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("mcp__github__\\* / mcp__gitlab__\\* first") and test("never Claude in Chrome on a forge")' >/dev/null 2>&1 \
+    && ok "post-compaction rules carry the forge rule (#127)" || bad "compact forge rule" "$OUT"
 run SessionStart "" '{"source":"startup"}' on-session.sh
 expect_rc "startup exits 0" 0
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("forge access") and test("never Claude in Chrome on a forge")' >/dev/null 2>&1 \
+    && ok "every session starts with the forge rule (#127)" || bad "startup forge rule" "$OUT"
 printf '%s' "$OUT" | jq -e '.systemMessage' >/dev/null 2>&1 && bad "no warning on a clean setup" "$OUT" || ok "a clean setup raises no guard warning"
 
 echo "== SessionStart · what can switch the guards off"

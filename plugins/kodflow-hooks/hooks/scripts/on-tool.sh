@@ -168,6 +168,9 @@ if [[ $INPUT =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PreToolUse\" ]] &&
                 if [[ $INPUT =~ $fp_re ]]; then fp_full=1; else case "$fp_tool" in *merge_pull_request|*merge_merge_request|*GitKraken__git_add) fp_full=1 ;; esac; fi
                 # A file named mcp.json is refused for every caller (pre_forge)
                 case "$INPUT" in *[Mm][Cc][Pp].[Jj][Ss][Oo][Nn]*) fp_full=1 ;; esac ;;
+            # The browser toward a forge, for every caller (pre_browser)
+            mcp__claude-in-chrome__navigate|mcp__claude-in-chrome__javascript_tool)
+                [ "${KODFLOW_FORGE_BROWSER:-}" != off ] && fp_full=1 ;;
             esac
             if [ $fp_full = 0 ]; then
                 [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]] && exit 0
@@ -1530,6 +1533,85 @@ pre_forge() {
 }
 
 # ============================================================================
+# PreToolUse · Claude in Chrome toward a forge
+# ============================================================================
+# GitHub and GitLab are read and driven through their MCP, then their CLI —
+# never through the user's browser: a tab freezes or answers "Failed to
+# fetch", an output holding a URL or a token is withheld, and a write rides
+# the web session's CSRF token, outside any tool meant for it. A navigation
+# to a forge host, or a script naming one or a GitLab API path, is refused
+# for every caller. The forges: github.com, gitlab.com and their subdomains,
+# the host of every git remote of the project, and KODFLOW_FORGE_HOSTS
+# (space- or comma-separated). The user's way out for one call they agreed
+# to: KODFLOW_FORGE_BROWSER=ask turns the refusal into a permission prompt,
+# =off turns the check off.
+
+# $1 a URL or a scp-like remote → BR_HOST, lower case, no user, no port.
+_br_host() {
+    local u=$1
+    case "$u" in
+        *://*) u=${u#*://} ;;
+        *@*:*) u=${u#*@}; u=${u%%:*} ;;
+        *) BR_HOST=""; return 1 ;;
+    esac
+    u=${u%%[/?#]*}; u=${u##*@}; u=${u%%:*}
+    BR_HOST=$(printf '%s' "$u" | tr '[:upper:]' '[:lower:]')
+    [ -n "$BR_HOST" ]
+}
+
+# The forge hosts, one per line.
+_br_forges() {
+    local r h
+    printf '%s\n' github.com gitlab.com
+    printf '%s\n' ${KODFLOW_FORGE_HOSTS//,/ } | tr '[:upper:]' '[:lower:]'
+    while IFS= read -r r; do
+        _br_host "$r" && printf '%s\n' "$BR_HOST"
+    done < <(git -C "$PROJECT_DIR" config --get-regexp '^remote\..*\.url$' 2>/dev/null | awk '{print $2}')
+}
+
+# $1 a host → 0 when it is a forge or one of its subdomains.
+_br_is_forge() {
+    local f
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        case "$1" in "$f"|*."$f") BR_FORGE=$f; return 0 ;; esac
+    done < <(_br_forges)
+    return 1
+}
+
+pre_browser() {
+    local url="" js="" hit="" f re='/api/v4/(projects|groups|users|merge_requests|issues|jobs|pipelines|runners|namespaces)([^a-z_]|$)'
+    eval "$(printf '%s' "$INPUT" | jq -r '(.tool_input // {}) as $i | @sh "url=\($i.url // "" | tostring) js=\($i.text // "" | tostring)"' 2>/dev/null)" || { _log; exit 0; }
+    if [ -n "$url" ]; then
+        _br_host "$url" || _br_host "https://$url"
+        [ -n "$BR_HOST" ] && _br_is_forge "$BR_HOST" && hit=$BR_HOST
+    fi
+    if [ -z "$hit" ] && [ -n "$js" ]; then
+        js=$(printf '%s' "$js" | tr '[:upper:]' '[:lower:]')
+        while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$js" in *"$f"*) hit=$f; break ;; esac
+        done < <(_br_forges)
+        # A script run in a tab the user opened on a forge names no host: a
+        # GitLab REST path is enough to know where it goes.
+        [ -z "$hit" ] && [[ $js =~ $re ]] && hit="a GitLab API path (/api/v4/)"
+    fi
+    [ -n "$hit" ] || { _log; exit 0; }
+    local title="BLOCKED — a forge is not read or driven through Claude in Chrome ($hit)"
+    local -a why=(
+        "GitHub and GitLab go through their MCP first: mcp__github__* / mcp__gitlab__* (ToolSearch \"+github\" or \"+gitlab\" loads them)."
+        "MCP missing, or answering 401: install or configure it first (claude mcp list; the token and, for GitLab, the instance URL), or tell the user exactly what is missing."
+        "What the MCP does not cover (pipelines, jobs, retry, play, traces): gh or glab, the CLI, as the last resort (gh auth status / glab auth status)."
+        "One call the user explicitly agreed to: they relaunch with KODFLOW_FORGE_BROWSER=ask, and each such call asks them first.")
+    if [ "${KODFLOW_FORGE_BROWSER:-}" = ask ]; then
+        jq -n -c --arg r "$title. ${why[*]}" \
+            '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"ask",permissionDecisionReason:$r}}' 2>/dev/null
+        _log; exit 0
+    fi
+    _motif_block forge-browser "$title" "${why[@]}"
+}
+
+# ============================================================================
 # PostToolUse · Agent / Task
 # ============================================================================
 # The other half of the delegation measurement, and what the subagent was
@@ -1584,6 +1666,13 @@ post_failure() {
         *"SyntaxError"*|*"syntax error"*)          advice="Syntax error: look for the unclosed bracket or bad indentation named in the message." ;;
         *"timeout"*|*"Timeout"*|*"ETIMEDOUT"*)     advice="Timed out: split the command, or run it in the background." ;;
         *"ENOENT"*|*"MODULE_NOT_FOUND"*)           advice="Module not found: check the manifest and run the install step." ;;
+    esac
+    # A forge MCP that is not authenticated is fixed before anything else,
+    # never routed around through the browser (pre_browser).
+    case "$TOOL" in mcp__github__*|mcp__gitlab__*)
+        case "$ERR" in *401*|*[Uu]nauthorized*|*"Bad credentials"*|*invalid_token*)
+            advice="The forge MCP is not authenticated: configure it before anything else — its token (GITHUB_PERSONAL_ACCESS_TOKEN, or GITLAB_PERSONAL_ACCESS_TOKEN with GITLAB_API_URL for the instance) in the server's env in mcp.json (mcp/mcp.example.json of kodflow/claude-marketplace), then /mcp to reconnect — or tell the user exactly what is missing. Meanwhile gh or glab (gh auth status, glab auth status), never Claude in Chrome." ;;
+        esac ;;
     esac
     [ -n "$advice" ] && jq -n -c --arg c "Tool '$TOOL' failed: ${ERR:0:200}. $advice" \
         '{hookSpecificOutput:{hookEventName:"PostToolUseFailure",additionalContext:$c}}' 2>/dev/null
@@ -1768,6 +1857,8 @@ case "$EV/$TOOL" in
     PreToolUse/mcp__*tasks__task_*|PreToolUse/mcp__kodflow-hooks__task_*) _log; exit 0 ;;
     PreToolUse/mcp__github__*|PreToolUse/mcp__gitlab__*|PreToolUse/mcp__GitKraken__*)
         pre_forge ;;
+    PreToolUse/mcp__claude-in-chrome__navigate|PreToolUse/mcp__claude-in-chrome__javascript_tool)
+        pre_browser ;;
     PreToolUse/Skill) _fable_skill; exit 0 ;;
     PreToolUse/*) exit 0 ;;
 esac

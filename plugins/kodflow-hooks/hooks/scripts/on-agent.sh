@@ -77,7 +77,7 @@ SubagentStart)
     _branch
     jq -n -c --arg c "## Subagent context (kodflow-hooks)
 Branch: $BRANCH · agent: ${AGENT:-unknown}
-1. MCP first: mcp__github__* / mcp__gitlab__* before gh or glab; mcp__context7__* for library docs.
+1. Forge access: mcp__github__* / mcp__gitlab__* first (missing or answering 401: install or configure it first, or say what is missing); gh or glab only for what the MCP lacks; never Claude in Chrome on a forge (refused). mcp__context7__* for library docs.
 2. rtk is not applied automatically: prefix rtk yourself for verbose read-only commands; byte-exact reads stay raw.
 3. Commits: conventional, no AI attribution, never on main, never --no-verify or --force.
 4. Return what you were asked for and say what you verified versus what you assumed.
