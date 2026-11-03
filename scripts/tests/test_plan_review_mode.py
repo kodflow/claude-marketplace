@@ -119,7 +119,7 @@ check("canonical text scopes the toolchain checklist to a code change",
 check("canonical text labels author-derived measurements",
       canon is not None and '"author-derived, raw source not re-read"' in canon)
 check("canonical text reads GitHub without Claude in Chrome and cites at a tag",
-      canon is not None and "`mcp__github__*`" in canon and "never through Claude in Chrome" in canon
+      canon is not None and "`mcp__github__*`" in canon and "Never through Claude in Chrome" in canon
       and "`<owner>/<repo>:<path>@<tag>`" in canon)
 check("canonical text judges round N from the brief, not from history",
       canon is not None and "Never rebuild the earlier state from conversation history" in canon)
@@ -143,13 +143,23 @@ check("debate.md brief gives literal paths and how to test a patch",
 check("debate.md brief names the revision and the measurement owner",
       "Revision: review the WORKING TREE" in brief and "(path@HEAD or path@worktree)" in brief
       and "Measurement: tools outside your Command scope" in brief
-      and "**A measurement named under `unverified` is yours to run.**" in brief)
+      and "**A measurement named under `unverified` may be yours to run.**" in brief)
 check("debate.md fixes the prior-objection verdict line and the fix-introduced defect",
       "`<ID> — fixed | reopen — <reason>`" in brief
       and "introduced BY an accepted fix is a reopen of that ID, not a new objection" in brief)
 check("debate.md hands round N the previous plan and triage files",
       "plan-r<N-1>.md" in brief and "`$SCRATCH/plan-r$ROUND.md`" in brief and "`$SCRATCH/triage-r$ROUND.md`" in brief)
+check("canonical text gives a GitHub issue and release fallback, else the lookup to the caller",
+      canon is not None and "`https://api.github.com/repos/<owner>/<repo>/issues/<n>`" in canon
+      and "the exact lookup goes under `unverified` for the caller to run" in canon)
+check("debate.md gives each reviewer its own scratch subdirectory",
+      "Scratch directory: <$SCRATCH>/<reviewer>" in brief and "a subdirectory of its own" in brief)
+check("debate.md runs a named measurement only in a sandbox or with explicit approval",
+      "Where its\noutput goes is not enough." in brief and "makes\nno network request that changes state" in brief
+      and "enforced read-only sandbox" in brief and "explicit approval of that command" in brief)
 spec = SPEC.read_text()
+check("specialists.md names the identity file the hook reads",
+      "`KODFLOW_COMMIT_IDENTITY` names" in spec and "`KODFLOW_COMMIT_IDENTITY=off`" in spec)
 check("specialists.md asks for literal paths and the commit identity",
       "**Give literal paths.**" in spec and "**Name the commit identity when the brief asks for a commit.**" in spec)
 sys.exit(1 if fails else 0)

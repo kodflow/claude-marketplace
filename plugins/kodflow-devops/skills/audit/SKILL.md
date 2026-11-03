@@ -130,8 +130,8 @@ it). So the forge path is checked end to end:
 
 ```bash
 claude mcp list 2>&1 | grep -iE '^(github|gitlab)\b'
-command -v gh   >/dev/null && gh auth status   2>&1 | head -3
-command -v glab >/dev/null && glab auth status 2>&1 | head -3
+if command -v gh >/dev/null 2>&1; then gh auth status 2>&1 | head -3; else echo "gh missing: install it, then gh auth login"; fi
+if command -v glab >/dev/null 2>&1; then glab auth status 2>&1 | head -3; else echo "glab missing: install it, then glab auth login --hostname <host>"; fi
 ```
 
 - a `github` or `gitlab` server absent, failing to connect, or answering 401 to

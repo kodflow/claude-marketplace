@@ -147,8 +147,13 @@ TS="$(date +%Y%m%d-%H%M%S)"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/challenge-${TS}.XXXXXX")"
 ```
 
-It is the only place a reviewer may write (a throwaway measurement, a fetched
-source file), and only where its own Command scope allows it. A brief that names
+Its top level holds the round records only (the briefs, `plan-r$ROUND.md`,
+`triage-r$ROUND.md`). Each reviewer gets a subdirectory of its own, created
+before dispatch (`mkdir "$SCRATCH/<reviewer>"`, the lens or agent name), so
+reviewers running in parallel never overwrite or read each other's files. That
+subdirectory is the only place a reviewer may write (a throwaway measurement, a
+fetched source file, a patched copy), and only where its own Command scope
+allows it. A brief that names
 no scratch directory leaves the reviewer read-only everywhere: the claim it could
 have measured goes under `unverified`.
 
@@ -200,8 +205,8 @@ Project records:
 Reference sources:
 <topic — URL or path (and its scratch copy, if downloaded) — one-line purpose, per entry>
 
-Scratch directory: <$SCRATCH>
-The only place you may write, and only what your Command scope allows; never
+Scratch directory: <$SCRATCH>/<reviewer>
+Yours alone, and the only place you may write, and only what your Command scope allows; never
 write in the repository. Scratch scripts import the project's dependencies by
 absolute path. To test a patch to the code under review, copy the source
 directory into the scratch directory, symlink node_modules (or the equivalent)
@@ -300,11 +305,16 @@ a defect a reviewer reports as introduced by an accepted fix, under whatever
 heading it arrives: it reopens that ID, it never opens a new one. `<ID> — fixed`
 leaves the ID as it was judged.
 
-**A measurement named under `unverified` is yours to run.** When a reviewer
-names the command that would settle a claim and that command writes nothing
-outside `$SCRATCH` and changes nothing in the repository, run it during triage
-and take its result as evidence, with the command. Otherwise the claim stays
-`unverified`, and the record keeps the command.
+**A measurement named under `unverified` may be yours to run.** Where its
+output goes is not enough. Run it during triage only when all three hold — it
+writes nothing outside `$SCRATCH`, changes nothing in the repository or on the
+host (no install, no container mounting the repository read-write), and makes
+no network request that changes state (no push, no publish, no remote API
+write) — and it runs either in an enforced read-only sandbox or with the
+user's explicit approval of that command, within your own Command scope. Then
+take its result as evidence, with the command. Anything else stays
+`unverified` with the command in the record, or goes to the user in 2.3 when
+the claim decides the plan.
 
 Then judge each objection against the plan and the codebase:
 

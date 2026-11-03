@@ -141,6 +141,7 @@ br navigate '{"url":"https://code.example.net/x","tabId":1}';              expec
 br navigate '{"url":"https://github.com/o/r","tabId":1}' '{"agent_id":"agt_br"}'; expect_br "a subagent is refused too"
 br javascript_tool '{"action":"javascript_exec","text":"fetch(\"https://gitlab.com/api/v4/projects/1/pipelines\")","tabId":1}'; expect_br "a script fetching a forge refused"
 br javascript_tool '{"action":"javascript_exec","text":"await fetch(\"/api/v4/projects/562/jobs?per_page=5\")","tabId":1}'; expect_br "a script on a GitLab API path, no host, refused"
+br navigate '{"url":"https://github.com./o/r","tabId":1}';                 expect_br "a fully qualified host (trailing dot) refused"
 br navigate '{"url":"https://example.com/github.com","tabId":1}';           expect_rc "a forge name in the path of another host passes" 0
 br navigate '{"url":"https://notgithub.com/","tabId":1}';                  expect_rc "a host that only ends with a forge name passes" 0
 br navigate '{"url":"https://docs.python.org/3/","tabId":1}';              expect_rc "any other site passes" 0
@@ -159,6 +160,12 @@ git -C "$T/repo" remote remove origin; git -C "$T/repo" remote remove mirror
 run PostToolUseFailure mcp__github__get_me '{"error":"MCP error: 401 Bad credentials"}' on-tool.sh
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("not authenticated") and test("GITHUB_PERSONAL_ACCESS_TOKEN") and test("never Claude in Chrome")' >/dev/null 2>&1 \
     && ok "a forge MCP answering 401 is reported with the steps to configure it" || bad "forge 401" "$OUT"
+run PostToolUseFailure mcp__gitlab__get_issue '{"error":"Request failed with status code 401"}' on-tool.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("not authenticated")' >/dev/null 2>&1 \
+    && ok "a 401 status code is read as an authentication failure" || bad "forge 401 status" "$OUT"
+run PostToolUseFailure mcp__gitlab__get_issue '{"error":"issue 4012 of project 401 not found on port 8401"}' on-tool.sh
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("not authenticated")' >/dev/null 2>&1 \
+    && bad "401 inside a number is no authentication failure" "$OUT" || ok "401 inside an issue number or a port is no authentication failure"
 
 echo "== PreToolUse Bash · the input is never rewritten"
 bash_cmd 'git push --force origin feat'

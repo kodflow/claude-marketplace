@@ -1554,7 +1554,7 @@ _br_host() {
         *@*:*) u=${u#*@}; u=${u%%:*} ;;
         *) BR_HOST=""; return 1 ;;
     esac
-    u=${u%%[/?#]*}; u=${u##*@}; u=${u%%:*}
+    u=${u%%[/?#]*}; u=${u##*@}; u=${u%%:*}; u=${u%.}   # github.com. is github.com
     BR_HOST=$(printf '%s' "$u" | tr '[:upper:]' '[:lower:]')
     [ -n "$BR_HOST" ]
 }
@@ -1669,10 +1669,12 @@ post_failure() {
     esac
     # A forge MCP that is not authenticated is fixed before anything else,
     # never routed around through the browser (pre_browser).
+    # 401 as an HTTP status only, never digits inside an issue number or a port.
+    local a401='(HTTP[/0-9.]*|[Ss]tatus( code)?|[Ee]rror|[Cc]ode)[[:space:]:=]*401([^0-9]|$)|(^|[^0-9])401 [Uu]nauthorized|[Uu]nauthorized|Bad credentials|invalid_token'
     case "$TOOL" in mcp__github__*|mcp__gitlab__*)
-        case "$ERR" in *401*|*[Uu]nauthorized*|*"Bad credentials"*|*invalid_token*)
-            advice="The forge MCP is not authenticated: configure it before anything else — its token (GITHUB_PERSONAL_ACCESS_TOKEN, or GITLAB_PERSONAL_ACCESS_TOKEN with GITLAB_API_URL for the instance) in the server's env in mcp.json (mcp/mcp.example.json of kodflow/claude-marketplace), then /mcp to reconnect — or tell the user exactly what is missing. Meanwhile gh or glab (gh auth status, glab auth status), never Claude in Chrome." ;;
-        esac ;;
+        if [[ $ERR =~ $a401 ]]; then
+            advice="The forge MCP is not authenticated: configure it before anything else — its token (GITHUB_PERSONAL_ACCESS_TOKEN, or GITLAB_PERSONAL_ACCESS_TOKEN with GITLAB_API_URL for the instance) in the server's env in mcp.json (mcp/mcp.example.json of kodflow/claude-marketplace), then /mcp to reconnect — or tell the user exactly what is missing. Meanwhile gh or glab (gh auth status, glab auth status), never Claude in Chrome."
+        fi ;;
     esac
     [ -n "$advice" ] && jq -n -c --arg c "Tool '$TOOL' failed: ${ERR:0:200}. $advice" \
         '{hookSpecificOutput:{hookEventName:"PostToolUseFailure",additionalContext:$c}}' 2>/dev/null

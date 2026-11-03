@@ -114,7 +114,7 @@ $open"
         ctx="${ctx:+$ctx
 
 }"'## POST-COMPACTION — standing rules (kodflow-hooks)
-1. Forge access: mcp__github__* / mcp__gitlab__* first (missing or answering 401: install or configure it first, or say what is missing); gh or glab only for what the MCP lacks; never Claude in Chrome on a forge (refused). mcp__context7__* for library docs.
+1. Forge access: mcp__github__* / mcp__gitlab__* first (missing or answering 401: install or configure it first, or say what is missing); gh or glab only for what the MCP lacks; never Claude in Chrome on a forge (refused by default; KODFLOW_FORGE_BROWSER=ask asks the user per call, =off lifts the check). mcp__context7__* for library docs.
 2. No hook rewrites a Bash command. For compressed output prefix rtk yourself (rtk git status, rtk ls); never on a read whose bytes matter (cat, head, tail, sed, diff, patch, checksums).
 3. Commits: conventional messages, no AI attribution, no .claude/ path in a message. Enforced by this plugin on PreToolUse and by the repo commit-msg hook.
 4. Never commit on main/master — /git creates the branch and the PR. Never --no-verify, -n or core.hooksPath. A forced push (--force, -f, +refspec) is refused: use --force-with-lease. A subagent never merges and never pushes to the default branch; the main thread merges a PR as soon as its CI is green and it has reviewed it, without asking the user.
@@ -128,7 +128,7 @@ Context was compacted: verify the task state before continuing.'
         # gets, compacted or not: nothing else stops a browser fallback.
         ctx="${ctx:+$ctx
 
-}kodflow-hooks · forge access: mcp__github__* / mcp__gitlab__* first (missing or answering 401: install or configure it first, or say what is missing); gh or glab only for what the MCP lacks; never Claude in Chrome on a forge (refused)."
+}kodflow-hooks · forge access: mcp__github__* / mcp__gitlab__* first (missing or answering 401: install or configure it first, or say what is missing); gh or glab only for what the MCP lacks; never Claude in Chrome on a forge (refused by default; KODFLOW_FORGE_BROWSER=ask asks the user per call, =off lifts the check)."
         # TRANSFORM: speak only when something is wrong. rtk present is the
         # normal case and needs no words.
         if ! command -v rtk >/dev/null 2>&1; then
