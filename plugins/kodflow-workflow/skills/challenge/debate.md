@@ -147,8 +147,13 @@ TS="$(date +%Y%m%d-%H%M%S)"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/challenge-${TS}.XXXXXX")"
 ```
 
-It is the only place a reviewer may write (a throwaway measurement, a fetched
-source file), and only where its own Command scope allows it. A brief that names
+Its top level holds the round records only (the briefs, `plan-r$ROUND.md`,
+`triage-r$ROUND.md`). Each reviewer gets a subdirectory of its own, created
+before dispatch (`mkdir "$SCRATCH/<reviewer>"`, the lens or agent name), so
+reviewers running in parallel never overwrite or read each other's files. That
+subdirectory is the only place a reviewer may write (a throwaway measurement, a
+fetched source file, a patched copy), and only where its own Command scope
+allows it. A brief that names
 no scratch directory leaves the reviewer read-only everywhere: the claim it could
 have measured goes under `unverified`.
 
@@ -200,7 +205,25 @@ Project records:
 Reference sources:
 <topic — URL or path (and its scratch copy, if downloaded) — one-line purpose, per entry>
 
-Scratch directory: <$SCRATCH>
+Scratch directory: <$SCRATCH>/<reviewer>
+Yours alone, and the only place you may write, and only what your Command scope allows; never
+write in the repository. Scratch scripts import the project's dependencies by
+absolute path. To test a patch to the code under review, copy the source
+directory into the scratch directory, symlink node_modules (or the equivalent)
+to the repository's, and patch the copy; never install through that link.
+
+Revision: review the WORKING TREE as it is on disk; when it differs from
+HEAD, say which one each file:line cites (path@HEAD or path@worktree).
+<the files that differ from HEAD, or "none">
+
+Measurement: tools outside your Command scope (docker, image tools…) are
+not yours to run; name the exact command that would settle the claim under
+unverified, so the caller can run it.
+
+Previous round (round 2 on; omit in round 1): the plan you reviewed last round
+is <$SCRATCH>/plan-r<N-1>.md, its triage <$SCRATCH>/triage-r<N-1>.md. Judge
+from these and the prior objections below, never from your memory of earlier
+rounds.
 
 Prior objections (round 2 on; omit in round 1):
 <per objection: ID, claim verbatim, remedy, disposition (accepted / rejected /
@@ -210,8 +233,12 @@ the fix was applied>
 Your objections by triage ID (round 2 on; omit in round 1):
 | triage ID | your local number | round |
 <one row per objection you raised, merged ones included>
-Under a heading "Prior objections", give one verdict per triage ID: whether the
-fix is correct, or why the rejection is wrong. A negative verdict reopens that
+Before any new objection, under a heading "Prior objections", give
+one verdict per triage ID: whether the fix is correct, or why the rejection is
+wrong, one line each as `<ID> — fixed | reopen — <reason>` (fixed: nothing is
+left to do on that ID, the fix holds or the rejection stands). A defect
+introduced BY an accepted fix is a reopen of that ID, not a new objection.
+A negative verdict reopens that
 ID; do not raise it again as a new objection. These verdicts do not count
 against the budget below.
 
@@ -230,6 +257,12 @@ objection with no concrete failure behind it is noise — leave it out. If the
 plan is sound from your lens, say so and stop; do not manufacture an objection
 to look useful.
 ```
+
+Every `<…>` above is filled before dispatch: the scratch directory and the
+previous-round files are given as literal absolute paths, and the Revision line
+lists what `git status --short` shows, or says none. A brief still carrying a
+placeholder such as `<$SCRATCH>` or `<scratch>` is not dispatched: the reviewer
+would spend its turns looking for the path.
 
 Structured return per objection: `severity`, `claim`, `evidence`, `remedy`,
 `consulted`, `unverified` — the six fields of the contract, the same for the
@@ -266,6 +299,22 @@ has found a gap or a better source, whether the list covers that topic or not
 substantiates the claim, take it as evidence and add that source to the list for
 the next round. A technology objection citing no source, listed or outside,
 that substantiates it falls under the empty-`consulted` rule of 1.3.
+
+A verdict line `<ID> — reopen — <reason>` is that negative verdict, and so is
+a defect a reviewer reports as introduced by an accepted fix, under whatever
+heading it arrives: it reopens that ID, it never opens a new one. `<ID> — fixed`
+leaves the ID as it was judged.
+
+**A measurement named under `unverified` may be yours to run.** Where its
+output goes is not enough. Run it during triage only when all three hold — it
+writes nothing outside `$SCRATCH`, changes nothing in the repository or on the
+host (no install, no container mounting the repository read-write), and makes
+no network request that changes state (no push, no publish, no remote API
+write) — and it runs either in an enforced read-only sandbox or with the
+user's explicit approval of that command, within your own Command scope. Then
+take its result as evidence, with the command. Anything else stays
+`unverified` with the command in the record, or goes to the user in 2.3 when
+the claim decides the plan.
 
 Then judge each objection against the plan and the codebase:
 
@@ -314,6 +363,12 @@ settled question is answered with the decision, not re-argued.
 
 Apply every accepted objection and every answer to the plan text itself. The
 rewritten plan is what round N+1 argues with.
+
+Before the next round's briefs are built, write the plan this round reviewed to
+`$SCRATCH/plan-r$ROUND.md` and this round's triage (every ID with its claim,
+remedy, disposition and reviewers) to `$SCRATCH/triage-r$ROUND.md`: the
+"Previous round" line of the next brief names both, so no reviewer rebuilds the
+earlier state from its own history.
 
 **Do not defend the plan.** If an objection is accepted, the plan was wrong; say
 what changed. Arguing back is how three rounds produce zero improvement.
@@ -368,3 +423,4 @@ and — when the plan belongs to a `/feature` or `/fix` subject — the comment 
 | Dispatch a brief with a technology topic missing from its reference sources | **FORBIDDEN** |
 | Set a word or character limit on a reviewer's response | **FORBIDDEN** — the budget is at most 8 objections, each with the six fields |
 | Hand a reviewer prior objections without its own triage ID table | **FORBIDDEN** |
+| Dispatch a brief that still carries a placeholder path | **FORBIDDEN** — give the literal path |

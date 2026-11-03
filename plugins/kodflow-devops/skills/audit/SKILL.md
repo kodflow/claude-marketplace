@@ -27,6 +27,11 @@ allowed-tools:
 - Bash(git:*)
 - Bash(python3:*)
 - Bash(bash:*)
+- Bash(claude mcp list:*)
+- Bash(gh auth status:*)
+- Bash(glab auth status:*)
+- mcp__github__get_me
+- mcp__gitlab__list_projects
 - Edit(~/.claude/**)
 ---
 
@@ -119,7 +124,30 @@ jq -r '.mcpServers | to_entries[] | "\(.key)\t\(.value.command // .value.url)"' 
 - a configured-but-unreachable server is a fault: report the binary it wants and
   where the binary actually is, if it exists elsewhere
 
-Score: `100 − 20×(unresolvable command)`.
+**Forge access.** GitHub and GitLab are read and driven through their MCP
+first, their CLI last, never through Claude in Chrome (kodflow-hooks refuses
+it). So the forge path is checked end to end:
+
+```bash
+claude mcp list 2>&1 | grep -iE '^(github|gitlab)\b'
+if command -v gh >/dev/null 2>&1; then gh auth status 2>&1 | head -3; else echo "gh missing: install it, then gh auth login"; fi
+if command -v glab >/dev/null 2>&1; then glab auth status 2>&1 | head -3; else echo "glab missing: install it, then glab auth login --hostname <host>"; fi
+```
+
+- a `github` or `gitlab` server absent, failing to connect, or answering 401 to
+  one cheap read (`mcp__github__get_me`, `mcp__gitlab__list_projects` with
+  `per_page: 1`) is a fault, reported with the steps that fix it: add the
+  server from `mcp/mcp.example.json` of kodflow/claude-marketplace, set its
+  token (`GITHUB_PERSONAL_ACCESS_TOKEN`, or `GITLAB_PERSONAL_ACCESS_TOKEN` and
+  `GITLAB_API_URL` for a self-hosted instance) in the environment the server
+  reads, then `/mcp` to reconnect. Name what is missing; never print a token
+- `gh` or `glab` absent or not logged in is reported with `gh auth login` /
+  `glab auth login --hostname <host>`: they are the last resort for what the
+  MCP does not cover (pipelines, jobs, traces)
+- a forge the user does not use (no remote on that host under the code home)
+  is noted, not scored
+
+Score: `100 − 20×(unresolvable command) − 15×(forge MCP absent or unauthenticated)`.
 
 ### 5. Settings
 

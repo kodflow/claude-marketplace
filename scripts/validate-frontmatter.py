@@ -51,10 +51,11 @@ def effort_fault(rel, e):
         return f"{rel}: effort {e!r} is not one of {sorted(EFFORTS)}"
 
 # Test-runner grants that, next to "scratch directory", promise a reproduction
-# the agent must write before it can run: the broad `Bash(go:*)` and
-# `Bash(cargo:*)`, and `go test` / `cargo test` with or without narrowing
-# flags (`Bash(go test -race:*)`). Matched backticked.
-SCRATCH_RUNNER = re.compile(r"`Bash\((?:go|cargo)(?::\*| test(?: [^`]*)?:\*)\)`")
+# the agent must write before it can run: the broad `Bash(go:*)`,
+# `Bash(cargo:*)` and `Bash(node:*)` (a measurement script), and `go test` /
+# `cargo test` with or without narrowing flags (`Bash(go test -race:*)`).
+# Matched backticked.
+SCRATCH_RUNNER = re.compile(r"`Bash\((?:go|cargo|node)(?::\*| test(?: [^`]*)?:\*)\)`")
 
 def command_scope(body):
     """The `## Command scope` section, up to the next `## ` heading, or ''."""
