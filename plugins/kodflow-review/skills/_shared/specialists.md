@@ -115,6 +115,15 @@ more, but that it goes and checks.
   cancelled?" gets an answer.
 - **Say what is already decided.** Pass the constraint ledger's MUST entries, so
   the specialist argues within them rather than against them.
+- **Give literal paths.** A scratch directory or a file the specialist must
+  read or write is named by its absolute path, never by a placeholder such as
+  `<scratch>`: a placeholder sends the specialist looking for it.
+- **Name the commit identity when the brief asks for a commit.** A subagent
+  told to commit is told the name and address the commit must carry — the rule
+  `${CLAUDE_CONFIG_DIR:-~/.claude}/kodflow/commit-identity.conf` gives for the
+  repository's forge, set in the worktree's local git config — since the
+  identity check of kodflow-hooks refuses any other. A brief that does not ask
+  for a commit says nothing about identity.
 
 ## Plan review, one contract for every specialist
 
@@ -132,11 +141,14 @@ literal marker `Plan review mode` and restates the six fields.
 
 ## Plan review mode
 
-This mode is on when the brief starts with `Plan review mode`, asks for objections to a plan (nothing built yet), or asks for a read-only review of a plan or code in the caller's own format. One rule decides the format: the caller's format replaces this agent's output format, and no output-format section of this file overrides it. Outside this mode the output format of this file applies unchanged.
+This mode is on when the brief starts with `Plan review mode`, asks for objections to a plan (nothing built yet), or asks for a read-only review of a plan or code in the caller's own format. One rule decides the format: the caller's format replaces this agent's output format, and no output-format section of this file overrides it. Outside this mode the output format of this file applies unchanged. The validation checklist of this file (its linters, tests and formatters) applies to a code change; a review of a plan, prose or issue drafts runs the caller's checks only.
 
 In this mode:
 
 - Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command and result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
+- A measurement made on data the plan's author produced (extracts such as `.npy` or `.npz` files, caches) is usable, but its `consulted` entry says "author-derived, raw source not re-read", and an `unverified` entry names the raw source whenever it could not be read.
+- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`) when this agent's Command scope lists one, else with WebFetch on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`; never through Claude in Chrome. A documentation page that redirects or cannot be reached is replaced by the first-party source read at the pinned version, not cited from memory.
+- From round 2 on, the brief carries the previous version of the plan and the triage of the earlier objections: first say, objection by objection, whether each fix holds, then attack the new version. Never rebuild the earlier state from conversation history.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
-- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
+- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing, unless a section of this file gives a fallback for that case. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.

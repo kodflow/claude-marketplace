@@ -110,4 +110,46 @@ check("debate.md forbids a word or character limit",
       "no brief sets a word or character\nlimit" in brief
       and "| Set a word or character limit on a reviewer's response | **FORBIDDEN**" in brief)
 check("debate.md has no word limit left", re.search(r"\b\d+\s*(?:-|–|to)?\s*\d*\s*words\b", brief) is None)
+# kodflow/claude-marketplace#111, #112, #115, #116. The toolchain checklist
+# binds a code change only; author-derived data is labelled; a GitHub source is
+# read without a browser and cited at a tag; round N judges from the brief, not
+# from history; an agent may give a fallback when no scratch directory is named.
+check("canonical text scopes the toolchain checklist to a code change",
+      canon is not None and "applies to a code change; a review of a plan, prose or issue drafts runs the caller's checks only" in canon)
+check("canonical text labels author-derived measurements",
+      canon is not None and '"author-derived, raw source not re-read"' in canon)
+check("canonical text reads GitHub without Claude in Chrome and cites at a tag",
+      canon is not None and "`mcp__github__*`" in canon and "never through Claude in Chrome" in canon
+      and "`<owner>/<repo>:<path>@<tag>`" in canon)
+check("canonical text judges round N from the brief, not from history",
+      canon is not None and "Never rebuild the earlier state from conversation history" in canon)
+check("canonical text lets an agent section give a no-scratch fallback",
+      canon is not None and "unless a section of this file gives a fallback for that case" in canon)
+proto = (AGENTS / "developer-specialist-protobuf.md").read_text()
+check("protobuf gives the mktemp fallback and its limits",
+      "## Checks without a named scratch directory" in proto and "`mktemp -d` outside every repository" in proto
+      and "When the brief forbids running anything, write nothing" in proto)
+node = (AGENTS / "developer-specialist-nodejs.md").read_text()
+check("nodejs runs a measurement script under the brief's scratch directory",
+      "`node <scratch>/x.mjs`" in node and "symlink `node_modules`" in node)
+rust = (AGENTS / "developer-specialist-rust.md").read_text()
+check("rust reads GitHub through read-only gh and cites clippy at the toolchain tag",
+      "`Bash(gh issue view:*)`" in rust and "GET only" in rust and "rust-lang/rust-clippy:<path>@rust-1.NN.0" in rust)
+# kodflow/claude-marketplace#113 and #126: what the brief says about paths,
+# revisions, measurements and the prior-objection verdict lines.
+check("debate.md brief gives literal paths and how to test a patch",
+      "A brief still carrying a\nplaceholder" in brief and "copy the source\ndirectory into the scratch directory" in brief
+      and "| Dispatch a brief that still carries a placeholder path | **FORBIDDEN**" in brief)
+check("debate.md brief names the revision and the measurement owner",
+      "Revision: review the WORKING TREE" in brief and "(path@HEAD or path@worktree)" in brief
+      and "Measurement: tools outside your Command scope" in brief
+      and "**A measurement named under `unverified` is yours to run.**" in brief)
+check("debate.md fixes the prior-objection verdict line and the fix-introduced defect",
+      "`<ID> — fixed | reopen — <reason>`" in brief
+      and "introduced BY an accepted fix is a reopen of that ID, not a new objection" in brief)
+check("debate.md hands round N the previous plan and triage files",
+      "plan-r<N-1>.md" in brief and "`$SCRATCH/plan-r$ROUND.md`" in brief and "`$SCRATCH/triage-r$ROUND.md`" in brief)
+spec = SPEC.read_text()
+check("specialists.md asks for literal paths and the commit identity",
+      "**Give literal paths.**" in spec and "**Name the commit identity when the brief asks for a commit.**" in spec)
 sys.exit(1 if fails else 0)
