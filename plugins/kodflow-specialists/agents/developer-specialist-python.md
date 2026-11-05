@@ -1,9 +1,9 @@
 ---
 name: developer-specialist-python
-description: Python specialist — modern Python 3.14+, type hints, async patterns, PEP standards,
-  mypy strict, ruff and pytest. Use when a change touches .py files, pyproject.toml or requirements
-  files, or a Python design question. Escalate to opus/high when the change spans several modules,
-  asyncio or thread concurrency, or a protocol.
+description: Python specialist — analyses Python but has no Write tool and does not create
+  worktrees, commit, or use gh/make; a fix brief goes to general-purpose with [general-purpose-ok].
+  Use when a change touches .py files, pyproject.toml or requirements files. Escalate to opus/high
+  when it spans several modules, asyncio or thread concurrency, or a protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: high
