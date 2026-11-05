@@ -1,9 +1,9 @@
 ---
 name: developer-specialist-cpp
-description: C++ specialist — C++23/26, concepts, coroutines, ranges, modules, Clang-Tidy and
-  AddressSanitizer. Use when a change touches .cpp, .hpp or .cc files, CMakeLists.txt, or a C++ API
-  or design question. Escalate to opus/high when the change spans several modules, threads or
-  atomics, or a wire protocol.
+description: C++ specialist — analyses C++ but has no Write tool and does not create worktrees,
+  commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a
+  change touches .cpp, .hpp or .cc files, or CMakeLists.txt. Escalate to opus/high when it spans
+  several modules, threads or atomics, or a wire protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: high

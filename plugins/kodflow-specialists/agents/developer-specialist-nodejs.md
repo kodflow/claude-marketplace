@@ -1,9 +1,9 @@
 ---
 name: developer-specialist-nodejs
-description: Node.js/TypeScript specialist — modern ECMAScript, TypeScript strict mode, async
-  patterns, npm ecosystem, ESLint and Prettier. Use when a change touches .ts or .js files,
-  package.json, tsconfig.json or an npm dependency. Escalate to opus/high when the change spans
-  several packages, async concurrency, or a wire protocol.
+description: Node.js/TypeScript specialist — writes and analyses it but does not create worktrees,
+  commit, or use gh/make; a fix-and-commit brief goes to general-purpose with [general-purpose-ok].
+  Use when a change touches .ts/.js files, package.json or tsconfig.json. Escalate to opus/high when
+  it spans several packages, async concurrency, or a wire protocol.
 tools: Read, Glob, Grep, Write, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: high

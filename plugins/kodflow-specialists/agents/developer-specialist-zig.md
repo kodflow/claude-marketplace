@@ -1,9 +1,9 @@
 ---
 name: developer-specialist-zig
-description: Zig specialist — comptime, allocator discipline, error unions, the 0.15 std.Io
-  Writer/Reader interfaces and the build.zig module graph. Use when a change touches .zig files,
-  build.zig or build.zig.zon. Escalate to opus/high when the change spans several modules, threads,
-  or a wire protocol.
+description: Zig specialist — analyses Zig but has no Write tool and does not create worktrees,
+  commit, or use gh/make; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a
+  change touches .zig files, build.zig or build.zig.zon. Escalate to opus/high when it spans several
+  modules, threads, or a wire protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: high
