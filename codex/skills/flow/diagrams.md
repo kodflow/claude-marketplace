@@ -101,6 +101,8 @@ The whole thing. Default view.
   /lint              `make lint` if the Makefile has it, else the toolchain, to zero
   /hunt "<topic>"    matrix ──▶ verified issues ──▶ fixes ──▶ frozen pass ──▶ MR
   ◆ one scope approval; nothing is pushed before a frozen pass finds nothing
+  /ktn-issues        all open issues ──▶ precedents ──▶ close lazy · fix the rest
+  ◆ narrow, never widen: every exemption gets a control and a breaker pass
 
 
   WHAT OUTLIVES THE SESSION
@@ -208,6 +210,8 @@ The whole thing. Default view.
   /lint             `make lint` if the Makefile has it, else the toolchain
   /hunt "<topic>"   matrix --> verified issues --> fixes --> frozen pass --> MR
   <> one scope approval; nothing is pushed before a frozen pass finds nothing
+  /ktn-issues       all open issues --> precedents --> close lazy . fix the rest
+  <> narrow, never widen: every exemption gets a control and a breaker pass
 
 
   WHAT OUTLIVES THE SESSION

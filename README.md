@@ -15,7 +15,7 @@ cd claude-marketplace && ./scripts/install.sh
 | Plugin | Skills |
 |--------|--------|
 | `kodflow-workflow` | `/project` `/warmup` `/search` `/plan` `/challenge` `/refine` `/git` `/feature` `/fix` `/flow` `/recap` `/docs` `/hunt` |
-| `kodflow-review` | `/review` `/debug` `/adr` `/learn` `/lint` |
+| `kodflow-review` | `/review` `/debug` `/adr` `/learn` `/lint` `/ktn-issues` |
 | `kodflow-devops` | `/infra` `/audit` `/update` `/ktn` |
 | `kodflow-shell` | `/shell` — and `super-claude` on your PATH |
 | `kodflow-specialists` | 35 language, platform and concern agents |
