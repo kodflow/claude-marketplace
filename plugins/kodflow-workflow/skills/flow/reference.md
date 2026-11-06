@@ -12,7 +12,7 @@ Index, by lane:
 | load | `/warmup` |
 | research | `/search` |
 | design | `/plan` `/challenge` `/refine` |
-| verify | `/review` `/debug` `/lint` `/hunt` |
+| verify | `/review` `/debug` `/lint` `/hunt` `/ktn-issues` |
 | ship | `/git` `/adr` |
 | keep | `/learn` `/docs` |
 | observe | `/recap` |
@@ -414,6 +414,22 @@ signals a process itself.
 | then | the user merges the MRs · `/hunt --status` closes what the forge did not · `/hunt --teardown` |
 | gate | **one approval of `scope.json`, then nothing is pushed before a full pass on a frozen SHA finds nothing**; a finding becomes an issue only after a verifier replays it; never merges |
 | loop | passes until convergence, bounded by `max_passes` and `max_hours`; `--resume` rebuilds every role from the ledger |
+
+---
+## /ktn-issues
+
+`kodflow-review` · inherit · **Judge every open linter issue, close the lazy, fix the rest**
+
+**Type** `/ktn-issues [<owner>/<repo>] [--triage-only] [--issue <N>[,<N>...]] [--resume]`
+
+| | |
+|---|---|
+| reads | every open issue of the target (default `kodflow/ktn-linter`) · every closed issue labelled `lazy` and closed not planned, with its closing comment · the project's `CLAUDE.md` for its commands and the host's heavy-work wrapper |
+| writes | `${XDG_STATE_HOME:-~/.local/state}/ktn-issues/<owner>-<repo>/` (ledger, baseline-red list, one scratch directory per issue) · lazy closures (comment, label `lazy`, not planned) · one commit per fixed issue on a batch branch · one PR |
+| after | nothing — this is an entry point |
+| then | `/code-review` at max · `/review` · the user merges the PR |
+| gate | precedent before verdict; every fix seen red first, with a negative control checked in both directions; a review round that tries to break each new exemption, run before the first push; never merges |
+| loop | `--resume` continues at the first ledger line without a final state |
 
 ---
 
