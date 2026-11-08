@@ -66,6 +66,34 @@ journaled (`root_guard: merge`), from a subagent it is refused. No command is
 put to the user for being irreversible (`rm -rf` included); the guards above
 still refuse what they refuse (a forced push, the delegation gate's writes).
 
+### The CodeRabbit capacity hint
+
+Before `gh pr create`, and before a `git push` (hint kept for a branch that has
+a ready PR), `on-tool.sh` tells Claude whether CodeRabbit is rate limited on
+the repository, in how many minutes a review frees up, and the way out: add the
+commits to an open PR, open a draft (CodeRabbit skips drafts unless the
+repository's `.coderabbit.yaml` says otherwise), or wait when the delay is
+short. It rides in the hook's one JSON document as `additionalContext`
+(PreToolUse), never as a decision: nothing is held, refused or rewritten, and
+a repository where CodeRabbit is not limited, or where anything fails
+(no `python3`, no token, no `github.com` remote, API down, 4 s deadline), gets
+no output at all and exit 0.
+
+The reader of CodeRabbit's messages is `hooks/coderabbit/probe.py`
+(`capacity`, standard library only), called by `hooks/scripts/lib/coderabbit.sh`.
+It is the one reader: kodflow/labs' scheduled relaunch workflow checks the same
+file out at a pinned commit and runs its `probe` and `relaunch`. It samples the
+repository's recent open PRs (the quota is per developer, so the repository is
+a proxy for the owner) and reads the token as `GH_TOKEN_<OWNER>`, `GH_TOKEN`,
+`GITHUB_TOKEN`, else `gh auth token`.
+
+**Cost.** A cached answer (5 minutes per repository, under
+`<config>/kodflow/coderabbit/`, mode 0600) makes no API request. A refresh
+makes 1 call for the open PRs, 1 per recent non-draft PR updated in the last 3
+hours (at most 5) for its comments, and 1 per PR holding a refusal for its
+reviews: 1 call on a quiet repository, at most 11, the case measured on
+kitsunium/sdk being below that. `KODFLOW_CODERABBIT=off` turns the hint off.
+
 ### The secret veil
 
 After every tool ran, never on its input: the value of a known credential

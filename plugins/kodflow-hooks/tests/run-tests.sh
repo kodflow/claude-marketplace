@@ -25,3 +25,5 @@ bash test_cleanup.sh
 bash test_identity.sh
 bash test_docs.sh
 bash test_blocks.sh
+bash test_coderabbit.sh
+python3 -I -m unittest discover -s coderabbit
