@@ -810,6 +810,32 @@ def repo_settings(api: Api, repo: str, ref: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+_MERGE_KEYS = ("path", "label", "name", "id", "key")
+
+
+def _merge_identity(item: Any) -> Any:
+    if isinstance(item, dict):
+        for k in _MERGE_KEYS:
+            if k in item:
+                return (k, json.dumps(item[k], sort_keys=True, default=str))
+    return ("=", json.dumps(item, sort_keys=True, default=str))
+
+
+def merge_inherited(child: Any, parent: Any) -> Any:
+    """CodeRabbit's configuration inheritance: objects merge deeply, the child's
+    scalars win, arrays keep the child's items then the parent's unique ones
+    (deduplicated by path, label, name, id or key, else by value)."""
+    if isinstance(child, dict) and isinstance(parent, dict):
+        out = dict(parent)
+        for k, v in child.items():
+            out[k] = merge_inherited(v, parent[k]) if k in parent else v
+        return out
+    if isinstance(child, list) and isinstance(parent, list):
+        seen = {_merge_identity(x) for x in child}
+        return list(child) + [x for x in parent if _merge_identity(x) not in seen]
+    return parent if child is None else child
+
+
 def eligibility(api: Api, repo: str, pr: Dict[str, Any], policy: Optional[Dict[str, Any]]) -> Tuple[Any, str]:
     """(True | False | "unknown", reason). Configuration is read at the head:
     CodeRabbit uses the file of the branch under review."""
@@ -821,6 +847,11 @@ def eligibility(api: Api, repo: str, pr: Dict[str, Any], policy: Optional[Dict[s
             settings = policy["settings"]
             if settings is None:
                 return "unknown", "no .coderabbit.yaml in the repository and no settings.yaml in the policy directory"
+        elif settings.get("inheritance") is True:
+            # The repository file asks for its parent: the organisation layer.
+            if policy["settings"] is None:
+                return "unknown", "the repository file inherits and the policy directory has no settings.yaml"
+            settings = merge_inherited(settings, policy["settings"])
         owner = repo.split("/")[0]
         number = pr["number"]
 
@@ -996,12 +1027,27 @@ def analyze_uncovered(api: Api, repo: str, pr: Dict[str, Any], comments: List[Di
         return None, cov
     owner = repo.split("/")[0]
     head = pr["head"]["sha"]
-    commit = api.get(owner, f"/repos/{repo}/commits/{head}") or {}
-    # The committer date of the head: a push is never older than it, so the
-    # quiet period it measures is a lower bound of the real one.
-    pushed_at = parse_time(_dig(commit, "commit", "committer", "date") or pr.get("updated_at") or fmt_time(now))
-    quiet = now - pushed_at >= dt.timedelta(minutes=getattr(opts, "push_quiet_minutes", DEFAULT_PUSH_QUIET_MINUTES))
-    in_progress = review_in_progress(api, repo, head) if quiet else None
+    error = None
+    # A failed read never stops the scan, and never makes a candidate: the
+    # relaunch PATs hold Pull requests write + Contents read, not Checks, so a
+    # 403 on check-runs or status is "pending unknown", and an unknown is not a
+    # "no". The record stays, not eligible, with the error said.
+    try:
+        commit = api.get(owner, f"/repos/{repo}/commits/{head}") or {}
+        # The committer date of the head: a push is never older than it, so the
+        # quiet period it measures is a lower bound of the real one.
+        pushed_at = parse_time(_dig(commit, "commit", "committer", "date") or pr.get("updated_at") or fmt_time(now))
+    except ApiError as err:
+        error = f"commit: {err}"[:200]
+        pushed_at = now
+    quiet = error is None and now - pushed_at >= dt.timedelta(minutes=getattr(opts, "push_quiet_minutes", DEFAULT_PUSH_QUIET_MINUTES))
+    in_progress: Any = None
+    if quiet:
+        try:
+            in_progress = review_in_progress(api, repo, head)
+        except ApiError as err:
+            error = f"review status: {err}"[:200]
+            in_progress = "unknown"
     relaunch = relaunch_state(comments, pushed_at, now, opts.stale_minutes, opts.max_attempts,
                               head, getattr(opts, "head_cap", DEFAULT_HEAD_CAP))
     return {
@@ -1019,7 +1065,8 @@ def analyze_uncovered(api: Api, repo: str, pr: Dict[str, Any], comments: List[Di
         "quiet": quiet,
         "review_in_progress": in_progress,
         "relaunch": relaunch,
-        "eligible": bool(quiet and in_progress is False and relaunch["state"] in ("none", "stale")),
+        "error": error,
+        "eligible": bool(error is None and quiet and in_progress is False and relaunch["state"] in ("none", "stale")),
     }, cov
 
 
@@ -1111,7 +1158,12 @@ def probe(api: Api, repos: List[str], owners: List[str], now: dt.datetime, opts:
                     except (OSError, YamlError, ValueError) as err:
                         policies[owner] = None
                         errors.append({"scope": f"policy {owner}", "error": f"{type(err).__name__}: {err}"[:200]})
-                u, cov = analyze_uncovered(api, repo, pr, comments, now, opts, policies[owner])
+                try:
+                    u, cov = analyze_uncovered(api, repo, pr, comments, now, opts, policies[owner])
+                except ApiError as err:   # one PR's failure never ends the repository's scan
+                    errors.append({"scope": f"{repo}#{pr['number']}", "error": str(err)})
+                    coverage_counts["unknown"] += 1
+                    continue
                 if cov["eligible"] is False:
                     coverage_counts["ineligible"] += 1
                 elif cov["eligible"] == "unknown" or cov["covered"] == "unknown":

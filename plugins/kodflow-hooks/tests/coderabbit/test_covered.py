@@ -267,6 +267,36 @@ class Eligibility(unittest.TestCase):
         dep = dict(fx["pr"], user={"login": "dependabot[bot]"}, title="build(deps): bump x")
         self.assertIs(probe.eligibility(api, "kodflow/ktn-linter", dep, probe.load_policy(POLICY, "kodflow"))[0], False)
 
+    def test_inheritance_true_merges_the_organisation_layer(self):
+        fx = load("kodflow_ktn-linter_816")
+        human = dict(fx["pr"], user=HUMAN, title="ci: run every job on the self-hosted kodflow-runner")
+        policy = probe.load_policy(POLICY, "kodflow")
+        own = "inheritance: true\nreviews:\n  auto_review:\n    ignore_title_keywords: [DRAFT]\n"
+        api = Api(routes_for(fx, "kodflow/ktn-linter", yaml_text=own))
+        ok, why = probe.eligibility(api, "kodflow/ktn-linter", human, policy)
+        self.assertIs(ok, False)                               # keyword of settings.yaml, inherited
+        self.assertIn("self-hosted kodflow-runner", why)
+        # inheritance: false (ktn-linter's real file): the organisation keyword does not apply
+        api = Api(routes_for(fx, "kodflow/ktn-linter", yaml_text=read(os.path.join(FIX, "kodflow_ktn-linter_816.coderabbit.yaml"))))
+        self.assertIs(probe.eligibility(api, "kodflow/ktn-linter", human, policy)[0], True)
+        # inherits but nothing to inherit from: unknown, not a guess
+        api = Api(routes_for(fx, "kodflow/ktn-linter", yaml_text=own))
+        no_settings = dict(policy, settings=None)
+        self.assertEqual(probe.eligibility(api, "kodflow/ktn-linter", human, no_settings)[0], "unknown")
+
+    def test_merge_inherited_follows_coderabbit(self):
+        child = {"language": "de-DE", "reviews": {"auto_review": {"drafts": False}, "path_instructions": [
+            {"path": "src/**", "instructions": "repo"}, {"path": "api/**", "instructions": "repo"}]}}
+        parent = {"language": "en-US", "chat": {"art": False}, "reviews": {"auto_review": {"enabled": True, "drafts": True},
+                  "path_instructions": [{"path": "src/**", "instructions": "central"}, {"path": "docs/**", "instructions": "central"}]}}
+        m = probe.merge_inherited(child, parent)
+        self.assertEqual(m["language"], "de-DE")
+        self.assertEqual(m["chat"], {"art": False})
+        self.assertEqual(m["reviews"]["auto_review"], {"enabled": True, "drafts": False})
+        self.assertEqual([(x["path"], x["instructions"]) for x in m["reviews"]["path_instructions"]],
+                         [("src/**", "repo"), ("api/**", "repo"), ("docs/**", "central")])
+        self.assertEqual(probe.merge_inherited(["a", "b"], ["b", "c"]), ["a", "b", "c"])
+
     def test_eligibility_unknown(self):
         fx = load("kodflow_ktn-linter_816")
         pr = fx["pr"]
@@ -518,6 +548,28 @@ class Uncovered(unittest.TestCase):
         fx = self.fx()
         self.assertFalse(self.rec(uncovered_api(fx, self.repo, pushed="2026-11-08T11:45:00Z"), fx)["eligible"])
         self.assertFalse(self.rec(uncovered_api(fx, self.repo, pending=True), fx)["eligible"])
+
+    def test_a_403_on_checks_makes_no_candidate_and_does_not_stop_the_scan(self):
+        fx = self.fx()
+        api = uncovered_api(fx, self.repo)
+        head = fx["pr"]["head"]["sha"]
+        api.routes[rf"/repos/{self.repo}/commits/{head}/check-runs"] = probe.ApiError(403, "Resource not accessible by personal access token")
+        rec = self.rec(api, fx)
+        self.assertFalse(rec["eligible"])
+        self.assertEqual(rec["review_in_progress"], "unknown")
+        self.assertIn("403", rec["error"])
+        # a rate-limited PR listed after it is still found and selected
+        later = copy.deepcopy(fx["pr"])
+        later.update(number=9, created_at="2026-11-01T00:00:00Z", head={"sha": "9999999aaaaaaa", "ref": "x"})
+        api.routes[rf"/repos/{self.repo}/pulls"] = [fx["pr"], later]
+        api.routes[rf"/repos/{self.repo}/issues/9/comments"] = [comment(BOT, LIMIT.format(n=5), "2026-11-08T10:00:00Z")]
+        api.routes[rf"/repos/{self.repo}/pulls/9/reviews"] = []
+        doc = probe.probe(api, [self.repo], [], NOW, argparse.Namespace(**vars(OPTS), exclude=""))
+        self.assertEqual(doc["candidates"], [{"owner": "kodflow", "repo": self.repo, "number": 9, "class": "rate_limited"}])
+        self.assertEqual(doc["errors"], [])
+        # a status read refused too, or the commit itself: never a candidate
+        api.routes[rf"/repos/{self.repo}/commits/{head}"] = probe.ApiError(403, "forbidden")
+        self.assertFalse(self.rec(api, fx)["eligible"])
 
     def test_unknown_never_makes_a_record(self):
         fx = self.fx()
