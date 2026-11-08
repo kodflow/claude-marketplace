@@ -57,7 +57,7 @@ run 'gh pr create -R kodflow/labs --title t'
 grep -q -- '--repo kodflow/labs' "$STUB_LOG" && ok "-R OWNER/NAME is forwarded" || bad "-R" "$(cat "$STUB_LOG")"
 run 'gh pr create --repo=kitsunium/sdk --title t'
 grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && ok "--repo=OWNER/NAME is forwarded" || bad "--repo=" "$(cat "$STUB_LOG")"
-run 'gh pr create -R "x;touch pwned" --title t'
+run "gh pr create -R \"x;touch $T/pwned\" --title t"
 ! grep -q -- '--repo' "$STUB_LOG" && [ ! -e "$T/repo/pwned" ] && [ ! -e "$T/pwned" ] && ok "a malformed repository is not forwarded" || bad "malformed" "$(cat "$STUB_LOG")"
 
 run 'gh --repo=kodflow/labs pr create --title t'

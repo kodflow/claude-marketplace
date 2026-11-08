@@ -557,6 +557,9 @@ def capacity(opts: argparse.Namespace, now: dt.datetime, api: Optional[Api] = No
 
     api = api or Api(deadline=end)
     try:
+        if opts.repo and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", opts.repo):
+            out["error"] = "--repo is not OWNER/NAME"
+            return out
         repo = opts.repo or repo_from_remote(git_output(opts.cwd, "remote", "get-url", "origin", timeout=left()) or "")
         out["repo"] = repo
         if not repo:

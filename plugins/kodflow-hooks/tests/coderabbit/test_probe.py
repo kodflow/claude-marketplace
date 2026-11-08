@@ -262,6 +262,12 @@ class Capacity(unittest.TestCase):
         self.assertEqual(f("https://github.com/a-b/c.d_e-f.git"), "a-b/c.d_e-f")
         self.assertEqual(f("https://github.com/a/b.github.io"), "a/b.github.io")
 
+    def test_capacity_validates_its_own_repo_argument(self):
+        for bad in ("a/b?x=1", "../etc", "a/b#c", "a b/c", "noslash"):
+            api = FakeApi({}, {}, [])
+            out = probe.capacity(cap_opts(repo=bad), NOW, api)
+            self.assertEqual((out["state"], api.calls), ("unknown", 0), bad)
+
     def test_subprocesses_share_the_deadline(self):
         seen = []
         real = probe.subprocess.run
