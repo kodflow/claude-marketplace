@@ -94,6 +94,26 @@ hours (at most 5) for its comments, and 1 per PR holding a refusal for its
 reviews: 1 call on a quiet repository, at most 11, the case measured on
 kitsunium/sdk being below that. `KODFLOW_CODERABBIT=off` turns the hint off.
 
+**Coverage.** `probe.py covered --repo OWNER/NAME --pr N [--policy-dir DIR]`
+prints `{head, last_reviewed, eligible, reason, covered}` for one pull request.
+`last_reviewed` comes from CodeRabbit's summary comment (the
+`final_review_risk_coverage` marker, else `Last reviewed commit:`, else the
+recent-review range; both comment layouts), never from a review's `commit_id`.
+`eligible` resolves the configuration as CodeRabbit does: the repository's
+`.coderabbit.yaml` at the head if it has one (merged over `DIR/settings.yaml`
+when it says `inheritance: true`), else `DIR/settings.yaml`, then
+the lists of `DIR/override-<owner>.yaml` on top (authors exact, title keywords
+case-insensitive substrings), drafts, base branches, path filters. Without a
+readable `DIR`, or on any doubt, a field is `"unknown"`, and `unknown` never
+leads to a command. Cached 5 minutes per (repository, PR, head). The YAML
+reader is a stdlib subset in the same file: refused constructs (anchors, tags)
+make `eligible` unknown rather than guessed. The scheduled `relaunch` marks its
+comments `<!-- kodflow-relaunch:cron head=<sha> -->` after the command and,
+given `--policy-dir`, also relaunches a review-eligible head that is
+positively not covered, quiet for 20 minutes and not under review; a read
+of the head's status or check runs that fails (a token without Checks: 403)
+makes that PR no candidate, never a stop of the scan.
+
 ### The secret veil
 
 After every tool ran, never on its input: the value of a known credential

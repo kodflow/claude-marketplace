@@ -1,0 +1,8 @@
+# Test fixture: the shape of making.codes coderabbit/override-<owner>.yaml
+# (plan section B), lists unioned on top of any repository file.
+reviews:
+  auto_review:
+    ignore_usernames: ["kodflow-ci[bot]"]
+    ignore_title_keywords:
+      - "ci(post-commit): sync the gate workflow with the central stub"
+      - "ci(runner-template): sync the runner stub"

@@ -1,0 +1,549 @@
+# yaml-language-server: $schema=https://www.coderabbit.ai/integrations/schema.v2.json
+# KTN-Linter - Go 1.27 static analysis tool. Rule counts are NOT written here:
+# docs/RULES.md is generated from the analyzer registry by `make docs` and gated
+# by `make docs-check`. The per-suite figures this line used to carry had both
+# drifted from the registry, which is why they are a pointer now and not a copy.
+# Restored 2026-04-26 — full configuration recovered after template-sync deletion (commit f6bc8498),
+# rule counts updated to match current registry, pkg/refactor + pkg/serve added to path_instructions.
+
+language: en-US
+
+tone_instructions: >-
+  Concise and technical. Expert Go audience. Focus on correctness, performance,
+  Go idioms. No framework migrations, no testify, no markdownlint. Cite KTN
+  rule codes when relevant.
+
+early_access: true
+enable_free_tier: true
+inheritance: false
+
+reviews:
+  profile: assertive
+  # request_changes_workflow=true — CodeRabbit posts CHANGES_REQUESTED on
+  # every batch of findings AND auto-approves when ALL of its threads are
+  # resolved with no pre-merge checks in error state. The auto-approve is
+  # the canonical mechanism for clearing stale CHANGES_REQUESTED states
+  # (a COMMENTED review does NOT dismiss CHANGES_REQUESTED in GitHub's
+  # review aggregator — only an APPROVED submission supersedes it).
+  request_changes_workflow: true
+  high_level_summary: true
+  high_level_summary_instructions: >-
+    Summarize in 3-5 bullet points. Focus on: new/modified KTN rules (cite codes
+    like KTN-FUNC-ERRLAST), govet/modernize wrapper changes, test coverage delta,
+    severity/message registry updates, CLI behavior changes, and orchestrator or
+    cache modifications.
+  high_level_summary_in_walkthrough: false
+  review_status: true
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: false
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  auto_apply_labels: true
+  suggested_reviewers: false
+  poem: false
+  abort_on_close: true
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    ignore_title_keywords:
+      - WIP
+      - DO NOT MERGE
+      - DRAFT
+    drafts: false
+    base_branches:
+      - main
+
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+  pre_merge_checks:
+    title:
+      mode: error
+      requirements: >-
+        Must follow conventional commits: type(scope): description.
+        Types: feat, fix, refactor, test, chore, ci, perf, docs.
+        Scopes: analyzer, cli, config, messages, rules, severity,
+        cache, formatter, orchestrator, updater, modernize, govet,
+        function, variable, structure, tests, constant, comment,
+        goroutine, iterator, errs, generic, iface,
+        receiver, switching, api, shared, utils, testhelper,
+        parameters, returns, metrics,
+        conventions, quality, parallel,
+        naming, performance, modern, safety,
+        methods, organization, dto, format, documentation,
+        resource, coordination, constraint, typing,
+        patterns, contract, consistency, generics,
+        handling, assertion, usage, exhaustive, access,
+        health, prompt, rules, serve, tui.
+    description:
+      mode: error
+
+  path_filters:
+    - "!**/.devcontainer/**"
+    - "!**/.claude/**"
+    - "!**/.grepai/**"
+    - "!**/builds/**"
+    - "!**/*.out"
+    - "!**/*.html"
+    - "!**/*.o"
+    - "!**/COVERAGE.MD"
+    - "!**/go.sum"
+
+  path_instructions:
+    # PROJECT-WIDE — zero-marker policy and structural-exemption discipline
+    - path: "**"
+      instructions: >-
+        ZERO proprietary marker policy. This project forbids ALL opt-out
+        markers in source code. DO NOT suggest adding `//nolint`,
+        `//nolint:<rule>`, `//ktn:scaffold`, `// IFACE-OPAQUE:`,
+        `// ROLE-CANONICAL:`, `// SENTINEL-EMPTY:`, or any other in-line
+        directive to silence diagnostics. Legitimate false positives are
+        fixed STRUCTURALLY in the analyzer (heuristic refinement, AST
+        signature exemption, sibling-pair detection) — never by annotating
+        the user's code. If a finding looks like a false positive, suggest
+        a structural exemption in the analyzer, not a marker on the call
+        site. The same rule applies to test files and testdata: no
+        suppression markers anywhere.
+
+    # PROJECT-WIDE — no path-based exclusions inside the linter
+    - path: "internal/analyzer/**"
+      instructions: >-
+        STRICTLY FORBIDDEN: path-based exclusions inside linter code. DO
+        NOT suggest helpers like `IsTestdataPath()`, `isTestdataFile()`,
+        `skipTestdata()`, nor inline checks like
+        `strings.Contains(path, "testdata")`,
+        `strings.HasSuffix(filename, "_test.go") && <skip>` used to bypass
+        an analyzer. Testdata is excluded by Go's own toolchain
+        (`go list ./...` skips testdata directories) and the test harness
+        runs analyzers directly on those files — any path-based bypass
+        artificially reduces the number of errors returned and defeats
+        the regression contract enforced by `make validate`. Exemptions
+        must be expressed STRUCTURALLY (AST shape, signature, sibling
+        pairing, type information), never by file path.
+
+    # Stdlib allowlist generator — three committed data files
+    - path: "cmd/gen-stdlib-allowlists/**"
+      instructions: >-
+        Generator that emits THREE data files committed to git (the stdlib
+        package allowlist, sentinel allowlist, and canonical-role allowlist
+        used by KTN-FUNC-EMPTYSENTINEL, KTN-STRUCT-ROLE-STUTTER,
+        KTN-INTERFACE-ANYUSE). The committed outputs are intentional — DO NOT
+        flag them as "generated files checked into the repo". Freshness is
+        enforced by `make generate-check` in CI: the generator is re-run
+        and the working tree must stay clean. If the data files drift, CI
+        fails. Treat the generator and its outputs as a coherent unit.
+
+    # Go source files - analyzer implementation
+    - path: "pkg/analyzer/**/*.go"
+      instructions: >-
+        Go 1.27 analyzer code using golang.org/x/tools/go/analysis. Every analyzer
+        follows: Analyzer<Name> variable, run<Name> function, Requires: [inspect.Analyzer].
+        AST traversal uses inspector.All[T]() (Go 1.27+ generic iterator). Type-safe
+        analysis via pass.TypesInfo. Diagnostics reported with pass.Reportf including
+        the KTN rule code prefix. Go 1.27 features are valid: new(expr) for any
+        expression, crypto APIs accepting nil rand.Reader, reflect.Value iterators.
+        Do NOT flag these as errors.
+
+    # Testdata files - intentional lint samples (CRITICAL: DO NOT REVIEW)
+    - path: "**/testdata/**"
+      instructions: >-
+        STOP: These are INTENTIONAL lint test fixtures for analysistest.Run().
+        DO NOT review code quality, style, or correctness in these files.
+        bad.go files DELIBERATELY contain bad patterns — that is their purpose.
+        good.go files must produce exactly 0 diagnostics.
+        bad.go files must produce ONLY the specific rule errors marked with
+        // want comments. Function names in bad.go use "bad" prefix to avoid
+        redeclaration with good.go. NEVER suggest improvements to bad.go —
+        the "bad" code IS the test. NEVER suggest creating *_test.go files
+        in testdata folders. go list ./... excludes testdata automatically.
+
+    # Test files - strict naming and patterns
+    - path: "**/*_test.go"
+      instructions: >-
+        Strict test naming: *_internal_test.go (white-box, same package) and
+        *_external_test.go (black-box, <package>_test suffix). Table-driven tests
+        with t.Run() are mandatory. Standard library testing only - no testify or
+        gomock. For analyzers, use testhelper.TestGoodBad(t, analyzer, dir, count).
+        t.Parallel() MUST be the FIRST statement in every subtest body — flag
+        any t.Run that defers t.Parallel() behind setup code. Use t.Cleanup() over
+        defer in parallel tests. Use t.TempDir() over os.MkdirTemp(). Go 1.27
+        features like new(false) are valid in tests. Target: maximum coverage.
+        NOTE: When packages are split into sub-packages, test files are moved
+        alongside their source code. These moved tests retain their original
+        patterns and conventions — do NOT flag them as needing restructuring.
+        Registry tests validate non-empty lists and non-nil analyzers — this
+        is sufficient for registry aggregation tests.
+
+    # main_test.go in cmd/ — Go toolchain expects this filename
+    - path: "cmd/*/main_test.go"
+      instructions: >-
+        EXEMPT from the *_internal_test.go / *_external_test.go naming
+        convention. KTN-TEST-FILES explicitly exempts `package main` test
+        files because Go's standard toolchain expects `main_test.go` for
+        TestMain wiring. DO NOT suggest renaming `main_test.go` to
+        `main_internal_test.go` or `main_external_test.go`. DO NOT suggest
+        splitting it into the dual-file pattern. This is the only valid
+        filename for a `package main` test entry point.
+
+    # Bad.go testdata — name-collision contract
+    - path: "**/testdata/**/bad.go"
+      instructions: >-
+        Functions in bad.go MUST start with the prefix `bad` (badFoo, badBar)
+        to avoid redeclaration collisions with same-named functions in the
+        sibling good.go. DO NOT suggest renaming them to drop the prefix.
+        DO NOT suggest merging bad.go and good.go. `go list ./...` excludes
+        testdata directories so these files are NOT linted by `make lint` —
+        they are validated separately by `make validate` (validate-testdata.sh).
+
+    # Health advisories - post-lint meta-analysis
+    - path: "pkg/health/**"
+      instructions: >-
+        Post-lint health advisory system. Activates ONLY when all lint violations
+        are resolved (0 issues). Checks operate on package metadata, not AST nodes.
+        Advisories are suggestions only — they do not affect exit codes. The Runner
+        aggregates multiple Checker implementations. PKG-SIZE is the first checker
+        (threshold: 20 non-test .go files per package).
+
+    # Registry files - analyzer aggregation
+    - path: "**/registry.go"
+      instructions: >-
+        Registry files aggregate analyzers for a category. They export Analyzers()
+        or GetAllRules() returning []*analysis.Analyzer. This pattern is consistent
+        across all 15 KTN categories and the govet/modernize wrappers. Do not
+        suggest restructuring.
+
+    # Message templates
+    - path: "pkg/messages/**"
+      instructions: >-
+        Rule message definitions. Each KTN rule has Short (one-line factual for lint
+        output) and Verbose (PROBLEM, WHY, INCORRECT/CORRECT EXAMPLE, SOURCE sections)
+        messages. Format verbs (%s, %d) for dynamic values. Every rule code must be
+        registered via Register(). Message counts must match the rule count per category.
+
+    # Severity mappings
+    - path: "pkg/severity/**"
+      instructions: >-
+        Severity mapping for every registered rule across 3 levels: Error, Warning, Info. Rule
+        counts in comments must match actual registrations. Verify category counts
+        match CLAUDE.md documentation.
+
+    # Shared classification utilities
+    - path: "pkg/analyzer/shared/**"
+      instructions: >-
+        Classification utilities for AST nodes. DTO detection (W9A Option C-strict)
+        uses a 5-axis pass-aware scorer: serialization tags (+2; json, yaml, xml,
+        protobuf, msgpack, bson, toml, csv, form, query, uri, avro, flatbuffers,
+        tlv, conf), DTO name suffix (+1; DTO, Request, Response, Params, Input,
+        Output, Payload, Message, Event, Command, Query), validate/binding tags
+        (+1), canonical Validate() error method (+1; requires analysis.Pass /
+        TypesInfo — pass-aware signal), adapter-transport package path (+1;
+        api, http, grpc, mcp, serve, cmd, event — requires pass.Pkg.Path(),
+        pass-aware signal). The last two signals are zero when pass==nil
+        (AST-only back-compat path). The historical opt-in `dto:""` tag has been
+        removed. Confidence levels: NotDTO(0), MaybeDTO(1), LikelyDTO(2),
+        DefiniteDTO(3). DTOs skip KTN-STRUCT-ONEFILE and KTN-STRUCT-CTOR.
+        DTOs enable KTN-STRUCT-JSONTAG and KTN-STRUCT-PRIVTAG.
+
+    # AST utility helpers
+    - path: "pkg/analyzer/utils/**"
+      instructions: >-
+        Pure AST helper functions. Must maintain 100% test coverage. Functions are
+        stateless and reusable across all analyzer categories. Naming, type checking,
+        file detection, and comment extraction utilities.
+
+    # Test helper package
+    - path: "pkg/analyzer/ktn/testhelper/**"
+      instructions: >-
+        Test utilities for KTN analyzers. TestGoodBad(), TestGood(), TestBad()
+        functions wrap analysistest.Run(). Must maintain 100% coverage. Creates
+        analysis.Pass with proper TypesSizes, fact functions, and ReadFile callbacks.
+
+    # Orchestrator - linting pipeline
+    - path: "pkg/orchestrator/**"
+      instructions: >-
+        Linting pipeline coordination: package loading, analyzer selection, parallel
+        execution with bounded concurrency (errgroup), file caching, and diagnostic
+        processing. analysis.Pass must include TypesSizes, all 6 fact function
+        callbacks, ReadFile, and Report. Required analyzers are resolved recursively.
+        Failed dependencies cause graceful skip of downstream analyzers.
+
+    # Cache system
+    - path: "pkg/cache/**"
+      instructions: >-
+        File-level caching for incremental analysis. Uses mtime + SHA256 hybrid
+        strategy. CachedDiagnostic stores file offsets (not token.Pos) for
+        FileSet-independent caching. ReadFilePooled uses sync.Pool for reduced
+        allocations. Generated file detection via IsGeneratedFile().
+
+    # Configuration
+    - path: "pkg/config/**"
+      instructions: >-
+        YAML configuration management (.ktn-linter.yaml). Singleton pattern via
+        Get()/Set()/Reset(). Supports per-rule enable/disable, thresholds, global
+        exclude patterns with glob matching. Priority: CLI flags > config file.
+        Per-rule test-file policy lives in severity.defaultSkippedTestRules,
+        not in this file — read it there rather than trusting a number here.
+
+    # Formatter output
+    - path: "pkg/formatter/**"
+      instructions: >-
+        Output formatting in text, JSON, and SARIF 2.1.0. Must maintain 100%
+        coverage. Text format uses ANSI colors. JSON and SARIF for tool integration.
+        ByRule grouping shows diagnostics organized by KTN rule code.
+
+    # CLI commands
+    - path: "cmd/**"
+      instructions: >-
+        Cobra CLI commands: lint, rules, config, prompt, upgrade. Global flags:
+        --verbose, --config, --category, --only-rule, --format (text/json/sarif),
+        --output, --strict, --no-cache, --format-code. The lint command is the
+        primary entry point coordinating the orchestrator pipeline.
+
+    # Shell scripts
+    - path: "**/*.sh"
+      instructions: >-
+        Shell scripts must use strict mode (set -euo pipefail). Check for proper
+        quoting of variables, error handling, safe temporary files with mktemp,
+        and curl commands using --retry and --proto '=https'.
+
+    # Dockerfiles
+    - path: "**/Dockerfile*"
+      instructions: >-
+        Multi-stage builds with pinned base images. Minimal layers. No secrets in
+        build args. Prefer COPY over ADD. Go binaries are statically compiled.
+
+    # Makefile
+    - path: "Makefile"
+      instructions: >-
+        Build system. Key targets: build (compile to builds/), test (with coverage
+        report to COVERAGE.MD), lint (self-lint with ktn-linter), validate (check
+        all testdata good.go/bad.go against compiled binary), fmt (gofmt).
+        make validate must pass before merge.
+
+    # CI/CD workflows
+    - path: ".github/workflows/**"
+      instructions: >-
+        GitHub Actions for release automation. Builds multi-arch binaries
+        (linux/darwin amd64+arm64, windows amd64) with checksums. Actions must
+        use pinned SHA references, not version tags. paths-ignore excludes test
+        files, testdata, and documentation from triggering releases.
+
+    # MCP server
+    - path: "pkg/serve/**"
+      instructions: >-
+        MCP server mode with live file watching (fsnotify), BoltDB cache, and
+        HTTP hooks. Exposes linting results via stdio JSON-RPC. The serve command
+        runs ktn-linter as a long-lived process for IDE integration. Resilience
+        layer: withRecovery middleware, safeGo/safeGoSync goroutine wrappers,
+        sanitiseLogField for CWE-117 protection, MaxBytesReader on every JSON
+        decode site, EvalSymlinks-aware path validation. surface_strategy YAML
+        controls phase emission across /scan, /pre, /post, /stop endpoints.
+
+    # Refactor tooling (hoisted out of pkg/serve)
+    - path: "pkg/refactor/**"
+      instructions: >-
+        Language-agnostic public-API drift detection used by the post-tool-use
+        hook. SymbolSnapshotValue / SymbolChangeValue / TakeSymbolSnapshot /
+        DiffSymbolSnapshots / FindCallersInRoot. Pure stdlib (go/parser,
+        go/printer, go/ast, io/fs); zero third-party imports. The reverse-
+        dependency invariant is enforced: pkg/refactor must NEVER import
+        pkg/serve or any package that does. Caller scan caps: max 500 files
+        walked, max 5 hits per symbol, vendor/testdata/dot-prefixed pruned.
+
+    # Rule metadata + plan generator
+    - path: "pkg/rules/**"
+      instructions: >-
+        Rule metadata extraction for `ktn-linter rules` and the AI prompt mode.
+        RuleMetadataValue carries non-textual rule properties (AffectsAPI,
+        CrossPackageImpact, FixHint, FixPattern, NeedsRaceTest, NeedsCountFlag).
+        Explicit registry first, prefix-fallback (KTN-GOROUTINE-* /
+        KTN-INTERFACE-*) second, zero-value otherwise. Tests must validate
+        explicit metadata keys against pkg/severity registrations.
+
+    - path: "pkg/prompt/**"
+      instructions: >-
+        Adaptive plan generator (PlanMode: surgical|package|batched|migration|
+        legacy) driven by SignalsValue / Score / SelectPlanMode. Sections
+        modeled as SectionValue with predicate-based ShouldEmit gates;
+        defaultPlanSections() returns the ordered catalog. Golden tests in
+        testdata/plans/ guard the byte-level output for each mode.
+
+    # TUI components
+    - path: "pkg/tui/**"
+      instructions: >-
+        Bubble Tea TUI for interactive prompt mode and the rules browser.
+        Reusable components for the interactive commands.
+
+    # Updater package
+    - path: "pkg/updater/**"
+      instructions: >-
+        Self-update from GitHub releases. Downloads platform-specific binary,
+        verifies checksum, and replaces current executable. Security-sensitive
+        code - verify HTTPS, checksum validation, and safe file operations.
+
+  labeling_instructions:
+    - label: analyzer
+      instructions: >-
+        Changes in pkg/analyzer/ affecting KTN rules, govet wrappers, modernize
+        wrappers, shared classification, or AST utilities.
+    - label: cli
+      instructions: >-
+        Changes in cmd/ktn-linter/ affecting Cobra commands, flags, or output.
+    - label: orchestrator
+      instructions: >-
+        Changes in pkg/orchestrator/ affecting package loading, analyzer execution,
+        caching, or diagnostic processing.
+    - label: messages
+      instructions: >-
+        Changes in pkg/messages/ affecting rule message definitions (Short/Verbose).
+    - label: severity
+      instructions: >-
+        Changes in pkg/severity/ affecting rule severity level assignments.
+    - label: tests
+      instructions: >-
+        Changes primarily adding or modifying *_test.go files or testdata fixtures.
+    - label: dependencies
+      instructions: >-
+        Changes to go.mod or go.sum modifying project dependencies.
+    - label: breaking-change
+      instructions: >-
+        Rule behavior changes that could produce different diagnostics on existing
+        code. New rules with severity Error or Warning. Removed/renamed rule codes.
+    - label: security
+      instructions: >-
+        Changes affecting security rules (KTN-VAR-WEAKRAND, KTN-VAR-CRYPTONIL),
+        the updater package, or any code handling external input.
+    - label: concurrency
+      instructions: >-
+        Changes affecting goroutine rules (KTN-GOROUTINE-*), the orchestrator's
+        parallel execution, or sync primitives.
+    - label: performance
+      instructions: >-
+        Changes affecting performance rules (KTN-VAR-SLICECAP, KTN-VAR-HOTLOOP,
+        KTN-VAR-BIGSTRUCT, KTN-VAR-SYNCPOOL), cache logic, or pooled allocations.
+    - label: go126
+      instructions: >-
+        Changes using or targeting Go 1.27 features: new(expr), crypto nil,
+        reflect iterators, errors.AsType[T]().
+    - label: config
+      instructions: >-
+        Changes in pkg/config/ affecting .ktn-linter.yaml parsing, per-rule
+        settings, or exclusion patterns.
+    - label: formatter
+      instructions: >-
+        Changes in pkg/formatter/ affecting text, JSON, or SARIF output.
+    - label: cache
+      instructions: >-
+        Changes in pkg/cache/ affecting incremental analysis caching.
+    - label: ci
+      instructions: >-
+        Changes in .github/workflows/, Makefile, or build tooling.
+    - label: shell
+      instructions: >-
+        Changes to shell scripts (.sh) in hooks, lifecycle, or CI.
+    - label: serve
+      instructions: >-
+        Changes in pkg/serve/ affecting the MCP server, file watching, or
+        BoltDB cache.
+    - label: tui
+      instructions: >-
+        Changes in pkg/tui/ affecting Bubble Tea components or terminal UI.
+    - label: health
+      instructions: >-
+        Changes in pkg/health/ affecting post-lint health advisories.
+
+  tools:
+    shellcheck:
+      enabled: true
+    hadolint:
+      enabled: true
+    actionlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    markdownlint:
+      enabled: false
+    ast-grep:
+      essential_rules: true
+    github-checks:
+      enabled: true
+      timeout_ms: 120000
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+  learnings:
+    scope: local
+  issues:
+    scope: local
+  pull_requests:
+    scope: local
+
+code_generation:
+  docstrings:
+    language: en-US
+    path_instructions:
+      - path: "**/*.go"
+        instructions: >-
+          Go doc comment style. Start with the function/type name. Include Params
+          and Returns sections for exported functions. For private functions, include
+          Params/Returns when signatures are non-trivial. Follow the pattern:
+          // FunctionName does X.\n//\n// Params:\n//   - param: description\n//\n//
+          Returns:\n//   - type: description
+  unit_tests:
+    path_instructions:
+      - path: "**/*.go"
+        instructions: >-
+          Standard library testing only. Table-driven tests with t.Run(). Name
+          files *_external_test.go (black-box, <pkg>_test) or *_internal_test.go
+          (white-box, same package). Public functions tested in external, private
+          in internal. Use analysistest.Run() with testdata/src/ for analyzers.
+          Use testhelper.TestGoodBad() for KTN rule tests. t.Parallel() first in
+          subtests. No testify, no gomock, no test frameworks.
+
+issue_enrichment:
+  planning:
+    enabled: true
+  labeling:
+    labeling_instructions:
+      - label: analyzer
+        instructions: >-
+          Issue relates to lint rule behavior, false positives, false negatives,
+          or new rule requests. Cite affected KTN codes.
+      - label: cli
+        instructions: >-
+          Issue relates to command-line interface, flags, output formatting, or
+          user-facing behavior.
+      - label: bug
+        instructions: >-
+          Issue reports incorrect behavior: false positives, false negatives,
+          panics, or wrong severity/message output.
+      - label: enhancement
+        instructions: >-
+          Issue requests a new rule, improved detection heuristics, new output
+          format, or new CLI feature.
+      - label: performance
+        instructions: >-
+          Issue relates to linter speed, memory usage, or caching effectiveness.
+      - label: orchestrator
+        instructions: >-
+          Issue relates to package loading, analyzer execution, dependency
+          resolution, or parallel processing.
