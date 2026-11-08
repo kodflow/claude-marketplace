@@ -456,6 +456,11 @@ def git_output(cwd: str, *args: str, timeout: float = 3.0) -> Optional[str]:
     return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else None
 
 
+def valid_repo(repo: str) -> bool:
+    """OWNER/NAME in GitHub's alphabet, with no `.` or `..` segment."""
+    return bool(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)) and not {".", ".."} & set(repo.split("/"))
+
+
 def repo_from_remote(url: str) -> Optional[str]:
     for rx in REMOTE_RES:
         m = rx.match(url.strip())
@@ -557,7 +562,7 @@ def capacity(opts: argparse.Namespace, now: dt.datetime, api: Optional[Api] = No
 
     api = api or Api(deadline=end)
     try:
-        if opts.repo and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", opts.repo):
+        if opts.repo and not valid_repo(opts.repo):
             out["error"] = "--repo is not OWNER/NAME"
             return out
         repo = opts.repo or repo_from_remote(git_output(opts.cwd, "remote", "get-url", "origin", timeout=left()) or "")
@@ -651,7 +656,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("probe: give at least one --repo or --owner", file=sys.stderr)
             return 2
         for repo in opts.repo:
-            if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+            if not valid_repo(repo):
                 print(f"probe: '{repo}' is not OWNER/NAME", file=sys.stderr)
                 return 2
         doc = probe(api, opts.repo, opts.owner, now, opts)
