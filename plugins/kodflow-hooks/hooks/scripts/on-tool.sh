@@ -856,7 +856,7 @@ _guard_git() {
             _scan commit "$(git -C "$gdir" log -5 --pretty=%B 2>/dev/null)" ;;
         am|revert|pull)
             for v in "${A[@]:y}"; do _is_noverify "$v" && F_NV="--no-verify on git $sub"; done ;;
-        push) _guard_push "$1" ;;
+        push) _guard_push "$1"; F_CR=push ;;
     esac
 }
 
@@ -901,11 +901,11 @@ _merge_words='mergePullRequest|enablePullRequestAutoMerge|merge_when_pipeline_su
 # gh: pr create/edit text, pr merge, and the REST/GraphQL equivalents.
 _guard_gh() {
     local y=1 na=${#A[@]} sub act v f hay="" ep=""
-    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo|--hostname) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
+    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) F_CR_REPO=${A[y+1]:-}; y=$((y+2)) ;; --hostname) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
     sub=${A[y]:-}; act=${A[y+1]:-}
     case "$sub/$act" in
         pr/create|pr/edit)
-            [ "$act" = create ] && F_ROOT="gh pr create from the main thread: opening the PR is the subagent's delivery."
+            [ "$act" = create ] && { F_CR=pr_create; F_ROOT="gh pr create from the main thread: opening the PR is the subagent's delivery."; }
             y=$((y+2))
             while [ $y -lt $na ]; do
                 v=${A[y]}
@@ -914,7 +914,9 @@ _guard_gh() {
                     --title=*|--body=*) hay=$hay$'\n'${v#*=} ;;
                     -F|--body-file) hay=$hay$'\n'$(_p_file "${A[y+1]:-}" "$1"); y=$((y+2)); continue ;;
                     --body-file=*) hay=$hay$'\n'$(_p_file "${v#*=}" "$1") ;;
-                    -R|--repo|-B|--base|-H|--head|-a|--assignee|-l|--label|-m|--milestone|-p|--project|-r|--reviewer|-T|--template|--add-*|--remove-*) y=$((y+2)); continue ;;
+                    -R|--repo) F_CR_REPO=${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --repo=*) F_CR_REPO=${v#*=} ;;
+                    -B|--base|-H|--head|-a|--assignee|-l|--label|-m|--milestone|-p|--project|-r|--reviewer|-T|--template|--add-*|--remove-*) y=$((y+2)); continue ;;
                 esac
                 y=$((y+1))
             done
@@ -1138,6 +1140,7 @@ pre_bash() {
     F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
     F_MODW=""; F_PLUG=""; GDIR=""; F_MCPJSON=""; F_CALL=0; F_CGDIR=""
     F_IDENT_T=""; F_IDENT_M=(); F_IDENT_OFF=""; ID_LINE_ENV=(); ID_CMD_ENV=()
+    F_CR=""; F_CR_REPO=""
 
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
     # $'…' string may spell one in escapes, so it is always read. tr, not
@@ -1259,7 +1262,20 @@ pre_bash() {
         # The main thread's merge is journaled, never asked about.
         ROOT_GUARD=merge
     fi
-    _ident_notice
+    # The CodeRabbit capacity hint (lib/coderabbit.sh), in the one JSON document
+    # of this hook: the identity notice, when there is one, rides with it.
+    local note ctx="" cwd=${GDIR:-$PROJECT_DIR}
+    [[ $cwd = /* ]] || cwd=$PROJECT_DIR/$cwd
+    note=$(_ident_notice)
+    if [ -n "$F_CR" ] && [ -d "$cwd" ] && . "$LIB/coderabbit.sh" 2>/dev/null; then
+        ctx=$(kf_coderabbit_hint "$F_CR" "$cwd" "$F_CR_REPO")
+    fi
+    if [ -n "$ctx" ]; then
+        [ -n "$note" ] || note='{}'
+        printf '%s' "$note" | jq -c --arg c "$ctx" '. + {hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}' 2>/dev/null
+    elif [ -n "$note" ]; then
+        printf '%s\n' "$note"
+    fi
     _log
     exit 0
 }
