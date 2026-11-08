@@ -901,7 +901,7 @@ _merge_words='mergePullRequest|enablePullRequestAutoMerge|merge_when_pipeline_su
 # gh: pr create/edit text, pr merge, and the REST/GraphQL equivalents.
 _guard_gh() {
     local y=1 na=${#A[@]} sub act v f hay="" ep=""
-    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) F_CR_REPO=${A[y+1]:-}; y=$((y+2)) ;; --hostname) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
+    while [ $y -lt $na ]; do case "${A[y]}" in -R|--repo) F_CR_REPO=${A[y+1]:-}; y=$((y+2)) ;; --repo=*) F_CR_REPO=${A[y]#*=}; y=$((y+1)) ;; -R?*) F_CR_REPO=${A[y]#-R}; y=$((y+1)) ;; --hostname) y=$((y+2)) ;; -*) y=$((y+1)) ;; *) break ;; esac; done
     sub=${A[y]:-}; act=${A[y+1]:-}
     case "$sub/$act" in
         pr/create|pr/edit)
@@ -1270,12 +1270,11 @@ pre_bash() {
     if [ -n "$F_CR" ] && [ -d "$cwd" ] && . "$LIB/coderabbit.sh" 2>/dev/null; then
         ctx=$(kf_coderabbit_hint "$F_CR" "$cwd" "$F_CR_REPO")
     fi
-    if [ -n "$ctx" ]; then
-        [ -n "$note" ] || note='{}'
-        printf '%s' "$note" | jq -c --arg c "$ctx" '. + {hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}' 2>/dev/null
-    elif [ -n "$note" ]; then
-        printf '%s\n' "$note"
-    fi
+    local merged=""
+    [ -n "$ctx" ] && merged=$(printf '%s' "${note:-"{}"}" | jq -c --arg c "$ctx" '. + {hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}' 2>/dev/null)
+    # A merge that failed must not cost the notice: fall back to it alone.
+    if [ -n "$merged" ]; then printf '%s\n' "$merged"
+    elif [ -n "$note" ]; then printf '%s\n' "$note"; fi
     _log
     exit 0
 }

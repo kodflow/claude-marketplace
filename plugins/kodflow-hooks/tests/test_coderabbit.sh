@@ -58,7 +58,14 @@ grep -q -- '--repo kodflow/labs' "$STUB_LOG" && ok "-R OWNER/NAME is forwarded" 
 run 'gh pr create --repo=kitsunium/sdk --title t'
 grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && ok "--repo=OWNER/NAME is forwarded" || bad "--repo=" "$(cat "$STUB_LOG")"
 run 'gh pr create -R "x;touch pwned" --title t'
-! grep -q -- '--repo' "$STUB_LOG" && [ ! -e pwned ] && ok "a malformed repository is not forwarded" || bad "malformed" "$(cat "$STUB_LOG")"
+! grep -q -- '--repo' "$STUB_LOG" && [ ! -e "$T/repo/pwned" ] && [ ! -e "$T/pwned" ] && ok "a malformed repository is not forwarded" || bad "malformed" "$(cat "$STUB_LOG")"
+
+run 'gh --repo=kodflow/labs pr create --title t'
+grep -q -- '--repo kodflow/labs' "$STUB_LOG" && ok "--repo=OWNER/NAME before the subcommand is forwarded" || bad "global --repo=" "$(cat "$STUB_LOG")"
+run 'gh -Rkodflow/labs pr create --title t'
+grep -q -- '--repo kodflow/labs' "$STUB_LOG" && ok "-ROWNER/NAME before the subcommand is forwarded" || bad "global -R" "$(cat "$STUB_LOG")"
+run 'gh -R kitsunium/sdk pr create --title t'
+grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && ok "-R OWNER/NAME before the subcommand is forwarded" || bad "global -R sep" "$(cat "$STUB_LOG")"
 
 echo "== silent where it has nothing to say"
 for c in 'git status' 'gh pr view 3' 'gh pr list' 'ls'; do
@@ -94,6 +101,22 @@ printf '%s' "$OUT" | jq -e '(.systemMessage | startswith("kodflow-hooks: commit 
     && [ "$(printf '%s' "$OUT" | wc -l)" -le 1 ] && ok "one JSON document carries both" || bad "merged document" "$OUT"
 run 'git push --force origin feat/x'
 [ $RC -eq 2 ] && [ -z "$(ctx)" ] && ok "a forced push is refused, no hint" || bad "force" "rc=$RC out=$OUT"
+
+echo "== a jq that fails on the merge costs neither the call nor the notice"
+mkdir -p "$T/bin"; REALJQ=$(command -v jq)
+cat > "$T/bin/jq" <<JQ
+#!/bin/bash
+case "\$*" in *additionalContext*) exit 5 ;; esac
+exec "$REALJQ" "\$@"
+JQ
+chmod +x "$T/bin/jq"
+export STUB_OUT='{"context":"HINT"}'
+rm -f "$T/home/.claude/kodflow/sessions/s1/commit-identity-notice"
+PATH="$T/bin:$PATH" run 'git commit -m "feat: x" && git push origin feat/x'
+printf '%s' "$OUT" | jq -e '.systemMessage | startswith("kodflow-hooks: commit identity")' >/dev/null && [ $RC -eq 0 ] \
+    && ok "the notice survives, rc 0" || bad "merge fallback" "rc=$RC out=$OUT"
+PATH="$T/bin:$PATH" run 'gh pr create --title t'
+[ $RC -eq 0 ] && [ -z "$OUT" ] && ok "no notice, merge failed: silence, rc 0" || bad "merge fallback silence" "rc=$RC out=$OUT"
 
 echo "== the real probe, no network: a repository that is not on github.com"
 unset KODFLOW_CODERABBIT_PROBE

@@ -255,6 +255,35 @@ class Capacity(unittest.TestCase):
         for url in ("https://github.com/kodflow/labs.git", "git@github.com:kodflow/labs.git", "ssh://git@github.com/kodflow/labs", "https://" + "x-access-token" + ":t" + "@github.com/kodflow/labs/"):
             self.assertEqual(f(url), "kodflow/labs", url)
         self.assertIsNone(f("https://gitlab.com/a/b.git"))
+        for url in ("https://github.com/ow ner/x", "https://github.com/a;b/x", "https://github.com/-a/x", "https://github.com/a--/x",
+                    "https://github.com/a/..", "https://github.com/a/.", "https://github.com/a/b c", "https://github.com/a/b/c",
+                    "git@github.com:a/b\nc", "https://github.com/a/$(id)"):
+            self.assertIsNone(f(url), url)
+        self.assertEqual(f("https://github.com/a-b/c.d_e-f.git"), "a-b/c.d_e-f")
+        self.assertEqual(f("https://github.com/a/b.github.io"), "a/b.github.io")
+
+    def test_subprocesses_share_the_deadline(self):
+        seen = []
+        real = probe.subprocess.run
+        def fake(cmd, **kw):
+            seen.append(kw["timeout"])
+            import types
+            return types.SimpleNamespace(returncode=0, stdout="https://github.com/o/r.git\n" if "remote" in cmd else "feat/x\n")
+        probe.subprocess.run = fake
+        try:
+            out = probe.capacity(cap_opts(repo=None, branch=None, deadline=1.0), NOW, self.api())
+        finally:
+            probe.subprocess.run = real
+        self.assertEqual(len(seen), 2)
+        self.assertTrue(all(0 < t <= 1.0 for t in seen), seen)
+        self.assertEqual(out["repo"], "o/r")
+        # a budget already spent: git is not even started
+        probe.subprocess.run = lambda *a, **k: self.fail("git ran past the deadline")
+        try:
+            out = probe.capacity(cap_opts(repo=None, deadline=0.0), NOW, self.api())
+        finally:
+            probe.subprocess.run = real
+        self.assertEqual(out["state"], "unknown")
 
 
 if __name__ == "__main__":

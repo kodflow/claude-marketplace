@@ -107,14 +107,16 @@ def fmt_time(value: dt.datetime) -> str:
 # ------------------------------------------------------------------- GitHub API
 
 
-def token_for(owner: str) -> Optional[str]:
+def token_for(owner: str, timeout: float = 3.0) -> Optional[str]:
     suffix = re.sub(r"[^A-Za-z0-9]", "_", owner).upper()
     for var in (f"GH_TOKEN_{suffix}", "GH_TOKEN", "GITHUB_TOKEN"):
         if os.environ.get(var):
             return os.environ[var]
+    if timeout <= 0.2:
+        return None
     try:
         out = subprocess.run(
-            ["gh", "auth", "token"], capture_output=True, text=True, timeout=3, check=False
+            ["gh", "auth", "token"], capture_output=True, text=True, timeout=timeout, check=False
         )
         if out.returncode == 0 and out.stdout.strip():
             return out.stdout.strip()
@@ -133,7 +135,8 @@ class Api:
 
     def _token(self, owner: str) -> Optional[str]:
         if owner not in self._tokens:
-            self._tokens[owner] = token_for(owner)
+            budget = 3.0 if self._deadline is None else min(3.0, self._deadline - time.monotonic())
+            self._tokens[owner] = token_for(owner, budget)
         return self._tokens[owner]
 
     def _request(self, owner: str, url: str, method: str = "GET", payload: Any = None) -> Tuple[Any, Dict[str, str]]:
@@ -433,15 +436,21 @@ DEFAULT_CACHE_MINUTES = 5
 DEFAULT_RECENT = 5          # open non-draft PRs read per refresh (one comments call each)
 DEFAULT_WINDOW_HOURS = 3    # a PR untouched for longer cannot hold a live refusal
 DEFAULT_DEADLINE_SECONDS = 4.0
+# GitHub's own alphabet: an owner is alphanumerics and single hyphens, a name
+# alphanumerics, `_`, `-` and `.`, never `.` or `..` alone.
+_OWNER = r"([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9]))*)"
+_NAME = r"((?!\.{1,2}(?:\.git)?/?$)[A-Za-z0-9_.-]+?)"
 REMOTE_RES = (
-    re.compile(r"^https?://(?:[^/@]*@)?github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$"),
-    re.compile(r"^(?:ssh://)?git@github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?/?$"),
+    re.compile(r"^https?://(?:[^/@]*@)?github\.com/" + _OWNER + "/" + _NAME + r"(?:\.git)?/?$"),
+    re.compile(r"^(?:ssh://)?git@github\.com[:/]" + _OWNER + "/" + _NAME + r"(?:\.git)?/?$"),
 )
 
 
-def git_output(cwd: str, *args: str) -> Optional[str]:
+def git_output(cwd: str, *args: str, timeout: float = 3.0) -> Optional[str]:
+    if timeout <= 0.2:
+        return None
     try:
-        out = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=3, check=False)
+        out = subprocess.run(["git", "-C", cwd, *args], capture_output=True, text=True, timeout=timeout, check=False)
     except (OSError, subprocess.SubprocessError):
         return None
     return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else None
@@ -541,14 +550,19 @@ def capacity(opts: argparse.Namespace, now: dt.datetime, api: Optional[Api] = No
         "minutes_until_review": None, "refused_pull_requests": [], "branch_pr": None,
         "context": "", "cache": "none", "api_calls": 0,
     }
-    api = api or Api(deadline=time.monotonic() + opts.deadline)
+    end = time.monotonic() + opts.deadline   # one budget for git, gh and the API alike
+
+    def left() -> float:
+        return min(3.0, end - time.monotonic())
+
+    api = api or Api(deadline=end)
     try:
-        repo = opts.repo or repo_from_remote(git_output(opts.cwd, "remote", "get-url", "origin") or "")
+        repo = opts.repo or repo_from_remote(git_output(opts.cwd, "remote", "get-url", "origin", timeout=left()) or "")
         out["repo"] = repo
         if not repo:
             out["error"] = "no github.com remote"
             return out
-        branch = opts.branch or git_output(opts.cwd, "symbolic-ref", "--short", "HEAD")
+        branch = opts.branch or git_output(opts.cwd, "symbolic-ref", "--short", "HEAD", timeout=left())
         out["branch"] = branch
         path = _cache_path(opts.cache_dir, repo) if opts.cache_dir else None
         sample = _read_cache(path, now, opts.cache_minutes) if path else None
