@@ -49,7 +49,8 @@ Reference document for all safety rules, conventions, and forbidden actions acro
 | More than 3 fix iterations | **FORBIDDEN** | Escalate to user |
 | Auto-dismiss CodeRabbit without fixing | **FORBIDDEN** | Must fix or justify |
 | Auto-dismiss Qodo P0/P1 without fixing | **FORBIDDEN** | Must address blockers |
-| Post `@coderabbitai resolve` before fixes applied | **FORBIDDEN** | Resolve only after fixing |
+| Post `@coderabbitai resolve` | **FORBIDDEN** | Threads are resolved by GraphQL `resolveReviewThread` (review-threads.md); the command is refused for the author where `allow_author_approval: false` |
+| Post `@coderabbitai review` on `covered` unknown | **FORBIDDEN** | Only a positive `covered: false` on an eligible PR, marked `:hook` (watch.md Phase 4.8) |
 | Refute a finding without evidence in the reply | **FORBIDDEN** | A bare dismissal is re-raised on the next push |
 | Leave a thread resolved with no reply on it | **FORBIDDEN** | The reviewer must see why |
 | Merge with a body that does not describe HEAD | **FORBIDDEN** | `<!-- describes: sha -->` must match (review-threads.md) |

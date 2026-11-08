@@ -118,6 +118,42 @@ printf '%s' "$OUT" | jq -e '.systemMessage | startswith("kodflow-hooks: commit i
 PATH="$T/bin:$PATH" run 'gh pr create --title t'
 [ $RC -eq 0 ] && [ -z "$OUT" ] && ok "no notice, merge failed: silence, rc 0" || bad "merge fallback silence" "rc=$RC out=$OUT"
 
+echo "== gh pr merge: one context line, never a command"
+run_main() {   # the main thread's Bash call (no agent_id): the one that may merge
+    local json; json=$(jq -n -c --arg c "$1" --arg cwd "$T/repo" \
+        '{session_id:"s1",hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$cwd,tool_use_id:"t2",tool_input:{command:$c}}')
+    : > "$STUB_LOG"
+    OUT=$(printf '%s' "$json" | bash "$S/on-tool.sh" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err")
+}
+export STUB_OUT='{"schema_version":1,"repo":"o/r","pr":42,"head":"abc1234def","covered":false,"eligible":true,"reason":"eligible"}' STUB_RC=0
+mkdir -p "$T/policy"
+KODFLOW_CODERABBIT_POLICY_DIR=$T/policy run_main 'gh pr merge 42 --squash --match-head-commit abc1234def'
+[ $RC -eq 0 ] && [ "$(ctx)" = "CodeRabbit on PR #42: head abc1234def covered=false eligible=true" ] \
+    && ok "merge: head, covered, eligible in one line" || bad "merge line" "rc=$RC out=$OUT err=$ERR"
+printf '%s' "$OUT" | jq -e '.hookSpecificOutput | has("permissionDecision") | not' >/dev/null && ok "merge: information only" || bad "merge decision" "$OUT"
+grep -q -- '^covered .*--pr 42' "$STUB_LOG" && grep -q -- "--policy-dir $T/policy" "$STUB_LOG" && grep -q -- '--deadline 4' "$STUB_LOG" \
+    && ok "merge: covered --pr N --policy-dir, 4 s deadline" || bad "merge args" "$(cat "$STUB_LOG")"
+KODFLOW_CODERABBIT_POLICY_DIR=$T/no-such-dir HOME=$T/home run_main 'gh pr merge 42'
+! grep -q -- '--policy-dir' "$STUB_LOG" && ok "merge: no policy directory, no --policy-dir (eligible unknown)" || bad "no policy" "$(cat "$STUB_LOG")"
+run_main 'gh pr merge https://github.com/kodflow/labs/pull/7 --squash'
+grep -q -- '--pr 7' "$STUB_LOG" && grep -q -- '--repo kodflow/labs' "$STUB_LOG" && ok "merge: a PR URL gives repo and number" || bad "merge url" "$(cat "$STUB_LOG")"
+run_main 'gh pr merge feat/x --rebase'
+grep -q -- '--branch feat/x' "$STUB_LOG" && ok "merge: a branch operand" || bad "merge branch" "$(cat "$STUB_LOG")"
+run_main 'gh pr merge --squash -t "feat: 9"'
+! grep -q -- '--pr\|--branch' "$STUB_LOG" && grep -q -- "--cwd $T/repo" "$STUB_LOG" && ok "merge: no operand, the checked-out branch" || bad "merge none" "$(cat "$STUB_LOG")"
+run_main 'gh pr merge 42 -R kitsunium/sdk'
+grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && ok "merge: -R after the operand" || bad "merge -R" "$(cat "$STUB_LOG")"
+export STUB_OUT='{"schema_version":1,"pr":42,"head":"abc1234def","covered":"unknown","eligible":false,"reason":"draft"}'
+run_main 'gh pr merge 42'
+[ "$(ctx)" = "CodeRabbit on PR #42: head abc1234def covered=unknown eligible=false (draft)" ] && ok "merge: the reason of an ineligible PR" || bad "merge reason" "$OUT"
+export STUB_OUT='{"schema_version":1,"pr":null,"head":null,"covered":"unknown","eligible":"unknown","error":"x"}'
+run_main 'gh pr merge 42'
+[ $RC -eq 0 ] && [ -z "$(ctx)" ] && ok "merge: no head known, silence" || bad "merge silence" "rc=$RC out=$OUT"
+STUB_RC=1 run_main 'gh pr merge 42'
+[ $RC -eq 0 ] && [ -z "$(ctx)" ] && ok "merge: probe fails, silence, rc 0" || bad "merge fail open" "rc=$RC out=$OUT"
+run 'gh pr merge 42'
+[ $RC -eq 2 ] && ok "a subagent's merge is still refused" || bad "subagent merge" "rc=$RC out=$OUT"
+
 echo "== the real probe, no network: a repository that is not on github.com"
 unset KODFLOW_CODERABBIT_PROBE
 git -C "$T/repo" remote add origin https://gitlab.example.invalid/a/b.git

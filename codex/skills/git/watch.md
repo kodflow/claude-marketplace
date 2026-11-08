@@ -137,7 +137,7 @@ action_watch:
           note: "NOT a hard timeout — watch CONTINUES and investigates the stall"
         actions:
           - investigate_pipeline: "Check if runner available"
-          - investigate_coderabbit: "If >5min no review, post @coderabbitai review"
+          - investigate_coderabbit: "If >5min no review: Phase 4.8 decides (positive covered=false only, marked :hook, one per head)"
           - report: "Display investigation results, then CONTINUE POLLING (do NOT stop)"
 
       open:
@@ -390,10 +390,53 @@ action_watch:
           Option 2: "Force proceed (override remaining findings)"
           Option 3: "Abort watch"
 
+  # ─── Phase 4.8: CodeRabbit coverage gate (GitHub) ───────────
+  #
+  # WHY: a merge aborts a review still running (reviews.abort_on_close), and
+  # a head CodeRabbit never reviewed (quota, auto-pause after N commits) looks
+  # green. So at merge-ready — CI green AND every thread resolved — ask once
+  # whether the head is covered, request ONE review if it positively is not,
+  # and wait for an answer before declaring the PR ready.
+  # ─────────────────────────────────────────────────────────────
+  phase_4_8_coderabbit_coverage:
+    when: "GitHub, pipeline green, relevant_count == 0, head pinned (pin_commit)"
+    probe: |
+      # kodflow-hooks ships the probe; KODFLOW_CODERABBIT_POLICY_DIR, else
+      # ~/Projects/kodflow/making.codes/coderabbit when it exists, else none.
+      PROBE=$(ls -d ~/.claude/plugins/cache/kodflow/kodflow-hooks/*/hooks/coderabbit/probe.py 2>/dev/null | tail -1)
+      POLICY=${KODFLOW_CODERABBIT_POLICY_DIR:-$HOME/Projects/kodflow/making.codes/coderabbit}
+      set -- covered --repo {{owner}}/{{repo}} --pr {{number}} --deadline 15
+      [ -d "$POLICY" ] && set -- "$@" --policy-dir "$POLICY"
+      python3 -I "$PROBE" "$@"     # → {head, last_reviewed, eligible, reason, covered}
+    rules:
+      - "`head` must equal pin_commit; otherwise re-pin and re-run the gate (a push landed)."
+      - "eligible false → no command, no wait: CodeRabbit is not meant to review this PR (reason says why). Ready."
+      - "eligible or covered \"unknown\" → NEVER post. Ready; the merge audit line says `unknown`."
+      - "covered true → ready."
+      - "eligible true AND covered false (positive) → request, then await (below)."
+    request:
+      skip_if:
+        - "capacity is exhausted: `python3 -I \"$PROBE\" capacity --action push --repo {{owner}}/{{repo}} --branch {{branch}}` → state == limited (a request now is refused and spends nothing useful)"
+        - "a marked request is already pending for this head: an issue comment of ours, newer than 30 min, whose body starts with `@coderabbitai review` and carries `kodflow-relaunch:` with `head=<pin_commit>`"
+      post: |
+        # the command FIRST (CodeRabbit reads the opening line), the marker on the next line
+        gh api repos/{{owner}}/{{repo}}/issues/{{number}}/comments -f body="@coderabbitai review
+        <!-- kodflow-relaunch:hook head={{pin_commit}} -->"
+      note: "A skipped request still enters the wait: the cron relaunch or a quota reset may answer."
+    await:
+      dashboard: "REVIEWS ├─ CodeRabbit : ⟳ awaiting CR on {{short_sha}} (since {{t0}})"
+      poll: "every 60s: re-run the probe (cached 5 min per head; pass --cache-dir to share the hook's cache)"
+      ready_when_any:
+        - "covered == true"
+        - "a CodeRabbit reply since t0 that refuses or pauses (`rate limited by coderabbit.ai`, `Review rate limited`, `review paused by coderabbit.ai`) → reason = that reply"
+        - "30 min since t0 → reason = \"no CodeRabbit answer in 30 min\""
+      on_new_findings: "covered true with new threads → back to Phase 4.5 (triage), then this gate again"
+    hand_to_merge: "pin_commit, covered, and the reason when not covered: merge.md uses them (expectedHeadSha / --match-head-commit, audit comment)"
+
   # ─── Phase 5.0: Exit Conditions ─────────────────────────────
   phase_5_exit:
     all_green:
-      condition: "Pipeline passed + All reviews satisfied + Prerequisites met"
+      condition: "Pipeline passed + All reviews satisfied + Prerequisites met + Phase 4.8 answered (covered, or a refusal/pause, or 30 min)"
       action: "Display final dashboard"
       message: "All prerequisites green — ready for /git --merge"
       display_format: |

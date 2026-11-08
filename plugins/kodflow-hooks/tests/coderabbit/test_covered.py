@@ -403,6 +403,18 @@ class Covered(unittest.TestCase):
             moved, _ = self.run_cov(fx, "kodflow/forgejo-raft", head=N9, cache_dir=d)
             self.assertEqual((moved["cache"], moved["covered"]), ("miss", True))   # a new head is never certified by the cache
 
+    def test_pr_found_from_the_branch(self):
+        fx = load("kitsunium_sdk_1314")
+        routes = routes_for(fx, "kitsunium/sdk")
+        routes[r"/repos/kitsunium/sdk/pulls"] = [{"number": 1314}]
+        api = Api(routes)
+        out = probe.covered(cov_opts("kitsunium/sdk", None, branch="chore/x", cwd=None), NOW, api)
+        self.assertEqual((out["pr"], out["covered"]), (1314, True))
+        routes[r"/repos/kitsunium/sdk/pulls"] = []
+        out = probe.covered(cov_opts("kitsunium/sdk", None, branch="chore/x", cwd=None), NOW, Api(routes))
+        self.assertEqual(out["covered"], "unknown")
+        self.assertIn("no open pull request", out["error"])
+
     def test_fails_open(self):
         api = Api({r".*": probe.ApiError(401, "Bad credentials")})
         out = probe.covered(cov_opts("o/r", 1), NOW, api)
