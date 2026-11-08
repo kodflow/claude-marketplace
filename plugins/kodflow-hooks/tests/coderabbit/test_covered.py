@@ -415,6 +415,31 @@ class Covered(unittest.TestCase):
         self.assertEqual(out["covered"], "unknown")
         self.assertIn("no open pull request", out["error"])
 
+    def test_repo_and_branch_from_the_checkout(self):
+        fx = load("kitsunium_sdk_1314")
+        routes = routes_for(fx, "kitsunium/sdk")
+        routes[r"/repos/kitsunium/sdk/pulls"] = [{"number": 1314}]
+        seen = []
+        def git(cwd, *args, timeout=3.0):
+            seen.append(args)
+            return "git@github.com:kitsunium/sdk.git" if args[0] == "remote" else "chore/remove-qodo"
+        real = probe.git_output
+        probe.git_output = git
+        try:
+            api = Api(routes)
+            out = probe.covered(cov_opts(None, None, cwd="/w"), NOW, api)
+            self.assertEqual((out["repo"], out["pr"], out["covered"]), ("kitsunium/sdk", 1314, True))
+            self.assertEqual([a[0] for a in seen], ["remote", "symbolic-ref"])
+            self.assertIn("/repos/kitsunium/sdk/pulls", api.paths)
+            # not a github.com remote: nothing asked, an error said
+            probe.git_output = lambda cwd, *a, timeout=3.0: "https://gitlab.com/a/b.git" if a[0] == "remote" else "main"
+            api = Api(routes)
+            out = probe.covered(cov_opts(None, None, cwd="/w"), NOW, api)
+            self.assertEqual((out["covered"], api.calls), ("unknown", 0))
+            self.assertIn("no github.com remote", out["error"])
+        finally:
+            probe.git_output = real
+
     def test_fails_open(self):
         api = Api({r".*": probe.ApiError(401, "Bad credentials")})
         out = probe.covered(cov_opts("o/r", 1), NOW, api)

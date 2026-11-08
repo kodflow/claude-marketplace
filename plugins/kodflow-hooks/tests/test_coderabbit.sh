@@ -143,6 +143,8 @@ run_main 'gh pr merge --squash -t "feat: 9"'
 ! grep -q -- '--pr\|--branch' "$STUB_LOG" && grep -q -- "--cwd $T/repo" "$STUB_LOG" && ok "merge: no operand, the checked-out branch" || bad "merge none" "$(cat "$STUB_LOG")"
 run_main 'gh pr merge 42 -R kitsunium/sdk'
 grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && ok "merge: -R after the operand" || bad "merge -R" "$(cat "$STUB_LOG")"
+run_main 'gh pr merge 42 -Rkitsunium/sdk --squash'
+grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && grep -q -- '--pr 42' "$STUB_LOG" && ok "merge: -ROWNER/NAME after the operand" || bad "merge -Rx" "$(cat "$STUB_LOG")"
 export STUB_OUT='{"schema_version":1,"pr":42,"head":"abc1234def","covered":"unknown","eligible":false,"reason":"draft"}'
 run_main 'gh pr merge 42'
 [ "$(ctx)" = "CodeRabbit on PR #42: head abc1234def covered=unknown eligible=false (draft)" ] && ok "merge: the reason of an ineligible PR" || bad "merge reason" "$OUT"

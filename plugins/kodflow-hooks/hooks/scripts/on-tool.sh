@@ -930,6 +930,7 @@ _guard_gh() {
                 case "${A[y]}" in
                     -R|--repo) F_CR_REPO=${A[y+1]:-}; y=$((y+2)); continue ;;
                     --repo=*) F_CR_REPO=${A[y]#*=} ;;
+                    -R?*) F_CR_REPO=${A[y]#-R} ;;
                     -t|--subject|-b|--body|-F|--body-file|-A|--author-email|--match-head-commit) y=$((y+2)); continue ;;
                     -*) ;;
                     *) [ -n "$F_CR_PR" ] || F_CR_PR=${A[y]} ;;

@@ -405,7 +405,8 @@ action_watch:
       # ~/Projects/kodflow/making.codes/coderabbit when it exists, else none.
       PROBE=$(ls -d ~/.claude/plugins/cache/kodflow/kodflow-hooks/*/hooks/coderabbit/probe.py 2>/dev/null | tail -1)
       POLICY=${KODFLOW_CODERABBIT_POLICY_DIR:-$HOME/Projects/kodflow/making.codes/coderabbit}
-      set -- covered --repo {{owner}}/{{repo}} --pr {{number}} --deadline 15
+      CACHE=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/coderabbit   # the hook's cache: one answer per head for 5 min
+      set -- covered --repo {{owner}}/{{repo}} --pr {{number}} --deadline 15 --cache-dir "$CACHE"
       [ -d "$POLICY" ] && set -- "$@" --policy-dir "$POLICY"
       python3 -I "$PROBE" "$@"     # → {head, last_reviewed, eligible, reason, covered}
     rules:
@@ -417,7 +418,16 @@ action_watch:
     request:
       skip_if:
         - "capacity is exhausted: `python3 -I \"$PROBE\" capacity --action push --repo {{owner}}/{{repo}} --branch {{branch}}` → state == limited (a request now is refused and spends nothing useful)"
-        - "a marked request is already pending for this head: an issue comment of ours, newer than 30 min, whose body starts with `@coderabbitai review` and carries `kodflow-relaunch:` with `head=<pin_commit>`"
+        - "a marked request is already pending for this head (pending_request below prints a count > 0)"
+      pending_request: |
+        # ours (the token's login), newer than 30 min, the command first, a relaunch marker naming this head
+        ME=$(gh api user --jq .login)
+        SINCE=$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 min ago' +%Y-%m-%dT%H:%M:%SZ)
+        gh api --paginate "repos/{{owner}}/{{repo}}/issues/{{number}}/comments?since=$SINCE" \
+          | jq -s --arg me "$ME" --arg since "$SINCE" --arg head "{{pin_commit}}" '[.[][]
+              | select(.user.login == $me and .created_at >= $since)
+              | select(.body | test("^\\s*@coderabbitai\\s+(full\\s+)?review\\b"; "i"))
+              | select(.body | test("<!--\\s*kodflow-relaunch:(cron|hook)\\b[^>]*\\bhead=" + $head))] | length'
       post: |
         # the command FIRST (CodeRabbit reads the opening line), the marker on the next line
         gh api repos/{{owner}}/{{repo}}/issues/{{number}}/comments -f body="@coderabbitai review
