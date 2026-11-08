@@ -112,9 +112,12 @@ class Analyze(unittest.TestCase):
         self.assertEqual(st(comment(GHA, "@coderabbitai review", "2026-11-08T11:50:00Z")), "none")
         # a command older than the refusal was answered by that refusal
         self.assertEqual(st(comment(HUMAN, "@coderabbitai review", "2026-11-08T08:00:00Z")), "none")
+        # three unmarked commands on this head: the per-head cap, not abandoning (only :cron abandons)
         many = [comment(HUMAN, "@coderabbitai review", t) for t in ("2026-11-08T09:10:00Z", "2026-11-08T09:40:00Z", "2026-11-08T10:10:00Z")]
-        self.assertEqual(st(*many), "abandoned")
+        self.assertEqual(st(*many), "capped")
         self.assertFalse(self.run_pr([base, *many])["eligible"])
+        crons = [comment(HUMAN, probe.command_body("cron", "0123456789abcdef"), t) for t in ("2026-11-08T09:10:00Z", "2026-11-08T09:40:00Z", "2026-11-08T10:10:00Z")]
+        self.assertEqual(st(*crons), "abandoned")
 
     def test_latest_refusal_wins(self):
         old = comment(BOT, LIMIT.format(n=1), "2026-11-08T08:00:00Z")
@@ -125,8 +128,8 @@ class Analyze(unittest.TestCase):
 
 class Select(unittest.TestCase):
     def rec(self, owner, number, created, state="none", eligible=True):
-        return {"owner": owner, "repo": f"{owner}/r", "number": number, "created_at": created,
-                "relaunch": {"state": state}, "eligible": eligible}
+        return {"owner": owner, "repo": f"{owner}/r", "number": number, "created_at": created, "kind": "rate_limited",
+                "relaunch": {"state": state, "owner_pending": state == "pending"}, "eligible": eligible}
 
     def test_one_per_owner_oldest(self):
         got = probe.select_candidates([
@@ -153,7 +156,7 @@ class Relaunch(unittest.TestCase):
         opts = argparse.Namespace(**vars(OPTS), dry_run=False, delay=0)
         doc = {"schema_version": 1, "candidates": [{"owner": "o", "repo": "o/r", "number": 1}]}
         self.assertEqual(probe.relaunch(api, doc, NOW, opts), 0)
-        self.assertEqual(api.posted, [("o/r", 1, "@coderabbitai review")])
+        self.assertEqual(api.posted, [("o/r", 1, "@coderabbitai review\n\n<!-- kodflow-relaunch:cron head=h1 -->")])
 
     def test_skips_when_no_longer_blocked(self):
         api = FakeApi({1: []}, {1: []})
