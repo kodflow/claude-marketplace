@@ -19,7 +19,7 @@ def check(name, ok, detail=""):
     fails += 0 if ok else 1
 
 
-text = POLICY.read_text()
+text = POLICY.read_text(encoding="utf-8")
 flat = re.sub(r"\s+", " ", text)
 
 STATEMENTS = {
@@ -38,6 +38,10 @@ STATEMENTS = {
     "exempt: claude-code-guide Haiku": "| `claude-code-guide` | Haiku",
     "exempt: statusline-setup Sonnet": "| `statusline-setup` | Sonnet",
     "exempt: web-fetch no default claimed": "| `web-fetch` | exempt, with no default claimed",
+    "s2: general-purpose and built-ins pass model and effort on the call":
+        "a dispatch to `general-purpose` or a built-in agent passes `model` and `effort` on the call",
+    "s7: inherit row says pass both unless the definition pins them":
+        "pass both on the call unless the definition pins them (§2)",
     "s3: governs overrides of a pinned frontmatter":
         "when a call may override a pinned frontmatter",
     "s7: override row scoped to pinned frontmatter":
@@ -53,6 +57,6 @@ check("old s3 sentence 'no override: the frontmatter is the decision' is gone",
 
 for plugin in ("kodflow-review", "kodflow-devops"):
     mirror = ROOT / f"plugins/{plugin}/skills/_shared/model-policy.md"
-    check(f"{plugin} mirror identical", mirror.read_text() == text)
+    check(f"{plugin} mirror identical", mirror.read_text(encoding="utf-8") == text)
 
 sys.exit(1 if fails else 0)
