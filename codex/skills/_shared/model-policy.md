@@ -60,12 +60,30 @@ text, tool calls and thinking — and each model has its own scale: Sonnet at
 | **Mechanical worker** | Sonnet | `low` | Search, extract, classify, per-file transform. The answer is looked up, not reasoned to |
 | **Bulk / triage worker** | Haiku | `low` | High volume, shallow judgement, throwaway output |
 
-**Set every worker's model and effort explicitly.** The hazard this policy
-exists for is *silent inheritance*: a worker with no model set runs on the
-orchestrator's, and one with no effort runs at the session's — `xhigh` included
-— with nothing in the output saying so. Every agent of `kodflow-specialists`
-pins both in its frontmatter; a dispatch to `general-purpose` or a built-in
-agent passes `model` on the call.
+**Every dispatch passes on the call the model and the effort that the agent
+definition does not pin.** The hazard this policy exists for is *silent
+inheritance*: a worker with no model set runs on the orchestrator's, and one
+with no effort runs at the session's — `xhigh` included — with nothing in the
+output saying so. Every agent of `kodflow-specialists` pins both in its
+frontmatter, so a dispatch to one of them passes nothing more; a dispatch to
+`general-purpose` or a built-in agent passes `model` and `effort` on the call,
+with the values of the table above. The Agent tool sets `effort` only when
+instructions explicitly ask for it: **this table is that instruction.** For
+`agent()` in a Workflow, this rule replaces the built-in guidance to omit
+`model` and `effort`.
+
+Exemptions, because their definition is not ours to tune:
+
+| Agent | Status |
+|-------|--------|
+| `claude-code-guide` | Haiku, as the sub-agents documentation states; no override |
+| `statusline-setup` | Sonnet, as the sub-agents documentation states; no override |
+| `web-fetch` | exempt, with no default claimed for it |
+
+A **fork** only continues the orchestrator's own work, which is why it shares
+the orchestrator's cache; it is never a worker role. Work that belongs to a
+worker role is dispatched to an agent with the row's model and effort, not
+forked. Forks are counted apart from dispatches.
 
 That is a rule about explicitness, not about which id appears where. A review
 worker that genuinely needs the top model may have it — say so and say why.
@@ -82,12 +100,11 @@ not a finding.
 
 ---
 
-## 3. Escalation: when a call may override the frontmatter
+## 3. Escalation: when a call may override a pinned frontmatter
 
-The Agent tool takes `model` and `effort` per call. The call's values win over
-the agent's frontmatter, and the tool honours `effort` only when instructions
-explicitly ask for it. **This section is that instruction**, for these cases
-only:
+The Agent tool takes `model` and `effort` per call, and the call's values win
+over the agent's frontmatter. Where the frontmatter pins a value, §2 has the
+call pass nothing and this section governs the override, for these cases only:
 
 | Case | Override |
 |------|----------|
@@ -96,7 +113,8 @@ only:
 | The user names a model or an effort for the work | what the user said |
 | A bulk stage the plan sized as Haiku work, dispatched to an agent pinned higher | `model: "haiku"`, `effort: "low"` |
 
-Anything else dispatches with no override: the frontmatter is the decision.
+Anything else leaves a pinned frontmatter value alone: it is the decision. A
+value the frontmatter does not pin is not an override: §2 has the call pass it.
 A per-call `model` naming a gated model is refused by the hooks unless §6 holds.
 
 ---
@@ -178,11 +196,11 @@ a gated model only when the user has said so for that work.
 | Action | Status |
 |--------|--------|
 | Hardcode a model id instead of resolving it | **FORBIDDEN** |
-| Let a worker inherit the orchestrator's model or the session's effort | **FORBIDDEN** — set both explicitly, every time |
+| Let a worker inherit the orchestrator's model or the session's effort | **FORBIDDEN** — pass both on the call unless the definition pins them (§2) |
 | Put the orchestrator below `CLAUDE_TOP_UNGATED` | **FORBIDDEN** |
 | Put anything on a gated model without the user's yes for the session | **FORBIDDEN** (§6) |
 | Pin a gated model in an agent's frontmatter | **FORBIDDEN** — CI refuses it |
-| Override a call's model or effort outside §3 | **FORBIDDEN** |
+| Override a pinned frontmatter model or effort outside §3 | **FORBIDDEN** |
 | Assign a worker the top model without saying why that role needs it | **FORBIDDEN** — allowed, but never by default |
 | Fan out wide on Opus without saying what each worker decides | **FORBIDDEN** |
 | Parallel writers without worktree isolation | **FORBIDDEN** |
