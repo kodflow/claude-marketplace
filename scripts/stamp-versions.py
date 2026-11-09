@@ -33,7 +33,7 @@ def compute(plugin):
     h = hashlib.sha256()
     prefix = f"plugins/{plugin}/"
     entries = git("ls-files", "-s", "-z", "--", prefix).split("\0")
-    for entry in sorted(e for e in entries if e):
+    for entry in sorted((e for e in entries if e), key=lambda e: e.split("\t", 1)[1]):
         meta, path = entry.split("\t", 1)
         mode, blob, _stage = meta.split()
         if path == prefix + MANIFEST:

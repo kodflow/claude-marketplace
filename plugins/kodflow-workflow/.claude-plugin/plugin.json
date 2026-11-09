@@ -1,6 +1,6 @@
 {
   "name": "kodflow-workflow",
-  "version": "0.0.0-r74566fd7141d",
+  "version": "0.0.0-r550b05ff466a",
   "description": "The work loop: open a tracked piece of work, research it, plan it, argue the plan, turn it into an executable contract, ship it. Each skill hands the next exactly what it needs, and every step leaves a trail the next session can read.",
   "author": {
     "name": "kodflow",
