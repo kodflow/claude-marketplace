@@ -326,12 +326,11 @@ build_and_test:
 ## 7. Handoff to external tiers
 
 Deterministic (this file) covers T1's grounded layer: linters / SAST / SCA / secrets / IaC
-/ build+test. The **external** tiers — **T2 Qodo** (absent in the default container ->
-skip-with-note) and **T3 CodeRabbit** (present here, but requires `coderabbit auth status`
-to pass before `coderabbit review`) — are a separate handoff:
+/ build+test. The **external** tier — **T2 CodeRabbit** (present here, but requires `coderabbit auth status`
+to pass before `coderabbit review`) — is a separate handoff:
 
-> **Read `tiers.md`** for T2/T3 dispatch, the `--tier` selection
-> matrix, timeouts, and how their parsed output enters the same Phase 7 dedup + confidence
+> **Read `tiers.md`** for T2 dispatch, the `--tier` selection
+> matrix, timeouts, and how its parsed output enters the same Phase 7 dedup + confidence
 > boost as the deterministic findings above.
 
 ---

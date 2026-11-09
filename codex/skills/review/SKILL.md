@@ -305,7 +305,7 @@ Every module lives beside this file. Read one when you reach its phase.
 | `triage.md` | Finding JSON schema, severity rubric, executor/specialist dispatch |
 | `contract.md` | Severity/confidence model (decoupled) + the anti-theater hard rules |
 | `manifest.md` | Manifest schema, file-class enum, `micro_per_hunk`, Judge protocol, verifier contract |
-| `tiers.md` | T2 Qodo (absent-skip) + T3 CodeRabbit (auth-probe) integration |
+| `tiers.md` | T2 CodeRabbit (auth-probe) integration |
 | `synthesis.md` | Verdict incl. INCONCLUSIVE, Needs-Verification gate, local report, `/plan` output |
 | `output.md` | Report layout, flag reference, budget controller |
 | `cyclic.md` | `--loop` correctness gate, patch-ID tracking, guardrails |

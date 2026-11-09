@@ -1,35 +1,25 @@
-# T2 Qodo + T3 CodeRabbit Integration (External Tiers)
+# T2 CodeRabbit Integration (External Tier)
 
-## External Tiers (T2 + T3) — Parallel with T1
+## External Tier (T2) — Parallel with T1
 
-**Launch external review tools in parallel with the 5 internal agents:**
+**Launch the external review tool in parallel with the 5 internal agents:**
 
 ```yaml
 external_tiers:
   dispatch:
-    mode: "parallel with T1 (2 Bash calls alongside 5 Task calls)"
+    mode: "parallel with T1 (1 Bash call alongside 5 Task calls)"
     tier_filter: "--tier flag controls which tiers run (default: all)"
 
-    qodo:
-      tier: "T2"
-      trigger: "command -v qodo && QODO_API_KEY is set"
-      command: |
-        qodo run review "Review the diff from {base_branch}. Focus on P0/P1 only. Structured output." \
-          --ci --yes --silent --log=/tmp/qodo-review-{timestamp}.md \
-          --tools=git,filesystem,ripgrep
-      timeout: 120000  # 2 minutes max
-      fallback: "skip (T2 unavailable)"
-
     coderabbit:
-      tier: "T3"
+      tier: "T2"
       trigger: "command -v coderabbit"   # binary present is enough to TRY; auth is probed below
       # CodeRabbit requires a prior `coderabbit auth login`. Probe auth FIRST so an
       # unauthenticated CLI is skipped-with-note instead of erroring mid-review.
       bootstrap: |
         if ! command -v coderabbit >/dev/null 2>&1; then
-          echo "T3 CodeRabbit: SKIP (binary absent)"          # tool-absent, not a failure
+          echo "T2 CodeRabbit: SKIP (binary absent)"          # tool-absent, not a failure
         elif ! coderabbit auth status >/dev/null 2>&1; then
-          echo "T3 CodeRabbit: SKIP (unauthenticated — run 'coderabbit auth login' to enable)"
+          echo "T2 CodeRabbit: SKIP (unauthenticated — run 'coderabbit auth login' to enable)"
         else
           CODERABBIT_OK=1                                       # authenticated -> run review below
         fi
@@ -39,18 +29,17 @@ external_tiers:
           --base "{base_branch}" --cwd /workspace \
           > /tmp/coderabbit-review-{timestamp}.md 2>&1
       timeout: 120000  # 2 minutes max
-      fallback: "skip-with-note (T3 unavailable: binary absent OR unauthenticated) — does NOT fail the run"
+      fallback: "skip-with-note (T2 unavailable: binary absent OR unauthenticated) — does NOT fail the run"
 ```
 
 **Tier Selection:**
 
-| `--tier` Value | T1 (Agents) | T2 (Qodo) | T3 (CodeRabbit) |
-|----------------|-------------|-----------|-----------------|
-| `all` (default) | Yes | Yes | Yes |
-| `internal` | Yes | No | No |
-| `external` | No | Yes | Yes |
-| `qodo` | No | Yes | No |
-| `coderabbit` | No | No | Yes |
+| `--tier` Value | T1 (Agents) | T2 (CodeRabbit) |
+|----------------|-------------|-----------------|
+| `all` (default) | Yes | Yes |
+| `internal` | Yes | No |
+| `external` | No | Yes |
+| `coderabbit` | No | Yes |
 
 ---
 
