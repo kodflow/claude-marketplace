@@ -77,7 +77,7 @@ body. Resolving and dismissing have no MCP equivalent: use `gh api`.
 
 | Bot | Re-run | Resolve everything it raised | Notes |
 |-----|--------|------------------------------|-------|
-| CodeRabbit | `@coderabbitai review` (incremental) · `@coderabbitai full review` | `@coderabbitai resolve` | only after the fixes are pushed; it re-reviews every push anyway |
+| CodeRabbit | `@coderabbitai review` (incremental) · `@coderabbitai full review` | **none: GraphQL `resolveReviewThread` per thread** (above) | never `@coderabbitai resolve`: with `allow_author_approval: false` (kitsunium) it is refused for the author, and it never resolves a thread anyway. A re-run requested by the workflow carries `<!-- kodflow-relaunch:hook head=<sha> -->` on the line after the command (watch.md Phase 4.8) |
 | Qodo | `/review` · `/improve` | none — findings live in one comment that the next `/review` rewrites | P0/P1 are addressed, P2 may be answered in a reply to the summary comment |
 
 Order matters: **fix → push → wait for the re-review → then resolve what is

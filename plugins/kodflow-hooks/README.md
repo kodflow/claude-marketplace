@@ -94,6 +94,14 @@ hours (at most 5) for its comments, and 1 per PR holding a refusal for its
 reviews: 1 call on a quiet repository, at most 11, the case measured on
 kitsunium/sdk being below that. `KODFLOW_CODERABBIT=off` turns the hint off.
 
+**Before `gh pr merge`** (main thread; a subagent's merge stays refused), one
+context line, `CodeRabbit on PR #N: head <sha> covered=<x> eligible=<y>`, from
+`covered` with a 4 s deadline and the policy directory of
+`KODFLOW_CODERABBIT_POLICY_DIR` (else `~/Projects/kodflow/making.codes/coderabbit`
+when it exists; none: `eligible=unknown`). It never posts a command and is
+silent on any failure; the request for a review is /git's watch loop
+(Phase 4.8), marked `:hook`.
+
 **Coverage.** `probe.py covered --repo OWNER/NAME --pr N [--policy-dir DIR]`
 prints `{head, last_reviewed, eligible, reason, covered}` for one pull request.
 `last_reviewed` comes from CodeRabbit's summary comment (the

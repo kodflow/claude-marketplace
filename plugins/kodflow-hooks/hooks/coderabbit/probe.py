@@ -1416,7 +1416,9 @@ def covered(opts: argparse.Namespace, now: dt.datetime, api: Optional[Api] = Non
     Calls: 1 (the pull request, every time: the cache is keyed by its head) and,
     on a miss, the comments, the repository's .coderabbit.yaml (1, or 2 without
     one), the changed files only when path_filters decide, the reviews only when
-    the summary comment carries no marker.
+    the summary comment carries no marker. Without --repo, the origin remote of
+    --cwd; without --pr, the open pull request of --branch (else the branch
+    checked out in --cwd): 1 call more, the hook's `gh pr merge` with no number.
     """
     out: Dict[str, Any] = {
         "schema_version": SCHEMA_VERSION, "repo": opts.repo, "pr": opts.pr, "head": None,
@@ -1426,27 +1428,47 @@ def covered(opts: argparse.Namespace, now: dt.datetime, api: Optional[Api] = Non
     }
     end = time.monotonic() + opts.deadline
     api = api or Api(deadline=end)
+
+    def left() -> float:
+        return min(3.0, end - time.monotonic())
+
     try:
-        if not valid_repo(opts.repo or ""):
-            out["error"] = "--repo is not OWNER/NAME"
+        cwd = getattr(opts, "cwd", None)
+        repo = opts.repo or (repo_from_remote(git_output(cwd, "remote", "get-url", "origin", timeout=left()) or "") if cwd else None)
+        if not valid_repo(repo or ""):
+            out["error"] = "--repo is not OWNER/NAME" if opts.repo else "no --repo and no github.com remote"
             return out
-        owner = opts.repo.split("/")[0]
-        pr = api.get(owner, f"/repos/{opts.repo}/pulls/{int(opts.pr)}")
+        out["repo"] = repo
+        owner = repo.split("/")[0]
+        number = opts.pr
+        if number is None:
+            branch = getattr(opts, "branch", None) or (git_output(cwd, "symbolic-ref", "--short", "HEAD", timeout=left()) if cwd else None)
+            if not branch:
+                out["error"] = "no --pr and no branch"
+                return out
+            found = api.paginate(owner, f"/repos/{repo}/pulls", {"state": "open", "head": f"{owner}:{branch}", "per_page": 5}, max_pages=1)
+            if not found:
+                out["error"] = f"no open pull request for branch {branch}"
+                return out
+            number = found[0]["number"]
+        number = int(number)
+        out["pr"] = number
+        pr = api.get(owner, f"/repos/{repo}/pulls/{number}")
         head = pr["head"]["sha"]
         out["head"] = head
-        path = _cache_path(opts.cache_dir, f"covered/{opts.repo}/{opts.pr}/{head}") if opts.cache_dir else None
+        path = _cache_path(opts.cache_dir, f"covered/{repo}/{number}/{head}") if opts.cache_dir else None
         cached = _read_cache(path, now, opts.cache_minutes) if path else None
         if cached is not None:
             out.update(cached)
             out["cache"] = "hit"
         else:
-            comments = api.paginate(owner, f"/repos/{opts.repo}/issues/{int(opts.pr)}/comments")
+            comments = api.paginate(owner, f"/repos/{repo}/issues/{number}/comments")
             try:
                 policy = load_policy(opts.policy_dir, owner)
             except (OSError, YamlError, ValueError) as err:
                 policy = None
                 out["error"] = f"policy: {type(err).__name__}: {err}"[:200]
-            res = coverage(api, opts.repo, pr, comments, policy)
+            res = coverage(api, repo, pr, comments, policy)
             out.update(res)
             out["cache"] = "miss"
             if path and "error" not in out and out["eligible"] != "unknown":
@@ -1491,8 +1513,10 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("--deadline", type=float, default=DEFAULT_DEADLINE_SECONDS, help="seconds the whole call may take")
     add_policy_args(c)
     v = sub.add_parser("covered", help="the commit CodeRabbit last reviewed on a pull request, and whether it would review it")
-    v.add_argument("--repo", required=True, metavar="OWNER/NAME")
-    v.add_argument("--pr", required=True, type=int, metavar="N")
+    v.add_argument("--repo", metavar="OWNER/NAME", help="instead of the origin remote of --cwd")
+    v.add_argument("--pr", type=int, metavar="N", help="instead of the open pull request of --branch")
+    v.add_argument("--cwd", default=".", help="directory whose origin remote and branch are read")
+    v.add_argument("--branch", help="branch, instead of the one checked out in --cwd")
     v.add_argument("--policy-dir", help="directory of settings.yaml and override-<owner>.yaml (none: eligible is unknown)")
     v.add_argument("--cache-dir", default="", help="directory of the cache, keyed by repository, PR and head (none: no cache)")
     v.add_argument("--cache-minutes", type=int, default=DEFAULT_CACHE_MINUTES)

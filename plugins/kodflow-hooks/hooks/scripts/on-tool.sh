@@ -921,7 +921,22 @@ _guard_gh() {
                 y=$((y+1))
             done
             _scan pr "$hay" ;;
-        pr/merge) F_MERGE="gh pr merge" ;;
+        pr/merge)
+            F_MERGE="gh pr merge"; F_CR=merge
+            # the target: the first operand (number, URL or branch); flags with a value
+            # skipped. Read for the CodeRabbit context line only, never for a decision.
+            y=$((y+2))
+            while [ $y -lt $na ]; do
+                case "${A[y]}" in
+                    -R|--repo) F_CR_REPO=${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --repo=*) F_CR_REPO=${A[y]#*=} ;;
+                    -R?*) F_CR_REPO=${A[y]#-R} ;;
+                    -t|--subject|-b|--body|-F|--body-file|-A|--author-email|--match-head-commit) y=$((y+2)); continue ;;
+                    -*) ;;
+                    *) [ -n "$F_CR_PR" ] || F_CR_PR=${A[y]} ;;
+                esac
+                y=$((y+1))
+            done ;;
         api/*)
             y=$((y+1))
             while [ $y -lt $na ]; do
@@ -1140,7 +1155,7 @@ pre_bash() {
     F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
     F_MODW=""; F_PLUG=""; GDIR=""; F_MCPJSON=""; F_CALL=0; F_CGDIR=""
     F_IDENT_T=""; F_IDENT_M=(); F_IDENT_OFF=""; ID_LINE_ENV=(); ID_CMD_ENV=()
-    F_CR=""; F_CR_REPO=""
+    F_CR=""; F_CR_REPO=""; F_CR_PR=""
 
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
     # $'…' string may spell one in escapes, so it is always read. tr, not
@@ -1268,7 +1283,7 @@ pre_bash() {
     [[ $cwd = /* ]] || cwd=$PROJECT_DIR/$cwd
     note=$(_ident_notice)
     if [ -n "$F_CR" ] && [ -d "$cwd" ] && . "$LIB/coderabbit.sh" 2>/dev/null; then
-        ctx=$(kf_coderabbit_hint "$F_CR" "$cwd" "$F_CR_REPO")
+        ctx=$(kf_coderabbit_hint "$F_CR" "$cwd" "$F_CR_REPO" "$F_CR_PR")
     fi
     local merged=""
     [ -n "$ctx" ] && merged=$(printf '%s' "${note:-"{}"}" | jq -c --arg c "$ctx" '. + {hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}' 2>/dev/null)

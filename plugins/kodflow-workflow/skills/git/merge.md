@@ -45,7 +45,14 @@ merge_call:
       repo: "<from remote>"
       pullNumber: "<resolved>"
       merge_method: "squash"     # or merge / rebase per project policy
+      expectedHeadSha: "<pin_commit>"   # = gh pr merge --match-head-commit: a push since the gate fails the merge
     on_failure: "raise — do NOT silently fall back to gh pr merge"
+    after_merge_github: |
+      # watch.md Phase 4.8 left covered + reason. Not covered (false or unknown) →
+      # one audit comment, never a command:
+      gh api repos/{owner}/{repo}/issues/{number}/comments \
+        -f body="merged without CodeRabbit review of <pin_commit>: <reason>"
+      # covered true, or eligible false (CodeRabbit was never meant to review it): nothing.
   gitlab:
     tool: "mcp__gitlab__merge_merge_request"
     on_failure: "raise — no glab fallback"
