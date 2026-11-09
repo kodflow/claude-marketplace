@@ -922,7 +922,9 @@ _guard_gh() {
             done
             _scan pr "$hay" ;;
         pr/merge)
-            F_MERGE="gh pr merge"; F_CR=merge
+            # F_CRM counts the merges of the line: a later verb (git push, gh pr
+            # create) resets F_CR, never this; two merges are refused below.
+            F_MERGE="gh pr merge"; F_CR=merge; F_CRM=$((F_CRM + 1))
             # the target: the first operand (number, URL or branch); flags with a value
             # skipped. Read for the CodeRabbit context line only, never for a decision.
             y=$((y+2))
@@ -1157,7 +1159,7 @@ pre_bash() {
     F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
     F_MODW=""; F_PLUG=""; GDIR=""; F_MCPJSON=""; F_CALL=0; F_CGDIR=""
     F_IDENT_T=""; F_IDENT_M=(); F_IDENT_OFF=""; ID_LINE_ENV=(); ID_CMD_ENV=()
-    F_CR=""; F_CR_REPO=""; F_CR_PR=""; F_CR_MATCH=""
+    F_CR=""; F_CR_REPO=""; F_CR_PR=""; F_CR_MATCH=""; F_CRM=0
 
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
     # $'…' string may spell one in escapes, so it is always read. tr, not
@@ -1284,7 +1286,9 @@ pre_bash() {
     local note ctx="" cwd=${GDIR:-$PROJECT_DIR}
     [[ $cwd = /* ]] || cwd=$PROJECT_DIR/$cwd
     note=$(_ident_notice)
-    if [ "$F_CR" = merge ] && [ -z "$AID" ] && [ -d "$cwd" ]; then
+    if [ "$F_CRM" -gt 1 ] && [ -z "$AID" ] && [ "${KODFLOW_CODERABBIT:-}" != off ]; then
+        _cr_deny "Plusieurs fusions sur une ligne ($F_CRM) : lance une fusion par commande, pour que la couverture CodeRabbit de chaque PR soit vérifiée avant sa fusion." "$note"
+    elif [ "$F_CRM" = 1 ] && [ -z "$AID" ] && [ -d "$cwd" ]; then
         _cr_merge_gate "$cwd" "$F_CR_REPO" "$F_CR_PR" "$F_CR_MATCH"
         [ -n "$CR_DENY" ] && _cr_deny "$CR_DENY" "$note"
         ctx=$CR_CTX

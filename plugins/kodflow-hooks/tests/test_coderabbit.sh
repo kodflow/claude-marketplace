@@ -165,6 +165,22 @@ for form in '42 -R kitsunium/sdk' '42 -Rkitsunium/sdk' '42 --repo kitsunium/sdk'
 done
 run_main 'gh -R kitsunium/sdk pr merge 42'
 grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && ok "-R before the subcommand" || bad "global -R" "$(cat "$STUB_LOG")"
+for t in 'https://gitlab.com/a/b/-/merge_requests/3' 'feat+x' 'user@feat' 'https://github.com/a/b/issues/3'; do
+    run_main "gh pr merge '$t' --squash"
+    [ $RC -eq 0 ] && [ -z "$(decision)" ] && [ "$(calls)" = 0 ] && ok "an unreadable target ($t): no probe, allowed" || bad "target $t" "rc=$RC out=$OUT calls=$(calls)"
+done
+run_main 'gh pr merge 42 -R "x;y"'
+[ $RC -eq 0 ] && [ -z "$(decision)" ] && [ "$(calls)" = 0 ] && ok "an unreadable repository: no probe, allowed" || bad "bad repo" "rc=$RC out=$OUT calls=$(calls)"
+for line in 'gh pr merge 42 --squash; git push origin feat/x' 'gh pr merge 42 && gh pr create --title t'; do
+    run_main "$line"
+    [ "$(decision)" = deny ] && grep -q -- '^merge-gate .*--pr 42' "$STUB_LOG" && ok "a later verb does not unhold the merge: $line" || bad "later verb $line" "out=$OUT log=$(cat "$STUB_LOG")"
+done
+run_main 'gh pr merge 1 --squash && gh pr merge 2 --squash'
+[ "$(decision)" = deny ] && reason | grep -q 'une fusion par commande' && [ "$(calls)" = 0 ] \
+    && ok "two merges on one line: refused, one per command" || bad "two merges" "out=$OUT calls=$(calls)"
+KODFLOW_CODERABBIT=off run_main 'gh pr merge 1 && gh pr merge 2'
+[ -z "$(decision)" ] && ok "two merges with KODFLOW_CODERABBIT=off: not held" || bad "two merges off" "$OUT"
+
 export STUB_OUT=$ALLOW
 run_main 'gh pr merge 42'
 [ $RC -eq 0 ] && [ -z "$(decision)" ] && [ "$(ctx)" = "CodeRabbit on PR #42: head abc1234def covered=true eligible=true" ] \

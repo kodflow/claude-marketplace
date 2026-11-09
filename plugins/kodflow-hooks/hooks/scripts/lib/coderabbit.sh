@@ -46,9 +46,13 @@ kf_coderabbit_merge_gate() {
     if [[ $target =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+) ]]; then
         repo=${BASH_REMATCH[1]}; target=${BASH_REMATCH[2]}
     fi
+    # A target or a repository this cannot read would make the probe judge
+    # another PR (the checked-out branch, the origin remote): fail open instead.
     if [[ $target =~ ^[0-9]+$ ]]; then args+=(--pr "$target")
-    elif [[ $target =~ ^[A-Za-z0-9._/-]+$ ]]; then args+=(--branch "$target"); fi
-    [[ $repo =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && args+=(--repo "$repo")
+    elif [[ $target =~ ^[A-Za-z0-9._/-]+$ ]]; then args+=(--branch "$target")
+    elif [ -n "$target" ]; then return 0; fi
+    if [[ $repo =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then args+=(--repo "$repo")
+    elif [ -n "$repo" ]; then return 0; fi
     [[ $match =~ ^[0-9a-fA-F]{7,40}$ ]] && args+=(--match-head "$match")
     policy=$(kf_coderabbit_policy_dir)
     [ -n "$policy" ] && args+=(--policy-dir "$policy")
