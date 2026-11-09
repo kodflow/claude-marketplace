@@ -135,6 +135,9 @@ jobs:
           COST_CHECKS_STRICT: model_effort
         run: python3 scripts/check-context-cost.py .
 
+      - name: The usage report prices and counts what the transcripts say
+        run: python3 scripts/tests/test_usage_report.py
+
       # The routing gate of kodflow-hooks reads routing-index.tsv, compiled
       # from the Keywords column of _shared/specialists.md. A keyword edited
       # by hand on either side would route on a table nobody reviews.
