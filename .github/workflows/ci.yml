@@ -314,10 +314,21 @@ jobs:
           npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
           claude --version
 
-      # --strict also fails on the missing "version" in plugin.json, which is
-      # deliberate: these plugins are versioned by commit (git-subdir), and a
-      # version field would stop `claude plugin update` from seeing new
-      # commits. Every other warning, and every error, fails the job.
+      # Every warning and every error fails the job, the missing-version one
+      # included. Each plugin.json carries a version derived from the plugin's
+      # content (scripts/stamp-versions.py): it changes whenever a file does,
+      # so `claude plugin update` still sees every change. A version that is
+      # only bumped by hand would freeze users on their cached copy.
+      - name: Plugin versions follow the plugin's content
+        run: python3 scripts/stamp-versions.py --check
+
+      - name: Plain strict validation of every plugin
+        run: |
+          for p in plugins/*/; do
+            echo "== $p"
+            claude plugin validate --strict "$p"
+          done
+
       - name: The engine reads the plugin as meant
         run: |
           set +e
@@ -329,7 +340,7 @@ jobs:
           r = json.load(open("validate.json"))
           parts = [r["manifest"]] + r.get("contents", [])
           errors = [e for p in parts for e in p.get("errors", [])]
-          warnings = [w for p in parts for w in p.get("warnings", []) if w.get("path") != "version"]
+          warnings = [w for p in parts for w in p.get("warnings", [])]
           notes = " ".join(n for p in parts for n in p.get("notes", []))
           bad = errors + warnings
           for item in bad:
@@ -343,7 +354,7 @@ jobs:
         run: claude plugin test plugins/kodflow-hooks
 
       # kodflow-hud: an optional mod of its own (two panes, toasts), held to
-      # the same two checks. Only the "version" warning is tolerated.
+      # the same two checks.
       - name: The engine reads kodflow-hud as meant
         run: |
           set +e
@@ -355,7 +366,7 @@ jobs:
           r = json.load(open("validate-hud.json"))
           parts = [r["manifest"]] + r.get("contents", [])
           errors = [e for p in parts for e in p.get("errors", [])]
-          warnings = [w for p in parts for w in p.get("warnings", []) if w.get("path") != "version"]
+          warnings = [w for p in parts for w in p.get("warnings", [])]
           notes = " ".join(n for p in parts for n in p.get("notes", []))
           bad = errors + warnings
           for item in bad:
@@ -369,7 +380,7 @@ jobs:
         run: claude plugin test plugins/kodflow-hud
 
       # kodflow-gamedev: agents, skills and one command hook, no mod. Held to
-      # the same validator; only the "version" warning is tolerated.
+      # the same validator.
       - name: The engine reads kodflow-gamedev as meant
         run: |
           set +e
@@ -381,7 +392,7 @@ jobs:
           r = json.load(open("validate-gamedev.json"))
           parts = [r["manifest"]] + r.get("contents", [])
           errors = [e for p in parts for e in p.get("errors", [])]
-          warnings = [w for p in parts for w in p.get("warnings", []) if w.get("path") != "version"]
+          warnings = [w for p in parts for w in p.get("warnings", [])]
           bad = errors + warnings
           for item in bad:
               print("::error::%s" % item)
