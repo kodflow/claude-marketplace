@@ -30,6 +30,7 @@ out=$(run SessionStart "" "")
 check "SessionStart emits the table" "$(printf '%s' "$out" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null 2>&1 && echo yes)" "$out"
 n=$(printf '%s' "$out" | jq '.hookSpecificOutput.additionalContext | length')
 check "within the 10000-character budget ($n)" "$([ "$n" -le 10000 ] && echo yes)"
+check "orchestrator row and plan mode rendered" "$(printf '%s' "$out" | grep -q 'Orchestrator: main session, not delegated, effort high' && printf '%s' "$out" | grep -q 'plan mode: exempt' && echo yes)"
 check "preamble names the explicit-effort instruction" "$(printf '%s' "$out" | grep -q 'explicitly asks for an effort' && echo yes)"
 check "marker main written" "$([ -f "$SD/tier-seen/main" ] && echo yes)"
 check "no plugin installed: tier-skew-none, no tier-skew" "$([ -f "$SD/tier-skew-none" ] && [ ! -f "$SD/tier-skew" ] && echo yes)"
@@ -69,6 +70,7 @@ check "unreadable installed_plugins.json: no skew file claimed" "$([ ! -f "$SD/t
 check "general-purpose emits" "$(emits general-purpose && echo yes)"
 check "marker is the agent_id" "$([ -f "$SD/tier-seen/id-general-purpose" ] && echo yes)"
 check "claude emits" "$(emits claude && echo yes)"
+check "workflow-subagent emits and is marked" "$(emits workflow-subagent && [ -f "$SD/tier-seen/id-workflow-subagent" ] && echo yes)"
 check "Explore does not" "$(emits Explore || echo yes)"
 check "Plan does not" "$(emits Plan || echo yes)"
 check "unknown definition does not" "$(emits nosuch || echo yes)"

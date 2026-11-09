@@ -46,8 +46,8 @@ _render() {
 $line
 EOT
             case "$kind" in
-            mode) printf -- '- %s: %s, effort %s\n' "$role" "$model" "$effort" ;;
-            role) printf -- '- %s: model %s, effort %s\n' "$role" "$model" "$effort" ;;
+            mode) printf -- '- %s mode: exempt from the tier\n' "$role" ;;
+            role) [ "$model" = - ] && printf -- '- %s: main session, not delegated, effort %s\n' "$role" "$effort" || printf -- '- %s: model %s, effort %s\n' "$role" "$model" "$effort" ;;
             exempt) [ "$model" = - ] && printf -- '- %s: exempt, no default claimed\n' "$role" \
                         || printf -- '- %s: exempt, %s as its own definition states\n' "$role" "$model" ;;
             fork) printf -- '- fork: only to continue the orchestrator, counted apart; never a worker\n' ;;
@@ -108,11 +108,12 @@ _install_paths() {
 _can_delegate() {
     local def tools dis
     case "$AGENT" in
-    general-purpose|claude) return 0 ;;
     Explore|Plan|"") return 1 ;;
+    # Built-ins with no definition file: they hold every tool, Agent included.
+    general-purpose|claude|workflow-subagent) return 0 ;;
     esac
     def=$(_definition "$AGENT" | head -n 1)
-    [ -n "$def" ] || return 1          # unknown definition: say nothing
+    [ -n "$def" ] || return 1          # unknown custom definition: say nothing
     dis=$(_fm_block "$def" disallowedTools)
     _names_delegation "$dis" && return 1
     grep -Eq '^tools:' "$def" 2>/dev/null || return 0   # no `tools`: all of them

@@ -24,9 +24,11 @@ compares.
 File format: line 1 `# sha256 <hex>`; then the fixed preamble, every line
 `# `-prefixed; then one row per line, tab-separated: kind, role, model, effort.
 kind is role | exempt | fork | mode. A role row has a model in
-{sonnet, opus, haiku} and an effort in {low, medium, high, xhigh, max}; an
-exempt or fork row has `-` where the policy claims no value; the mode row is
-the orchestrator, "main session, not delegated".
+{sonnet, opus, haiku} and an effort in {low, medium, high, xhigh, max}.
+`-` means "no value claimed by the policy". It is allowed only in exempt, fork
+and mode rows, and in the model cell of the Orchestrator role row (the main
+session, not delegated: the hooks render it so). Every other cell is in the
+closed vocabulary. A mode row exempts a permission mode from the tier (`plan`).
 
     python3 scripts/build-tier-table.py [root]           write both copies
     python3 scripts/build-tier-table.py --check [root]   exit 1 when stale
@@ -43,7 +45,6 @@ OUTPUTS = (
 )
 MODELS = {"sonnet", "opus", "haiku"}
 EFFORTS = {"low", "medium", "high", "xhigh", "max"}
-ORCHESTRATOR = "main session, not delegated"
 # What section 2 must contain; a policy edit that drops one is a fault here,
 # not a silent hole in what the hooks tell the model.
 REQUIRED_ROLES = [
@@ -62,6 +63,7 @@ PREAMBLE = [
     "Model and effort of every delegation (Agent call or Workflow agent()).",
     "This table is the instruction that explicitly asks for an effort: pass on the call the model and the effort of the row that matches the role, unless the agent definition pins them.",
     "For agent() in a Workflow, this rule replaces the built-in guidance to omit model and effort.",
+    "`-` means no value claimed by the policy; it appears only in exempt, fork and mode rows and in the model of the Orchestrator row.",
 ]
 
 
@@ -120,7 +122,7 @@ def build(root):
         if role == "Orchestrator":
             if effort not in EFFORTS:
                 faults.append(f"{role}: effort {effort!r} outside {sorted(EFFORTS)}")
-            rows.append(("mode", role, ORCHESTRATOR, effort))
+            rows.append(("role", role, "-", effort))
             continue
         if model not in MODELS:
             faults.append(f"{role}: model {model!r} outside {sorted(MODELS)}")
@@ -145,6 +147,7 @@ def build(root):
 
     if re.search(r"^A \*\*fork\*\*", sec, re.M):
         rows.append(("fork", "fork", "-", "-"))
+        rows.append(("mode", "plan", "-", "-"))
     else:
         faults.append("the fork paragraph is missing from section 2")
 

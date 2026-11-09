@@ -53,11 +53,16 @@ check("preamble carries the explicit-effort and Workflow sentences",
 rows = [l.split("\t") for l in lines if not l.startswith("#")]
 check("four tab-separated cells per row", all(len(r) == 4 for r in rows), rows)
 check("kinds are role|exempt|fork|mode", all(r[0] in ("role", "exempt", "fork", "mode") for r in rows))
-roles = [r for r in rows if r[0] == "role"]
+roles = [r for r in rows if r[0] == "role" and r[1] != "Orchestrator"]
 check("role rows stay in the closed vocabulary",
       all(r[2] in ("sonnet", "opus", "haiku") and r[3] in ("low", "medium", "high", "xhigh", "max") for r in roles))
-check("orchestrator rendered without a placeholder",
-      ["mode", "Orchestrator", "main session, not delegated", "high"] in rows and "CLAUDE_TOP_UNGATED" not in a)
+check("orchestrator is a role row, model -, effort high",
+      ["role", "Orchestrator", "-", "high"] in rows and "CLAUDE_TOP_UNGATED" not in a)
+check("plan is a mode row", ["mode", "plan", "-", "-"] in rows)
+check("`-` only where allowed",
+      all(r[2] != "-" or r[0] in ("exempt", "fork", "mode") or r[1] == "Orchestrator" for r in rows)
+      and all(r[3] != "-" or r[0] in ("exempt", "fork", "mode") for r in rows))
+check("preamble documents `-`", any("no value claimed" in l for l in lines if l.startswith("#")))
 
 # Refusals
 r = run(fixture(drop=True))
@@ -66,6 +71,8 @@ r = run(fixture(lambda t: t.replace("| **Mechanical worker** | Sonnet |", "| **F
 check("a role missing: exit 1", r.returncode == 1 and "Mechanical worker" in r.stderr, r.stderr)
 r = run(fixture(lambda t: t.replace("| **Bulk / triage worker** | Haiku | `low` |", "| **Bulk / triage worker** | Gpt | `low` |")))
 check("unknown model cell: exit 1", r.returncode == 1 and "gpt" in r.stderr, r.stderr)
+r = run(fixture(lambda t: t.replace("| **Mechanical worker** | Sonnet | `low` |", "| **Mechanical worker** | - | `low` |")))
+check("`-` refused in a worker role row: exit 1", r.returncode == 1 and "model" in r.stderr, r.stderr)
 r = run(fixture(lambda t: t.replace("| **Mechanical worker** | Sonnet | `low` |", "| **Mechanical worker** | Sonnet | `ultra` |")))
 check("unknown effort cell: exit 1", r.returncode == 1 and "ultra" in r.stderr, r.stderr)
 r = run(fixture(lambda t: t.replace("| Role | Model | Effort | Why this one |", "| Role | Model | Effort | Tier | Why this one |")
