@@ -751,8 +751,10 @@ if [ "$PROFILE" = "infrastructure" ] && [ -n "${INFRA_EXTRACT_DIR:-}" ]; then
     echo "  ✓ .infra-template-version ($INFRA_COMMIT)"
 fi
 
-# Cleanup deprecated files
-[ -f ".coderabbit.yaml" ] && rm -f ".coderabbit.yaml" && echo "  Removed deprecated .coderabbit.yaml"
+# .coderabbit.yaml and .coderabbit.local.yaml are NOT template files and are
+# never touched here: kodflow/post-commit's enforce renders .coderabbit.yaml
+# from the repository's own .coderabbit.local.yaml and a central part, and
+# deleting it would only make the next enforce run open the same pull request.
 
 # Migration: remove deprecated MCP servers from runtime mcp.json
 if [ -f "$HOME/.claude/mcp.json" ] && command -v jq &>/dev/null; then
