@@ -33,7 +33,7 @@ Synthesis details: **read `synthesis.md`**.
 /review --strictness chill|assertive       # default: assertive
 /review --triage            # Large-diff mode (>30 files OR >1500 lines); micro-deferral -> INCONCLUSIVE
 /review --describe          # Force auto-describe (draft only)
-/review --tier all|internal|external|qodo|coderabbit|deterministic
+/review --tier all|internal|external|coderabbit|deterministic
 /review --no-poc            # Skip POC/benchmark (findings demoted; verdict forced INCONCLUSIVE)
 /review --help
 ```

@@ -161,7 +161,7 @@ feedback_collection:
 |----------|------|-------|----------|
 | Human | Question | 2 | HIGH |
 | Human | Comment | 3 | MEDIUM |
-| AI (qodo) | Suggestion | 3 | EXTRACT |
+| AI (coderabbit) | Suggestion | 3 | EXTRACT |
 
 ---
 
@@ -556,27 +556,17 @@ merge_dedupe:
     - "design_agent.findings"
     - "quality_agent.findings"
     - "shell_agent.findings"
-    # T2 (Qodo) — parsed from /tmp/qodo-review-{timestamp}.md
-    - "qodo_findings (parsed)"
-    # T3 (CodeRabbit) — parsed from /tmp/coderabbit-review-{timestamp}.md
+    # T2 (CodeRabbit) — parsed from /tmp/coderabbit-review-{timestamp}.md
     - "coderabbit_findings (parsed)"
 
   parse_external:
-    qodo:
-      source_file: "/tmp/qodo-review-{timestamp}.md"
-      parser: |
-        Extract findings matching pattern: [P0|P1|P2] <file>:<line> — <title>
-        Map: P0→CRITICAL, P1→HIGH, P2→MEDIUM
-        Set: impact="external-qodo", source="qodo"
-      on_parse_failure: "log warning, skip T2 findings"
-
     coderabbit:
       source_file: "/tmp/coderabbit-review-{timestamp}.md"
       parser: |
         Extract CodeRabbit findings from plain text output
         Map severity from CodeRabbit format to our schema
         Set: impact="external-coderabbit", source="coderabbit"
-      on_parse_failure: "log warning, skip T3 findings"
+      on_parse_failure: "log warning, skip T2 findings"
 
   normalize:
     required_fields:
@@ -614,7 +604,7 @@ merge_dedupe:
     rule: |
       IF same file:line AND similar title (fuzzy match > 80%):
         Keep T1 finding (highest detail)
-        Add "confirmed_by: [T2, T3]" field
+        Add "confirmed_by: [T2]" field
         Boost confidence by 10% per confirmation (cap 100%)
     boost_label: "multi-tier-confirmed"
 

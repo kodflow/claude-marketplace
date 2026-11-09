@@ -70,7 +70,7 @@ tier_status_model:                 # MUST appear in the report, generated from _
        dimension and is named in the report — but the run can still reach a valid (qualified) verdict."
 ```
 
-External tiers (Qodo T2 — absent in default container, skip-with-note; CodeRabbit T3 —
+External tier (CodeRabbit T2 —
 requires `coderabbit auth login` first, probe `coderabbit auth status` before
 `coderabbit review`): **read `tiers.md`**.
 
