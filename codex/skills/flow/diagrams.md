@@ -72,19 +72,15 @@ The whole thing. Default view.
   │ on every changed hunk           ──▶ /refine ──▶ /goal   (the cycle)
   ◆ an external, non-LLM verifier recomputes the manifest from git
   ◆ and VOIDS the whole run on a mismatch. That is the anti-fake-pass.
-  ▼
-  /git --commit ─▶ --watch ─▶ --merge      a commit · a PR/MR · a merge
-  ◆ --watch never merges on its own.
-  ( --merge ─▶ --watch is the only automatic edge, and it points backwards.
-  └──▶ /warmup --update · /review · /adr
+  └──▶ /warmup --update · /adr   once the change is committed
 
 
   OPENING WORK — either of these starts the trail and cuts the branch
   ──────────────────────────────────────────────────────────────────────────────
   /feature <what>    .claude/issues/<slug>.md · an issue · a branch
-                     ──▶ /search  /challenge  /goal  /git
+                     ──▶ /search  /challenge  /goal
   /fix <defect>      the same ledger, kind: fix
-                     ──▶ /debug  /challenge  /git
+                     ──▶ /debug  /challenge
   ◆ /fix refuses a defect with no reproduction: observed, expected, and the steps.
   ◆ a specialist verdict of "documented behaviour" ends the run and sends you
     to /feature having created nothing.
@@ -107,8 +103,8 @@ The whole thing. Default view.
 
   WHAT OUTLIVES THE SESSION
   ──────────────────────────────────────────────────────────────────────────────
-  /adr <decision>    docs/adr/NNNN-*.md   ◀── /plan  /git  /debug
-                     a leaf: three arrows in, none out
+  /adr <decision>    docs/adr/NNNN-*.md   ◀── /plan  /debug
+                     a leaf: two arrows in, none out
   /docs [id,…]       docs/<the catalogue>  ◀── /project
                      ──▶ read back by /plan  /challenge  /refine
   ◆ a draft is shown before it is written; a document is ignored only on your word
@@ -181,19 +177,15 @@ The whole thing. Default view.
   | on every changed hunk          --> /refine --> /goal   (the cycle)
   <> an external, non-LLM verifier recomputes the manifest from git
   <> and VOIDS the whole run on a mismatch. That is the anti-fake-pass.
-  v
-  /git --commit -> --watch -> --merge     a commit . a PR/MR . a merge
-  <> --watch never merges on its own.
-  ( --merge -> --watch is the only automatic edge, and it points backwards.
-  +--> /warmup --update . /review . /adr
+  +--> /warmup --update . /adr   once the change is committed
 
 
   OPENING WORK -- either of these starts the trail and cuts the branch
   ------------------------------------------------------------------------------
   /feature <what>   .claude/issues/<slug>.md . an issue . a branch
-                    --> /search  /challenge  /goal  /git
+                    --> /search  /challenge  /goal
   /fix <defect>     the same ledger, kind: fix
-                    --> /debug  /challenge  /git
+                    --> /debug  /challenge
   <> /fix refuses a defect with no reproduction: observed, expected, the steps.
   <> a specialist verdict of "documented behaviour" ends the run and sends you
      to /feature having created nothing.
@@ -216,8 +208,8 @@ The whole thing. Default view.
 
   WHAT OUTLIVES THE SESSION
   ------------------------------------------------------------------------------
-  /adr <decision>   docs/adr/NNNN-*.md   <-- /plan  /git  /debug
-                    a leaf: three arrows in, none out
+  /adr <decision>   docs/adr/NNNN-*.md   <-- /plan  /debug
+                    a leaf: two arrows in, none out
   /docs [id,...]    docs/<the catalogue>  <-- /project
                     --> read back by /plan  /challenge  /refine
   <> a draft is shown before it is written; a document is ignored only on your word
@@ -253,10 +245,7 @@ The nominal route, nothing else. For someone who wants the order and no detail.
   an idea
      │
      ▼
-  /project ─▶ /warmup ─▶ /search ─▶ /plan ─▶ /refine ─▶ /goal ─▶ /review ─▶ /git
-                                                                             │
-                                                                             ▼
-                                                                          merged
+  /project ─▶ /warmup ─▶ /search ─▶ /plan ─▶ /refine ─▶ /goal ─▶ /review
 
   what each one leaves behind
   ─────────────────────────────────────────────────────────────────────────────
@@ -267,7 +256,6 @@ The nominal route, nothing else. For someone who wants the order and no detail.
      /refine     .claude/goals/<slug>.md
      /goal       the work itself
      /review     .claude/plans/review-fixes-<ts>.md  ──▶ back to /refine
-     /git        a commit, a PR or MR, a merge
 
   open the work first when it is a real change
   ─────────────────────────────────────────────────────────────────────────────
@@ -288,10 +276,7 @@ The nominal route, nothing else. For someone who wants the order and no detail.
   an idea
      |
      v
-  /project -> /warmup -> /search -> /plan -> /refine -> /goal -> /review -> /git
-                                                                             |
-                                                                             v
-                                                                          merged
+  /project -> /warmup -> /search -> /plan -> /refine -> /goal -> /review
 
   what each one leaves behind
   -----------------------------------------------------------------------------
@@ -302,7 +287,6 @@ The nominal route, nothing else. For someone who wants the order and no detail.
      /refine    .claude/goals/<slug>.md
      /goal      the work itself
      /review    .claude/plans/review-fixes-<ts>.md  --> back to /refine
-     /git       a commit, a PR or MR, a merge
 
   open the work first when it is a real change
   -----------------------------------------------------------------------------
@@ -361,9 +345,8 @@ skills barely call each other, they hand each other files.
                      the join between a branch, an
                      issue, and the conversation
 
-  /adr             docs/adr/NNNN-kebab-title.md          /git — before a PR whose
-                     docs/adr/README.md (the index)      diff changes architecture
-                                                         /plan — suggests one
+  /adr             docs/adr/NNNN-kebab-title.md          /plan — suggests one
+                     docs/adr/README.md (the index)
 
   the hooks        .claude/logs/<branch>/                /learn
                         session.jsonl                    you
@@ -413,9 +396,8 @@ skills barely call each other, they hand each other files.
                      the join between a branch, an
                      issue, and the conversation
 
-  /adr             docs/adr/NNNN-kebab-title.md         /git - before a PR whose
-                     docs/adr/README.md (the index)     diff changes the design
-                                                        /plan - suggests one
+  /adr             docs/adr/NNNN-kebab-title.md         /plan - suggests one
+                     docs/adr/README.md (the index)
 
   the hooks        .claude/logs/<branch>/               /learn
                         session.jsonl                   you

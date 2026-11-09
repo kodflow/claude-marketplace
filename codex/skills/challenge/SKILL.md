@@ -81,7 +81,7 @@ Output: .claude/goals/<slug>.md — <= 4000 chars, validated by
         Sections: CONTEXT OBJECTIVE SCOPE TASKS CONSTRAINTS
                   ACCEPTANCE VERIFY STOP
 
-Chain:  /plan → /challenge → /goal → /git
+Chain:  /plan → /challenge → /goal
 ════════════════════════════════════════════════════════════════
 ```
 
@@ -134,7 +134,6 @@ Print, in this order:
 
 ```
 /challenge → /goal   paste the directive
-           → /git    land it
 ```
 
 When the plan came from a tracked subject, offer to post the summary as a

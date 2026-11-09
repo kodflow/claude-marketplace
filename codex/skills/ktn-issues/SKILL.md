@@ -154,8 +154,8 @@ the ledger.
 1. The branch passed `gate.md` (every check green, autosquash done, the
    per-commit build green). The review round runs on the **local** branch,
    before the first push, so history is rewritten only where nobody else has it.
-2. Push the batch branch and open **one** PR (`kodflow-workflow:git` when
-   installed, else `gh pr create`). Body: a table of every issue of the run —
+2. Push the batch branch and open **one** PR (through the forge MCP,
+   else `gh pr create`). Body: a table of every issue of the run —
    number, verdict, commit or closure link — plus every `Fixes #N`, the
    review round's counts (exemptions challenged, too wide, narrowed) and the
    corpus diff per rule.

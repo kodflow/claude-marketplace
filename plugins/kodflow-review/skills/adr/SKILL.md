@@ -99,9 +99,9 @@ The choice, stated in active voice: "We will …". Be specific and falsifiable.
 - **`/plan`**: when a plan settles a non-obvious architectural trade-off, it
   emits a `Suggested next step: /adr <decision>` so the *why* is captured before
   implementation, not lost.
-- **`/git`**: before opening a PR that changes architecture (new dependency,
-  layering, public contract, protocol), `/git` checks for a matching ADR and
-  suggests `/adr` if none exists. ADRs are committed with the change.
+- **Pull requests**: a PR that changes architecture (new dependency, layering,
+  public contract, protocol) should carry a matching ADR; run `/adr` if none
+  exists. ADRs are committed with the change.
 - **`/debug`**: an architecture-checkpoint conclusion ("the bug was a wrong
   abstraction") is a decision worth an ADR.
 

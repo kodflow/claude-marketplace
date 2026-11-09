@@ -292,4 +292,3 @@ language of each repository. Root reads the module before entering its phase.
 - `../_shared/model-policy.md` — the tier and effort of every role
 - `../_shared/specialists.md` — who the hunter consults on the technology
 - `../fix/SKILL.md`, then `kodflow-review:debug` — for one defect, not a topic
-- `../git/SKILL.md` — not used during a hunt; `hunt-push` replaces it
