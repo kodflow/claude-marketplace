@@ -30,10 +30,13 @@ from typing import Iterator, NamedTuple
 # published multipliers applied to `input`, spelled out rather than computed, so
 # that a model breaking the pattern is a row and not a branch in the code:
 #
-#   cache read   0.10x input      (Fable 5.1 reads at 0.025x, hence its own row)
+#   cache read   0.10x input      (Fable 5.1 reads at 0.025x and Opus/Sonnet 5.5 at
+#                                  0.05x, hence their own rows)
 #   cache write  1.25x input on the 5-minute TTL, 2.00x on the 1-hour TTL
 #
-# Verified 2026-09-15 against the claude-api skill's model table (Anthropic
+# Rows dated 2026-09-15 were verified against the claude-api skill's model
+# table, the 5.5 rows on 2026-11-10 against
+# https://platform.claude.com/docs/en/about-claude/pricing (Anthropic
 # first-party API rates). Bedrock and Vertex are partner-priced and are NOT
 # covered here; a transcript produced against those endpoints is priced wrong.
 
@@ -60,6 +63,16 @@ PRICES: dict[str, Price] = {
     "claude-sonnet-5":   Price( 2.00,  0.20,    2.50,    4.00,  10.00, "2026-09-15"),
     "claude-sonnet-4-6": Price( 3.00,  0.30,    3.75,    6.00,  15.00, "2026-09-15"),
     "claude-haiku-4-5":  Price( 1.00,  0.10,    1.25,    2.00,   5.00, "2026-09-15"),
+    "claude-opus-5-5":   Price( 4.00,  0.20,    5.00,    8.00,  20.00, "2026-11-10"),
+    "claude-sonnet-5-5": Price( 2.00,  0.10,    2.50,    4.00,  10.00, "2026-11-10"),
+    "claude-haiku-5-5":  Price( 0.10,  0.01,    0.125,   0.20,   0.50, "2026-11-10"),
+}
+
+# A model whose whole request is billed at a higher rate once its prompt
+# (input + cache reads + cache writes, i.e. Event.context) exceeds a threshold.
+# The tier replaces the base row for that request; it is not a marginal rate.
+LONG_PROMPT_TIERS: dict[str, tuple[int, Price]] = {
+    "claude-haiku-5-5": (100_000, Price(0.50, 0.05, 0.625, 1.00, 2.50, "2026-11-10")),
 }
 
 # Bands for the main-thread context histogram, in tokens.
@@ -114,6 +127,7 @@ class Event(NamedTuple):
     write_5m: int
     write_1h: int
     out: int
+    run: str | None = None  # transcript key of the subagent run, None on the main thread
 
     @property
     def context(self) -> int:
@@ -149,6 +163,9 @@ def price_of(event: Event) -> Cost:
     p = PRICES.get(event.model)
     if p is None:
         return ZERO
+    tier = LONG_PROMPT_TIERS.get(event.model)
+    if tier is not None and event.context > tier[0]:
+        p = tier[1]
     return Cost(
         event.inp * p.inp / 1e6,
         event.cache_read * p.cache_read / 1e6,
@@ -239,11 +256,46 @@ def transcripts(projects: Path) -> Iterator[tuple[Path, str, str, bool]]:
                     yield path, project_dir.name, session_dir.name, True
 
 
+def read_meta(transcript: Path) -> dict:
+    """The sibling `<agent>.meta.json` of a subagent transcript, or {}."""
+    meta = transcript.with_suffix(".meta.json")
+    try:
+        obj = json.loads(meta.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError):
+        return {}
+    return obj if isinstance(obj, dict) else {}
+
+
+def clean(value: object) -> str | None:
+    """A non-empty string field, else None. Never anything else."""
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def workflow_run_id(path: Path, projects: Path) -> str | None:
+    """The run id of a workflow transcript: the path segment after `workflows`."""
+    parts = path.relative_to(projects).parts
+    if "workflows" in parts:
+        index = parts.index("workflows")
+        if index + 1 < len(parts) - 1:
+            return parts[index + 1]
+    return None
+
+
+DISPATCH_TOOLS = {"Agent", "Task"}
+
+
 def collect(projects: Path, since: datetime | None, until: datetime | None,
-            fragment: str | None) -> tuple[list[Event], dict]:
-    """Read every transcript once and return the deduplicated events."""
+            fragment: str | None) -> tuple[list[Event], dict, dict]:
+    """Read every transcript once; return events, stats and the dispatch trace.
+
+    The trace holds what the cost events cannot say: which Agent calls were made
+    and with which fields, and when each subagent run started and ended.
+    Message content is read only to find `tool_use` blocks; none of it is kept.
+    """
     seen: set[str] = set()
     events: list[Event] = []
+    runs: dict[str, dict] = {}
+    dispatches: dict[str, dict] = {}
     stats = {"files": 0, "records": 0, "duplicates": 0, "undated": 0,
              "filtered": 0, "synthetic": 0}
 
@@ -252,12 +304,50 @@ def collect(projects: Path, since: datetime | None, until: datetime | None,
             continue
         stats["files"] += 1
         agent = agent_type_of({}, path) if is_sub else None
+        run_key = str(path.relative_to(projects)) if is_sub else None
+        if is_sub:
+            meta = read_meta(path)
+            phase = clean(meta.get("workflowPhase"))
+            run_id = workflow_run_id(path, projects)
+            runs[run_key] = {
+                "session": session, "agent": agent,
+                "description": clean(meta.get("description")),
+                "tool_use_id": clean(meta.get("toolUseId")),
+                "model": clean(meta.get("model")), "effort": clean(meta.get("effort")),
+                "phase": phase, "run_id": run_id,
+                "workflow": run_id is not None or phase is not None,
+                "first": None, "last": None,
+            }
         for record in iter_json_lines(path):
+            stamp = parse_time(record.get("timestamp"))
+            if is_sub and stamp is not None:
+                run = runs[run_key]
+                run["first"] = stamp if run["first"] is None else min(run["first"], stamp)
+                run["last"] = stamp if run["last"] is None else max(run["last"], stamp)
             if record.get("type") != "assistant":
                 continue
             message = record.get("message")
             if not isinstance(message, dict):
                 continue
+            content = message.get("content")
+            if isinstance(content, list) and stamp is not None \
+                    and not ((since and stamp < since) or (until and stamp >= until)):
+                for block in content:
+                    if not (isinstance(block, dict) and block.get("type") == "tool_use"
+                            and block.get("name") in DISPATCH_TOOLS):
+                        continue
+                    call_id = block.get("id")
+                    fields = block.get("input")
+                    if not isinstance(call_id, str) or not isinstance(fields, dict) \
+                            or call_id in dispatches:
+                        continue
+                    kind = clean(fields.get("subagent_type"))
+                    dispatches[call_id] = {
+                        "when": stamp, "caller": agent, "type": kind or "general-purpose",
+                        "model": clean(fields.get("model")),
+                        "effort": clean(fields.get("effort")),
+                        "fork": kind == "fork" or fields.get("fork") is True,
+                    }
             usage = message.get("usage")
             if not isinstance(usage, dict):
                 continue
@@ -310,8 +400,12 @@ def collect(projects: Path, since: datetime | None, until: datetime | None,
                 write_5m=write_5m,
                 write_1h=write_1h,
                 out=int(usage.get("output_tokens") or 0),
+                run=run_key,
             ))
-    return events, stats
+    runs = {k: r for k, r in runs.items()
+            if r["first"] is not None and not ((since and r["first"] < since)
+                                               or (until and r["first"] >= until))}
+    return events, stats, {"runs": runs, "dispatches": dispatches}
 
 
 # --- aggregation ------------------------------------------------------------
@@ -348,7 +442,96 @@ def find_reprimes(events: list[Event]) -> set[str]:
     return flagged
 
 
-def build_report(events: list[Event], stats: dict) -> dict:
+def analyse_dispatches(trace: dict) -> dict:
+    """How each Agent call fixed its model and effort.
+
+    Per field, one of three states: explicit on the call, explicit in the
+    definition (the subagent's `.meta.json`, joined by tool_use id), or
+    unresolved — the run inherited it and the transcripts cannot say from where.
+    Forks are counted apart: they continue the orchestrator, they are no worker.
+    """
+    by_call = {r["tool_use_id"]: r for r in trace["runs"].values() if r["tool_use_id"]}
+    out = {"total": 0, "forks": 0, "by_week": {}, "by_type": {}}
+
+    def blank() -> dict:
+        return {"dispatches": 0,
+                "model": {"call": 0, "definition": 0, "unresolved": 0},
+                "effort": {"call": 0, "definition": 0, "unresolved": 0}}
+
+    for call_id, d in trace["dispatches"].items():
+        if d["fork"]:
+            out["forks"] += 1
+            continue
+        out["total"] += 1
+        run = by_call.get(call_id)
+        slots = (out["by_week"].setdefault(iso_week(d["when"]), blank()),
+                 out["by_type"].setdefault(d["type"], blank()))
+        for slot in slots:
+            slot["dispatches"] += 1
+        for field in ("model", "effort"):
+            if d[field]:
+                state = "call"
+            elif run and run[field]:
+                state = "definition"
+            else:
+                state = "unresolved"
+            for slot in slots:
+                slot[field][state] += 1
+    return out
+
+
+def analyse_workflows(events: list[Event], trace: dict) -> list[dict]:
+    """One row per workflow run: cost, and the (model, effort) mix by phase."""
+    rows: dict[str, dict] = {}
+    for key, run in trace["runs"].items():
+        if not run["workflow"]:
+            continue
+        rows.setdefault(run["run_id"] or "(no run id)", {
+            "run_id": run["run_id"] or "(no run id)", "session": run["session"],
+            "agents": 0, "cost": ZERO, "requests": 0, "phases": {}})["agents"] += 1
+    for event in events:
+        run = trace["runs"].get(event.run) if event.run else None
+        if run is None or not run["workflow"]:
+            continue
+        row = rows[run["run_id"] or "(no run id)"]
+        cost = price_of(event)
+        row["cost"] = add(row["cost"], cost)
+        row["requests"] += 1
+        slot = row["phases"].setdefault(run["phase"] or "(no phase)", {}) \
+                            .setdefault((event.model, event.effort),
+                                        {"cost": ZERO, "requests": 0})
+        slot["cost"] = add(slot["cost"], cost)
+        slot["requests"] += 1
+    return sorted(rows.values(), key=lambda r: r["cost"].total, reverse=True)
+
+
+def find_repeats(trace: dict) -> dict:
+    """Subagent runs that repeat an earlier same-type run, one after the other.
+
+    A candidate starts after a run of the same agent type has finished and has
+    the same description, to the character. A parallel group shares a start
+    window, so none of its members starts after another has finished. This is a
+    prompt for a look at the sessions, not a rate of corrections: a repeated
+    description is also what a deliberate second pass looks like.
+    """
+    groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for run in trace["runs"].values():
+        if run["description"]:
+            groups[(run["session"], run["agent"])].append(run)
+    by_agent: dict[str, int] = defaultdict(int)
+    total = 0
+    for (_, agent), members in groups.items():
+        members.sort(key=lambda r: r["first"])
+        for index, run in enumerate(members):
+            if any(prev["description"] == run["description"] and prev["last"] <= run["first"]
+                   for prev in members[:index]):
+                by_agent[agent] += 1
+                total += 1
+    return {"candidates": total, "by_agent": dict(sorted(by_agent.items()))}
+
+
+def build_report(events: list[Event], stats: dict, trace: dict | None = None) -> dict:
+    trace = trace or {"runs": {}, "dispatches": {}}
     reprimes = find_reprimes(events)
     unknown: dict[str, dict] = defaultdict(lambda: {"requests": 0, "tokens": 0})
     weeks: dict[str, dict] = {}
@@ -363,6 +546,8 @@ def build_report(events: list[Event], stats: dict) -> dict:
             "main": {"cost": ZERO, "requests": 0},
             "agents": defaultdict(lambda: {"cost": ZERO, "requests": 0}),
             "pairs": defaultdict(lambda: {"cost": ZERO, "requests": 0}),
+            "subagent_pairs": defaultdict(lambda: {"cost": ZERO, "requests": 0}),
+            "agent_models": defaultdict(lambda: {"cost": ZERO, "requests": 0}),
             "bands": {k: {"cost": ZERO, "requests": 0}
                       for k in ("<150k", "150k-400k", ">400k")},
             "reprimes": {"cost": ZERO, "requests": 0, "where": []},
@@ -409,6 +594,11 @@ def build_report(events: list[Event], stats: dict) -> dict:
             agent = week["agents"][event.agent]
             agent["cost"] = add(agent["cost"], cost)
             agent["requests"] += 1
+            for table, key in (("subagent_pairs", (event.model, event.effort)),
+                               ("agent_models", (event.agent, event.model, event.effort))):
+                slot = week[table][key]
+                slot["cost"] = add(slot["cost"], cost)
+                slot["requests"] += 1
 
         slot = windows[int(event.when.timestamp()) // WINDOW_SECONDS]
         slot["cost"] = add(slot["cost"], cost)
@@ -418,6 +608,9 @@ def build_report(events: list[Event], stats: dict) -> dict:
     top = sorted(windows.items(), key=lambda kv: kv[1]["cost"].total, reverse=True)[:10]
     return {
         "stats": stats,
+        "dispatches": analyse_dispatches(trace),
+        "workflows": analyse_workflows(events, trace),
+        "repeats": find_repeats(trace),
         "weeks": weeks,
         "unknown_models": unknown,
         "windows": [
@@ -527,6 +720,34 @@ def print_text(report: dict, projects: Path, since: str | None, until: str | Non
         else:
             print("   re-primes: none")
 
+    dispatch = report["dispatches"]
+    if dispatch["total"] or dispatch["forks"]:
+        print()
+        print(f"── dispatches: {dispatch['total']} Agent calls, {dispatch['forks']} forks "
+              f"(counted apart)")
+        for week_name, slot in sorted(dispatch["by_week"].items()):
+            states = " · ".join(
+                f"{f} {slot[f]['call']} call / {slot[f]['definition']} definition / "
+                f"{slot[f]['unresolved']} unresolved" for f in ("model", "effort"))
+            print(f"   {week_name}  {slot['dispatches']:>4}  {states}")
+    if report["workflows"]:
+        print()
+        print(f"── {len(report['workflows'])} workflow run(s)")
+        for run in report["workflows"][:10]:
+            print(f"   {run['run_id']:<20} {money(run['cost'].total):>10}  "
+                  f"{run['requests']:>5} requests  {run['agents']} agents")
+            for phase, mix in run["phases"].items():
+                shown = ", ".join(f"{m}/{e} x{sl['requests']}" for (m, e), sl in mix.items())
+                print(f"     {phase:<18} {shown}")
+    repeats = report["repeats"]
+    if repeats["candidates"]:
+        print()
+        print(f"── sequential repetition candidates: {repeats['candidates']} "
+              f"(same agent type, same description, started after the previous one finished; "
+              f"a prompt to look, not a correction rate)")
+        for agent, count in repeats["by_agent"].items():
+            print(f"   {agent:<30} {count:>4}")
+
     print()
     # "the ten most expensive" is a ceiling: a short range simply has fewer
     # windows, and claiming ten while printing four reads like a bug.
@@ -547,6 +768,16 @@ def jsonable(report: dict) -> dict:
     return {
         "stats": report["stats"],
         "unknown_models": {k: dict(v) for k, v in report["unknown_models"].items()},
+        "dispatches": report["dispatches"],
+        "workflows": [{
+            "run_id": w["run_id"], "session": w["session"], "agents": w["agents"],
+            "requests": w["requests"], "cost": cost(w["cost"]),
+            "phases": {ph: [{"model": m, "effort": e, "cost": cost(sl["cost"]),
+                             "requests": sl["requests"]}
+                            for (m, e), sl in mix.items()]
+                       for ph, mix in w["phases"].items()},
+        } for w in report["workflows"]],
+        "sequential_repeat_candidates": report["repeats"],
         "weeks": {
             name: {
                 "cost": cost(week["cost"]),
@@ -560,6 +791,12 @@ def jsonable(report: dict) -> dict:
                 "pairs": [{"model": m, "effort": e, "cost": cost(s["cost"]),
                            "requests": s["requests"]}
                           for (m, e), s in week["pairs"].items()],
+                "subagent_pairs": [{"model": m, "effort": e, "cost": cost(s["cost"]),
+                                    "requests": s["requests"]}
+                                   for (m, e), s in week["subagent_pairs"].items()],
+                "by_agent_model": [{"agent": a, "model": m, "effort": e,
+                                    "cost": cost(s["cost"]), "requests": s["requests"]}
+                                   for (a, m, e), s in week["agent_models"].items()],
                 "bands": {b: {"cost": cost(s["cost"]), "requests": s["requests"]}
                           for b, s in week["bands"].items()},
                 "reprimes": {"cost": cost(week["reprimes"]["cost"]),
@@ -606,9 +843,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     projects = Path(args.projects).expanduser() if args.projects else default_projects()
-    events, stats = collect(projects, parse_day(args.since), parse_day(args.until, end=True),
+    events, stats, trace = collect(projects, parse_day(args.since), parse_day(args.until, end=True),
                             args.project)
-    report = build_report(events, stats)
+    report = build_report(events, stats, trace)
 
     if args.json:
         json.dump(jsonable(report), sys.stdout, indent=2, sort_keys=False)
