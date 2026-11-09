@@ -6,7 +6,7 @@ Single source of the CodeRabbit quota logic: kodflow-hooks' PreToolUse hint
 relaunch workflow (`probe` and `relaunch`, which checks this file out at a
 pinned commit) both run THIS file. Nothing else reads CodeRabbit's messages.
 
-Four subcommands, standard library only (Python 3.9+), no third-party import:
+Five subcommands, standard library only (Python 3.9+), no third-party import:
 
   probe      list the open, non-draft pull requests whose last CodeRabbit action
              is a refusal (rate limit or pause) that no review has followed, and,
@@ -25,6 +25,10 @@ Four subcommands, standard library only (Python 3.9+), no third-party import:
              from the policy files as CodeRabbit resolves them), and whether the
              head is covered. Cached per head, bounded by a deadline, never
              raises: `unknown` wherever a fact could not be established.
+  merge-gate the PreToolUse decision before a merge: allow, or deny while
+             CodeRabbit reviews an eligible head that is positively not
+             covered (it posts the marked request, and the audit comment when
+             the merge goes through unreviewed). Fails open.
 
 The JSON contract of `probe` is the stable interface (it feeds a workflow now,
 a Claude Code hook later). `schema_version` moves only on a breaking change;
@@ -1456,6 +1460,7 @@ def covered(opts: argparse.Namespace, now: dt.datetime, api: Optional[Api] = Non
         pr = api.get(owner, f"/repos/{repo}/pulls/{number}")
         head = pr["head"]["sha"]
         out["head"] = head
+        out["head_ref"] = _dig(pr, "head", "ref")
         path = _cache_path(opts.cache_dir, f"covered/{repo}/{number}/{head}") if opts.cache_dir else None
         cached = _read_cache(path, now, opts.cache_minutes) if path else None
         if cached is not None:
@@ -1476,6 +1481,123 @@ def covered(opts: argparse.Namespace, now: dt.datetime, api: Optional[Api] = Non
     except Exception as err:  # noqa: BLE001 - an answer, never a traceback
         out["error"] = f"{type(err).__name__}: {err}"[:200]
     out["api_calls"] = api.calls
+    return out
+
+
+# -------------------------------------------------------------------- merge gate
+
+DEFAULT_MERGE_WAIT_MINUTES = 30
+AUDIT_PREFIX = "merged without CodeRabbit review of "
+
+
+def _hhmm(t: dt.datetime) -> str:
+    return t.astimezone(dt.timezone.utc).strftime("%H:%M UTC")
+
+
+def merge_gate(opts: argparse.Namespace, now: dt.datetime, api: Optional[Api] = None) -> Dict[str, Any]:
+    """Should this merge wait for CodeRabbit: the PreToolUse decision, as JSON.
+
+      allow   covered, not eligible, unknown, any error or timeout (fail open),
+              and an uncovered head once the wait is over or the quota is out
+              (then one audit comment per head, posted here, before the merge)
+      deny    an eligible head positively not covered: one marked request
+              `@coderabbitai review` + `<!-- kodflow-relaunch:hook head=<sha> -->`
+              (posted here when none is pending for this head), then wait
+              `--wait-minutes` from that request
+
+    Never raises; `decision` is always set. `context` is the line the hook adds
+    on an allow, `message` the reason of a deny.
+    """
+    wait = max(0, int(getattr(opts, "wait_minutes", DEFAULT_MERGE_WAIT_MINUTES)))
+    out: Dict[str, Any] = {"schema_version": SCHEMA_VERSION, "decision": "allow", "action": "none",
+                           "repo": None, "pr": None, "head": None, "covered": "unknown", "eligible": "unknown",
+                           "reason": None, "requested_at": None, "wait_until": None, "message": "", "context": "", "api_calls": 0}
+    end = time.monotonic() + opts.deadline
+    api = api or Api(deadline=end)
+    match = (getattr(opts, "match_head", None) or "").strip()
+
+    def advice(head: str) -> str:
+        if match and same_sha(match, head):
+            return ""
+        if match:
+            return f" --match-head-commit {match} is not the head {head}: the merge will fail, re-read the PR."
+        return f" Merge with --match-head-commit {head} (MCP: expectedHeadSha) so a push since this check fails the merge."
+
+    try:
+        cov = covered(opts, now, api)
+        for k in ("repo", "pr", "head", "covered", "eligible", "reason"):
+            out[k] = cov.get(k)
+        head = cov.get("head")
+        if not head:
+            out["error"] = cov.get("error") or "no head"
+            return out
+        line = f"CodeRabbit on PR #{cov['pr']}: head {head} covered={str(cov['covered']).lower()} eligible={str(cov['eligible']).lower()}"
+        if cov["eligible"] is False:
+            line += f" ({cov['reason']})"
+        if cov["covered"] is not False or cov["eligible"] is not True:
+            out["context"] = line + advice(head)          # covered, ineligible or unknown: allow
+            return out
+        repo, number = cov["repo"], cov["pr"]
+        owner = repo.split("/")[0]
+        comments = api.paginate(owner, f"/repos/{repo}/issues/{number}/comments")
+        # the cache may be up to 5 min old: re-read the summary before holding anyone
+        sha, _ = last_reviewed(comments, lambda: [])
+        if sha and same_sha(sha, head):
+            out["covered"] = True
+            out["context"] = line.replace("covered=false", "covered=true") + advice(head)
+            return out
+        requests = [c for c in (parse_command(x) for x in comments) if c and c["origin"] in ("cron", "hook") and same_sha(c["head"], head)]
+        last = max((c["at"] for c in requests), default=None)
+        audit_re = re.compile(r"^\s*" + re.escape(AUDIT_PREFIX) + r"([0-9a-fA-F]{7,40})", re.I)
+        audited = any((m := audit_re.match(x.get("body") or "")) and same_sha(m.group(1), head) for x in comments)
+        dry = bool(getattr(opts, "dry_run", False))
+
+        def allow_with_audit(why: str) -> Dict[str, Any]:
+            out["action"] = "audited" if audited else ("would_audit" if dry else "audit")
+            if not audited and not dry:
+                api.post_comment(owner, repo, number, f"{AUDIT_PREFIX}{head}: {why}")
+            out["reason"] = why
+            out["context"] = f"{line}. Merging without its review: {why}." + advice(head)
+            return out
+
+        if last is not None:
+            out["requested_at"] = fmt_time(last)
+            out["wait_until"] = fmt_time(last + dt.timedelta(minutes=wait))
+            # a reply to the command, not the summary: the summary keeps its pause
+            # section while paused and is edited when the review starts
+            answer = latest_refusal([x for x in comments if parse_time(x["created_at"]) > last
+                                     and not SUMMARY_RE.search(x.get("body") or "")])
+            if answer is not None:
+                kind = refusal_kind(answer.get("body") or "")
+                return allow_with_audit(f"CodeRabbit answered the request of {_hhmm(last)} with a {kind.replace('_', ' ')} notice")
+            if now - last >= dt.timedelta(minutes=wait):
+                return allow_with_audit(f"no CodeRabbit review within {wait} min of the request of {_hhmm(last)}")
+            out["decision"], out["action"] = "deny", "waiting"
+        else:
+            cap = capacity(argparse.Namespace(
+                action="push", cwd=".", repo=repo, branch=cov.get("head_ref"), cache_dir=opts.cache_dir,
+                cache_minutes=opts.cache_minutes, recent=DEFAULT_RECENT, window_hours=DEFAULT_WINDOW_HOURS,
+                deadline=max(0.0, end - time.monotonic()), buffer_minutes=DEFAULT_BUFFER_MINUTES,
+                unknown_wait_minutes=DEFAULT_UNKNOWN_WAIT_MINUTES, stale_minutes=DEFAULT_STALE_MINUTES,
+                max_attempts=DEFAULT_MAX_ATTEMPTS), now, api)
+            if cap["state"] == "limited":
+                return allow_with_audit(f"CodeRabbit is rate limited on {repo} (next review in about {cap['minutes_until_review']} min)")
+            if not dry:
+                api.post_comment(owner, repo, number, command_body("hook", head))
+            last = now
+            out["requested_at"] = fmt_time(now)
+            out["wait_until"] = fmt_time(now + dt.timedelta(minutes=wait))
+            out["decision"], out["action"] = "deny", "would_request" if dry else "requested"
+        until = last + dt.timedelta(minutes=wait)
+        out["message"] = (f"CodeRabbit relancé sur {head[:12]} à {_hhmm(last)} ; réessaie la fusion dès qu'il a relu "
+                          f"ou après {_hhmm(until)} ({wait} min).") + advice(head)
+    except Exception as err:  # noqa: BLE001 - fail open: a gate that cannot decide lets the merge through
+        out["decision"] = "allow"
+        out["error"] = f"{type(err).__name__}: {err}"[:200]
+        if out["head"] and not out["context"]:
+            out["context"] = f"CodeRabbit on PR #{out['pr']}: head {out['head']} covered=unknown (the merge gate failed: {out['error']})"
+    finally:
+        out["api_calls"] = api.calls
     return out
 
 
@@ -1522,6 +1644,15 @@ def build_parser() -> argparse.ArgumentParser:
     v.add_argument("--cache-minutes", type=int, default=DEFAULT_CACHE_MINUTES)
     v.add_argument("--deadline", type=float, default=DEFAULT_DEADLINE_SECONDS, help="seconds the whole call may take")
     v.add_argument("--now", help="ISO UTC instant to use as now (tests)")
+    g = sub.add_parser("merge-gate", help="allow a merge, or hold it while CodeRabbit reviews an uncovered head")
+    for a, kw in (("--repo", dict(metavar="OWNER/NAME")), ("--pr", dict(type=int, metavar="N")), ("--cwd", dict(default=".")),
+                  ("--branch", {}), ("--policy-dir", {}), ("--cache-dir", dict(default="")),
+                  ("--cache-minutes", dict(type=int, default=DEFAULT_CACHE_MINUTES)),
+                  ("--deadline", dict(type=float, default=DEFAULT_DEADLINE_SECONDS)), ("--now", {})):
+        g.add_argument(a, **kw)
+    g.add_argument("--wait-minutes", type=int, default=DEFAULT_MERGE_WAIT_MINUTES, help="hold after the request (default %(default)s)")
+    g.add_argument("--dry-run", action="store_true", help="decide and print, post nothing")
+    g.add_argument("--match-head", help="the sha the merge command pins (--match-head-commit / expectedHeadSha), if any")
     r = sub.add_parser("relaunch", help="post the command on the candidates of a probe document")
     r.add_argument("--input", default="-", help="probe JSON file, '-' for stdin (default)")
     r.add_argument("--dry-run", action="store_true", help="re-check and report, post nothing")
@@ -1533,9 +1664,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[List[str]] = None) -> int:
     opts = build_parser().parse_args(argv)
     now = parse_time(opts.now) if opts.now else dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
-    if opts.command in ("capacity", "covered"):
+    if opts.command in ("capacity", "covered", "merge-gate"):
         # Fail open by contract: whatever happens, one JSON document and exit 0.
-        json.dump((capacity if opts.command == "capacity" else covered)(opts, now), sys.stdout, ensure_ascii=False)
+        fn = {"capacity": capacity, "covered": covered, "merge-gate": merge_gate}[opts.command]
+        json.dump(fn(opts, now), sys.stdout, ensure_ascii=False)
         sys.stdout.write("\n")
         return 0
     api = Api()

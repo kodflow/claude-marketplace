@@ -94,13 +94,23 @@ hours (at most 5) for its comments, and 1 per PR holding a refusal for its
 reviews: 1 call on a quiet repository, at most 11, the case measured on
 kitsunium/sdk being below that. `KODFLOW_CODERABBIT=off` turns the hint off.
 
-**Before `gh pr merge`** (main thread; a subagent's merge stays refused), one
-context line, `CodeRabbit on PR #N: head <sha> covered=<x> eligible=<y>`, from
-`covered` with a 4 s deadline and the policy directory of
-`KODFLOW_CODERABBIT_POLICY_DIR` (else `~/Projects/kodflow/making.codes/coderabbit`
-when it exists; none: `eligible=unknown`). It never posts a command and is
-silent on any failure; the request for a review is /git's watch loop
-(Phase 4.8), marked `:hook`.
+**The merge gate.** Before `gh pr merge` (every `-R` form, a number, a URL,
+a branch or none) and `mcp__github__merge_pull_request`, main thread only (a
+subagent's merge stays refused), `probe.py merge-gate` decides, 4 s deadline,
+cached `covered`, the policy directory of `KODFLOW_CODERABBIT_POLICY_DIR` (else
+`~/Projects/kodflow/making.codes/coderabbit` when it exists):
+
+| CodeRabbit on the head | the hook |
+|---|---|
+| covered, not eligible, unknown, an error, the deadline | allow, one context line `CodeRabbit on PR #N: head <sha> covered=<x> eligible=<y>` |
+| eligible, positively not covered, no marked request for this head | posts `@coderabbitai review` then `<!-- kodflow-relaunch:hook head=<sha> -->`, and denies: "CodeRabbit relancé sur <sha> à HH:MM ; réessaie la fusion dès qu'il a relu ou après HH:MM (30 min)" |
+| a marked request younger than the wait | denies with the same text, posts nothing |
+| the wait is over, CodeRabbit answered the request with a refusal, or the quota is out (`capacity` limited) | allows, after one audit comment per head: `merged without CodeRabbit review of <sha>: <reason>` |
+
+A merge that does not pin the head (`--match-head-commit`, MCP
+`expectedHeadSha`) is told to, never held for it. `KODFLOW_CR_MERGE_WAIT_MINUTES`
+sets the wait (default 30), `KODFLOW_CODERABBIT=off` turns every CodeRabbit
+behaviour off. `merge-gate --dry-run` decides without posting.
 
 **Coverage.** `probe.py covered --repo OWNER/NAME --pr N [--policy-dir DIR]`
 prints `{head, last_reviewed, eligible, reason, covered}` for one pull request.

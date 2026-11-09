@@ -118,43 +118,95 @@ printf '%s' "$OUT" | jq -e '.systemMessage | startswith("kodflow-hooks: commit i
 PATH="$T/bin:$PATH" run 'gh pr create --title t'
 [ $RC -eq 0 ] && [ -z "$OUT" ] && ok "no notice, merge failed: silence, rc 0" || bad "merge fallback silence" "rc=$RC out=$OUT"
 
-echo "== gh pr merge: one context line, never a command"
+echo "== gh pr merge and mcp__github__merge_pull_request: the merge gate"
 run_main() {   # the main thread's Bash call (no agent_id): the one that may merge
     local json; json=$(jq -n -c --arg c "$1" --arg cwd "$T/repo" \
         '{session_id:"s1",hook_event_name:"PreToolUse",tool_name:"Bash",cwd:$cwd,tool_use_id:"t2",tool_input:{command:$c}}')
     : > "$STUB_LOG"
     OUT=$(printf '%s' "$json" | bash "$S/on-tool.sh" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err")
 }
-export STUB_OUT='{"schema_version":1,"repo":"o/r","pr":42,"head":"abc1234def","covered":false,"eligible":true,"reason":"eligible"}' STUB_RC=0
+run_mcp() {    # $1 tool_input JSON, $2 agent_id or empty
+    local json; json=$(jq -n -c --argjson i "$1" --arg cwd "$T/repo" --arg aid "${2:-}" \
+        '{session_id:"s1",hook_event_name:"PreToolUse",tool_name:"mcp__github__merge_pull_request",cwd:$cwd,tool_use_id:"t3",tool_input:$i} + (if $aid != "" then {agent_id:$aid,agent_type:"general-purpose"} else {} end)')
+    : > "$STUB_LOG"
+    OUT=$(printf '%s' "$json" | bash "$S/on-tool.sh" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err")
+}
+decision() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision // empty' 2>/dev/null; }
+reason() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason // empty' 2>/dev/null; }
+DENY='{"decision":"deny","action":"requested","head":"abc1234def","message":"CodeRabbit relancé sur abc1234def à 12:00 UTC ; réessaie la fusion dès qu'"'"'il a relu ou après 12:30 UTC (30 min).","context":""}'
+ALLOW='{"decision":"allow","action":"none","head":"abc1234def","message":"","context":"CodeRabbit on PR #42: head abc1234def covered=true eligible=true"}'
 mkdir -p "$T/policy"
-KODFLOW_CODERABBIT_POLICY_DIR=$T/policy run_main 'gh pr merge 42 --squash --match-head-commit abc1234def'
-[ $RC -eq 0 ] && [ "$(ctx)" = "CodeRabbit on PR #42: head abc1234def covered=false eligible=true" ] \
-    && ok "merge: head, covered, eligible in one line" || bad "merge line" "rc=$RC out=$OUT err=$ERR"
-printf '%s' "$OUT" | jq -e '.hookSpecificOutput | has("permissionDecision") | not' >/dev/null && ok "merge: information only" || bad "merge decision" "$OUT"
-grep -q -- '^covered .*--pr 42' "$STUB_LOG" && grep -q -- "--policy-dir $T/policy" "$STUB_LOG" && grep -q -- '--deadline 4' "$STUB_LOG" \
-    && ok "merge: covered --pr N --policy-dir, 4 s deadline" || bad "merge args" "$(cat "$STUB_LOG")"
+export STUB_OUT=$DENY STUB_RC=0
+KODFLOW_CODERABBIT_POLICY_DIR=$T/policy run_main 'gh pr merge 42 --squash'
+[ $RC -eq 0 ] && [ "$(decision)" = deny ] && [ "$(reason)" = "$(printf '%s' "$DENY" | jq -r .message)" ] \
+    && ok "deny: permissionDecision deny with the probe's reason" || bad "deny" "rc=$RC out=$OUT err=$ERR"
+grep -q -- '^merge-gate .*--pr 42' "$STUB_LOG" && grep -q -- "--policy-dir $T/policy" "$STUB_LOG" && grep -q -- '--deadline 4' "$STUB_LOG" \
+    && grep -q -- '--wait-minutes 30' "$STUB_LOG" && grep -q -- '--cache-dir' "$STUB_LOG" \
+    && ok "merge-gate --pr N --policy-dir --cache-dir, 4 s, 30 min" || bad "gate args" "$(cat "$STUB_LOG")"
+KODFLOW_CR_MERGE_WAIT_MINUTES=7 run_main 'gh pr merge 42'
+grep -q -- '--wait-minutes 7' "$STUB_LOG" && ok "KODFLOW_CR_MERGE_WAIT_MINUTES is passed" || bad "wait env" "$(cat "$STUB_LOG")"
+KODFLOW_CR_MERGE_WAIT_MINUTES='5;x' run_main 'gh pr merge 42'
+grep -q -- '--wait-minutes 30' "$STUB_LOG" && ok "a malformed wait falls back to 30" || bad "wait bad" "$(cat "$STUB_LOG")"
 KODFLOW_CODERABBIT_POLICY_DIR=$T/no-such-dir HOME=$T/home run_main 'gh pr merge 42'
-! grep -q -- '--policy-dir' "$STUB_LOG" && ok "merge: no policy directory, no --policy-dir (eligible unknown)" || bad "no policy" "$(cat "$STUB_LOG")"
+! grep -q -- '--policy-dir' "$STUB_LOG" && ok "no policy directory, no --policy-dir (eligible unknown)" || bad "no policy" "$(cat "$STUB_LOG")"
+run_main 'gh pr merge 42 --match-head-commit abc1234def'
+grep -q -- '--match-head abc1234def' "$STUB_LOG" && ok "--match-head-commit SHA is forwarded" || bad "match" "$(cat "$STUB_LOG")"
+run_main 'gh pr merge 42 --match-head-commit=abc1234def --squash'
+grep -q -- '--match-head abc1234def' "$STUB_LOG" && ok "--match-head-commit=SHA is forwarded" || bad "match=" "$(cat "$STUB_LOG")"
 run_main 'gh pr merge https://github.com/kodflow/labs/pull/7 --squash'
-grep -q -- '--pr 7' "$STUB_LOG" && grep -q -- '--repo kodflow/labs' "$STUB_LOG" && ok "merge: a PR URL gives repo and number" || bad "merge url" "$(cat "$STUB_LOG")"
+grep -q -- '--pr 7' "$STUB_LOG" && grep -q -- '--repo kodflow/labs' "$STUB_LOG" && ok "a PR URL gives repo and number" || bad "merge url" "$(cat "$STUB_LOG")"
 run_main 'gh pr merge feat/x --rebase'
-grep -q -- '--branch feat/x' "$STUB_LOG" && ok "merge: a branch operand" || bad "merge branch" "$(cat "$STUB_LOG")"
+grep -q -- '--branch feat/x' "$STUB_LOG" && ok "a branch operand" || bad "merge branch" "$(cat "$STUB_LOG")"
 run_main 'gh pr merge --squash -t "feat: 9"'
-! grep -q -- '--pr\|--branch' "$STUB_LOG" && grep -q -- "--cwd $T/repo" "$STUB_LOG" && ok "merge: no operand, the checked-out branch" || bad "merge none" "$(cat "$STUB_LOG")"
-run_main 'gh pr merge 42 -R kitsunium/sdk'
-grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && ok "merge: -R after the operand" || bad "merge -R" "$(cat "$STUB_LOG")"
-run_main 'gh pr merge 42 -Rkitsunium/sdk --squash'
-grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && grep -q -- '--pr 42' "$STUB_LOG" && ok "merge: -ROWNER/NAME after the operand" || bad "merge -Rx" "$(cat "$STUB_LOG")"
-export STUB_OUT='{"schema_version":1,"pr":42,"head":"abc1234def","covered":"unknown","eligible":false,"reason":"draft"}'
+! grep -q -- '--pr\|--branch' "$STUB_LOG" && grep -q -- "--cwd $T/repo" "$STUB_LOG" && ok "no operand: the checked-out branch" || bad "merge none" "$(cat "$STUB_LOG")"
+for form in '42 -R kitsunium/sdk' '42 -Rkitsunium/sdk' '42 --repo kitsunium/sdk' '42 --repo=kitsunium/sdk' '-R kitsunium/sdk 42'; do
+    run_main "gh pr merge $form --squash"
+    grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && grep -q -- '--pr 42' "$STUB_LOG" && ok "-R form: gh pr merge $form" || bad "-R form $form" "$(cat "$STUB_LOG")"
+done
+run_main 'gh -R kitsunium/sdk pr merge 42'
+grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && ok "-R before the subcommand" || bad "global -R" "$(cat "$STUB_LOG")"
+for t in 'https://gitlab.com/a/b/-/merge_requests/3' 'feat+x' 'user@feat' 'https://github.com/a/b/issues/3'; do
+    run_main "gh pr merge '$t' --squash"
+    [ $RC -eq 0 ] && [ -z "$(decision)" ] && [ "$(calls)" = 0 ] && ok "an unreadable target ($t): no probe, allowed" || bad "target $t" "rc=$RC out=$OUT calls=$(calls)"
+done
+run_main 'gh pr merge 42 -R "x;y"'
+[ $RC -eq 0 ] && [ -z "$(decision)" ] && [ "$(calls)" = 0 ] && ok "an unreadable repository: no probe, allowed" || bad "bad repo" "rc=$RC out=$OUT calls=$(calls)"
+for line in 'gh pr merge 42 --squash; git push origin feat/x' 'gh pr merge 42 && gh pr create --title t'; do
+    run_main "$line"
+    [ "$(decision)" = deny ] && grep -q -- '^merge-gate .*--pr 42' "$STUB_LOG" && ok "a later verb does not unhold the merge: $line" || bad "later verb $line" "out=$OUT log=$(cat "$STUB_LOG")"
+done
+run_main 'gh pr merge 1 --squash && gh pr merge 2 --squash'
+[ "$(decision)" = deny ] && reason | grep -q 'une fusion par commande' && [ "$(calls)" = 0 ] \
+    && ok "two merges on one line: refused, one per command" || bad "two merges" "out=$OUT calls=$(calls)"
+KODFLOW_CODERABBIT=off run_main 'gh pr merge 1 && gh pr merge 2'
+[ -z "$(decision)" ] && ok "two merges with KODFLOW_CODERABBIT=off: not held" || bad "two merges off" "$OUT"
+
+export STUB_OUT=$ALLOW
 run_main 'gh pr merge 42'
-[ "$(ctx)" = "CodeRabbit on PR #42: head abc1234def covered=unknown eligible=false (draft)" ] && ok "merge: the reason of an ineligible PR" || bad "merge reason" "$OUT"
-export STUB_OUT='{"schema_version":1,"pr":null,"head":null,"covered":"unknown","eligible":"unknown","error":"x"}'
-run_main 'gh pr merge 42'
-[ $RC -eq 0 ] && [ -z "$(ctx)" ] && ok "merge: no head known, silence" || bad "merge silence" "rc=$RC out=$OUT"
-STUB_RC=1 run_main 'gh pr merge 42'
-[ $RC -eq 0 ] && [ -z "$(ctx)" ] && ok "merge: probe fails, silence, rc 0" || bad "merge fail open" "rc=$RC out=$OUT"
-run 'gh pr merge 42'
-[ $RC -eq 2 ] && ok "a subagent's merge is still refused" || bad "subagent merge" "rc=$RC out=$OUT"
+[ $RC -eq 0 ] && [ -z "$(decision)" ] && [ "$(ctx)" = "CodeRabbit on PR #42: head abc1234def covered=true eligible=true" ] \
+    && ok "allow: the context line, no decision" || bad "allow" "rc=$RC out=$OUT"
+for bad_out in '' 'not-json' '{"decision":"allow","context":""}'; do
+    STUB_OUT=$bad_out run_main 'gh pr merge 42'
+    [ $RC -eq 0 ] && [ -z "$(decision)" ] && [ -z "$(ctx)" ] && ok "fail open on '${bad_out:-empty}'" || bad "fail open $bad_out" "rc=$RC out=$OUT"
+done
+STUB_OUT=$DENY STUB_RC=1 run_main 'gh pr merge 42'
+[ "$(decision)" = deny ] && ok "a non-zero exit with a deny document still holds (the probe always exits 0)" || bad "rc1" "$OUT"
+STUB_OUT=$DENY KODFLOW_CODERABBIT=off run_main 'gh pr merge 42'
+[ $RC -eq 0 ] && [ -z "$OUT" ] && [ "$(calls)" = 0 ] && ok "KODFLOW_CODERABBIT=off: no gate" || bad "off" "rc=$RC out=$OUT calls=$(calls)"
+STUB_OUT=$DENY run 'gh pr merge 42'
+[ $RC -eq 2 ] && [ "$(calls)" = 0 ] && ok "a subagent's merge is still refused, the gate not run" || bad "subagent merge" "rc=$RC calls=$(calls)"
+
+export STUB_OUT=$DENY
+run_mcp '{"owner":"kitsunium","repo":"sdk","pullNumber":42,"expectedHeadSha":"abc1234def","merge_method":"squash"}'
+[ $RC -eq 0 ] && [ "$(decision)" = deny ] && grep -q -- '--repo kitsunium/sdk' "$STUB_LOG" && grep -q -- '--pr 42' "$STUB_LOG" \
+    && grep -q -- '--match-head abc1234def' "$STUB_LOG" && ok "MCP merge: the same gate, expectedHeadSha forwarded" || bad "mcp deny" "rc=$RC out=$OUT log=$(cat "$STUB_LOG") err=$ERR"
+export STUB_OUT=$ALLOW
+run_mcp '{"owner":"kitsunium","repo":"sdk","pullNumber":42}'
+[ $RC -eq 0 ] && [ -z "$(decision)" ] && [ -n "$(ctx)" ] && ok "MCP merge allowed: the context line" || bad "mcp allow" "rc=$RC out=$OUT"
+run_mcp '{"owner":"kitsunium","repo":"sdk","pullNumber":"42; x"}'
+[ $RC -eq 0 ] && [ "$(calls)" = 0 ] && ok "MCP merge with a malformed number: no gate, allowed" || bad "mcp bad" "rc=$RC calls=$(calls)"
+STUB_OUT=$DENY run_mcp '{"owner":"kitsunium","repo":"sdk","pullNumber":42}' agt9
+[ $RC -eq 2 ] && [ "$(calls)" = 0 ] && ok "MCP merge from a subagent: still refused" || bad "mcp subagent" "rc=$RC calls=$(calls)"
 
 echo "== the real probe, no network: a repository that is not on github.com"
 unset KODFLOW_CODERABBIT_PROBE
