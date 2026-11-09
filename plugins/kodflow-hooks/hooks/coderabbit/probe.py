@@ -55,7 +55,7 @@ What counts as what (read from real comments, 2026-11-08):
                from bot accounts (github-actions[bot] included), so the comment
                must come from a person's token. Ours carry, AFTER the command (the
                command must open the comment), `<!-- kodflow-relaunch:cron
-               head=<sha> -->` (this file's relaunch) or `:hook` (the /git watch
+               head=<sha> -->` (this file's relaunch) or `:hook` (a PR-watch
                loop); a command with no marker is `manual`. Only `:cron` holds the
                owner slot and counts toward abandoning; every origin counts toward
                the per-head cap and suppresses a new command while pending.

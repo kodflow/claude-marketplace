@@ -58,7 +58,7 @@ Destination, first that answers:
 Re-running on the same subject appends a comment. It never rewrites
 the original body — that record is the point.
 
-Chain:  /feature → /search → /challenge → /goal → /git
+Chain:  /feature → /search → /challenge → /goal
 ════════════════════════════════════════════════════════════════
 ```
 
@@ -188,7 +188,6 @@ Refuse over a dirty tree. Skip entirely under `--no-branch`.
 /feature → /search <the unknowns>   research what the ledger cannot answer
          → /challenge               debate the plan, lock it into a /goal prompt
          → /goal                    execute
-         → /git --commit            land it
 ```
 
 Name the *Still open* items as the argument for `/search`. That is what they are

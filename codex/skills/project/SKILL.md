@@ -75,7 +75,7 @@ Constraints live in  CLAUDE.md  (spilling to .claude/constraints.md
 past 250 lines, the /project spill point).
 
 Workflow:
-  /project → /warmup → /search → /plan → /refine → /goal → /git
+  /project → /warmup → /search → /plan → /refine → /goal
 ════════════════════════════════════════════════════════════════
 ```
 
@@ -206,7 +206,7 @@ the project chose, instead of re-litigating it every session.
 Print the resolved workspace, the case taken, and the constraint count, then:
 
 ```
-/project → /warmup → /search <topic> → /plan → /refine → /goal → /git
+/project → /warmup → /search <topic> → /plan → /refine → /goal
 ```
 
 Invoke `the /warmup skill` when the workspace was ADOPTed or CLONEd (there

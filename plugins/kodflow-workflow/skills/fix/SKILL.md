@@ -77,7 +77,7 @@ A defect needs: observed · expected · steps · scope.
 Missing steps is a blocker, not a formality — an unreproducible
 bug wastes whoever picks it up next, and that is often you.
 
-Chain:  /fix → /debug → /challenge → /goal → /git
+Chain:  /fix → /debug → /challenge → /goal
 ════════════════════════════════════════════════════════════════
 ```
 
@@ -217,7 +217,6 @@ especially here, where the uncommitted work may be the very thing that broke it.
 /fix → /debug         reproduce, isolate, prove the cause
      → /challenge     debate the fix, lock it into a /goal prompt
      → /goal          execute
-     → /git --commit  land it
 ```
 
 `/debug` enforces no-fix-without-root-cause. Send it there rather than patching

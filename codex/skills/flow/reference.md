@@ -13,7 +13,7 @@ Index, by lane:
 | research | `/search` |
 | design | `/plan` `/challenge` `/refine` |
 | verify | `/review` `/debug` `/lint` `/hunt` `/ktn-issues` |
-| ship | `/git` `/adr` |
+| ship | `/adr` |
 | keep | `/learn` `/docs` |
 | observe | `/recap` |
 | machine | `/audit` `/update` `/ktn` `/infra` |
@@ -53,7 +53,7 @@ and a review cites the ID when a diff breaks one.
 |---|---|
 | reads | every `CLAUDE.md` root to leaf · the constraint ledger · source, config, tests and docs through four parallel probes in one message |
 | writes | nothing by default. `--update` rewrites the `CLAUDE.md` of each directory it touched |
-| after | `/project` · `/git` · the `Stop` hook, which names the directories you changed |
+| after | `/project` · the `Stop` hook, which names the directories you changed |
 | then | `/search` · `/plan` · `/review` · `/goal` |
 | gate | two disjoint modes off one argument. The default path reads and stops; only `--update` writes. |
 
@@ -151,7 +151,7 @@ the shortest contract that survives, never pads to fill it.
 | reads | the tracker detection, then the branch, then the ledger, to find whether this subject already exists |
 | writes | `.claude/issues/<slug>.md` (committed, append-only) · a GitLab or GitHub issue, or a note store entry · a branch named after the issue |
 | after | nothing — an entry point |
-| then | `/search` · `/challenge` · `/goal` · `/git` · every matched specialist |
+| then | `/search` · `/challenge` · `/goal` · every matched specialist |
 | loop | run it again on the same subject and it appends a comment. The original understanding is never rewritten. |
 
 ---
@@ -167,28 +167,9 @@ the shortest contract that survives, never pads to fill it.
 | reads | the same tracker resolution as `/feature` |
 | writes | `.claude/issues/<slug>.md` with `kind: fix` · an issue or note · a branch · a `## Not yet reproduced` section naming exactly what is missing |
 | after | nothing — an entry point |
-| then | `/debug` · `/challenge` · `/git` · specialists (mandatory when the technology matches) |
+| then | `/debug` · `/challenge` · specialists (mandatory when the technology matches) |
 | gate | **no reproduction, no bug.** Observed, expected, and the steps that show it. |
 | gate | a specialist verdict of "documented behaviour" ends the run having created nothing, and hands you to `/feature`. |
-
----
-
-## /git
-
-`kodflow-workflow` · opus · **Commit, open the PR/MR, drive CI green, merge**
-
-**Type** `/git --commit | --watch | --merge | --finish [--branch <name>]`
-
-| | |
-|---|---|
-| reads | the git identity, the diff, the CI status, `docs/adr/` before a PR that changes architecture |
-| writes | a conventional commit · a PR or MR · a merge · the git identity when it was unset |
-| after | `/feature` · `/fix` · `/challenge` · `/goal` |
-| then | `/warmup --update` · `/review` · `/adr` |
-| gate | `--watch` **never merges by itself.** All-green only prints the next step. |
-| loop | `--merge` falling back to `--watch` is the only automatic edge between the three arms, and it points backwards. |
-
-Review threads are answered on the platform, not in the terminal.
 
 ---
 
@@ -202,7 +183,7 @@ Review threads are answered on the platform, not in the terminal.
 |---|---|
 | reads | every changed file and every changed hunk · the constraint ledger · the real output of linters, SAST, SCA, secret, IaC and build/test runs |
 | writes | `.claude/plans/review-fixes-<ts>.md` · `$SCRATCH/review-manifest-<ts>.json` · edits a plan in place with a backup under `.claude/plans/.history/` |
-| after | `/plan` · `/git` |
+| after | `/plan` |
 | then | `/refine` then `/goal` — that is the cycle |
 | gate | an **external, non-LLM verifier** recomputes hunks and symbols from git and invalidates the run on a mismatch. That is what makes a fake pass mechanically detectable. |
 | gate | no finding ships without `file:line` of real cited code plus a counterexample. Severity and confidence are decoupled: a high-severity low-confidence finding is routed to "Needs Verification", never dropped. |
@@ -258,8 +239,8 @@ thrashing.
 |---|---|
 | reads | the existing `docs/adr/` numbering and index |
 | writes | `docs/adr/NNNN-kebab-title.md` · `docs/adr/README.md` · the superseded ADR's status · the ADR number in the PR or commit body |
-| after | `/plan` · `/git` · `/debug` — all three only **suggest** it |
-| then | nothing. A leaf: three arrows in, none out. |
+| after | `/plan` · `/debug` — both only **suggest** it |
+| then | nothing. A leaf: two arrows in, none out. |
 | gate | its first step is a refusal gate — not every change is a decision |
 
 The template captures patterns and contracts but never the why. This fills that

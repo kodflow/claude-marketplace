@@ -136,7 +136,7 @@ Exclusions: .gitignore is authoritative, plus testdata/, vendor/, node_modules/,
 .git/, bin/, dist/, build/, target/, zig-out/, zig-cache/.
 
 Workflow:
-  /project → /warmup → /search → /plan → /refine → /goal → /git
+  /project → /warmup → /search → /plan → /refine → /goal
 ════════════════════════════════════════════════════════════════
 ```
 
@@ -295,8 +295,6 @@ acceptable only when it says why.
 /plan           design within the constraints
     ↓
 /refine → /goal contract, then execution
-    ↓
-/git            commit
     ↓
 /warmup --update  fold what changed back into the docs
 ```

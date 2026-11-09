@@ -227,7 +227,7 @@ the plan's title), then one `task_create` per task in dependency order, each
 characters, the task's `Fait quand` in `description`. Never create them
 without the answer.
 
-Nothing is committed: the documents are left in the work tree for `/git`.
+Nothing is committed: the documents are left in the work tree, uncommitted, for you to commit on a branch.
 
 ---
 

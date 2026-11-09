@@ -215,8 +215,7 @@ create_missing_workflow:
 ## Phase 2.5: Drift Detection
 
 A CLAUDE.md is judged stale from the history, not from its `<!-- updated: -->`
-comment: that timestamp is inert (`skills/git/commit.md`, "No staleness
-check"). The one command below lists each CLAUDE.md older than the last commit
+comment: that timestamp is inert (no skill checks it). The one command below lists each CLAUDE.md older than the last commit
 of code in its directory, with the number of commits since, the tracked files
 modified but not yet committed (`git diff --name-only HEAD`) and the code files
 not yet tracked (a directory can drift before its first commit). Code owned by

@@ -70,7 +70,6 @@ Task(subagent_type="devops-specialist-security", prompt="Run security analysis o
 |-------|-------------|
 | `/plan` | Use before `/infra --plan` for complex changes |
 | `/review` | Review infrastructure code changes |
-| `/git` | Commit infrastructure changes |
 | `/search` | Research Terraform patterns |
 
 ---

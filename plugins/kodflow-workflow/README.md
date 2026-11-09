@@ -23,7 +23,6 @@ claude plugin install kodflow-workflow@kodflow
 | `/plan` | décompose et conçoit, sans rien construire |
 | `/challenge` | met le plan à l'épreuve de lentilles contradictoires |
 | `/refine` | transforme un plan en contrat `/goal` vérifiable |
-| `/git` | branche, commit, PR, suivi de la CI |
 | `/feature` · `/fix` | ouvrent un sujet suivi et sa branche |
 | `/flow` | dessine la carte des skills |
 | `/recap` | l'état du travail en un tableau |
