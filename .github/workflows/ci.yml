@@ -148,6 +148,15 @@ jobs:
           git diff --exit-code -- plugins/kodflow-hooks/hooks/routing-index.tsv \
             || { echo "::error::routing-index.tsv is stale — run scripts/build-routing-index.py"; exit 1; }
 
+      # The hooks inject tier-table.tsv into the orchestrator and into the
+      # sub-agents that can delegate; it is compiled from model-policy.md
+      # section 2 and mirrored with _shared. A hand edit would teach a tier
+      # nobody reviewed.
+      - name: The tier table matches model-policy.md
+        run: |
+          python3 scripts/tests/test_tier_table.py
+          python3 scripts/build-tier-table.py --check
+
       # Agents do not receive the shared files, so the plan review contract is
       # copied into each routed agent; a missing or drifted copy fails here.
       - name: Every routed agent carries the plan review mode
