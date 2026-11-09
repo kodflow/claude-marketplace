@@ -931,7 +931,9 @@ _guard_gh() {
                     -R|--repo) F_CR_REPO=${A[y+1]:-}; y=$((y+2)); continue ;;
                     --repo=*) F_CR_REPO=${A[y]#*=} ;;
                     -R?*) F_CR_REPO=${A[y]#-R} ;;
-                    -t|--subject|-b|--body|-F|--body-file|-A|--author-email|--match-head-commit) y=$((y+2)); continue ;;
+                    --match-head-commit) F_CR_MATCH=${A[y+1]:-}; y=$((y+2)); continue ;;
+                    --match-head-commit=*) F_CR_MATCH=${A[y]#*=} ;;
+                    -t|--subject|-b|--body|-F|--body-file|-A|--author-email) y=$((y+2)); continue ;;
                     -*) ;;
                     *) [ -n "$F_CR_PR" ] || F_CR_PR=${A[y]} ;;
                 esac
@@ -1155,7 +1157,7 @@ pre_bash() {
     F_ROOT=""; F_NV=""; F_HOOKS=0; F_ATTR=""; F_ATTR_KIND=""; F_COMMIT=0; F_FORCE=0; F_MERGE=""; F_DEFPUSH=""; F_AMEND=0
     F_MODW=""; F_PLUG=""; GDIR=""; F_MCPJSON=""; F_CALL=0; F_CGDIR=""
     F_IDENT_T=""; F_IDENT_M=(); F_IDENT_OFF=""; ID_LINE_ENV=(); ID_CMD_ENV=()
-    F_CR=""; F_CR_REPO=""; F_CR_PR=""
+    F_CR=""; F_CR_REPO=""; F_CR_PR=""; F_CR_MATCH=""
 
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
     # $'…' string may spell one in escapes, so it is always read. tr, not
@@ -1282,14 +1284,44 @@ pre_bash() {
     local note ctx="" cwd=${GDIR:-$PROJECT_DIR}
     [[ $cwd = /* ]] || cwd=$PROJECT_DIR/$cwd
     note=$(_ident_notice)
-    if [ -n "$F_CR" ] && [ -d "$cwd" ] && . "$LIB/coderabbit.sh" 2>/dev/null; then
-        ctx=$(kf_coderabbit_hint "$F_CR" "$cwd" "$F_CR_REPO" "$F_CR_PR")
+    if [ "$F_CR" = merge ] && [ -z "$AID" ] && [ -d "$cwd" ]; then
+        _cr_merge_gate "$cwd" "$F_CR_REPO" "$F_CR_PR" "$F_CR_MATCH"
+        [ -n "$CR_DENY" ] && _cr_deny "$CR_DENY" "$note"
+        ctx=$CR_CTX
+    elif [ -n "$F_CR" ] && [ "$F_CR" != merge ] && [ -d "$cwd" ] && . "$LIB/coderabbit.sh" 2>/dev/null; then
+        ctx=$(kf_coderabbit_hint "$F_CR" "$cwd" "$F_CR_REPO")
     fi
     local merged=""
     [ -n "$ctx" ] && merged=$(printf '%s' "${note:-"{}"}" | jq -c --arg c "$ctx" '. + {hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}' 2>/dev/null)
     # A merge that failed must not cost the notice: fall back to it alone.
     if [ -n "$merged" ]; then printf '%s\n' "$merged"
     elif [ -n "$note" ]; then printf '%s\n' "$note"; fi
+    _log
+    exit 0
+}
+
+# The CodeRabbit merge gate (lib/coderabbit.sh → probe.py merge-gate), for
+# `gh pr merge` and mcp__github__merge_pull_request alike, main thread only (a
+# subagent's merge is refused before). Sets CR_DENY (the reason of a hold) or
+# CR_CTX (a context line). No answer, a malformed one, jq missing: neither is
+# set, the merge goes on (fail open).
+_cr_merge_gate() {   # $1 cwd, $2 owner/name, $3 number|url|branch, $4 the pinned head sha
+    CR_DENY=""; CR_CTX=""
+    [ "${KODFLOW_CODERABBIT:-}" = off ] && return 0
+    . "$LIB/coderabbit.sh" 2>/dev/null || return 0
+    local out
+    out=$(kf_coderabbit_merge_gate "$@")
+    [ -n "$out" ] || return 0
+    eval "$(printf '%s' "$out" | jq -r '@sh "CR_DENY=\(if .decision == "deny" then (.message // "CodeRabbit review pending") else "" end) CR_CTX=\(if .decision == "deny" then "" else (.context // "") end)"' 2>/dev/null)" || { CR_DENY=""; CR_CTX=""; }
+    return 0
+}
+
+_cr_deny() {   # $1 reason, $2 the identity notice (JSON) to keep
+    local doc
+    doc=$(printf '%s' "${2:-"{}"}" | jq -c --arg r "$1" '. + {hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}' 2>/dev/null)
+    [ -n "$doc" ] || return 0     # cannot say it: fail open
+    ROOT_GUARD=coderabbit-wait
+    printf '%s\n' "$doc"
     _log
     exit 0
 }
@@ -1557,6 +1589,16 @@ pre_forge() {
         esac
     elif [ "$FM" = 1 ]; then
         ROOT_GUARD=merge
+        if [ "$TOOL" = mcp__github__merge_pull_request ]; then
+            local MO="" MR="" MN="" MS="" mdir=${CWD:-$PROJECT_DIR}
+            eval "$(printf '%s' "$INPUT" | jq -r '.tool_input as $i | @sh "MO=\($i.owner // "" | tostring) MR=\($i.repo // "" | tostring) MN=\($i.pullNumber // "" | tostring) MS=\($i.expectedHeadSha // "" | tostring)"' 2>/dev/null)"
+            [ -d "$mdir" ] || mdir=$PROJECT_DIR
+            if [ -n "$MO" ] && [ -n "$MR" ] && [[ $MN =~ ^[0-9]+$ ]]; then
+                _cr_merge_gate "$mdir" "$MO/$MR" "$MN" "$MS"
+                [ -n "$CR_DENY" ] && _cr_deny "$CR_DENY"
+                [ -n "$CR_CTX" ] && jq -n -c --arg c "$CR_CTX" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}' 2>/dev/null
+            fi
+        fi
     fi
     _log
     exit 0

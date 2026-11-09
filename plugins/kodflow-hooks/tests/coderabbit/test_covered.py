@@ -669,5 +669,139 @@ class Select(unittest.TestCase):
         self.assertEqual(got[0]["number"], 1)
 
 
+
+# ------------------------------------------------------------------ merge gate
+
+
+def gate_opts(**kw):
+    base = dict(repo="kodflow/forgejo-raft", pr=8, cwd=None, branch=None, policy_dir=POLICY, cache_dir="",
+                cache_minutes=5, deadline=4.0, wait_minutes=30, match_head=None, dry_run=False)
+    base.update(kw)
+    return argparse.Namespace(**base)
+
+
+class MergeGate(unittest.TestCase):
+    repo = "kodflow/forgejo-raft"
+
+    def api(self, extra_comments=(), head=None, pulls=None, **routes):
+        fx = load("kodflow_forgejo-raft_8")
+        fx["comments"] = fx["comments"] + list(extra_comments)
+        r = routes_for(fx, self.repo, head=head)
+        r[rf"/repos/{self.repo}/pulls"] = pulls or []          # the capacity sample: nothing refused
+        r.update(routes)
+        return Api(r)
+
+    def gate(self, api, now=NOW, **kw):
+        return probe.merge_gate(gate_opts(**kw), now, api)
+
+    def request(self, at, head=A6):
+        return comment(HUMAN, probe.command_body("hook", head), at)
+
+    def test_uncovered_posts_one_marked_request_and_holds(self):
+        api = self.api()
+        out = self.gate(api)
+        self.assertEqual((out["decision"], out["action"]), ("deny", "requested"))
+        self.assertEqual(api.posted, [(self.repo, 8, probe.command_body("hook", A6))])
+        self.assertIn("CodeRabbit relancé sur a6147257f573 à 12:00 UTC", out["message"])
+        self.assertIn("après 12:30 UTC (30 min)", out["message"])
+        self.assertIn("--match-head-commit " + A6, out["message"])     # recommended, not required
+        self.assertEqual(out["wait_until"], "2026-11-08T12:30:00Z")
+
+    def test_dry_run_posts_nothing(self):
+        api = self.api()
+        out = self.gate(api, dry_run=True)
+        self.assertEqual((out["decision"], out["action"], api.posted), ("deny", "would_request", []))
+
+    def test_pending_request_holds_without_reposting(self):
+        api = self.api([self.request("2026-11-08T11:50:00Z")])
+        out = self.gate(api, match_head=A6)
+        self.assertEqual((out["decision"], out["action"], api.posted), ("deny", "waiting", []))
+        self.assertIn("à 11:50 UTC", out["message"])
+        self.assertIn("après 12:20 UTC", out["message"])
+        self.assertNotIn("--match-head-commit", out["message"])           # already pinned to the head
+
+    def test_a_request_for_another_head_does_not_count(self):
+        api = self.api([self.request("2026-11-08T11:50:00Z", head=N9)])
+        self.assertEqual(self.gate(api)["action"], "requested")
+
+    def test_wait_over_allows_with_one_audit(self):
+        api = self.api([self.request("2026-11-08T11:30:00Z")])
+        out = self.gate(api)                                          # 30 min exactly: over
+        self.assertEqual((out["decision"], out["action"]), ("allow", "audit"))
+        self.assertEqual(len(api.posted), 1)
+        self.assertTrue(api.posted[0][2].startswith(f"merged without CodeRabbit review of {A6}: no CodeRabbit review within 30 min"))
+        self.assertIn("Merging without its review", out["context"])
+        # the clock one minute earlier: still held
+        early = self.gate(self.api([self.request("2026-11-08T11:30:00Z")]), now=probe.parse_time("2026-11-08T11:59:00Z"))
+        self.assertEqual(early["decision"], "deny")
+        # an audit already there (any case): not posted twice
+        api = self.api([self.request("2026-11-08T11:30:00Z"), comment(HUMAN, f"Merged without CodeRabbit review of {A6[:7]}: x", "2026-11-08T11:59:00Z")])
+        out = self.gate(api)
+        self.assertEqual((out["decision"], out["action"], api.posted), ("allow", "audited", []))
+
+    def test_wait_minutes_is_honoured(self):
+        api = self.api([self.request("2026-11-08T11:50:00Z")])
+        self.assertEqual(self.gate(api, wait_minutes=5)["decision"], "allow")
+
+    def test_a_refusal_reply_after_the_request_ends_the_wait(self):
+        reply = comment(BOT, "<!-- This is an auto-generated reply by CodeRabbit -->\nReview rate limited.", "2026-11-08T11:51:00Z")
+        api = self.api([self.request("2026-11-08T11:50:00Z"), reply])
+        out = self.gate(api)
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("rate limited notice", api.posted[0][2])
+
+    def test_quota_out_allows_with_audit_and_requests_nothing(self):
+        other = {"number": 3, "title": "t", "created_at": "2026-11-01T00:00:00Z", "updated_at": "2026-11-08T11:55:00Z",
+                 "head": {"sha": "3333333ccccccc", "ref": "feat/z"}, "user": HUMAN, "draft": False}
+        api = self.api(pulls=[other], **{rf"/repos/{self.repo}/issues/3/comments": [comment(BOT, LIMIT.format(n=20), "2026-11-08T11:55:00Z")],
+                                         rf"/repos/{self.repo}/pulls/3/reviews": []})
+        out = self.gate(api)
+        self.assertEqual(out["decision"], "allow")
+        self.assertEqual(len(api.posted), 1)
+        self.assertIn("rate limited on kodflow/forgejo-raft", api.posted[0][2])
+
+    def test_covered_ineligible_and_unknown_allow(self):
+        out = self.gate(self.api(head=N9))
+        self.assertEqual((out["decision"], out["covered"]), ("allow", True))
+        self.assertIn("covered=true", out["context"])
+        fx = load("kodflow_ktn-linter_816")
+        api = Api(routes_for(fx, "kodflow/ktn-linter", yaml_text=read(os.path.join(FIX, "kodflow_ktn-linter_816.coderabbit.yaml"))))
+        out = probe.merge_gate(gate_opts(repo="kodflow/ktn-linter", pr=816), NOW, api)
+        self.assertEqual((out["decision"], out["eligible"], api.posted), ("allow", False, []))
+        self.assertIn("ignore_usernames", out["context"])
+        api = self.api()
+        out = self.gate(api, policy_dir=None)
+        self.assertEqual((out["decision"], out["eligible"], api.posted), ("allow", "unknown", []))
+        self.assertIn("eligible=unknown", out["context"])
+
+    def test_errors_fail_open(self):
+        out = probe.merge_gate(gate_opts(), NOW, Api({r".*": probe.ApiError(401, "Bad credentials")}))
+        self.assertEqual((out["decision"], out["context"]), ("allow", ""))
+        api = self.api()
+        api.post_comment = lambda *a: (_ for _ in ()).throw(probe.ApiError(403, "forbidden"))
+        out = self.gate(api)
+        self.assertEqual(out["decision"], "allow")
+        self.assertIn("403", out["error"])
+
+    def test_a_stale_cached_false_is_read_again(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.gate(self.api(), cache_dir=d, dry_run=True)              # caches covered=false for A6
+            fx = load("kodflow_forgejo-raft_8")
+            for c in fx["comments"]:
+                c["body"] = c["body"].replace(N9, A6)                     # CodeRabbit reviewed A6 since
+            r = routes_for(fx, self.repo)
+            r[rf"/repos/{self.repo}/pulls"] = []
+            api = Api(r)
+            out = self.gate(api, cache_dir=d)
+            self.assertEqual((out["decision"], out["covered"], api.posted), ("allow", True, []))
+
+    def test_cli(self):
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(probe.main(["merge-gate", "--repo", "a/../b", "--pr", "1"]), 0)
+        self.assertEqual(json.loads(buf.getvalue())["decision"], "allow")
+
 if __name__ == "__main__":
     unittest.main()
