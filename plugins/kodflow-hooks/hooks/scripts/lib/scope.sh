@@ -27,7 +27,10 @@
 # command word the reader cannot see ($cmd) are never reported.
 #
 # Every miss is silence: no jq, no definition found, no `## Command scope`,
-# KODFLOW_SCOPE=off (or `off` in <config>/kodflow/scope-mode). Journal:
+# a line over KF_SCOPE_MAX_CMD (8192) characters, KODFLOW_SCOPE=off (or
+# `off` in <config>/kodflow/scope-mode), both checked before any parse. It
+# stays advisory by the owner's decision of 10/11/2026: it never blocks and
+# never causes a permission prompt. Journal:
 # <session>/scope.jsonl, one line per call that went outside; the advice
 # itself names a command once per agent (<session>/scope-seen/<agent_id>).
 #
@@ -113,8 +116,8 @@ _kf_scope_covered() {
     local rest=("$@")
     while IFS= read -r fam; do
         [ -n "$fam" ] || continue
-        # shellcheck disable=SC2206 # a family's words, split on purpose
-        fw=($fam)
+        # read -a splits without pathname expansion: a family word is never a glob
+        read -r -a fw <<< "$fam"
         [ "${fw[0]}" = "$name" ] || continue
         ok=1; i=1
         while [ $i -lt ${#fw[@]} ]; do
@@ -174,13 +177,26 @@ _kf_scope_s() {
     printf '%s' "${v//[^A-Za-z0-9_:.@,\/ +-]/_}"
 }
 
-# Reads on-tool.sh's ATYPE, AID, TUID, SID and its parsed line.
+# A line longer than this is never read for the advice: no parse, no
+# advice, so a large heredoc costs a specialist what it costs anyone else.
+KF_SCOPE_MAX_CMD=${KF_SCOPE_MAX_CMD:-8192}
+
+# $1 the command line → 0 when the advice may be computed: not switched off,
+# and a line short enough to read at once. Checked before any parse.
+kf_scope_enabled() {
+    local cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude} m=""
+    case "${KODFLOW_SCOPE:-}" in off|OFF|Off) return 1 ;; esac
+    [ "${#1}" -le "$KF_SCOPE_MAX_CMD" ] || return 1
+    [ -r "$cfg/kodflow/scope-mode" ] && read -r m < "$cfg/kodflow/scope-mode" 2>/dev/null
+    case "$m" in off|OFF|Off) return 1 ;; esac
+    return 0
+}
+
+# Reads on-tool.sh's ATYPE, AID, TUID, SID and its parsed line; the caller
+# has asked kf_scope_enabled first.
 kf_scope_check() {
     SCOPE_CTX=""
-    local cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude} m=""
-    case "${KODFLOW_SCOPE:-}" in off|OFF|Off) return 0 ;; esac
-    [ -r "$cfg/kodflow/scope-mode" ] && read -r m < "$cfg/kodflow/scope-mode" 2>/dev/null
-    case "$m" in off|OFF|Off) return 0 ;; esac
+    local cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
     . "$KF_SCOPE_LIB/agents.sh" 2>/dev/null || return 0
     kf_agent_def "$ATYPE" "$cfg" "${CLAUDE_PROJECT_DIR:-${CWD:-}}" || return 0
     kf_scope_families "$KF_AGENT_DEF" || return 0
@@ -204,7 +220,7 @@ kf_scope_check() {
         new=${new:+$new, }$l
     done
     [ -n "$new" ] || return 0
-    [ "$KF_SCOPE_REVIEW" = 1 ] && extra=" (its Plan review inspection commands counted)"
-    SCOPE_CTX="COMMAND SCOPE (kodflow-hooks, advice only): outside the Command scope of ${ATYPE}${extra}, this call runs: ${new}. The call goes on. A step outside the scope is handed back to the caller, or its claim goes under unverified with the command that would settle it. Said once per command; KODFLOW_SCOPE=off turns this advice off."
+    [ "$KF_SCOPE_REVIEW" = 1 ] && extra=", Plan review inspection included"
+    SCOPE_CTX="COMMAND SCOPE (advice only, nothing blocked): not in the Command scope of ${ATYPE}${extra}: ${new}. Fine if the brief allowed it; this is only reported, once per command. KODFLOW_SCOPE=off silences it."
     return 0
 }

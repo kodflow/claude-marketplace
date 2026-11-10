@@ -1180,11 +1180,12 @@ pre_bash() {
 
     # SCOPE (#155): a kodflow-specialists agent's call against the Command
     # scope its own definition declares. Before the gate, since what falls
-    # outside is rarely a verb this hook knows. Advice only, never a refusal,
-    # and silent on any miss (lib/scope.sh).
+    # outside is rarely a verb this hook knows. Advice only, never a refusal
+    # (the owner's decision), silent on any miss, and switched off or past
+    # 8192 characters it is skipped before the line is parsed (lib/scope.sh).
     SCOPE_CTX=""; P_DONE=0
     case "$ATYPE" in kodflow-specialists:*)
-        if [ -n "$AID" ] && . "$LIB/scope.sh" 2>/dev/null; then
+        if [ -n "$AID" ] && . "$LIB/scope.sh" 2>/dev/null && kf_scope_enabled "$CMD"; then
             _p_parse "$CMD"; P_DONE=1
             kf_scope_check
         fi ;;

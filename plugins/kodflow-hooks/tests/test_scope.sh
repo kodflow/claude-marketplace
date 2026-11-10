@@ -30,8 +30,12 @@ check() { if [ "$2" = yes ]; then ok "$1"; else bad "$1" "${3:-}"; fi; }
 # Not a case inside $( ): bash 3.2 misreads its `)`.
 has() { case "$1" in *"$2"*) return 0 ;; esac; return 1; }
 
-printf '{"version":2,"plugins":{"kodflow-specialists@kodflow":[{"scope":"user","installPath":"%s"}]}}\n' \
-    "$ROOT/plugins/kodflow-specialists" > "$CFG/plugins/installed_plugins.json"
+# The shipped definitions first, then a fake copy holding test-only agents
+FAKE=$T/fake
+mkdir -p "$FAKE/agents"
+printf -- '---\nname: fake-glob\n---\n\n## Command scope\n\n- `Bash(g?:*)`\n\n## Role\n' > "$FAKE/agents/fake-glob.md"
+printf '{"version":2,"plugins":{"kodflow-specialists@kodflow":[{"scope":"user","installPath":"%s"},{"scope":"user","installPath":"%s"}]}}\n' \
+    "$ROOT/plugins/kodflow-specialists" "$FAKE" > "$CFG/plugins/installed_plugins.json"
 
 # call COMMAND [AGENT_TYPE] [AGENT_ID] → OUT the hook's stdout, RC its exit code
 # Each call is a new subagent unless AGENT_ID is given: the advice is said
@@ -79,12 +83,12 @@ outside "a pipe's second command is read" "go list ./... | head -3" "head"
 outside "git commit: a subform outside, named with its verb" "git commit -m x" "git commit"
 outside "gh pr create is not gh pr view" "gh pr create --fill" "gh pr"
 outside "nested bash -c is read" "bash -c 'curl -s https://example.org'" "curl"
-outside "several are named once each" "awk 1 go.mod; awk 2 go.mod; sed -n 1p x" "runs: awk, sed."
+outside "several are named once each" "awk 1 go.mod; awk 2 go.mod; sed -n 1p x" ": awk, sed. Fine if the brief allowed it"
 call "make test && runcap go test"; out=$OUT
 a=$(advice "$out")
 check "every outside command is named" "$(has "$a" "make, runcap" && echo yes)" "$a"
-check "the advice names the agent and that the call goes on" "$(has "$a" "kodflow-specialists:developer-specialist-go" && has "$a" "The call goes on" && echo yes)" "$a"
-check "the inspection commands are said to be counted" "$(has "$a" "Plan review inspection commands counted" && echo yes)" "$a"
+check "the advice names the agent and blocks nothing" "$(has "$a" "kodflow-specialists:developer-specialist-go" && has "$a" "nothing blocked" && echo yes)" "$a"
+check "the inspection commands are said to be included" "$(has "$a" "Plan review inspection included" && echo yes)" "$a"
 check "one JSON document on stdout" "$([ "$(printf '%s\n' "$out" | grep -c .)" = 1 ] && printf '%s' "$out" | jq -e . >/dev/null 2>&1 && echo yes)" "$out"
 check "nothing on stderr" "$([ ! -s "$T/err" ] && echo yes)" "$(cat "$T/err")"
 check "journal line written with the commands" "$(tail -n 1 "$SD/scope.jsonl" 2>/dev/null | jq -e '.outside | test("make")' >/dev/null 2>&1 && echo yes)"
@@ -92,28 +96,48 @@ check "the journal does not keep the command line" "$(grep -c 'runcap go test' "
 
 echo "-- said once per agent and command"
 call "head -1 go.mod" kodflow-specialists:developer-specialist-go same1
-check "first time: said" "$(has "$(advice "$OUT")" "runs: head." && echo yes)" "$OUT"
+check "first time: said" "$(has "$(advice "$OUT")" ": head. Fine" && echo yes)" "$OUT"
 call "head -2 go.mod" kodflow-specialists:developer-specialist-go same1
 check "second time, same agent: silent" "$([ "$RC" = 0 ] && [ -z "$(advice "$OUT")" ] && echo yes)" "$OUT"
 call "head -2 go.mod | tail -1" kodflow-specialists:developer-specialist-go same1
-check "a new command of the same agent: only it is said" "$(has "$(advice "$OUT")" "runs: tail." && echo yes)" "$OUT"
+check "a new command of the same agent: only it is said" "$(has "$(advice "$OUT")" ": tail. Fine" && echo yes)" "$OUT"
 call "head -1 go.mod" kodflow-specialists:developer-specialist-go other1
-check "another agent is told again" "$(has "$(advice "$OUT")" "runs: head." && echo yes)" "$OUT"
+check "another agent is told again" "$(has "$(advice "$OUT")" ": head. Fine" && echo yes)" "$OUT"
 check "the journal keeps every call" "$([ "$(grep -c '"agent_id":"same1"' "$SD/scope.jsonl")" = 3 ] && echo yes)"
 call "sed -n 's/x/github-secret/p' f" kodflow-specialists:developer-executor-correctness
-check "an argument is never copied into the advice" "$(has "$(advice "$OUT")" "runs: sed." && ! grep -q github-secret "$SD/scope.jsonl" && echo yes)" "$OUT"
+check "an argument is never copied into the advice" "$(has "$(advice "$OUT")" ": sed. Fine" && ! grep -q github-secret "$SD/scope.jsonl" && echo yes)" "$OUT"
 
 echo "-- an existing guard still wins and the advice rides with a notice"
 call "git push --force origin feat"
 check "a forced push is still refused (exit 2)" "$([ "$RC" = 2 ] && echo yes)" "rc=$RC"
 call "git log -1 && wc -l go.mod"
-check "a git line that passes the guards carries the advice" "$([ "$RC" = 0 ] && has "$(advice "$OUT")" "runs: wc." && echo yes)" "rc=$RC out=$OUT"
+check "a git line that passes the guards carries the advice" "$([ "$RC" = 0 ] && has "$(advice "$OUT")" ": wc. Fine" && echo yes)" "rc=$RC out=$OUT"
 
 echo "-- scopes read from the definitions"
 outside "executor-correctness: grep is not in its scope" "grep -rn x ." "grep" kodflow-specialists:developer-executor-correctness
 silent "executor-correctness: go vet is" "go vet ./..." kodflow-specialists:developer-executor-correctness
 silent "systemd: a prose bullet's leading forms count (grep -n)" "grep -n Type= $T/tmp/sp/x.txt" kodflow-specialists:domain-specialist-systemd
 outside "systemd: a form the bullet forbids after its list does not (sed -i)" "sed -i s/a/b/ $T/tmp/sp/x.txt" "sed" kodflow-specialists:domain-specialist-systemd
+
+echo "-- a family word is never a glob"
+touch "$T/go"
+outside "Bash(g?:*) does not cover go, even with a file named go here" "go vet ./..." ": go. Fine" kodflow-specialists:fake-glob
+rm -f "$T/go"
+
+echo "-- a long line is never read: same cost as any caller"
+big=$(awk 'BEGIN { for (i = 0; i < 4350; i++) printf "line %05d of a large heredoc body, nothing to run here at all\n", i }')
+long="cat > $T/tmp/sp/big.txt <<'EOF'
+$big
+EOF"
+check "the line is a 272 kB heredoc, over 8192 characters (${#long})" "$([ ${#long} -gt 270000 ] && echo yes)"
+t0=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000'); call "$long" general-purpose; t1=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000')
+gp=$((t1-t0))
+t0=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000'); call "$long"; t1=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000')
+sp=$((t1-t0))
+check "a 272 kB heredoc from a specialist: rc 0, no advice" "$([ "$RC" = 0 ] && [ -z "$(advice "$OUT")" ] && echo yes)" "rc=$RC"
+check "within the general-purpose time (${sp} ms vs ${gp} ms)" "$([ "$sp" -le $((gp * 3 / 2 + 300)) ] && echo yes)"
+KF_SCOPE_MAX_CMD=100000000 call "sed -n 1p x # $(printf '%9000s' '')"
+check "the cap is the only reason: under a raised cap the same kind of line is read" "$(has "$(advice "$OUT")" ": sed. Fine" && echo yes)" "$OUT"
 
 echo "-- silence on every miss"
 silent "main thread (no agent_id)" "sed -n 1p x" kodflow-specialists:developer-specialist-go ""

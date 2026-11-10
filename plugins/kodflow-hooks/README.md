@@ -672,20 +672,25 @@ shell reader (nested `bash -c`, pipes, wrappers, `rtk`, `env`, `VAR=`), git's
 global options are walked past, shell plumbing (`cd`, `echo`, `test`…) and a
 command word it cannot see (`$c`) are not reported.
 
-It never refuses and never rewrites: a call outside goes on and carries one
-`additionalContext` line naming the commands outside (the name, and its verb
+It never refuses, never rewrites and never causes a permission prompt, and
+stays advisory by the owner's decision (10/11/2026): a command the brief
+allowed is fine, it is only reported. A call outside goes on and carries one
+terse `additionalContext` line naming the commands outside (the name, and its verb
 when the verb is a plain word, never an argument), once per agent and
 command; every such call is a line of `<session>/scope.jsonl` (agent type and
 id, tool_use_id, the commands outside, never the line). No definition, no
-section, no `Bash(...)` entry, a bare agent name, no jq, `KODFLOW_SCOPE=off`
-or `off` in `<config>/kodflow/scope-mode`: silence. A refusal mode is left to
-a decision: replayed on 480 recorded specialist calls, 425 ran a command
-outside the declared scope, mostly `head`, `sed`, `grep`, `cat`, `tail` and
-`wc` in pipes, which a refusal would have stopped. The identity it relies on
+section, no `Bash(...)` entry, a bare agent name, no jq: silence.
+`KODFLOW_SCOPE=off`, `off` in `<config>/kodflow/scope-mode` and a line over
+8192 characters are decided before the line is parsed, so a large heredoc
+costs a specialist what it costs any other caller. Replayed on 480 recorded
+specialist calls, 425 ran a command outside the declared scope, mostly
+`head`, `sed`, `grep`, `cat`, `tail` and `wc` in pipes: what a refusal would
+have stopped, and why there is none. The identity it relies on
 is recorded: every PreToolUse a subagent sends carries `agent_id` and its
 `agent_type`, the plugin-qualified name for a plugin agent
 (`tests/fixtures/specialist-bash.jsonl`). Cost: about 30 ms on a specialist's
-shell call, none on any other caller. Tested by `tests/test_scope.sh`.
+shell call of at most 8192 characters (measured on the replay), nothing
+past that cap and nothing on any other caller. Tested by `tests/test_scope.sh`.
 
 ### Holes — what was not observed, and is not claimed
 
