@@ -20,6 +20,10 @@
     "en": "{O}Requests still open{X}: {ids} (completed once answered, deleted if moot)",
     "fr": "{O}Demandes encore ouvertes{X} : {ids} (completed si traitées, deleted si caduques)"
   },
+  "stop.continue": {
+    "en": "Your task list still has open items: {items}. Continue with them. If one is blocked, say what is blocking it.",
+    "fr": "Ta liste de tâches a encore des éléments ouverts : {items}. Continue avec eux. Si l'un est bloqué, dis ce qui le bloque."
+  },
   "stop.builtin": {
     "en": "{O}Open tasks (TaskUpdate){X}: {ids} (completed if done, deleted if moot, waiting if blocked on the user)",
     "fr": "{O}Tâches ouvertes (TaskUpdate){X} : {ids} (completed si faites, deleted si caduques, waiting si bloquées sur l'utilisateur)"

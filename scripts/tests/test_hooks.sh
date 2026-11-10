@@ -392,6 +392,57 @@ rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.s
     && ok "a malformed tasks.json: Stop still exits 0 with one document" || bad "stop malformed" "rc=$RC $OUT"
 rm -rf "$MS" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-count"
 
+echo "== Stop · open tasks relaunch the turn, twice per task at most"
+mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-continue"
+blocks() { printf '%s' "$OUT" | jq -e '.decision == "block" and (.reason | test("still has open items: #7 Ship the hook") and test("If one is blocked, say what is blocking it"))' >/dev/null 2>&1; }
+passes() { [ "$RC" -eq 0 ] && ! printf '%s' "$OUT" | jq -e '.decision? == "block"' >/dev/null 2>&1; }
+CONT='{"version":2,"next_id":9,"next_epic":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"Hook"}],
+  "tasks":[{"id":"7","agent":"main","epic":1,"subject":"Ship the hook","status":"pending"},
+           {"id":"8","agent":"main","epic":1,"subject":"Done","status":"completed"}]}'
+printf '%s' "$CONT" > "$MS/tasks.json"
+KODFLOW_LANG=en run Stop "" '{"stop_hook_active":false}' on-stop.sh
+blocks && ok "an open task in an epic blocks the stop with the guide's reminder naming it" || bad "continue block" "$OUT"
+[ "$(printf '%s\n' "$OUT" | grep -c '^{')" -le 1 ] && ok "the relaunch rides in the one JSON document" || bad "continue single document" "$OUT"
+KODFLOW_LANG=en run Stop "" '{"stop_hook_active":true}' on-stop.sh
+blocks && ok "second relaunch, stop_hook_active true: still blocked (counter at 1)" || bad "continue second" "$OUT"
+KODFLOW_LANG=en run Stop "" '{"stop_hook_active":true}' on-stop.sh
+passes && ok "the counter reached 2: the stop goes through" || bad "continue cap" "rc=$RC $OUT"
+rm -f "$T/tmp/sp/stop-count"; KODFLOW_LANG=en run Stop "" '{"stop_hook_active":false}' on-stop.sh
+passes && ok "the cap holds across turns for the same task" || bad "continue cap kept" "rc=$RC $OUT"
+rm -f "$T/tmp/sp/stop-continue" "$T/tmp/sp/stop-count"
+printf '%s' "$CONT" | jq -c '.tasks[0].status = "waiting"' > "$MS/tasks.json"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+passes && ok "only waiting tasks: the stop goes through" || bad "continue waiting" "rc=$RC $OUT"
+printf '%s' "$CONT" | jq -c '.tasks += [{"id":"9","agent":"main","epic":1,"subject":"After","status":"pending","blockedBy":["10"]},{"id":"10","agent":"main","epic":1,"subject":"Go","status":"waiting","assignee":"human"}] | .tasks[0].status = "completed"' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+passes && ok "a pending task blocked by a waiting one does not relaunch" || bad "continue blocked_by" "rc=$RC $OUT"
+printf '%s' "$CONT" | jq -c '.tasks = [.tasks[1]]' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+passes && ok "no open task: the stop goes through" || bad "continue none" "rc=$RC $OUT"
+rm -f "$MS/tasks.json" "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+passes && ok "no task store: the stop goes through" || bad "continue no store" "rc=$RC $OUT"
+printf '{"epics":7,"tasks":[1,' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+passes && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] \
+    && ok "a malformed task store: the stop goes through, exit 0, one document" || bad "continue malformed" "rc=$RC $OUT"
+printf '%s' "$CONT" > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false,"agent_id":"a1b2","agent_type":"Explore"}' on-stop.sh
+passes && ok "never for a subagent" || bad "continue subagent" "rc=$RC $OUT"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false,"permission_mode":"plan"}' on-stop.sh
+passes && ok "never in plan mode" || bad "continue plan" "rc=$RC $OUT"
+rm -f "$T/tmp/sp/stop-count"; stop_env KODFLOW_STOP_CONTINUE=off; RC=$?
+passes && ok "KODFLOW_STOP_CONTINUE=off: no relaunch" || bad "continue off" "rc=$RC $OUT"
+printf '{"agents":{"w1":{"type":"general-purpose","started":%s,"stopped":null}}}' "$(date +%s)" > "$MS/agents.json"
+printf '%s' "$CONT" | jq -c '.tasks[0].status = "in_progress" | .tasks[0].worker = "general-purpose" | .tasks[0].worker_id = "w1"' > "$MS/tasks.json"
+rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
+passes && ok "a task in progress on a running subagent does not relaunch" || bad "continue live worker" "rc=$RC $OUT"
+chmod 000 "$T/tmp/sp" 2>/dev/null
+printf '%s' "$CONT" > "$MS/tasks.json"; rm -f "$MS/agents.json"
+run Stop "" '{"stop_hook_active":false}' on-stop.sh
+chmod 755 "$T/tmp/sp" 2>/dev/null
+passes && ok "a counter that cannot be written blocks nothing" || bad "continue unwritable" "rc=$RC $OUT"
+rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-continue"
+
 echo "== Stop · one task in progress per worker"
 mkdir -p "$MS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
 printf '%s' '{"version":2,"epics":[{"id":1,"agent":"main","title":"A"},{"id":2,"agent":"main","title":"B"}],"active":{"main":1},"tasks":[
