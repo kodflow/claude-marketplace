@@ -148,24 +148,29 @@ export function definitionPaths(
 
 export type Candidate = {
   model: string;
-  source: "call" | "frontmatter" | "env" | "parent";
+  source: "call" | "frontmatter" | "env" | "parent" | "own";
 };
 
 /**
  * What a spawn would run on, by the engine's precedence: a fork inherits the
  * parent's; CLAUDE_CODE_SUBAGENT_MODEL with CLAUDE_CODE_SUBAGENT_MODEL_FORCE
- * set overrides everything else; then the call's model, the definition's
- * (`inherit` meaning the parent's), CLAUDE_CODE_SUBAGENT_MODEL, the parent's.
+ * set overrides everything else; FORCE with no CLAUDE_CODE_SUBAGENT_MODEL
+ * ignores the call's model too (the parent's model, or Explore's own, which
+ * is not known here: an empty model, gated by nothing); then the call's
+ * model, the definition's (`inherit` meaning the parent's),
+ * CLAUDE_CODE_SUBAGENT_MODEL, the parent's.
  */
 export function candidate(
   e: { model?: unknown; fork?: unknown; parentModel?: unknown },
   definition: string | undefined,
   envModel: string | undefined,
   force = false,
+  subagentType?: string,
 ): Candidate {
   const parent: Candidate = { model: String(e.parentModel ?? ""), source: "parent" };
   if (e.fork) return parent;
   if (force && envModel) return { model: envModel, source: "env" };
+  if (force) return subagentType === "Explore" ? { model: "", source: "own" } : parent;
   if (typeof e.model === "string" && e.model) return { model: e.model, source: "call" };
   const fm = frontmatterModel(definition);
   if (fm && fm.toLowerCase() === "inherit") return parent;
@@ -231,7 +236,7 @@ export async function judgeSpawn(
   if (!tokens.length) return { kind: "pass", why: "nothing gated" };
   const type = typeof e.subagentType === "string" ? e.subagentType : "";
   const def = type ? await port.definition(type) : undefined;
-  const c = candidate(e, def, await port.envModel(), await port.envForce());
+  const c = candidate(e, def, await port.envModel(), await port.envForce(), type);
   if (!isGated(c.model, tokens)) return { kind: "pass", why: `ungated (${c.source})`, model: c.model };
   return consent(c.model, `${c.source} model of ${type || "the agent"}`, mode, port, "dispatch");
 }
