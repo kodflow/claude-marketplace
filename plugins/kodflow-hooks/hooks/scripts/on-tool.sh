@@ -1293,7 +1293,8 @@ pre_bash() {
             "Merging is the main thread's decision." \
             "Report the PR and its CI state; stop there."
         [ -n "$F_DEFPUSH" ] && _motif_block push-default "COMMAND BLOCKED — a subagent does not push to the default branch ($F_DEFPUSH)" \
-            "Push your feature branch and open a PR."
+            "Push your feature branch and open a PR." \
+            "A new repository whose remote has no default branch yet: report it; the main thread makes that first push."
     elif [ -n "$F_MERGE" ]; then
         # The main thread's merge is journaled, never asked about.
         ROOT_GUARD=merge

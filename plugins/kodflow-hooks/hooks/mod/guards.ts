@@ -896,7 +896,10 @@ export async function verdict(
       return {
         motif: "push-default",
         title: `COMMAND BLOCKED — a subagent does not push to the default branch (${f.defaultPush})`,
-        lines: ["Push your feature branch and open a PR."],
+        lines: [
+          "Push your feature branch and open a PR.",
+          "A new repository whose remote has no default branch yet: report it; the main thread makes that first push.",
+        ],
       };
   }
   return undefined;
