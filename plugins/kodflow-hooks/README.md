@@ -586,6 +586,52 @@ pinned_model, pinned_effort, tool_use_id`. Reasons: `tier`, `tier-sub`,
 `tier-fork`, `tier-skew`, `tier-inert`, `tier-breaker`, `tier-nodef`,
 `tier-nojq`, `tier-unparsed`. Tests: `tests/test_tier_judge.sh`.
 
+#### Tier knobs and motifs
+
+| Knob | Effect |
+|------|--------|
+| `KODFLOW_TIER=off\|warn\|enforce` | the environment's mode; wins over both files unless one of the three says `off` |
+| `<config>/kodflow/sessions/<sid>/tier-mode` | the session's mode (one word) |
+| `<config>/kodflow/tier-mode` | the global mode (one word) |
+
+`<config>` is `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`. Precedence: `off` in any of
+the three wins; else `KODFLOW_TIER` > session file > global file > **warn**;
+`tier-skew` turns enforce into warn. An unknown word is ignored. To turn the
+check off for the session, the command the advice prints:
+`printf off > '<config>/kodflow/sessions/<sid>/tier-mode'` (the path is
+single-quoted, an embedded `'` written `'\''`, the same in the shell judge and
+in `tier.ts`).
+
+**Warn is the default and it is what ships.** Enforce is a later decision,
+taken on the measured week of warn (`usage_report.py` joins `tier.jsonl` to the
+Agent dispatches by `tool_use_id` and counts `would_refuse`, action and reason
+per week): false positives under 2 % and non-conformity under 10 %.
+
+Motifs (the `reason` of a journal line, the `[motif:…]` of a message):
+
+| Motif | Meaning |
+|-------|---------|
+| `tier` | a main-thread dispatch names no model or no effort |
+| `tier-sub` | the same, from a subagent |
+| `tier-workflow` | an `agent()` of a Workflow, seen at spawn (logged, never refused) |
+| `tier-fork` | a fork: continues the orchestrator, exempt, counted apart |
+| `tier-skew` | the hooks' table and the skills' table differ: warn only |
+| `tier-inert` | enforce, but the caller never received the table: passes |
+| `tier-breaker` | the breaker let a repeated refusal through |
+| `tier-nodef` | no readable definition for the type: passes |
+| `tier-nojq` | `jq` is absent: passes |
+| `tier-unparsed` | the payload or the script could not be read reliably: passes |
+| `tier-nonliteral` | an `agent()` option that is not a literal (spread, computed key): passes |
+| `tier-unjudged` | a Workflow given by `name` alone: not judged |
+| `tier-resume` | a Workflow resume (`resumeFromRunId`): not judged |
+| `tier-teammate` | a named teammate agent at spawn: logged |
+| `tier-nomod` | reserved, not emitted yet: with the mod absent no hook sees a Workflow, so it passes without a journal line |
+
+Shared vectors: `tests/fixtures/tier-vectors.jsonl` is read by
+`tests/test_tier_vectors.sh` (shell) and, through the generated
+`tests/mod/tier-vectors.ts` (`scripts/check-tier-vectors.sh --write`), by
+`tests/mod/tier.test.ts`.
+
 ### Agent feedback (`KODFLOW_FEEDBACK=off`)
 
 `SubagentStart` adds rule 6: end the answer with `## Agent feedback` (an

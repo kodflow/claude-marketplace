@@ -53,7 +53,7 @@ _kf_tier_pinned() {
 }
 
 # The mode and where it came from: KT_MODE, KT_MSRC. `off` in any source wins.
-_kf_tier_mode() {   # $1 = session dir, $2 = config dir
+_kf_tier_mode() {   # $1 = session dir, $2 = config dir, $3 = tier-skew marker (optional)
     local env f v src
     KT_MODE=warn KT_MSRC=default
     env=$(_kf_tier_lower "${KODFLOW_TIER:-}")
@@ -70,9 +70,21 @@ _kf_tier_mode() {   # $1 = session dir, $2 = config dir
     fi
     for f in "KODFLOW_TIER:$env" "$1/tier-mode:$sess" "$2/kodflow/tier-mode:$glob"; do
         v=${f##*:}; src=${f%:*}
-        case "$v" in warn|enforce) KT_MODE=$v KT_MSRC=$src; return 0 ;; esac
+        case "$v" in warn|enforce) KT_MODE=$v KT_MSRC=$src; break ;; esac
     done
+    # Skew: the tables differ, so the advice may not be this table's: no refusal.
+    if [ "$KT_MODE" = enforce ] && [ -n "${3:-}" ] && [ -f "$3" ]; then
+        KT_MODE=warn KT_MSRC=tier-skew
+    fi
     return 0
+}
+
+# The command that turns the check off, quoted like tier.ts's offCommand:
+# printf off > '<path>', an embedded ' written '\''.
+_kf_tier_offcmd() {
+    local p=$1 q="'" esc
+    esc=${p//$q/$q\\$q$q}
+    printf "printf off > '%s'" "$esc"
 }
 
 # One line of the journal. Reads the caller's locals.
@@ -138,7 +150,7 @@ kf_tier_check() {
     local sub=0; [ -n "$t_aid" ] && sub=1
     local motif=tier; [ $sub = 1 ] && motif=tier-sub
 
-    _kf_tier_mode "$kt_sdir" "$cfg"
+    _kf_tier_mode "$kt_sdir" "$cfg" "$kt_sdir/tier-skew"
     [ "$KT_MODE" = off ] && return 0
 
     if [ $hasjq = 0 ]; then _kf_tier_log pass tier-nojq; return 0; fi
@@ -164,9 +176,6 @@ kf_tier_check() {
 
     # Skew: the table of the hooks and the one the skills carry differ, so the
     # instruction the model read may not be this table: advice only.
-    if [ "$KT_MODE" = enforce ] && [ -f "$kt_sdir/tier-skew" ]; then
-        KT_MODE=warn KT_MSRC=tier-skew
-    fi
 
     case "$t_ex" in
     true) _kf_tier_log pass tier; return 0 ;;   # [tier-exempt: …] in the description or the prompt
@@ -230,7 +239,8 @@ kf_tier_check() {
         enforce=1
     fi
 
-    local rows msg what src
+    local rows msg what src off_cmd
+    off_cmd=$(_kf_tier_offcmd "$kt_sdir/tier-mode")
     rows=$(_kf_tier_rows "$table" "$t_st")
     what=${t_st:-general-purpose}
     src="from $KT_MSRC"; [ "$KT_MSRC" = default ] && src=default
@@ -240,7 +250,7 @@ Pass the $missing on the call, from the tier table (kodflow-hooks/hooks/tier-tab
 ${rows}
 Take the row that matches the task's role.
 Mode: $KT_MODE ($src).
-To turn this check off for the session: printf off > $kt_sdir/tier-mode
+To turn this check off for the session: $off_cmd
 [motif:tier]"
 
     if [ $enforce = 1 ]; then

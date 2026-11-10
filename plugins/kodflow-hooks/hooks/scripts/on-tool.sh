@@ -95,6 +95,8 @@ _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
 }
 # TIER · does a delegation say its model and its effort? lib/tier.sh. Called
 # at the head of every Agent/Task path, before any early exit, mod or no mod.
+# The mode defaults to warn (advice only); enforce is opt-in (KODFLOW_TIER or a
+# tier-mode file), see _kf_tier_mode in lib/tier.sh.
 _tier_check() {
     [ -n "${TIER_DONE:-}" ] && return 0; TIER_DONE=1
     . "${BASH_SOURCE[0]%/*}/lib/tier.sh" 2>/dev/null || return 0
