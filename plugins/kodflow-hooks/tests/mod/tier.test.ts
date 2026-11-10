@@ -546,10 +546,10 @@ test("the context added is the recorded accepted shape: an array of strings next
 test("the project slug is the engine's: every character outside [A-Za-z0-9] becomes -", async ($, on) => {
   // T0: /workspace/probe → -workspace-probe (tests/fixtures/tier-workflow-results.jsonl)
   expect(projectSlug("/workspace/probe")).toBe("-workspace-probe");
-  expect(projectSlug("/Users/a b/my_proj.v2@x")).toBe("-Users-a-b-my-proj-v2-x");
-  const cwd = "/Users/a b/my_proj.v2";
+  expect(projectSlug("/workspace/a b/my_proj.v2@x")).toBe("-workspace-a-b-my-proj-v2-x");
+  const cwd = "/workspace/a b/my_proj.v2";
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_TIER: "enforce" }, { cwd });
-  const persisted = `${CFG}/projects/-Users-a-b-my-proj-v2/${SID}/workflows/scripts/bare-wf_9.js`;
+  const persisted = `${CFG}/projects/-workspace-a-b-my-proj-v2/${SID}/workflows/scripts/bare-wf_9.js`;
   h.files.set(persisted, BARE);
   const r: any = await $.tool.call(wf({ scriptPath: persisted }));
   expect(r.deny).toContain("agent() #1");
@@ -569,8 +569,8 @@ test("a slug over 200 characters: cut, any base-36 suffix, this session only", a
 });
 
 test("the off command is quoted: a space or a quote in the config path survives the copy", () => {
-  expect(offCommand("/Users/Jane Doe/.claude/kodflow/sessions/s")).toBe(
-    "printf off > '/Users/Jane Doe/.claude/kodflow/sessions/s/tier-mode'",
+  expect(offCommand("/workspace/Jane Doe/.claude/kodflow/sessions/s")).toBe(
+    "printf off > '/workspace/Jane Doe/.claude/kodflow/sessions/s/tier-mode'",
   );
   expect(offCommand("/x/it's")).toBe("printf off > '/x/it'\\''s/tier-mode'");
 });
