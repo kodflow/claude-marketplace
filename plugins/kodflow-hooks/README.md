@@ -552,6 +552,41 @@ session — Fable today (model-policy §6).
   starts on a gated model (the payload's `model`, absent in a headless run,
   else the settings', else `ANTHROPIC_MODEL`).
 
+### The tier judge for Agent calls (`KODFLOW_TIER=off|warn|enforce`)
+
+`lib/tier.sh`, called at the head of the Agent/Task handling of `on-tool.sh`
+(before every early exit, the agent_id one included, mod beating or not),
+checks that a delegation does not leave its model or its effort to
+inheritance. It needs `jq` (absent: the call passes, `tier-nojq` in the
+journal) and reads only `.tool_input.*`: the payload's top-level `effort` is
+the session's. A field is **pinned** by the call, by the agent definition's
+frontmatter (`kf_fm_field`; `null`, `~` and, for a model, `inherit` pin
+nothing), or by the environment (`CLAUDE_CODE_SUBAGENT_MODEL`;
+`CLAUDE_CODE_EFFORT_LEVEL` other than `auto`/`unset`). With
+`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` the call's model is ignored by the engine:
+the environment's model, else the parent's (Explore: its own), so the model is
+not missing. Exempt: the rows of `tier-table.tsv` (exempt agents, `fork`,
+`mode plan`) and `[tier-exempt: …]` in the description or the prompt. A type
+with no readable definition (not a built-in) passes with `tier-nodef`.
+
+Mode: `off` in any source wins; else `KODFLOW_TIER`, then
+`<session>/tier-mode`, then `<config>/kodflow/tier-mode`, then **warn**;
+`<session>/tier-skew` (written by `on-tier.sh`) forces warn. In warn nothing is
+refused: the advice comes back as `additionalContext` (one message naming every
+missing field, the rows of the table for the role, the mode and its source,
+and `printf off > <config>/kodflow/sessions/<sid>/tier-mode`). In enforce the
+call is refused (exit 2) only when the caller's marker exists
+(`tier-seen/main` or `tier-seen/<agent_id>`, written when the table was
+injected), else it passes as `tier-inert`. The breaker lets the 4th distinct
+refusal of one (subagent_type, caller) through (`tier-breaker`; counted by
+`tool_use_id` in the append-only `<session>/tier-count`).
+
+Every verdict is one line of `<session>/tier.jsonl`: `ts, mode, mode_source,
+would_refuse, action, reason, subagent_type, caller, has_model, has_effort,
+pinned_model, pinned_effort, tool_use_id`. Reasons: `tier`, `tier-sub`,
+`tier-fork`, `tier-skew`, `tier-inert`, `tier-breaker`, `tier-nodef`,
+`tier-nojq`, `tier-unparsed`. Tests: `tests/test_tier_judge.sh`.
+
 ### Agent feedback (`KODFLOW_FEEDBACK=off`)
 
 `SubagentStart` adds rule 6: end the answer with `## Agent feedback` (an

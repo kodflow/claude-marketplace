@@ -93,6 +93,14 @@ _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
         "The user can also set KODFLOW_FABLE=allow." "[motif:fable]" >&2
     exit 2
 }
+# TIER · does a delegation say its model and its effort? lib/tier.sh. Called
+# at the head of every Agent/Task path, before any early exit, mod or no mod.
+_tier_check() {
+    [ -n "${TIER_DONE:-}" ] && return 0; TIER_DONE=1
+    . "${BASH_SOURCE[0]%/*}/lib/tier.sh" 2>/dev/null || return 0
+    kf_tier_check
+    return 0
+}
 _fable_fast() {
     [ -n "${FABLE_DONE:-}" ] && return 0; FABLE_DONE=1
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
@@ -104,7 +112,12 @@ _fable_fast() {
     # then the call, the frontmatter (inherit: the parent's, unknown here),
     # then CLAUDE_CODE_SUBAGENT_MODEL.
     local env=${CLAUDE_CODE_SUBAGENT_MODEL:-} heir=0
-    case "${CLAUDE_CODE_SUBAGENT_MODEL_FORCE:-}" in ''|0|false|no|off) ;; *) [ -n "$env" ] && m=$env && why="CLAUDE_CODE_SUBAGENT_MODEL (forced)" ;; esac
+    # A fork runs on the parent's model whatever the call says. _FORCE set:
+    # the call is ignored whatever the environment holds; with no
+    # CLAUDE_CODE_SUBAGENT_MODEL the model is the parent's (Explore: its own),
+    # which a PreToolUse payload does not carry, so nothing is gated here.
+    [ "$FF_TYPE" = fork ] && return 0
+    case "${CLAUDE_CODE_SUBAGENT_MODEL_FORCE:-}" in ''|0|false|no|off) ;; *) [ -n "$env" ] || return 0; m=$env; why="CLAUDE_CODE_SUBAGENT_MODEL (forced)" ;; esac
     [ -z "$m" ] && [ -n "$FF_MODEL" ] && m=$FF_MODEL && why="the call's model"
     t=$FF_TYPE
     if [ -z "$m" ] && [ -n "$t" ]; then
@@ -154,7 +167,9 @@ if [[ $INPUT =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PreToolUse\" ]] &&
             [ -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/${fp_sid:-default}/triage-pending" ] || exit 0 ;;
         Agent|Task)
             # The gated-model fallback, every caller, no jq; then only the
-            # main thread goes on, to the routing gate (pre_agent).
+            # main thread goes on, to the routing gate (pre_agent). The tier
+            # judge comes first and sees every caller.
+            _tier_check
             _fable_fast
             if [[ $INPUT =~ \"agent_id\":\ ?\"[^\"]+\" ]]; then exit 0; fi ;;
         *)
@@ -1838,6 +1853,7 @@ EOF
 pre_agent() {
     # A payload the fast path did not recognise (another JSON layout) still
     # meets the gated-model fallback, decoded by jq here
+    [ "$EV" = PreToolUse ] && _tier_check
     [ "$EV" = PreToolUse ] && _fable_fast
     [ "$EV" = PreToolUse ] && [ -z "$AID" ] || { _log; exit 0; }
     _isolation_gate
