@@ -14,6 +14,7 @@
 #   kf_skill_def NAME CFG PROJECT → KF_SKILL_DEF, a skill's SKILL.md
 #   kf_fm_model FILE              → KF_FM_MODEL, its frontmatter model
 #   kf_fm_effort FILE             → KF_FM_EFFORT, its frontmatter effort
+#   kf_fm_field FILE KEY          → KF_FM_FIELD, any one-line frontmatter key
 
 KF_AGENTS_LIB=${BASH_SOURCE[0]%/*}
 
@@ -134,7 +135,7 @@ _kf_fm_get() {
         NR == 1 { sub(/^\357\273\277/, ""); if ($0 != "---") exit; next }
         NR > 61 || $0 == "---" { exit }
         index($0, key ":") == 1 {
-            v = $0; sub(/^[A-Za-z]+:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
+            v = $0; sub(/^[A-Za-z_-]+:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
             sub(/[[:space:]]+$/, "", v)
             if (v ~ /^".*"$/ || v ~ /^'\''.*'\''$/) v = substr(v, 2, length(v) - 2)
             print v; exit
@@ -150,4 +151,11 @@ kf_fm_model() {
 kf_fm_effort() {
     KF_FM_EFFORT=$(_kf_fm_get "$1" effort)
     [ -n "$KF_FM_EFFORT" ]
+}
+
+# Any one-line frontmatter key, the same reading (BOM, CRLF, quotes, comment).
+# The raw value comes back: `null` or `~` are the caller's to judge.
+kf_fm_field() {
+    KF_FM_FIELD=$(_kf_fm_get "$1" "$2")
+    [ -n "$KF_FM_FIELD" ]
 }
