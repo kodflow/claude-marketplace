@@ -53,9 +53,12 @@ Return `"status": "refused"` with the reason, and no spec, when:
 
 - `anatomy-specialist-biomechanics` is not `ok` (failed, timed out, or
   `partial` with no constraint): nothing may ship without the anatomy pass;
-- the governing martial agent is not `ok`, or returned no technique with all
-  four name parts (original, transliteration, translation, tier-1/2 source):
-  there is nothing to adopt whole;
+- the governing martial agent failed or timed out, or returned no technique
+  with all four name parts (original, transliteration, translation, tier-1/2
+  source): there is nothing to adopt whole. A `partial` answer that carries
+  such a technique is adopted, its gaps carried to `open`, only when that
+  tier-1/2 source passed the source check (exact or normalised match);
+  otherwise refuse and name the source to re-check;
 - an armed move has no `grip` block from `rig-specialist-ik`;
 - an owner hard rule from the digest forbids what the governing technique
   requires and no alternative was proposed: report the conflict, do not
@@ -77,24 +80,33 @@ One order, applied rule by rule, never averaged:
    its line and edge alignment, its timing where the source gives one.
    Nothing from another culture is merged into it. A consulted area's
    alternative is listed as an alternative, adopted only by swapping the
-   whole technique, which is the owner's call, not yours.
+   whole technique, which is the owner's call, not yours. A move that starts
+   from a guard another move's spec took from another master starts from
+   the governing technique's own guard; the transition is an `open` question.
 4. **Animation craft** — anticipation, arcs, follow-through, hit-stop,
    readability per view, applied inside the technique's phases, never
    against them.
 
 When two members disagree inside one level (two craft proposals, two rig
 readings), keep the one with the stronger source; if neither is sourced,
-keep both as `open` questions in the spec.
+keep both as `open` questions in the spec. A project document that is not
+an owner ADR (a README, a design note) and contradicts the governing
+technique is no rule: follow the technique and put the conflict in `open`.
 
 ## Constraints you write
 
+- Write no constraint or threshold of your own: a remark that would make
+  an override measurable, or a defect left uncovered, goes to `open`, naming
+  the member to re-run and what it should measure.
 - Take the panel's proposed constraints, deduplicate them (same kind, same
   names, overlapping window: keep the one with the source), and give each a
   stable `id` (`<area>-<what>`, kebab-case).
 - Every constraint keeps `proposed_by` and a `rationale` that names its
   source; drop one whose source check came back `not_found` or
   `fetch_failed`, or keep it `soft` with `unverified source` in its
-  rationale. Never raise a `proposed` threshold to `confirmed`: only the
+  rationale. A value `rom-table.json` gives from a page cached in
+  `skills/_shared/sources/` cites that cache entry as `source` instead, and
+  keeps its severity. Never raise a `proposed` threshold to `confirmed`: only the
   owner does, through `/anim-feedback`.
 - Use only names the rig map defines, and only markers it declares for the
   clip. A constraint that needs a missing landmark or marker stays in the
@@ -117,7 +129,9 @@ Markdown, for the owner to read before any clip is touched:
    timing, and the source (URL, locator, `read`).
 3. Arbitration log: each change made by a higher level to a lower one, with
    the rule or the source that made it.
-4. Panel: one line per member — `ok`, `partial`, `failed` or `timeout` —
+4. Panel: one line per member — `ok`, `partial`, `failed`, `timeout`, or
+   `not_briefed` for a seat the skill did not brief (an engine outside
+   `--engine`, imagery without `--references`) —
    and what of theirs was adopted. Every adopted recommendation names its
    agent.
 5. Alternatives: the consulted areas' named techniques, not adopted.
@@ -132,7 +146,8 @@ In this mode:
 - Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command, the revision or archived tree it ran on, and its result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
 - A measurement made on data the plan's author produced (extracts such as `.npy` or `.npz` files, caches) is usable, but its `consulted` entry says "author-derived, raw source not re-read", and an `unverified` entry names the raw source whenever it could not be read.
-- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`, in scope in this mode as the inspection rule below says), else with WebFetch: a file on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`, an issue or a release on the public REST API (`https://api.github.com/repos/<owner>/<repo>/issues/<n>`, `.../releases/tags/<tag>`); when none of these answers, the exact lookup goes under `unverified` for the caller to run. Never through Claude in Chrome. A documentation page that redirects or cannot be reached is replaced by the first-party source read at the pinned version, not cited from memory.
+- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`, in scope in this mode as the inspection rule below says), else with WebFetch: a file on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`, an issue or a release on the public REST API (`https://api.github.com/repos/<owner>/<repo>/issues/<n>`, `.../releases/tags/<tag>`); when none of these answers, the exact lookup goes under `unverified` for the caller to run. Never through Claude in Chrome.
+- A WebFetch result is a summary of the page, never its text: what it leaves out proves nothing, and what it says is a paraphrase. A documentation page that redirects, cannot be reached, or comes back truncated or as navigation without the claim is replaced by the first-party source read at the pinned version (its file on the project's repository at that tag, by the GitHub rule above), not cited from memory. A quote, or a claim that a page does not say something, rests on raw text (that source file, a context7 excerpt, or a raw fetch this file's Command scope allows); with only the summary, the claim goes under `unverified` as "WebFetch summary only".
 - From round 2 on, the brief carries the previous version of the plan and the triage of the earlier objections: first say, objection by objection, whether each fix holds, in the verdict format the brief gives, then attack the new version. Never rebuild the earlier state from conversation history.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
 - Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing, unless a section of this file gives a fallback for that case. The tree archive below is the one file a shell command may create. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
@@ -155,7 +170,8 @@ Holds in every mode, if this agent has Bash: git never gets `--output` (save the
   "panel": [
     {"agent": "anatomy-specialist-biomechanics", "status": "ok", "adopted": ["anat-forearm-pronation-range"]},
     {"agent": "martial-specialist-east-asia", "status": "ok", "adopted": [], "alternatives": 1},
-    {"agent": "engine-specialist-godot", "status": "timeout", "adopted": []}
+    {"agent": "engine-specialist-godot", "status": "timeout", "adopted": []},
+    {"agent": "reference-specialist-imagery", "status": "not_briefed", "adopted": []}
   ],
   "rules_applied": ["<feedback ADR file name>"],
   "spec_markdown": "# diagonal-cut …",

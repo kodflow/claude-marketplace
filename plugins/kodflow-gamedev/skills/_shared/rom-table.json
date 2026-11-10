@@ -1,7 +1,7 @@
 {
   "schema": "rom-table/v1",
   "as_of": "2026-10-30",
-  "note": "Every value comes from the plugin's research of 2026-10-30 and nothing else. passive_max_deg is a measured passive ceiling, not a combat amplitude: a pose that reaches it is at the edge of the normal adult range and reads as strained. functional is the comfort arc or the minimum needed for daily tasks (Ryu 1991, Morrey 1981), the zone a natural move stays in. Angles are clinical, measured from the anatomical neutral position, not from a rig's rest pose (T-pose or A-pose): convert before comparing with a joint_angle measured on a track. Norms diverge by 5 to 12 degrees between CDC and AAOS/AMA (protocol, population): name the reference applied and keep thresholds soft. Tier 3 entries may inform a proposed threshold only, said so in its rationale. approx true means the research gives the value as approximate (~).",
+  "note": "Every value comes from the plugin's research of 2026-10-30 and nothing else. passive_max_deg is the CDC population mean of the passive end range (SD given), used as a ceiling, not a combat amplitude: a pose that reaches it is at the edge of the normal adult range and reads as strained. functional is the comfort arc or the minimum needed for daily tasks (Ryu 1991, Morrey 1981), the zone a natural move stays in. Angles are clinical, measured from the anatomical neutral position, not from a rig's rest pose (T-pose or A-pose): convert before comparing with a joint_angle measured on a track. Norms diverge by 5 to 12 degrees between CDC and AAOS/AMA (protocol, population): name the reference applied and keep thresholds soft. Tier 3 entries may inform a proposed threshold only, said so in its rationale. approx true means the research gives the value as approximate (~).",
   "joints": [
     {
       "joint": "shoulder",
@@ -398,7 +398,7 @@
     },
     {
       "what": "age- and sex-stratified values",
-      "why": "a sex-stratified pronation value for ages 20 to 44 was rejected at verification; use all-ages values"
+      "why": "a sex-stratified pronation value for ages 20 to 44 was rejected at verification, yet later reads found sex-stratified values in the CDC PDF: re-read it before adding any; use all-ages values until then"
     },
     {
       "what": "measured kinematics of a sword cut",

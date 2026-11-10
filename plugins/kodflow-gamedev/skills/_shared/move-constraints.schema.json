@@ -272,7 +272,8 @@
           ]
         },
         "clip": {
-          "type": "string"
+          "type": "string",
+          "description": "The one clip this constraint is measured on (default: the file's clip). A check that must hold on several clips is written once per clip, the clip in its id."
         },
         "window": {
           "$ref": "#/$defs/window"
@@ -370,6 +371,7 @@
             }
           },
           "then": {
+            "description": "target's position in ref's local frame: its x, y or z, or its distance; with orientation, the angle between an axis of target and an axis of ref, each in its own local frame.",
             "required": [
               "target",
               "ref"
@@ -479,6 +481,7 @@
                 "$ref": "#/$defs/name"
               },
               "metric": {
+                "description": "velocity_axis_angle: angle between the point's velocity and blade_axis, folded to 0-90 (the axis has no sign): 90 edge-led, 0 point-led, so a bound above 90 never binds. chord_arc_ratio: chord over path length, 1 for a straight line. displacement_angle: the chord against `against`. path_length: metres travelled.",
                 "enum": [
                   "velocity_axis_angle",
                   "chord_arc_ratio",
@@ -504,6 +507,7 @@
             }
           },
           "then": {
+            "description": "Cyclic lag of b behind a as a share of the window (a cross-correlation that wraps): a phase only on a looping clip whose window spans whole cycles. A series that does not move, such as an arm held in guard, is unmeasurable, hence unevaluated.",
             "required": [
               "a",
               "b"

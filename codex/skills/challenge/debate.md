@@ -96,7 +96,7 @@ Why each flag earns its place:
 
 | Flag | Why |
 |------|-----|
-| `--output-schema` | the same objection schema the Claude reviewers return, so triage treats every panel member identically instead of parsing prose; the objections come back as an array, and its order gives their local numbers |
+| `--output-schema` | the six fields the Claude reviewers answer in prose, given as JSON, so triage reads every panel member by the same fields; the objections come back as an array, and its order gives their local numbers; from round 2 the schema adds a `prior` array, one `{id, verdict, reason, evidence, remedy}` per row of Codex's triage-ID table (evidence and remedy filled on a reopen), or its verdicts on prior objections have no field to land in |
 | `-o <file>` | the verdict lands in a file rather than being scraped out of progress output |
 | `-s read-only` | a reviewer has no business writing; the sandbox makes that structural rather than a request |
 | `--ephemeral` | no session state for a one-shot review |
@@ -158,9 +158,13 @@ no scratch directory leaves the reviewer read-only everywhere: the claim it coul
 have measured goes under `unverified`.
 
 Gather the **project records** once too: the documents and ADRs Phase 0 already
-hands to reviewers, the verification scripts the plan cites (a dependency or
+hands to reviewers, the threat model when the repository keeps one (what is
+public, who may attack it), the verification scripts the plan cites (a dependency or
 layering check, a lint gate), and the benchmark methodology file when the plan
-makes a performance claim. Find them in the repository and the plan; each goes
+makes a performance claim. When the plan edits a file the repository keeps in
+several copies or generates, name the canonical source and the check that
+holds the others (a CI diff, a sync or build script), so no reviewer argues
+from a copy. Find them in the repository and the plan; each goes
 in the brief as a path with a one-line purpose, so a specialist reads the
 domain's founding decisions instead of rediscovering them.
 
@@ -241,11 +245,14 @@ the fix was applied>
 
 Your objections by triage ID (round 2 on; omit in round 1):
 | triage ID | your local number | round |
-<one row per objection you raised, merged ones included>
+<one row per triage ID that carries an objection of yours, merged ones included;
+one local objection split across two IDs is a row for each ID>
 Before any new objection, under a heading "Prior objections", give
 one verdict per triage ID: whether the fix is correct, or why the rejection is
 wrong, one line each as `<ID> — fixed | reopen — <reason>` (fixed: nothing is
-left to do on that ID, the fix holds or the rejection stands). A defect
+left to do on that ID, the fix holds or the rejection stands). A reopen adds
+two lines under it: `evidence:` (file:line, or the plan line) and `remedy:`
+(the change that closes it). A defect
 introduced BY an accepted fix is a reopen of that ID, not a new objection.
 A negative verdict reopens that
 ID; do not raise it again as a new objection. These verdicts do not count
@@ -256,12 +263,15 @@ How to rule, case by case:
 - fix recorded as applied in the triage but absent from the plan text → reopen;
 - a new fact on an ID you reopen → in that verdict's reason, not a new objection;
 - a defect born where a later plan step meets a fix → reopen if that step is
-  the fix of that ID (your own remedy included), else a new objection.
+  the fix of that ID (your own remedy included), else a new objection;
+- a defect one ID's fix makes in text another ID's remedy owns → reopen the ID
+  whose fix made the change, and name the other ID in the reason.
 Your objections go in your answer, never in a file of the scratch directory.
 
-Return objections only; the output format of
-your own definition does not apply here. Number your new objections 1, 2, 3…
-(a label, not a field). At most 8 objections, each with the six fields:
+Return objections only, in prose, each field labelled; the output format of
+your own definition does not apply here, and an output schema replaces this
+layout only where the caller enforces one (the external CLI). Number your new
+objections 1, 2, 3… (a label, not a field). At most 8 objections, each with the six fields:
 severity (blocking / material / minor), claim, evidence (file:line, or the plan
 line it contradicts), remedy, consulted (the sources you checked, one entry per
 source: a URL, a file read at a revision as path@rev, or a scratch measurement
@@ -339,7 +349,9 @@ take its result as evidence, with the command. Anything else stays
 `unverified` with the command in the record, or goes to the user in 2.3 when
 the claim decides the plan.
 
-Then judge each objection against the plan and the codebase:
+Then judge each objection against the plan and the codebase, opening every
+`file:line` it rests on first: a cited line that does not say what the claim
+says is no evidence.
 
 | Verdict | Meaning | Effect |
 |---------|---------|--------|

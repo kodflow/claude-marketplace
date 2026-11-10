@@ -44,7 +44,7 @@ cover has no entry, and its questions are listed under [Gaps](#gaps).
 
 | Entry | URL | Tier | Fetched | Status | What it supports | Caveats |
 |-------|-----|------|---------|--------|------------------|---------|
-| The Met, Gladiators: types and training | https://www.metmuseum.org/en/essays/gladiators-types-and-training | 1 | 2026-10-30 | single-source | the gladiator types murmillo, thraex, retiarius, secutor, hoplomachus | an essay on types, not a technique source |
+| The Met, Gladiators: types and training | https://www.metmuseum.org/en/essays/gladiators-types-and-training | 1 | 2026-10-30 | single-source | the gladiator types murmillo, thraex, retiarius, secutor, hoplomachus | an essay on types, not a technique source; answered 429 with a bot challenge to WebFetch and curl on 2026-10-31: report it as a gap when it does again |
 
 ## Martial — South Asia
 
@@ -79,14 +79,15 @@ rules, judo, Nordic, Persian or Ottoman wrestling. See [Gaps](#gaps).
 | Ryu 1991, functional wrist ROM | https://pubmed.ncbi.nlm.nih.gov/1861019/ | 1 | 2026-10-30 | single-source | functional minimum (n=40): extension 60, flexion 54, ulnar deviation 40, radial 17; 70 % of tasks within about 40/40 and 40 combined radial plus ulnar | abstract only |
 | Morrey 1981, functional forearm and elbow arc | none recorded (JBJS not open) | 3 | — | not fetched | 50 pronation / 50 supination; elbow 30-130 | known through secondary reports only |
 | WikEM joint ROM table | https://wikem.org/wiki/Joint_ROM_(Table) | 3 | 2026-10-30 | single-source | shoulder abduction 180, internal/external rotation 90/90; hip abduction 40, rotation 40/50; cervical rotation 80, lateral flexion 45; thoracolumbar rotation 30 | secondary table |
-| Putnam 1993 / Hirashima 2002, 2008, proximal-to-distal sequencing | none recorded | 3 | — | not fetched | proximal-to-distal sequencing is a well-supported heuristic, contested for arm internal rotation | secondary citations only: a `phase_offset` built on it is soft |
+| Putnam 1993, proximal-to-distal sequencing | https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=8505347&rettype=abstract&retmode=text | 1 | 2026-10-31 | single-source | segments in striking and throwing skills are generally sequenced proximal to distal | abstract only, shipped verified in `sources/`: `"read": "summary"` |
+| Hirashima 2002, 2008 | none recorded | 3 | — | not fetched | proximal-to-distal sequencing contested for arm internal rotation | secondary citations only: a `phase_offset` built on it is soft |
 
 ## Animation craft and motion metrics
 
 | Entry | URL | Tier | Fetched | Status | What it supports | Caveats |
 |-------|-----|------|---------|--------|------------------|---------|
 | GDC 2014 Animation Bootcamp (Cartwright, Skullgirls) | https://www.gdcvault.com/play/1020971/ | 2 | 2026-10-30 | confirmed | strong key poses, anticipation and timing under a frame budget (6 frames for a punch) | only the public summary was read |
-| Motion generation survey (foot skate, jerk) | https://arxiv.org/pdf/2507.05419 | 2 | 2026-10-30 | single-source | foot skate: a frame counts when the foot is under 5 cm from the ground and moves faster than 0.2 m/s horizontally (2-2.5 cm in some papers); jerk as peak, area, share of high-jerk frames | one paper |
+| Motion generation survey (foot skate, jerk) | https://arxiv.org/pdf/2507.05419 | 2 | 2026-10-30 | single-source | foot skate: a frame counts when the foot is under 5 cm from the ground and moves faster than 0.2 m/s horizontally (2-2.5 cm in some papers); jerk as peak, area, share of high-jerk frames | one paper; the verified excerpt (`sources/`) gives the definitions only, and later reads did not find the figures in the HTML version: cite them with a locator read in the run, or as unverified |
 | SmashWiki, Hitlag | https://www.ssbwiki.com/Hitlag | 3 | 2026-10-30 | single-source | hit-stop of 8-15 frames for a 15 % hit depending on the game | community wiki, per-game formulas |
 | Longsword cut timing | see Europe | 4 | 2026-10-30 | single-source | — | — |
 
