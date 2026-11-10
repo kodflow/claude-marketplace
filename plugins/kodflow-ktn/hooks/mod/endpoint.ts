@@ -39,14 +39,22 @@ export function anchorPaths(home: string | undefined, localAppData?: string): st
   return [...posix, ...windowsAnchors(localAppData)];
 }
 
-/** An absolute path this side can dial or run: POSIX, or a Windows drive path. */
-const absolute = (p: unknown): p is string =>
-  typeof p === "string" && !p.includes("\0") && (p.startsWith("/") || isWindowsAbsolute(p));
+/**
+ * An absolute path this side can dial or run: POSIX for a pointer read from
+ * a HOME anchor, a Windows drive path for one read from the LOCALAPPDATA
+ * anchor, never the other, so a POSIX session refuses a drive path as before.
+ */
+const absolute = (p: unknown, windows: boolean): p is string =>
+  typeof p === "string" && !p.includes("\0") && (windows ? isWindowsAbsolute(p) : p.startsWith("/"));
 
 const utf8Length = (s: string) => new TextEncoder().encode(s).length;
 
-/** Reads endpoint.json's text; every failure is a reason, never a throw. */
-export function parseEndpoint(text: string): EndpointRead {
+/**
+ * Reads endpoint.json's text; every failure is a reason, never a throw.
+ * `windows`: the pointer came from the LOCALAPPDATA anchor (#143).
+ */
+export function parseEndpoint(text: string, opts: { windows?: boolean } = {}): EndpointRead {
+  const windows = opts.windows === true;
   let raw: any;
   try {
     raw = JSON.parse(text);
@@ -61,14 +69,14 @@ export function parseEndpoint(text: string): EndpointRead {
       reason: `endpoint.json de schéma ${String(raw.schema)}, ${ENDPOINT_SCHEMA} attendu`,
     };
   const socket = raw.socket;
-  if (!absolute(socket))
+  if (!absolute(socket, windows))
     return { ok: false, reason: "endpoint.json sans socket absolu" };
   if (utf8Length(socket) > SOCKET_MAX_BYTES)
     return {
       ok: false,
       reason: `socket trop long (${utf8Length(socket)} octets, ${SOCKET_MAX_BYTES} au plus)`,
     };
-  const exe = absolute(raw.exe) ? raw.exe : "";
+  const exe = absolute(raw.exe, windows) ? raw.exe : "";
   const version = typeof raw.version === "string" ? raw.version : "";
   return { ok: true, endpoint: { socket, exe, version } };
 }

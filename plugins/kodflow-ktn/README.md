@@ -78,7 +78,9 @@ approval) and `GET /api/view` for the workspace, over the socket.
 a named pipe its IPC library derives from the socket path, not on a file at
 that path. The mod then reads `endpoint.json` under `%LOCALAPPDATA%\ktn-linter\`
 (after the HOME anchors, and only when `LOCALAPPDATA` is a drive path),
-accepts a drive path for the socket and the binary, and dials the pipe
+accepts a drive path for the socket and the binary from that anchor only (a
+HOME anchor still refuses one, and a failed `LOCALAPPDATA` read is no anchor),
+and dials the pipe
 `\\.\pipe\ipc-<16 hex>-<base>`: SHA-256 of the lower-cased socket path, its
 first 8 bytes, then the path's last element (`hooks/mod/winpipe.ts`, the
 constants in `contract.ts`). A socket path with `.` or `..` segments, or

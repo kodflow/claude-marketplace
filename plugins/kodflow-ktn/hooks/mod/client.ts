@@ -259,7 +259,12 @@ export class Client {
 
   /** endpoint.json from its anchors; a move resets what the old one taught. */
   private async readEndpoint(): Promise<{ ok: true } | { ok: false; detail: string }> {
-    const paths = anchorPaths(await this.port.home(), await this.port.localAppData?.());
+    // A LOCALAPPDATA read that throws or rejects is no Windows anchor, never
+    // a broken POSIX state.
+    const localAppData = await Promise.resolve()
+      .then(() => this.port.localAppData?.())
+      .catch(() => undefined);
+    const paths = anchorPaths(await this.port.home(), localAppData);
     for (const path of paths) {
       let text: string;
       try {
@@ -274,7 +279,7 @@ export class Client {
         this.failures = 0;
         this.breakerUntil = 0;
       }
-      const parsed = parseEndpoint(text);
+      const parsed = parseEndpoint(text, { windows: isWindowsAbsolute(path) });
       if (!parsed.ok) {
         this.endpoint = undefined;
         return { ok: false, detail: parsed.reason };

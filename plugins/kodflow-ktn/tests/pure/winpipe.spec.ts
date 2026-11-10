@@ -108,12 +108,12 @@ test("POSIX unchanged: the HOME anchors alone, in their order, with or without L
 });
 
 test("endpoint.json: a Windows socket and binary are absolute; a relative one is still refused", () => {
-  const r = parseEndpoint(endpointJson({ socket: WSOCK, exe: WEXE }));
+  const r = parseEndpoint(endpointJson({ socket: WSOCK, exe: WEXE }), { windows: true });
   assert.equal(r.ok, true);
   if (r.ok)
     assert.deepEqual([r.endpoint.socket, r.endpoint.exe], [WSOCK, WEXE]);
   assert.equal(
-    parseEndpoint(endpointJson({ socket: "ktn\\user.sock" })).ok,
+    parseEndpoint(endpointJson({ socket: "ktn\\user.sock" }), { windows: true }).ok,
     false,
   );
   const posix = parseEndpoint(endpointJson());
@@ -195,4 +195,41 @@ test("POSIX dial unchanged: socketPath is endpoint.json's socket", async () => {
     seen.length >= 2 && seen.every((s) => s === SOCKET),
     seen.join(","),
   );
+});
+
+test("POSIX refuses a drive path as before; the Windows anchor refuses a POSIX one", () => {
+  const drive = parseEndpoint(endpointJson({ socket: WSOCK }));
+  assert.equal(drive.ok, false);
+  if (!drive.ok) assert.match(drive.reason, /sans socket absolu/);
+  const exe = parseEndpoint(endpointJson({ exe: WEXE }));
+  assert.equal(exe.ok && exe.endpoint.exe, "");
+  assert.equal(parseEndpoint(endpointJson(), { windows: true }).ok, false);
+});
+
+test("a drive-path socket under a HOME anchor stays unreachable, with no request", async () => {
+  const w = world();
+  w.files.set(ANCHOR, endpointJson({ socket: WSOCK }));
+  const c = new Client(w.port);
+  c.setWorkspace(WS);
+  await c.refresh();
+  assert.equal(w.last().kind, "unreachable");
+  assert.equal(w.requests.length, 0);
+});
+
+test("a LOCALAPPDATA read that rejects or throws leaves POSIX as it was", async () => {
+  for (const bad of [
+    async () => {
+      throw new Error("env refused");
+    },
+    () => {
+      throw new Error("sync throw");
+    },
+  ]) {
+    const w = world();
+    (w.port as any).localAppData = bad;
+    const c = new Client(w.port);
+    c.setWorkspace(WS);
+    await c.refresh();
+    assert.equal(w.last().kind, "ready");
+  }
 });
