@@ -162,4 +162,56 @@ check("specialists.md names the identity file the hook reads",
       "`KODFLOW_COMMIT_IDENTITY` names" in spec and "`KODFLOW_COMMIT_IDENTITY=off`" in spec)
 check("specialists.md asks for literal paths and the commit identity",
       "**Give literal paths.**" in spec and "**Name the commit identity when the brief asks for a commit.**" in spec)
+# kodflow/claude-marketplace#134. Read-only inspection: two scopes, one text.
+# What holds in every mode (forbidden git and gh options, the options a diff
+# command carries) and what Plan review mode adds to the Command scope (the
+# inspection commands, one tree archive), so no agent keeps its own variant.
+check("canonical text states the rules that hold in every mode",
+      canon is not None and "Holds in every mode, if this agent has Bash:" in canon
+      and all(o in canon for o in ("`--output`", "`--ext-diff`", "`--textconv`", "`--filters`",
+                                    "`-O`/`--open-files-in-pager`", "`--remote`", "`--exec`", "`--web`"))
+      and "`git --no-pager <command> --no-ext-diff --no-textconv`" in canon
+      and "`--method GET` and no `-f`, `-F`, `--field`, `--raw-field` or `--input`" in canon)
+check("canonical text adds the inspection commands in Plan review mode only, the host still deciding",
+      canon is not None and "In Plan review mode only, if this agent has Bash:" in canon
+      and "the read-only inspection commands below are in scope in addition to this file's Command scope; nothing else is added" in canon
+      and "A command in scope may still be refused by the host: report it under `unverified`." in canon
+      and all(c in canon for c in ("`git ls-tree`", "`git cat-file`", "`gh pr view`")))
+check("canonical text names the one tree archive, its filters neutralised, under the brief's scratch",
+      canon is not None
+      and "`git archive --format=tar -o <scratch>/tree.tar <rev> [-- <paths>]`" in canon
+      and "`python3 -m tarfile --filter data -e <scratch>/tree.tar <scratch>/tree`" in canon
+      and "`-c filter.N.smudge= -c filter.N.process= -c filter.N.required=false`" in canon
+      and "overrides any \"never create a file through the shell\"" in canon
+      and "\"archived tree at <rev>, export-ignore and export-subst applied\"" in canon)
+check("canonical text cites a measurement with its revision and defers verdict format to the brief",
+      canon is not None and "its command, the revision or archived tree it ran on, and its result" in canon
+      and "in the verdict format the brief gives" in canon)
+OLD_GIT = "The git commands stay read-only: never pass an option"
+for a in sorted(AGENTS.glob("*.md")):
+    check(f"{a.stem} keeps no git rule of its own", OLD_GIT not in a.read_text())
+check("docker lists no buildx family (it is `docker buildx`)", "`Bash(buildx:*)`" not in (AGENTS / "devops-specialist-docker.md").read_text())
+py = (AGENTS / "developer-specialist-python.md").read_text()
+check("python reads GitHub through read-only gh, on rust's model",
+      "`Bash(gh issue view:*)`" in py and "write through gh" in py and "use gh/make" not in py)
+check("specialists.md keeps one delivery rule, computed, not listed",
+      "## Who delivers a change" in spec and "`delivers` or `reviews`" in spec and "no list is\nkept by hand" in spec)
+for bullet in ("**Give every fact and figure its command.**", "**Say which constraint wins.**",
+               "**Number the follow-ups.**", "**Ask for the property, not a frozen value.**",
+               "**Say what the subagent may run.**", "**Diagnose before prescribing.**",
+               "`uv run --no-project --with <package> python3 <test>`", "**Example paths stay generic.**"):
+    check(f"Briefing well carries {bullet}", bullet in spec)
+# kodflow/claude-marketplace#134: the brief rules the verdict cases, names a
+# revision, the reading order and each figure's command, and a reply cut short
+# is read from the file SubagentStop keeps.
+check("debate.md brief takes a revision ref, a reading order and measurements",
+      "Revision: <ref>" in brief and "Reading order:" in brief
+      and "Measurements: <per figure the plan or this brief states: figure — command → result>" in brief
+      and "compare each change it proposes with the current text before objecting" in brief)
+check("debate.md brief rules every verdict case",
+      all(s in brief for s in ("remedy right but mis-scoped → reopen", "naming the part that fails",
+                               "absent from the plan text → reopen", "in that verdict's reason, not a new objection",
+                               "else a new objection", "never in a file of the scratch directory")))
+check("debate.md triage reads a truncated reply from the SubagentStop file",
+      "/kodflow/sessions/<session id>/agents/<agent id>.md" in brief)
 sys.exit(1 if fails else 0)

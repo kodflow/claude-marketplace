@@ -64,6 +64,21 @@ _agents() {   # $1 = start|stop
     ) >/dev/null 2>&1 </dev/null
 }
 
+# The whole last message of each subagent, as SubagentStop carries it
+# (last_assistant_message, also in auto mode before the hand-back):
+# <config>/kodflow/sessions/<session>/agents/<agent id>.md. A report cut short
+# on the way to the parent is read there (challenge/debate.md, 2.2), so no
+# reviewer writes a file of its own. Replaced whole on each stop.
+_report() {
+    local id=${AID//[^A-Za-z0-9_-]/} dir msg
+    [ -n "$id" ] || return 0
+    msg=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty' 2>/dev/null)
+    [ -n "$msg" ] || return 0
+    dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID/agents
+    mkdir -p "$dir" 2>/dev/null || return 0
+    printf '%s\n' "$msg" > "$dir/$id.md.tmp" 2>/dev/null && mv -f "$dir/$id.md.tmp" "$dir/$id.md" 2>/dev/null
+}
+
 # Rule 6, and what it feeds: the feedback an agent leaves on its own
 # instructions is kept per session and proposed to the user at Stop
 # (on-stop.sh), never acted on unasked. KODFLOW_FEEDBACK=off drops both.
@@ -71,17 +86,19 @@ FEEDBACK_RULE=""
 [ "${KODFLOW_FEEDBACK:-}" != off ] && FEEDBACK_RULE="
 6. End your final answer with a section \"## Agent feedback\" (an \"agent_feedback\" key when you answer in JSON): what in your own instructions was wrong, missing or ambiguous for this task, in a line or two. Leave it out when there is nothing."
 
+. "$LIB/rules.sh" 2>/dev/null
+
 case "$EV" in
 SubagentStart)
     _agents start
     _branch
     jq -n -c --arg c "## Subagent context (kodflow-hooks)
 Branch: $BRANCH · agent: ${AGENT:-unknown}
-1. Forge access: mcp__github__* / mcp__gitlab__* first (missing or answering 401: install or configure it first, or say what is missing); gh or glab only for what the MCP lacks; never Claude in Chrome on a forge (refused by default; KODFLOW_FORGE_BROWSER=ask asks the user per call, =off lifts the check). mcp__context7__* for library docs.
+1. Forge access: $KF_FORGE_RULE A subagent whose own tool list lacks the forge MCP uses gh or glab directly and says so. mcp__context7__* for library docs. $KF_CI_WATCH_RULE
 2. rtk is not applied automatically: prefix rtk yourself for verbose read-only commands; byte-exact reads stay raw.
-3. Commits: conventional, no AI attribution, never on main, never --no-verify or --force.
+3. Commits: conventional, no AI attribution, never on main, never --no-verify; a forced push only as --force-with-lease, never --force.
 4. Return what you were asked for and say what you verified versus what you assumed.
-5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; if that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS, use ~/Projects/.worktrees/<repo>-<epic-slug>) and deliver through a PR; the main thread reviews and merges.${FEEDBACK_RULE}" \
+5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; if that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS, use ~/Projects/.worktrees/<repo>-<epic-slug>) and deliver through a PR; the main thread reviews and merges. A branch already held by a worktree you did not create: never reuse that worktree and never remove it; report it to the main thread.${FEEDBACK_RULE}" \
         '{hookSpecificOutput:{hookEventName:"SubagentStart",additionalContext:$c}}' 2>/dev/null
     _log ;;
 
@@ -89,6 +106,7 @@ SubagentStop)
     [ "$ACTIVE" = true ] && exit 0      # already continuing because of a stop hook
     _agents stop
     . "$LIB/feedback.sh" 2>/dev/null && kf_feedback "$INPUT" "$SID" "$AID" "$AGENT" "$PROJECT_DIR"
+    _report
     _log ;;
 
 TeammateIdle|TaskCreated|TaskCompleted)

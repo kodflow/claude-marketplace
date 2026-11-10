@@ -178,6 +178,18 @@ jobs:
       - name: Every routed agent carries the plan review mode
         run: python3 scripts/tests/test_plan_review_mode.py
 
+      # The copies are written by sync_plan_review_mode.py, tested on a
+      # fixture (a section in the middle and at the end of a file) first.
+      - name: The plan review mode copies are what the sync script writes
+        run: |
+          python3 scripts/tests/test_sync_plan_review_mode.py
+          python3 scripts/sync_plan_review_mode.py --check
+
+      # The git commands Plan review mode prescribes, against a repository
+      # whose external diff, textconv, pager and filter drivers are a witness.
+      - name: The prescribed git commands never run a program of the repository
+        run: bash scripts/tests/test_git_readonly.sh
+
       # The dispatch gates enforce what model-policy.md says; the file must keep
       # saying that every dispatch passes model and effort, the fork rule and
       # the exemptions.
@@ -306,7 +318,9 @@ jobs:
       - name: Delegation gate under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-hooks/tests/test_root_gate.sh
       - name: Routing gate, gated-model fallback and agent feedback under /bin/bash 3.2
-        run: /bin/bash plugins/kodflow-hooks/tests/test_agents.sh
+        run: HOOK_SHELL=/bin/bash /bin/bash plugins/kodflow-hooks/tests/test_agents.sh
+      - name: The prescribed git commands under /bin/bash 3.2 and BSD script(1)
+        run: /bin/bash scripts/tests/test_git_readonly.sh
       - name: Router under /bin/bash 3.2
         run: /bin/bash scripts/tests/test_route_agent.sh
       - name: Cleanup of a subagent's worktree under /bin/bash 3.2
