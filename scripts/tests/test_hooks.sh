@@ -436,10 +436,12 @@ printf '{"agents":{"w1":{"type":"general-purpose","started":%s,"stopped":null}}}
 printf '%s' "$CONT" | jq -c '.tasks[0].status = "in_progress" | .tasks[0].worker = "general-purpose" | .tasks[0].worker_id = "w1"' > "$MS/tasks.json"
 rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":false}' on-stop.sh
 passes && ok "a task in progress on a running subagent does not relaunch" || bad "continue live worker" "rc=$RC $OUT"
-chmod 000 "$T/tmp/sp" 2>/dev/null
-printf '%s' "$CONT" > "$MS/tasks.json"; rm -f "$MS/agents.json"
+# A directory where the counter file goes: the write "succeeds" into it, the
+# check reads no count back. File modes would not do: root ignores them.
+rm -f "$T/tmp/sp/stop-continue"; mkdir "$T/tmp/sp/stop-continue"
+printf '%s' "$CONT" > "$MS/tasks.json"; rm -f "$MS/agents.json" "$T/tmp/sp/stop-count"
 run Stop "" '{"stop_hook_active":false}' on-stop.sh
-chmod 755 "$T/tmp/sp" 2>/dev/null
+rm -rf "$T/tmp/sp/stop-continue"
 passes && ok "a counter that cannot be written blocks nothing" || bad "continue unwritable" "rc=$RC $OUT"
 rm -rf "$MS" "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said" "$T/tmp/sp/stop-continue"
 

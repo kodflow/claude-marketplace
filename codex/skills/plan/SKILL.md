@@ -234,12 +234,14 @@ Phase 5.8: Frontend Guidelines (conditional)
     - "Choose distinctive fonts (AVOID: Arial, Inter, Roboto)"
     - "Use CSS variables for color consistency"
     - "Prioritize one well-orchestrated animation over scattered micro-interactions"
-    - "FORBIDDEN, named styles rather than 'avoid a generic AI look': purple gradients
+    - "FORBIDDEN unless the user or the project's design system requires it, named
+       styles rather than 'avoid a generic AI look': purple gradients
        on white, predictable centered layouts, a cream or off-white background, italic
        accent words in headlines, numbered 01/02/03 section labels, monospace labels,
        pill-shaped buttons"
     - "Check the styles of the first result against that list, and add to the list
-       (in the plan) every recurring default it shows before the next iteration"
+       (in the plan) every recurring default it shows that nothing requires, before
+       the next iteration"
     - "Each design must feel context-specific, never cookie-cutter"
 
 Phase 6.0: Validation Request
@@ -271,8 +273,8 @@ bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/detect-models.sh
 Every plan carries the allocation, in one line under its constraints:
 
 ```
-Models: orchestrator <CLAUDE_TOP_UNGATED> @high · code workers Sonnet @medium
-        (@high on a defect or hook code, Opus @high across modules) · review
+Models: orchestrator <CLAUDE_TOP_UNGATED> @medium · code workers Sonnet @medium
+        (@medium on a defect or hook code, Opus @medium across modules) · review
         workers Opus @high · mechanical workers Sonnet @low · workers never
         inherit the orchestrator model · worktree isolation wherever workers
         write concurrently.
