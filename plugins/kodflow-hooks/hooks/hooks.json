@@ -3,13 +3,16 @@
   "modules": ["./mod/register.ts"],
   "hooks": {
     "SessionStart": [
-      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 10 } ] }
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 10 } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tier.sh", "timeout": 10 } ] }
     ],
     "SessionEnd": [
-      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 5 } ] }
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 5 } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tier.sh", "timeout": 5 } ] }
     ],
     "PreCompact": [
-      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 5 } ] }
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 5 } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tier.sh", "timeout": 5 } ] }
     ],
     "ConfigChange": [
       { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-session.sh", "timeout": 5 } ] }
@@ -33,7 +36,8 @@
       { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tool.sh", "timeout": 5 } ] }
     ],
     "SubagentStart": [
-      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] }
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] },
+      { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-tier.sh", "timeout": 5 } ] }
     ],
     "SubagentStop": [
       { "matcher": "", "hooks": [ { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/scripts/on-agent.sh", "timeout": 5 } ] }
