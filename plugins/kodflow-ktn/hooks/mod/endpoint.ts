@@ -7,7 +7,13 @@
 // on one platform out of three. The pointer names it; the mod reads it.
 // state.json is not a source either: a clean stop removes it, which is exactly
 // when the launch button has to appear.
+//
+// Windows (#143) is read by winpipe.ts: the anchor under %LOCALAPPDATA%, a
+// drive path for the socket and the binary. A POSIX session never meets it:
+// its anchors come first, and LOCALAPPDATA is only read when it is a drive
+// path.
 import { ANCHORS, ENDPOINT_SCHEMA, SOCKET_MAX_BYTES } from "./contract.ts";
+import { isWindowsAbsolute, windowsAnchors } from "./winpipe.ts";
 
 export type Endpoint = {
   socket: string;
@@ -20,12 +26,22 @@ export type EndpointRead =
   | { ok: true; endpoint: Endpoint }
   | { ok: false; reason: string };
 
-/** The anchors to try, in order, under an absolute HOME. */
-export function anchorPaths(home: string | undefined): string[] {
-  if (!home || !home.startsWith("/")) return [];
-  const base = home.endsWith("/") ? home.slice(0, -1) : home;
-  return ANCHORS.map((rel) => `${base}/${rel}`);
+/**
+ * The anchors to try, in order: under an absolute HOME, then, when
+ * LOCALAPPDATA names a drive path, the Windows one.
+ */
+export function anchorPaths(home: string | undefined, localAppData?: string): string[] {
+  const posix: string[] = [];
+  if (home && home.startsWith("/")) {
+    const base = home.endsWith("/") ? home.slice(0, -1) : home;
+    posix.push(...ANCHORS.map((rel) => `${base}/${rel}`));
+  }
+  return [...posix, ...windowsAnchors(localAppData)];
 }
+
+/** An absolute path this side can dial or run: POSIX, or a Windows drive path. */
+const absolute = (p: unknown): p is string =>
+  typeof p === "string" && !p.includes("\0") && (p.startsWith("/") || isWindowsAbsolute(p));
 
 const utf8Length = (s: string) => new TextEncoder().encode(s).length;
 
@@ -45,17 +61,14 @@ export function parseEndpoint(text: string): EndpointRead {
       reason: `endpoint.json de schéma ${String(raw.schema)}, ${ENDPOINT_SCHEMA} attendu`,
     };
   const socket = raw.socket;
-  if (typeof socket !== "string" || !socket.startsWith("/") || socket.includes("\0"))
+  if (!absolute(socket))
     return { ok: false, reason: "endpoint.json sans socket absolu" };
   if (utf8Length(socket) > SOCKET_MAX_BYTES)
     return {
       ok: false,
       reason: `socket trop long (${utf8Length(socket)} octets, ${SOCKET_MAX_BYTES} au plus)`,
     };
-  const exe =
-    typeof raw.exe === "string" && raw.exe.startsWith("/") && !raw.exe.includes("\0")
-      ? raw.exe
-      : "";
+  const exe = absolute(raw.exe) ? raw.exe : "";
   const version = typeof raw.version === "string" ? raw.version : "";
   return { ok: true, endpoint: { socket, exe, version } };
 }

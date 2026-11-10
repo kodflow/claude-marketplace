@@ -74,6 +74,21 @@ it, which is exactly when the launch button is needed). It then asks `GET
 /status` once per pointer (the protocol it speaks, the workspaces waiting for
 approval) and `GET /api/view` for the workspace, over the socket.
 
+**Windows** (#143). Since kodflow/ktn-linter#989 the daemon listens there on
+a named pipe its IPC library derives from the socket path, not on a file at
+that path. The mod then reads `endpoint.json` under `%LOCALAPPDATA%\ktn-linter\`
+(after the HOME anchors, and only when `LOCALAPPDATA` is a drive path),
+accepts a drive path for the socket and the binary, and dials the pipe
+`\\.\pipe\ipc-<16 hex>-<base>`: SHA-256 of the lower-cased socket path, its
+first 8 bytes, then the path's last element (`hooks/mod/winpipe.ts`, the
+constants in `contract.ts`). A socket path with `.` or `..` segments, or
+outside ASCII, is refused as unreachable rather than cleaned differently
+from the daemon. The launch runs from the binary's drive root. POSIX is
+unchanged: the socket is dialled as it is. Tested by `tests/pure/winpipe.spec.ts`
+on POSIX only: nothing has run on Windows, neither the pipe nor the engine's
+`$.http.fetch` taking a pipe name as `socketPath`, and the activation probe
+still walks POSIX paths (`activation: always` is the net there).
+
 Every known failure ends in a drawn state, never in silence:
 
 | State | When | Offered |
