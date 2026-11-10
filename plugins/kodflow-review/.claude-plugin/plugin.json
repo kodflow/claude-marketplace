@@ -1,6 +1,6 @@
 {
   "name": "kodflow-review",
-  "version": "0.0.0-rae1f89100b86",
+  "version": "0.0.0-re48a448ef94b",
   "description": "Evidence-bound review and debugging. Findings cite real code and a counterexample; deterministic scanners run for real and their exit codes populate the report; an external non-LLM verifier can invalidate the whole run. Root-cause-first debugging refuses a fix nobody proved.",
   "author": {
     "name": "kodflow",
