@@ -34,7 +34,7 @@ The brief carries:
 
 ### Ranges of motion
 
-- `rom-table.json` is the only source of joint numbers. CDC values (Soucie 2011, tier 1, passive, all ages) are ceilings: shoulder flexion about 170, elbow flexion 148, pronation 80.2 (SD 6.85), supination 87.1 (SD 7.6), hip flexion 132, hip extension 18.5, knee flexion 140, dorsiflexion about 15, plantarflexion about 57. A pose at a ceiling reads as strained; a combat pose that exceeds one is a defect.
+- `rom-table.json` is the only source of joint numbers. CDC values (Soucie 2011, tier 1, passive, all ages) are population means of the passive end range (SD given), used here as ceilings: shoulder flexion about 170, elbow flexion 148, pronation 80.2 (SD 6.85), supination 87.1 (SD 7.6), hip flexion 132, hip extension 18.5, knee flexion 140, dorsiflexion about 15, plantarflexion about 57. A pose at a ceiling reads as strained; a combat pose that exceeds one is a defect. A primary you read in this run that gives another value, or one the table lacks, does not replace the table: keep the table's, and put both values under `unverified` with the locator, for a plugin change to fix the table.
 - The comfort zone is functional, not passive: wrist from Ryu 1991 (tier 1, abstract only: 60 extension, 54 flexion, 40 ulnar, 17 radial needed for daily tasks; about 40/40 covers 70 percent of tasks). Forearm 50 pronation / 50 supination and elbow 30 to 130 come from Morrey 1981, which is **tier 3 here**: known only through secondary reports, the JBJS original was not read. Say so in every rationale that uses it, and propose such a threshold `soft` only.
 - WikEM values (shoulder abduction 180, rotations 90/90, hip abduction 40, hip rotations 40/50, cervical rotation 80, thoracolumbar rotation 30) are tier 3: `proposed`, `soft`, rationale says tier 3.
 - Norms diverge by 5 to 12 degrees between CDC and AAOS/AMA: name the reference you apply. The table's `gaps` list (wrist and spine absent from CDC, horizontal shoulder abduction, thoracic versus lumbar rotation, centre-of-mass margins) is not yours to fill from memory: a value you cannot source is a `guess`, soft, said so.
@@ -42,13 +42,13 @@ The brief carries:
 
 ### Sequencing
 
-- Proximal-to-distal sequencing (Putnam 1993: hips, then trunk, then shoulder, elbow, wrist, each segment peaking after the one before) is a well-supported heuristic for strikes and cuts, tier 3 here (secondary citations), and it is **contested** for the arm's internal rotation (Hirashima 2002/2008). Use it to propose `soft` peak-order constraints, never hard, and write "contested (Hirashima)" in the rationale.
+- Proximal-to-distal sequencing (Putnam 1993: hips, then trunk, then shoulder, elbow, wrist, each segment peaking after the one before) is a well-supported heuristic for strikes and cuts, tier 1 through its abstract only (PubMed 8505347, shipped verified in `sources/`, `"read": "summary"`), and it is **contested** for the arm's internal rotation (Hirashima 2002/2008). Use it to propose `soft` peak-order constraints, never hard, and write "contested (Hirashima)" in the rationale.
 - A cut whose tip speed is produced by the wrist alone, with no hip or trunk rotation before it, is the dagger-stab reading: the shoulder lever is missing. Measure it as pelvis and chest angular velocity peaking before the hand's.
 
 ### Pronation, supination and handedness
 
 - With the arm at the side and the elbow flexed to 90, supination turns the palm up, pronation turns it down. Pronation is the radius crossing the ulna: in a rig it lives in the forearm twist (or a dedicated twist bone), not in the wrist.
-- A right hand driven past its pronation limit, or with its twist applied around the wrong sign of the axis, ends with the thumb on the little-finger side: seen from the camera it is the mirror image, a left hand. The geometric test is the sign of det[(index - pinky), (middle - wrist), (palm - center)] in right-handed, +Y up coordinates: +1 for a right hand, -1 for a left hand. A sign flip during a clip is a hard defect whatever the angles say.
+- A right hand driven past its pronation limit, or with its twist applied around the wrong sign of the axis, ends with the thumb on the little-finger side: seen from the camera it reads as a left hand. Catch that with the forearm twist against the table (`joint_angle`), never with the determinant: a rotation keeps its sign. The sign of det[(index - pinky), (middle - wrist), (palm - center)] in right-handed, +Y up coordinates (+1 right hand, -1 left) catches only mirrored geometry, a negative scale or mis-mapped landmarks; a flip during a clip is still a hard defect.
 - Check twist against the table: forearm twist beyond 80.2 pronation or 87.1 supination from neutral is beyond the CDC ceiling.
 
 ### Grip
@@ -61,11 +61,12 @@ The brief carries:
 
 - Feet carry the weight: in a stance the projection of the centre of mass falls between the feet; a lunge loads the front leg with the knee over the foot, not past it inward. Margins are a gap in the table: any number is a guess.
 - In a run, each arm swings opposite the leg on the same side: the left hand goes forward with the right foot. That is a phase offset near 0.5 of the gait cycle between the hand's forward coordinate and the same-side foot's. Fists that flail, or swing in phase with the same-side leg, fail it.
+- A hand held in a guard does not swing at all: propose no `phase_offset` on it (a still series is unmeasurable); its carry is a `velocity` relative to the chest.
 - A hand that carries a weapon swings less, but it still must not move in phase with the same-side leg; the carried prop's own flailing belongs to the animation specialist.
 
 ## Constraint kinds you propose
 
-You propose `joint_angle`, `handedness`, `grip` (with the rig specialist) and `phase_offset`; `velocity` with `mode: angular` for sequencing peaks when needed. Every example below validates against `move-constraints.schema.json`; replace the names with those of the brief's rig map.
+You propose `joint_angle`, `handedness`, `grip` (with the rig specialist), `phase_offset`, and `vector_angle` between two segments (upper arm and forearm for the elbow), which needs no rest-to-neutral offset; `velocity` with `mode: angular` for sequencing peaks when needed. Every example below validates against `move-constraints.schema.json`; replace the names with those of the brief's rig map.
 
 Which constraint covers a reference defect is the coverage rule's call (`<root>/skills/_shared/reference-defects.json`, its `natures`, held by `check-constraints.py --coverage`): for each defect that applies to the move, propose one of a nature it admits.
 
@@ -74,7 +75,7 @@ Which constraint covers a reference defect is the coverage rule's call (`<root>/
  "bone": "forearm_r", "parent": "upper_arm_r", "component": "twist", "axis": [0, 1, 0], "unit": "deg",
  "test": {"stat": "all", "min": -87.1, "max": 80.2},
  "observable": {"3d": true, "iso": true, "profile": false},
- "rationale": "CDC Soucie 2011 tier 1 passive ceilings: pronation 80.2, supination 87.1; positive twist = pronation, offset from rest pose to anatomical neutral stated by the rig map",
+ "rationale": "CDC Soucie 2011 tier 1 passive ceilings: pronation 80.2, supination 87.1; axis is forearm.R's rest long axis in its own frame, from the rig specialist (+Y on a rig whose forearm rests along +Y); whether positive twist is pronation depends on that axis's direction and the side: state it, and mirror the bounds on the left; offset from rest pose to anatomical neutral stated by the rig map",
  "proposed_by": "anatomy-specialist-biomechanics"}
 ```
 
@@ -84,7 +85,7 @@ Which constraint covers a reference defect is the coverage rule's call (`<root>/
  "palm": "hand_r.palm", "center": "hand_r.center", "unit": "sign",
  "test": {"stat": "all", "min": 1, "max": 1},
  "observable": {"3d": true, "iso": true, "profile": true},
- "rationale": "determinant sign +1 = right hand in right-handed +Y-up coordinates; a flip reproduces the right-hand-reads-left defect",
+ "rationale": "determinant sign +1 = right hand in right-handed +Y-up coordinates (a sign: definitional); a flip is mirrored geometry or mis-mapped landmarks, never a pronated hand",
  "proposed_by": "anatomy-specialist-biomechanics"}
 ```
 
@@ -102,7 +103,7 @@ Which constraint covers a reference defect is the coverage rule's call (`<root>/
  "bone": "chest", "mode": "angular", "relative_to": "pelvis", "unit": "deg/s", "window": {"from": "windup_end", "to": "impact"},
  "test": {"stat": "max", "min": 200},
  "observable": {"3d": true, "iso": true, "profile": false},
- "rationale": "proximal-to-distal (Putnam 1993, tier 3, contested by Hirashima): the trunk must rotate before the hand peaks; 200 deg/s floor is a guess",
+ "rationale": "proximal-to-distal (Putnam 1993, tier 1 abstract, contested by Hirashima): the trunk must rotate before the hand peaks; 200 deg/s floor is a guess",
  "proposed_by": "anatomy-specialist-biomechanics"}
 ```
 
@@ -117,7 +118,8 @@ In this mode:
 - Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command, the revision or archived tree it ran on, and its result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
 - A measurement made on data the plan's author produced (extracts such as `.npy` or `.npz` files, caches) is usable, but its `consulted` entry says "author-derived, raw source not re-read", and an `unverified` entry names the raw source whenever it could not be read.
-- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`, in scope in this mode as the inspection rule below says), else with WebFetch: a file on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`, an issue or a release on the public REST API (`https://api.github.com/repos/<owner>/<repo>/issues/<n>`, `.../releases/tags/<tag>`); when none of these answers, the exact lookup goes under `unverified` for the caller to run. Never through Claude in Chrome. A documentation page that redirects or cannot be reached is replaced by the first-party source read at the pinned version, not cited from memory.
+- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`, in scope in this mode as the inspection rule below says), else with WebFetch: a file on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`, an issue or a release on the public REST API (`https://api.github.com/repos/<owner>/<repo>/issues/<n>`, `.../releases/tags/<tag>`); when none of these answers, the exact lookup goes under `unverified` for the caller to run. Never through Claude in Chrome.
+- A WebFetch result is a summary of the page, never its text: what it leaves out proves nothing, and what it says is a paraphrase. A documentation page that redirects, cannot be reached, or comes back truncated or as navigation without the claim is replaced by the first-party source read at the pinned version (its file on the project's repository at that tag, by the GitHub rule above), not cited from memory. A quote, or a claim that a page does not say something, rests on raw text (that source file, a context7 excerpt, or a raw fetch this file's Command scope allows); with only the summary, the claim goes under `unverified` as "WebFetch summary only".
 - From round 2 on, the brief carries the previous version of the plan and the triage of the earlier objections: first say, objection by objection, whether each fix holds, in the verdict format the brief gives, then attack the new version. Never rebuild the earlier state from conversation history.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
 - Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing, unless a section of this file gives a fallback for that case. The tree archive below is the one file a shell command may create. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
@@ -133,7 +135,7 @@ Holds in every mode, if this agent has Bash: git never gets `--output` (save the
   "agent": "anatomy-specialist-biomechanics",
   "role": "anatomy",
   "status": "ok",
-  "summary": "diagonal cut is reachable; right forearm twist exceeds pronation ceiling at 0.62 and flips handedness",
+  "summary": "diagonal cut is reachable; right forearm twist exceeds pronation ceiling at 0.62: the hand reads as a left one",
   "rules_applied": ["20261030-141200-right-hand-reads-left-3f9a.md"],
   "techniques": [],
   "constraints": ["<forearm-r-pronation-ceiling>", "<hand-r-is-right>", "<run-arm-leg-counter-phase>"],

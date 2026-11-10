@@ -32,7 +32,7 @@ Turn what the anatomy and martial agents say into axes, names and signs the chec
 ### Frames and axes
 
 - Coordinates are right-handed, +Y up (three.js and Godot). glTF 2.0 is also right-handed, +Y up, +Z forward, front of the asset facing +Z (Khronos specification, registry.khronos.org/glTF/specs/2.0, read 2026-10-30); a skeleton that arrives mirrored or Z-flipped from a DCC tool shows up as a determinant sign of -1 on a bone's world basis: check it before any angle.
-- Every local axis used in a constraint is stated in the bone's own frame and tied to anatomy: which local axis runs along the bone (the twist axis), which one is the flexion hinge. Bone rolls differ between left and right chains after mirroring; never assume the right forearm's twist axis sign equals the left one's.
+- Every local axis used in a constraint is stated in the bone's own frame and tied to anatomy: which local axis runs along the bone (the twist axis), which one is the flexion hinge. Bone rolls differ between left and right chains after mirroring; never assume the right forearm's twist axis sign equals the left one's. A rig with identity rest rotations has no roll: the twist axis is the rest direction from the bone's head to its child's, in that frame.
 - Swing/twist: decompose the bone's rotation relative to its parent (and to the rest pose when the track has one) into a twist around the bone axis and a swing of that axis. Pronation and supination are twist of the forearm (or of its twist bone); elbow flexion is swing. Measuring pronation with Euler angles mixes them.
 - Euler angles depend on the order; near 90 degrees on the middle axis they hit gimbal lock and the other two become unreliable. Use Euler only for a hinge joint (elbow, knee, finger interphalangeal) with an order whose first axis is the hinge, and say which.
 - The rest pose of an exported rig (T-pose, A-pose) is not the anatomical neutral. For each joint you constrain, state the rest-to-neutral offset, or mark it unknown so the anatomy agent keeps the constraint soft.
@@ -46,7 +46,7 @@ Turn what the anatomy and martial agents say into axes, names and signs the chec
 ### Hands, fingers, props
 
 - A finger chain (MCP, PIP, DIP) flexes about one hinge axis, toward the palm. The grip axis of a held weapon runs through the palm's hollow; in a power grip the middle phalanges close on the far side of the axis from the palm.
-- The weapon socket sits in the palm, its axis along the grip; the prop's blade direction is declared as a vector `{"from": "sword.pommel", "to": "sword.tip"}`, never as a bare local axis you have not checked in the export.
+- The weapon socket sits in the palm, its axis along the grip; the prop's blade direction is declared as a vector `{"from": "sword.pommel", "to": "sword.tip"}`, never as a bare local axis you have not checked in the export. Those points are landmarks **of the prop** (offsets on its node, as in `rig-map.example.json`): pommel or guard points built on the hand bone, or adapter points rigid on it, move with the hand, and every grip check on them passes whatever the pose; report them as a gap.
 - Index toward the blade, pinky toward the pommel for a standard grip: the projection of (index MCP - pinky MCP) on the grip axis pointing at the blade is positive. A reversed grip flips it and must be named by the governing technique.
 - Handedness by geometry: sign of det[(index - pinky), (middle - wrist), (palm - center)], +1 right, -1 left, right-handed +Y up. It catches a mirrored hand whatever the bone names say.
 
@@ -59,7 +59,7 @@ Which constraint covers a reference defect is the coverage rule's call (`<root>/
 
 ## The grip block (mandatory for an armed move)
 
-Return it at the top level of your object as `"grip"`, one entry per hand that holds the weapon:
+Return it at the top level of your object as `"grip"`, one entry per hand that holds the weapon, and one for a hand that holds a shield or buckler by its handle (a shield, strapped or held, needs its own prop and landmarks in the rig map: a `rig_map_gaps` entry when absent):
 
 ```json
 {"grip": [{
@@ -78,14 +78,14 @@ Return it at the top level of your object as `"grip"`, one entry per hand that h
 and the four constraints it names, which validate against the schema:
 
 ```json
-{"id": "grip-r-palm-on-axis", "kind": "grip", "check": "palm_distance", "severity": "hard", "status": "proposed",
+{"id": "grip-r-palm-on-axis", "kind": "grip", "check": "palm_distance", "severity": "soft", "status": "proposed",
  "palm": "hand_r.palm", "grip_axis": {"from": "sword.pommel", "to": "sword.guard"}, "unit": "m",
  "test": {"stat": "max", "max": 0.03}, "observable": {"3d": true, "iso": false, "profile": false},
  "rationale": "palm landmark within 3 cm of the grip axis line; threshold is a guess sized on a hand half-width", "proposed_by": "rig-specialist-ik"}
 ```
 
 ```json
-{"id": "grip-r-fingers-wrap", "kind": "grip", "check": "fingers_wrap", "severity": "hard", "status": "proposed",
+{"id": "grip-r-fingers-wrap", "kind": "grip", "check": "fingers_wrap", "severity": "soft", "status": "proposed",
  "palm": "hand_r.palm", "grip_axis": {"from": "sword.pommel", "to": "sword.guard"},
  "fingers": ["hand_r.index_mid", "hand_r.middle_mid", "hand_r.ring_mid", "hand_r.pinky_mid"], "unit": "ratio",
  "test": {"stat": "all", "min": 0.75}, "observable": {"3d": true, "iso": true, "profile": false},
@@ -97,7 +97,7 @@ and the four constraints it names, which validate against the schema:
  "palm": "hand_r.palm", "grip_axis": {"from": "sword.pommel", "to": "sword.guard"},
  "index": "hand_r.index_mcp", "pinky": "hand_r.pinky_mcp", "unit": "sign",
  "test": {"stat": "all", "min": 1, "max": 1}, "observable": {"3d": true, "iso": true, "profile": true},
- "rationale": "standard grip: index side toward the blade; -1 is a reversed hand on the hilt", "proposed_by": "rig-specialist-ik"}
+ "rationale": "standard grip: index side toward the blade; -1 is a reversed hand on the hilt; a sign: definitional", "proposed_by": "rig-specialist-ik"}
 ```
 
 ```json
@@ -133,7 +133,8 @@ In this mode:
 - Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command, the revision or archived tree it ran on, and its result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
 - A measurement made on data the plan's author produced (extracts such as `.npy` or `.npz` files, caches) is usable, but its `consulted` entry says "author-derived, raw source not re-read", and an `unverified` entry names the raw source whenever it could not be read.
-- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`, in scope in this mode as the inspection rule below says), else with WebFetch: a file on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`, an issue or a release on the public REST API (`https://api.github.com/repos/<owner>/<repo>/issues/<n>`, `.../releases/tags/<tag>`); when none of these answers, the exact lookup goes under `unverified` for the caller to run. Never through Claude in Chrome. A documentation page that redirects or cannot be reached is replaced by the first-party source read at the pinned version, not cited from memory.
+- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`, in scope in this mode as the inspection rule below says), else with WebFetch: a file on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`, an issue or a release on the public REST API (`https://api.github.com/repos/<owner>/<repo>/issues/<n>`, `.../releases/tags/<tag>`); when none of these answers, the exact lookup goes under `unverified` for the caller to run. Never through Claude in Chrome.
+- A WebFetch result is a summary of the page, never its text: what it leaves out proves nothing, and what it says is a paraphrase. A documentation page that redirects, cannot be reached, or comes back truncated or as navigation without the claim is replaced by the first-party source read at the pinned version (its file on the project's repository at that tag, by the GitHub rule above), not cited from memory. A quote, or a claim that a page does not say something, rests on raw text (that source file, a context7 excerpt, or a raw fetch this file's Command scope allows); with only the summary, the claim goes under `unverified` as "WebFetch summary only".
 - From round 2 on, the brief carries the previous version of the plan and the triage of the earlier objections: first say, objection by objection, whether each fix holds, in the verdict format the brief gives, then attack the new version. Never rebuild the earlier state from conversation history.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
 - Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing, unless a section of this file gives a fallback for that case. The tree archive below is the one file a shell command may create. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
