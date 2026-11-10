@@ -14,7 +14,7 @@ Index, by lane:
 | design | `/plan` `/challenge` `/refine` |
 | verify | `/review` `/debug` `/lint` `/hunt` `/ktn-issues` |
 | ship | `/adr` |
-| keep | `/learn` `/docs` |
+| keep | `/learn` `/docs` `/improve` |
 | observe | `/recap` |
 | machine | `/audit` `/update` `/ktn` `/infra` |
 
@@ -264,6 +264,23 @@ gap, so a future maintainer does not have to re-derive it.
 
 Trivial fixes, one-time incidents and things already in the base are filtered
 out before you are ever asked.
+
+---
+
+## /improve
+
+`kodflow-review` · inherit · **Turn subagent feedback into a marketplace PR**
+
+**Type** `/improve [--session <id>] [--since <days>] [--agent <type>] [--target <prefix>] [--check]`
+
+| | |
+|---|---|
+| reads | `<config>/kodflow/sessions/*/agent-feedback.jsonl` (kodflow-hooks, SubagentStop) · a worktree of kodflow/claude-marketplace at its default branch · the ledger |
+| writes | one branch and one PR on kodflow/claude-marketplace · `<config>/kodflow/improve/handled.tsv` (one verdict per need) |
+| after | the Stop hook's agent-feedback proposal — it suggests it |
+| then | the user reviews and merges the PR |
+| gate | **nothing is opened or recorded before your answer**; each need judged against the current tree (fixed, open, out of scope); no feedback quoted and no session detail in the PR; never merges |
+| loop | the ledger: a need judged once is not asked about again |
 
 ---
 

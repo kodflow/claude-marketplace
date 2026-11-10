@@ -650,7 +650,9 @@ tool_result`), else the definition's frontmatter (`source: frontmatter`); the
 effort is the payload's own, which is the subagent's effective level. At
 `Stop`, a new set of entries is proposed once, to a user present in the last
 10 minutes (`composer-at`): show the diff to each agent's definition, and ask
-before opening any issue on kodflow/claude-marketplace. An entry whose agent
+before opening anything on kodflow/claude-marketplace; for a kodflow agent the
+proposal offers `kodflow-review:improve`, the deliberate pass over every
+session's entries that turns the open needs into one pull request. An entry whose agent
 has no definition file (a built-in, an agent defined in the session) is kept
 but never proposed: there is no definition to show a diff of.
 
