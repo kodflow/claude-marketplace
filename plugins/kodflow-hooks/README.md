@@ -245,8 +245,8 @@ fails by accident blocks every shell call of the session.
 | `ConfigChange` | `on-session.sh` | — | — | — | log · `bypassPermissions` flagged in `security-events.jsonl` |
 | `UserPromptSubmit` | `on-user.sh` | — | — | branch, latest plan, latest goal · the cleanup notices (`cleanup-notices`, consumed) · while the mod beats: the main agent's epics (active one with its task in progress, other open ones with done/total) when `tasks.json` exists, and the triage directive with the epic mandatory on `task_create` · the delegation line (code in a repository: dispatch or message the epic's subagent) unless `KODFLOW_ROOT=off` · no triage directive on a turn the user did not type · a `systemMessage` when the mod is gone | raise the triage gate (mod beating) and reset the Stop loop counter, except on a turn the user did not type · log |
 | `Notification` | `on-user.sh` | — | — | bell (`terminalSequence`) on idle, permission and elicitation prompts | log |
-| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (own worktree, deliver through a PR, and rule 6: end with `## Agent feedback`) | running-agents registry, with the main agent's active epic at start · log |
-| `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · its agent feedback in `agent-feedback.jsonl` · log |
+| `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (forge and CI-watch rules from `lib/rules.sh`, `--force-with-lease` only, own worktree and never one it did not create, deliver through a PR, and rule 6: end with `## Agent feedback`) | running-agents registry, with the main agent's active epic at start · log |
+| `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · its whole last message in `<session>/agents/<agent id>.md` · its agent feedback in `agent-feedback.jsonl` · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
 | `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | — | feedback in one document, one line per cause, each task named once, each cause said once per state (below, « The Stop feedback ») · the CLAUDE.md of each directory changed this session, once per directory · a triage cause left unsettled (`triage-pending`), not on a system turn · the subagents' new agent feedback, once, to a user present in the last 10 minutes, never for an agent with no definition file | bell · log |
 
@@ -482,7 +482,10 @@ That file is `hooks/routing-index.tsv` filtered to the plugins
 first dispatch when it is missing or older than the shipped index; with no
 index at all the call passes (`route-noindex`). `hooks/routing-index.tsv` is
 generated from the Keywords column of `skills/_shared/specialists.md` by
-`scripts/build-routing-index.py`, and CI fails when the two disagree.
+`scripts/build-routing-index.py`, and CI fails when the two disagree. Its fourth
+column says whether each agent `delivers` a change (commit, push, PR) or
+`reviews` only, computed from the agent's tools and Command scope; the refusal
+prints it with the rule ("Who delivers a change" in `specialists.md`).
 
 `[general-purpose-ok]` in the description or the prompt is the deliberate
 exception, written by every skill that means a general-purpose dispatch (the

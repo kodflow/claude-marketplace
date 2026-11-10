@@ -792,6 +792,15 @@ run SessionStart "" '{"source":"startup"}' on-session.sh
 expect_rc "startup exits 0" 0
 printf '%s' "$OUT" | jq -e '.hookSpecificOutput.additionalContext | test("forge access") and test("never Claude in Chrome on a forge")' >/dev/null 2>&1 \
     && ok "every session starts with the forge rule (#127)" || bad "startup forge rule" "$OUT"
+. "$S/lib/rules.sh"
+printf '%s' "$OUT" | jq -e --arg r "$KF_FORGE_RULE" '.hookSpecificOutput.additionalContext | contains($r)' >/dev/null 2>&1 \
+    && ok "the startup forge rule is lib/rules.sh's" || bad "startup forge var" "$OUT"
+run SessionStart "" '{"source":"compact"}' on-session.sh
+printf '%s' "$OUT" | jq -e --arg r "$KF_FORGE_RULE" --arg w "$KF_CI_WATCH_RULE" '.hookSpecificOutput.additionalContext | contains($r) and contains($w)' >/dev/null 2>&1 \
+    && ok "the post-compaction rules carry lib/rules.sh's forge and CI watch rules" || bad "compact forge var" "$OUT"
+run SubagentStart "" '{"agent_id":"a0","agent_type":"Explore"}' on-agent.sh
+printf '%s' "$OUT" | jq -e --arg r "$KF_FORGE_RULE" '.hookSpecificOutput.additionalContext | contains($r)' >/dev/null 2>&1 \
+    && ok "SubagentStart carries the same forge rule" || bad "subagent forge var" "$OUT"
 printf '%s' "$OUT" | jq -e '.systemMessage' >/dev/null 2>&1 && bad "no warning on a clean setup" "$OUT" || ok "a clean setup raises no guard warning"
 
 echo "== SessionStart · what can switch the guards off"

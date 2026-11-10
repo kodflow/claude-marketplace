@@ -2,15 +2,17 @@
 # shellcheck shell=bash
 #
 # hooks/routing-index.tsv is generated from skills/_shared/specialists.md
-# (scripts/build-routing-index.py): `keyword<TAB>word|ext<TAB>agent`, agent
-# being `plugin:name` or a built-in with no colon. A session reads its own
+# (scripts/build-routing-index.py): `keyword<TAB>word|ext<TAB>agent<TAB>delivery`,
+# agent being `plugin:name` or a built-in with no colon, delivery `delivers` or
+# `reviews` (whether it can carry a commit and a PR). A three-field line, from
+# an older index, reads as `reviews`. A session reads its own
 # copy, filtered to the plugins installed_plugins.json lists, so the gate
 # never names an agent this machine cannot dispatch.
 #
 #   . "$LIB/route.sh"
 #   kf_route_install CFG OUT      write OUT from the shipped index (jq)
 #   kf_route_fresh OUT [CFG]      0 when OUT was built from this index and installed_plugins.json
-#   kf_route_match OUT DESC       one `agent<TAB>keyword,…` line per agent named
+#   kf_route_match OUT DESC       one `agent<TAB>keyword,…<TAB>delivery` line per agent named
 
 KF_ROUTE_INDEX=${BASH_SOURCE[0]%/*}/../../routing-index.tsv
 
@@ -38,7 +40,7 @@ kf_route_install() {
         BEGIN { n = split(ENVIRON["KF_PLUGINS"], p, "\n"); for (i = 1; i <= n; i++) if (p[i] != "") ok[p[i]] = 1 }
         NR == 1 { print sig }
         /^#/ { print; next }
-        NF == 3 { i = index($3, ":"); if (i == 0 || (substr($3, 1, i - 1) in ok)) print }' \
+        NF >= 3 { i = index($3, ":"); if (i == 0 || (substr($3, 1, i - 1) in ok)) print }' \
         "$KF_ROUTE_INDEX" > "$tmp" 2>/dev/null && mv -f "$tmp" "$out" 2>/dev/null && return 0
     rm -f -- "$tmp" 2>/dev/null
     return 1
@@ -64,12 +66,13 @@ kf_route_match() {
             n = split(d, w, " ")
             for (i = 1; i <= n; i++) { t = w[i]; sub(/[.]+$/, "", t); if (t != "") tok[t] = 1 }
         }
-        /^#/ || NF != 3 { next }
+        /^#/ || NF < 3 { next }
+        { how[$3] = (NF >= 4 ? $4 : "reviews") }
         $2 == "word" && ($1 in tok) { add($3, $1); next }
         $2 == "ext" {
             L = length($1)
             for (t in tok) if (length(t) >= L && substr(t, length(t) - L + 1) == $1) { add($3, $1); break }
         }
         function add(a, k) { if (a in hit) hit[a] = hit[a] "," k; else { order[++m] = a; hit[a] = k } }
-        END { for (i = 1; i <= m; i++) print order[i] "\t" hit[order[i]] }' "$1" 2>/dev/null
+        END { for (i = 1; i <= m; i++) print order[i] "\t" hit[order[i]] "\t" how[order[i]] }' "$1" 2>/dev/null
 }

@@ -78,7 +78,7 @@ check("the orchestrator sends unit files to the systemd specialist",
 
 rows = [l.split("\t") for l in INDEX.read_text().splitlines()[1:]]
 owners = {}
-for kw, _, agent in rows:
+for kw, _, agent, *_ in rows:
     owners.setdefault(kw, set()).add(agent)
 for kw in ("systemd", "sd_notify", ".service", ".socket", ".timer"):
     check(f"{kw} routes to the systemd specialist alone", owners.get(kw) == {SYD}, owners.get(kw))
