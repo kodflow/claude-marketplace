@@ -55,7 +55,7 @@ type Host = {
   spawned: any[];
 };
 
-function host(on: any, env: Record<string, string>): Host {
+function host(on: any, env: Record<string, string>, opts: { noRealPath?: boolean } = {}): Host {
   const h: Host = {
     files: new Map(),
     store: new Map(),
@@ -112,7 +112,7 @@ function host(on: any, env: Record<string, string>): Host {
         size: text?.length ?? 0,
         mtimeMs: 0,
         isLink: target !== undefined,
-        ...(e.resolve ? { realPath: real } : {}),
+        ...(e.resolve && !opts.noRealPath ? { realPath: real } : {}),
       },
     };
   });
@@ -165,6 +165,7 @@ test("one bare agent(): warn by default, the run goes on, the advice in context"
   expect(text).toContain("Mode warn (source: default)");
   expect(text).toContain(`printf off > ${DIR}/tier-mode`);
   expect(h.journal.length).toBe(1);
+  expect(h.journal[0].ts).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
   expect(h.journal[0]).toEqual(
     expect.objectContaining({
       source: "mod",
@@ -189,7 +190,7 @@ test("a script whose agent() passes both fields: untouched, one ok line", async 
   expect(r.result).toEqual(LAUNCHED);
   expect(
     h.journal.map((l) => [l.reason, l.action, l.pinned_model, l.pinned_effort]),
-  ).toEqual([["ok", "pass", "call", "call"]]);
+  ).toEqual([["tier", "pass", "call:haiku", "call:low"]]);
 });
 
 test("enforce refuses before the run; the same script a second time passes (breaker)", async ($, on) => {
@@ -203,7 +204,7 @@ test("enforce refuses before the run; the same script a second time passes (brea
   expect(h.ran).toBe(1);
   expect(two.context[0]).toContain("agent() #1");
   expect(h.journal.map((l) => l.reason)).toEqual(["tier", "tier-breaker"]);
-  expect(h.journal.map((l) => l.action)).toEqual(["deny", "warn"]);
+  expect(h.journal.map((l) => l.action)).toEqual(["refuse", "warn"]);
   // Another script is refused on its own
   const other: any = await $.tool.call(wf({ script: `${BARE}\n// v2` }));
   expect(other.deny).toContain("TIER CHECK REFUSED");
@@ -314,13 +315,7 @@ test("agentType: a definition pinning both fields needs neither; one pinning the
     }),
   );
   expect(builtIn.deny).toContain("missing effort");
-  expect(h.journal.map((l) => l.reason)).toEqual([
-    "ok",
-    "tier",
-    "tier-nodef",
-    "tier-exempt",
-    "tier",
-  ]);
+  expect(h.journal.map((l) => l.reason)).toEqual(["tier", "tier", "tier-nodef", "tier", "tier"]);
 });
 
 test("the environment pins: CLAUDE_CODE_SUBAGENT_MODEL and CLAUDE_CODE_EFFORT_LEVEL (auto pins nothing)", async ($, on) => {
@@ -334,9 +329,7 @@ test("the environment pins: CLAUDE_CODE_SUBAGENT_MODEL and CLAUDE_CODE_EFFORT_LE
   expect(r.deny).toBeUndefined();
   expect(h.journal[0]).toEqual(
     expect.objectContaining({
-      reason: "ok",
-      pinned_model: "env",
-      pinned_effort: "env",
+      reason: "tier", would_refuse: false, pinned_model: "env:sonnet", pinned_effort: "env:high",
     }),
   );
 });
@@ -351,7 +344,8 @@ test("CLAUDE_CODE_EFFORT_LEVEL=auto leaves the effort to the call", async ($, on
     wf({ script: "await agent('x', {model: 'haiku'})" }),
   );
   expect(r.deny).toContain("missing effort");
-  expect(h.journal[0].pinned_model).toBe("call");
+  expect(h.journal[0].pinned_model).toBe("call:haiku");
+  expect(h.journal[0].pinned_effort).toBe("");
 });
 
 test("twenty agent() calls: one line each, the missing ones named by index", async ($, on) => {
@@ -366,7 +360,7 @@ test("twenty agent() calls: one line each, the missing ones named by index", asy
   );
   expect(h.journal.length).toBe(20);
   expect(
-    h.journal.filter((l) => l.reason === "tier").map((l) => l.index),
+    h.journal.filter((l) => l.would_refuse).map((l) => l.index),
   ).toEqual([4, 8, 12, 16, 20]);
   expect(r.context[0]).toContain("5 agent() call(s)");
 });
@@ -491,4 +485,58 @@ test("frontmatterModel is frontmatterField(model): inherit kept, null and ~ drop
   expect(frontmatterModel("﻿---\r\nmodel: 'fable' # c\r\n---\r\n")).toBe(
     "fable",
   );
+});
+
+test("the module loads with tier and fable on agent.spawn: one handler, both rules", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  // A load failure throws on the first event; a spawn and a Workflow both answer
+  const spawned: any = await $.agent.spawn({
+    prompt: "x", description: "w", subagentType: "general-purpose", parentModel: "claude-sonnet-5-5", fork: false, background: true,
+  } as any);
+  expect(spawned.deny).toBeUndefined();
+  const r: any = await $.tool.call(wf({ script: FULL }));
+  expect(r.result).toEqual(LAUNCHED);
+  expect(h.spawned.length).toBe(1);
+});
+
+test("mode_source names the file it came from, as the shell does", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
+  h.files.set(`${DIR}/tier-mode`, "enforce\n");
+  const r: any = await $.tool.call(wf({ script: BARE }));
+  expect(r.deny).toContain(`Mode enforce (source: ${DIR}/tier-mode)`);
+  expect(h.journal[0].mode_source).toBe(`${DIR}/tier-mode`);
+  expect(h.journal[0].action).toBe("refuse");
+});
+
+test("scriptPath with a . or .. segment, or outside the roots by its spelling, is not read", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_TIER: "enforce" });
+  h.files.set("/etc/x.js", BARE);
+  const up: any = await $.tool.call(wf({ scriptPath: `${CWD}/../etc/x.js` }));
+  const dot: any = await $.tool.call(wf({ scriptPath: `${CWD}/./a/../../etc/x.js` }));
+  expect([up.deny, dot.deny]).toEqual([undefined, undefined]);
+  expect(h.journal.map((l) => [l.reason, l.why])).toEqual([
+    ["tier-unjudged", "scriptPath not absolute, or with a . or .. segment"],
+    ["tier-unjudged", "scriptPath not absolute, or with a . or .. segment"],
+  ]);
+});
+
+test("a host without realPath: the spelling decides, a link is not followed", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_TIER: "enforce" }, { noRealPath: true });
+  h.files.set(`${WF}/plain-wf_1.js`, BARE);
+  h.files.set(`link:${WF}/linked-wf_1.js`, "/etc/x.js");
+  const plain: any = await $.tool.call(wf({ scriptPath: `${WF}/plain-wf_1.js` }));
+  expect(plain.deny).toContain("agent() #1");
+  const linked: any = await $.tool.call(wf({ scriptPath: `${WF}/linked-wf_1.js` }));
+  expect(linked.deny).toBeUndefined();
+});
+
+test("the context added is the recorded accepted shape: an array of strings next to the result", async ($, on) => {
+  // tests/fixtures/tier-workflow-results.jsonl, last line: accepted
+  // {context: ["<warning text>"], result: {...}}; a string context is rejected
+  const accepted = { context: ["<warning text>"], ref: 1, result: { status: "async_launched" } };
+  host(on, { CLAUDE_CONFIG_DIR: CFG });
+  const r: any = await $.tool.call(wf({ script: BARE }));
+  expect(Array.isArray(r.context) && r.context.every((c: unknown) => typeof c === "string")).toBe(true);
+  expect(Object.keys(r).filter((k) => k in accepted).sort()).toEqual(["context", "result"]);
+  expect(r.additionalContext).toBeUndefined();
 });

@@ -436,13 +436,23 @@ export function parseTable(text: string | undefined): TableRow[] {
   return rows;
 }
 
-export type Pin = "call" | "definition" | "env" | "none";
+/**
+ * Where a field's value comes from, as the shell journals it:
+ * "call:<v>", "frontmatter:<v>", "env:<v>", "env-forced:<v>", or "" when
+ * nothing pins it. A call value that is not a string literal is "?".
+ */
+export type Pin = string;
 
 export type CallVerdict = {
   index: number;
   line: number;
   agentType?: string;
-  reason: "ok" | "tier" | "tier-nodef" | "tier-exempt";
+  /** tier: judged (missing or not); tier-nodef: no definition, passed */
+  reason: "tier" | "tier-nodef";
+  exempt?: boolean;
+  /** the call itself carries the field */
+  has_model: boolean;
+  has_effort: boolean;
   missing: string[];
   pinned_model: Pin;
   pinned_effort: Pin;
@@ -511,14 +521,16 @@ export async function judgeWorkflowScript(
       index: c.index,
       line: c.line,
       agentType: type,
-      reason: "ok",
+      reason: "tier",
+      has_model: has("model"),
+      has_effort: has("effort"),
       missing: [],
-      pinned_model: "none",
-      pinned_effort: "none",
+      pinned_model: "",
+      pinned_effort: "",
     };
     calls.push(v);
     if (type && exempt.has(type)) {
-      v.reason = "tier-exempt";
+      v.exempt = true;
       continue;
     }
     let def: string | undefined;
@@ -529,17 +541,19 @@ export async function judgeWorkflowScript(
         continue;
       }
     }
+    const call = (k: string) => `call:${c.values[k] ?? "?"}`;
+    const fmModel = frontmatterField(def, "model");
+    const fmEffort = frontmatterField(def, "effort");
     // FORCE: the environment's model replaces the call's
-    if (envModel && port.envForce) v.pinned_model = "env";
-    else if (has("model")) v.pinned_model = "call";
-    else if (definitionPins(def, "model")) v.pinned_model = "definition";
-    else if (envModel) v.pinned_model = "env";
-    if (has("effort")) v.pinned_effort = "call";
-    else if (definitionPins(def, "effort")) v.pinned_effort = "definition";
-    else if (envEffort) v.pinned_effort = "env";
-    if (v.pinned_model === "none") v.missing.push("model");
-    if (v.pinned_effort === "none") v.missing.push("effort");
-    if (v.missing.length) v.reason = "tier";
+    if (envModel && port.envForce) v.pinned_model = `env-forced:${port.envModel!.trim()}`;
+    else if (has("model")) v.pinned_model = call("model");
+    else if (pinned(fmModel, "model")) v.pinned_model = `frontmatter:${fmModel}`;
+    else if (envModel) v.pinned_model = `env:${port.envModel!.trim()}`;
+    if (has("effort")) v.pinned_effort = call("effort");
+    else if (pinned(fmEffort, "effort")) v.pinned_effort = `frontmatter:${fmEffort}`;
+    else if (envEffort) v.pinned_effort = `env:${port.envEffort!.trim()}`;
+    if (!v.pinned_model) v.missing.push("model");
+    if (!v.pinned_effort) v.missing.push("effort");
   }
   return {
     kind: "judged",
@@ -559,7 +573,7 @@ export const offCommand = (sessionDir: string): string =>
 export function advice(
   missing: CallVerdict[],
   table: TableRow[],
-  mode: { mode: TierMode; source: ModeSource },
+  mode: { mode: TierMode; source: string },
   sessionDir: string,
 ): string {
   const head =
@@ -637,11 +651,20 @@ export const insideRoots = (
 ): boolean =>
   roots.some((r) => real.startsWith(r)) || isScratchpad(real, session);
 
+/**
+ * A path judged by its spelling alone: absolute, no `.` or `..` segment, no
+ * empty segment. Symlinks are not resolved here; the caller also checks the
+ * real path when the host gives one.
+ */
+export const plainPath = (path: string): boolean =>
+  path.startsWith("/") && !path.slice(1).split("/").some((seg) => seg === "" || seg === "." || seg === "..");
+
 export type SourcePort = {
   /** the real path and size of a file; undefined when it cannot be stat'd */
+  /** size and kind of a file, and its real path when the host gives one */
   stat: (
     path: string,
-  ) => Promise<{ real: string; size: number; file: boolean } | undefined>;
+  ) => Promise<{ real?: string; size: number; file: boolean } | undefined>;
   read: (path: string) => Promise<string | undefined>;
   roots: string[];
   /** realpath of each root, for a root that is itself a symlink (/tmp on macOS) */
@@ -661,11 +684,17 @@ export async function workflowSource(
     };
   if (typeof e.scriptPath === "string" && e.scriptPath) {
     const path = e.scriptPath;
-    if (!path.startsWith("/"))
+    if (!plainPath(path))
       return {
         kind: "pass",
         reason: "tier-unjudged",
-        why: "scriptPath not absolute",
+        why: "scriptPath not absolute, or with a . or .. segment",
+      };
+    if (!insideRoots(path, port.roots, port.session))
+      return {
+        kind: "pass",
+        reason: "tier-unjudged",
+        why: "scriptPath outside the session, project and scratchpad",
       };
     const st = await port.stat(path);
     if (!st || !st.file)
@@ -674,7 +703,8 @@ export async function workflowSource(
         reason: "tier-unjudged",
         why: "scriptPath not a readable file",
       };
-    if (!insideRoots(st.real, port.roots, port.session))
+    // A link out of the roots, when the host says where it leads
+    if (st.real !== undefined && !insideRoots(st.real, port.roots, port.session))
       return {
         kind: "pass",
         reason: "tier-unjudged",
@@ -686,14 +716,14 @@ export async function workflowSource(
         reason: "tier-unjudged",
         why: "script over 256 kB",
       };
-    const text = await port.read(st.real);
+    const text = await port.read(path);
     if (text === undefined)
       return {
         kind: "pass",
         reason: "tier-unjudged",
         why: "scriptPath unreadable",
       };
-    return { kind: "script", text, from: "scriptPath", path: st.real };
+    return { kind: "script", text, from: "scriptPath", path };
   }
   if (typeof e.script === "string" && e.script) {
     if (e.script.length > MAX_SCRIPT)
@@ -717,20 +747,17 @@ export async function workflowSource(
   };
 }
 
-/** A short digest of a script (FNV-1a, two 32-bit lanes): the breaker's key. */
-export function digest(text: string): string {
-  let a = 0x811c9dc5;
-  let b = 0x01000193 ^ text.length;
-  for (let k = 0; k < text.length; k++) {
-    const c = text.charCodeAt(k);
-    a = Math.imul(a ^ c, 0x01000193) >>> 0;
-    b = Math.imul(b ^ (c + k), 0x5bd1e995) >>> 0;
-  }
-  return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
+/**
+ * SHA-256 of a script, hex (crypto.subtle: mods have no node:crypto). The
+ * breaker's key is the session and this digest, whatever $.store's scope.
+ */
+export async function digest(text: string): Promise<string> {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export const breakerKey = (session: string, script: string): string =>
-  `tier-breaker:${session}:${digest(script)}`;
+export const breakerKey = async (session: string, script: string): Promise<string> =>
+  `tier-breaker:${session}:${await digest(script)}`;
 
 // ---------------------------------------------------------------- spawn
 
@@ -738,6 +765,8 @@ export type SpawnNote = {
   reason: "tier-workflow" | "tier-resume" | "tier-teammate";
   subagent_type: string;
   has_model: boolean;
+  /** the per-call model, when the spawn names one */
+  model?: string;
 };
 
 /** What agent.spawn leaves in the journal: never a refusal, often nothing. */
@@ -750,24 +779,27 @@ export function judgeSpawn(e: {
 }): SpawnNote | undefined {
   const type = typeof e.subagentType === "string" ? e.subagentType : "";
   const has_model = typeof e.model === "string" && e.model !== "";
+  const model = has_model ? (e.model as string) : undefined;
   if (e.workflow && typeof e.workflow === "object")
-    return { reason: "tier-workflow", subagent_type: type, has_model };
+    return { reason: "tier-workflow", subagent_type: type, has_model, model };
   if (e.resume && typeof e.resume === "object")
-    return { reason: "tier-resume", subagent_type: type, has_model };
+    return { reason: "tier-resume", subagent_type: type, has_model, model };
   if (typeof e.name === "string" && e.name)
-    return { reason: "tier-teammate", subagent_type: type, has_model };
+    return { reason: "tier-teammate", subagent_type: type, has_model, model };
   return undefined;
 }
 
 // ---------------------------------------------------------------- journal
 
 export type JournalLine = {
-  ts: number;
+  /** ISO UTC, seconds (date -u +%FT%TZ) */
+  ts: string;
   source: "mod";
   mode: TierMode;
-  mode_source: ModeSource;
+  /** KODFLOW_TIER, the path of the tier-mode file read, default or tier-skew */
+  mode_source: string;
   would_refuse: boolean;
-  action: "pass" | "warn" | "deny";
+  action: "pass" | "warn" | "refuse";
   reason: string;
   subagent_type: string;
   caller: string;
@@ -779,6 +811,13 @@ export type JournalLine = {
   index?: number;
   why?: string;
 };
+
+/** The shell's timestamp: ISO UTC to the second. */
+export const isoNow = (ms: number): string => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+
+/** The mode's source as the shell names it: a file by its path. */
+export const sourceText = (source: ModeSource, sessionDir: string, config: string): string =>
+  source === "session" ? `${sessionDir}/tier-mode` : source === "global" ? `${config}/kodflow/tier-mode` : source;
 
 export const journalFile = (sessionDir: string): string =>
   `${sessionDir}/tier.jsonl`;

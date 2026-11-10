@@ -120,6 +120,8 @@ import {
   journalArgv,
   journalFile,
   journalText,
+  isoNow,
+  sourceText,
   judgeSpawn as tierSpawn,
   judgeWorkflowScript,
   parseTable,
@@ -626,7 +628,8 @@ type TierCtx = {
   cfg: string;
   session: string;
   dir: string;
-  mode: { mode: TierMode; source: ModeSource };
+  /** the source as the shell journals it: a file by its path */
+  mode: { mode: TierMode; source: string };
 };
 
 // The tier mode, as the shell reads it (tier.ts resolveMode)
@@ -642,7 +645,7 @@ async function tierCtx($: any): Promise<TierCtx | undefined> {
     global: await read(`${cfg}/kodflow/tier-mode`),
     skew: await $.fs.exists(`${dir}/tier-skew`).catch(() => false),
   });
-  return { cfg, session, dir, mode };
+  return { cfg, session, dir, mode: { mode: mode.mode, source: sourceText(mode.source as ModeSource, dir, cfg) } };
 }
 
 // Appended, never rewritten: $.fs.write would overwrite the shell's lines
@@ -659,11 +662,16 @@ async function tierSources($: any, ctx: TierCtx): Promise<SourcePort> {
   const cwd = String(await $.session.cwd());
   const project = await projectDir($).catch(() => undefined);
   const stat = async (path: string) => {
+    // `resolve` is not in the reference: realPath, when the host gives it,
+    // is checked too; without it the spelling of the path alone decides
     const s = await $.fs.stat(path, { resolve: true }).catch(() => undefined);
     if (!s) return undefined;
-    // No realPath: a link the engine would not follow, not judged
-    if (typeof s.realPath !== "string") return undefined;
-    return { real: s.realPath, size: Number(s.size ?? 0), file: s.kind === "file" };
+    if (s.isLink && typeof s.realPath !== "string") return undefined;
+    return {
+      real: typeof s.realPath === "string" ? s.realPath : undefined,
+      size: Number(s.size ?? 0),
+      file: s.kind === "file",
+    };
   };
   const roots = scriptRoots({ config: ctx.cfg, cwd, project, session: ctx.session });
   // A root behind a symlink (/tmp, a linked config) is compared by its real path
@@ -690,7 +698,7 @@ function noteTierSpawn($: any, e: any): void {
     if (!ctx || ctx.mode.mode === "off") return;
     await tierJournal($, ctx.dir, [
       {
-        ts: Math.floor(Date.now() / 1000),
+        ts: isoNow(Date.now()),
         source: "mod",
         mode: ctx.mode.mode,
         mode_source: ctx.mode.source,
@@ -701,8 +709,8 @@ function noteTierSpawn($: any, e: any): void {
         caller: e.parentAgentId ? String(e.parentAgentId) : "main",
         has_model: note.has_model,
         has_effort: false,
-        pinned_model: note.has_model ? "call" : "none",
-        pinned_effort: "none",
+        pinned_model: note.model ? `call:${note.model}` : "",
+        pinned_effort: "",
         tool_use_id: String(e.tool_use_id ?? ""),
       },
     ]);
@@ -757,7 +765,7 @@ export const register: Register = (on) => {
     const ctx = await tierCtx($);
     if (!ctx || ctx.mode.mode === "off") return next(e);
     const base = {
-      ts: Math.floor(Date.now() / 1000),
+      ts: isoNow(Date.now()),
       source: "mod" as const,
       mode: ctx.mode.mode,
       mode_source: ctx.mode.source,
@@ -773,8 +781,8 @@ export const register: Register = (on) => {
       why,
       has_model: false,
       has_effort: false,
-      pinned_model: "none",
-      pinned_effort: "none",
+      pinned_model: "",
+      pinned_effort: "",
     });
     const src = await workflowSource(argsOf(e as any), await tierSources($, ctx));
     if (src.kind === "pass") {
@@ -793,10 +801,10 @@ export const register: Register = (on) => {
       await tierJournal($, ctx.dir, [unjudged(v.reason, v.why)]);
       return next(e);
     }
-    let action: JournalLine["action"] = v.missing.length ? (ctx.mode.mode === "enforce" ? "deny" : "warn") : "pass";
+    let action: JournalLine["action"] = v.missing.length ? (ctx.mode.mode === "enforce" ? "refuse" : "warn") : "pass";
     let breaker = false;
-    const key = breakerKey(ctx.session, src.text);
-    if (action === "deny" && (await $.store.get(key))) {
+    const key = await breakerKey(ctx.session, src.text);
+    if (action === "refuse" && (await $.store.get(key))) {
       action = "warn";
       breaker = true;
     }
@@ -807,15 +815,15 @@ export const register: Register = (on) => {
       would_refuse: c.missing.length > 0,
       action: c.missing.length ? action : "pass",
       reason: c.missing.length && breaker ? "tier-breaker" : c.reason,
-      has_model: c.pinned_model === "call",
-      has_effort: c.pinned_effort === "call",
+      has_model: c.has_model,
+      has_effort: c.has_effort,
       pinned_model: c.pinned_model,
       pinned_effort: c.pinned_effort,
     }));
     await tierJournal($, ctx.dir, lines);
     if (!v.missing.length) return next(e);
     const text = advice(v.missing, table, ctx.mode, ctx.dir);
-    if (action === "deny") {
+    if (action === "refuse") {
       await $.store.set(key, { at: base.ts });
       journal($, e, "tier", "deny", undefined, blockOf(text));
       return { deny: text };

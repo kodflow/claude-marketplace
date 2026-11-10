@@ -660,6 +660,15 @@ console.log("== tier: the shared vectors (tests/fixtures/tier-vectors.jsonl)");
     }
   }
   check(n === rows.length && n > 40, `${n} vectors read`);
+  // T0 #20: the shape the mod returns on a Workflow call is the recorded accepted one
+  const results = readFileSync(join(here, "..", "fixtures", "tier-workflow-results.jsonl"), "utf8")
+    .split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const shape = results.find((r) => r.input?.accepted)?.input;
+  check(
+    Array.isArray(shape?.accepted?.context) && shape.accepted.context.every((c: unknown) => typeof c === "string") &&
+      typeof shape?.rejected?.context === "string",
+    "the recorded tool.call return: context accepted as an array of strings, rejected as a string",
+  );
 }
 
 console.log("== tier: the journal is appended, never rewritten");
@@ -667,9 +676,9 @@ console.log("== tier: the journal is appended, never rewritten");
   const root = mkdtempSync(join(tmpdir(), "tier-journal-"));
   const dir = join(root, "kodflow", "sessions", "s1");
   const line = (reason: string): JournalLine => ({
-    ts: 1, source: "mod", mode: "warn", mode_source: "default", would_refuse: false, action: "pass",
+    ts: "2026-11-10T00:00:00Z", source: "mod", mode: "warn", mode_source: "default", would_refuse: false, action: "pass",
     reason, subagent_type: "workflow", caller: "main", has_model: false, has_effort: false,
-    pinned_model: "none", pinned_effort: "none", tool_use_id: "t",
+    pinned_model: "", pinned_effort: "", tool_use_id: "t",
   });
   const append = (text: string) =>
     new Promise<number | null>((resolve) => {
