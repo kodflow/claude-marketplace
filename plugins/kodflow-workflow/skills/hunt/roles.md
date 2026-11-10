@@ -9,7 +9,7 @@ addressed again with SendMessage after a `/clear` or a resume.
 | Role | Count | Model · effort | Lives | Works in | Writes |
 |------|-------|----------------|-------|----------|--------|
 | root | 1 | session (orchestrator) | the whole hunt | nowhere | ledger, `scope.json`, the push deny rule |
-| hunter | budget (1–2) | Opus · `medium` (autonomous, counterexample search) | one pass | detached `sha-<k>` worktrees | witness commits on `hunt-w/<slug>/<N>`, `finding` events |
+| hunter | budget (1–2) | Opus · `xhigh` (autonomous, counterexample search, an executor role) | one pass | detached `sha-<k>` worktrees | witness commits on `hunt-w/<slug>/<N>`, `finding` events |
 | verifier | ≤1 alive | Opus · `high` (review / verify) | one finding | its own detached worktree | `confirmed`/`rejected`, the issue |
 | fixer | budget (≥1) | Sonnet · `medium` (defect in existing code); Opus · `medium` when the fix spans packages, goroutines or a protocol | one issue at a time | `fix-<N>` worktree | `hunt-fix/<slug>/<N>` |
 | integrator | = fixer 1 | Opus · `medium` (an invariant held across issues) | the whole hunt | the integration worktree | `hunt/<slug>`, `tip.bundle` |
