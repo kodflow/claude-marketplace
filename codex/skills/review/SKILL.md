@@ -167,7 +167,11 @@ Dispatch in parallel. **Execution mode**: read
 Teams) vs `SUBAGENTS` (Task tool). Both paths MUST be schema- and severity-equivalent.
 
 Each producer receives: the repo profile, the file's macro record, its changed
-functions/hunks, the blast-radius callers, the deterministic-tier hits for that file, a
+functions/hunks, the blast-radius callers, the deterministic-tier hits for that file, the review
+scope (this diff alone, or the wider topic the caller named), the threat model the
+repository records (what is public, who may attack it) or "none recorded", the
+dimension each other producer owns (`dimensions.md`), so a point owned elsewhere is
+left to its owner, a
 **report-file path** in the session scratchpad
 (`REPORTS=$(mktemp -d "${TMPDIR:-/tmp}/review-reports.XXXXXX")`, one `$REPORTS/<agent>.md`
 each — never inside the worktree, where the file would land as `??` in the next
