@@ -11,7 +11,8 @@ concurrently. **Wave 2** — `hooks` and `daemon` in ONE message, sent once wave
 receives a self-contained prompt and acts on its own concern only. When
 route-agent.sh answers with its `general-purpose` fallback (exit 10), the
 prompt carries `[general-purpose-ok]`, the `marker` of that JSON: the
-kodflow-hooks routing gate reads it as a deliberate dispatch.
+kodflow-hooks routing gate reads it as a deliberate dispatch, and the call passes
+that JSON's `resolved_model` and `effort`.
 
 Every write of a hook entry, of the per-user daemon's state and of the MCP
 entry goes through ktn-linter's own subcommands. No agent edits a

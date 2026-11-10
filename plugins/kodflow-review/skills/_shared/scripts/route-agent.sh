@@ -34,7 +34,9 @@
 #   10 no match — fallback general-purpose was used; its JSON carries marker
 #      "[general-purpose-ok]", which the caller puts in the prompt so the
 #      kodflow-hooks routing gate reads the dispatch as deliberate. Model and
-#      effort are null there: the caller sets them per model-policy §2
+#      effort are those of the tier-table.tsv row for --role (default "Code
+#      worker, well specified"), read from skills/_shared/tier-table.tsv: the
+#      caller passes them on the call (model-policy §2), never null
 #   2  usage
 #   20 invalid profile JSON
 #   21 invalid routing rule (malformed JSONL, or a model or effort in a rule)
@@ -43,12 +45,16 @@
 #   30 the agent's definition cannot be found or read
 #   31 the agent's model is missing, invalid or gated (model-policy §6), or its effort
 #      is invalid
+#   32 the fallback needs a tier-table.tsv row (--role) and it is missing,
+#      unreadable, or claims no model or effort
 
 set -uo pipefail
 # WHY: not -e so we can return tailored exit codes per error condition.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROUTING_TABLE="${CLAUDE_ROUTING_TABLE:-$SCRIPT_DIR/../routing-table.jsonl}"
+TIER_TABLE="${CLAUDE_TIER_TABLE:-$SCRIPT_DIR/../tier-table.tsv}"
+ROLE="Code worker, well specified"
 TELEMETRY_LOG="${CLAUDE_ROUTING_TELEMETRY:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/logs/router-fallbacks.jsonl}"
 CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 PROJECT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
@@ -68,6 +74,7 @@ while [[ $# -gt 0 ]]; do
     --skill)    SKILL="${2:-}"; shift 2 || shift ;;
     --phase)    PHASE="${2:-}"; shift 2 || shift ;;
     --profile)  PROFILE_PATH="${2:-}"; shift 2 || shift ;;
+    --role)     ROLE="${2:-}"; shift 2 || shift ;;
     --dry-run)  DRY_RUN=1; shift ;;
     -h|--help)
       cat <<USAGE
@@ -76,6 +83,8 @@ route-agent.sh — resolve a skill+phase+profile to a dispatch decision.
   --skill <name>        e.g. /review, /refine, /search
   --phase <name>        skill phase identifier
   --profile <path>      path to a JSON profile (output of detect-project.sh)
+  --role <row>          tier-table role the general-purpose fallback takes its
+                        model and effort from (default "Code worker, well specified")
   --dry-run             explain rule resolution, never side-effect
 
 See routing-table.jsonl for available rules.
@@ -103,17 +112,26 @@ fi
 # exit 10.
 emit_fallback() {
   local reason="$1" phase="$2"
+  local fb_model fb_effort
+  # Model and effort of the tier-table row: general-purpose has no frontmatter,
+  # so the call must carry them (model-policy §2); a missing row is a failure,
+  # not a null the caller would fill from memory.
+  read -r fb_model fb_effort < <(awk -F'\t' -v r="$ROLE" \
+      '$1 == "role" && $2 == r { print $3, $4; exit }' "$TIER_TABLE" 2>/dev/null)
+  case "${fb_model:--}" in -) fb_model="" ;; esac
+  case "${fb_effort:--}" in -) fb_effort="" ;; esac
+  if [[ -z "$fb_model" || -z "$fb_effort" ]]; then
+    echo "fallback: no model and effort for role '$ROLE' in $TIER_TABLE" >&2
+    return 32
+  fi
   mkdir -p "$(dirname "$TELEMETRY_LOG")" 2>/dev/null
   jq -n --arg ts "$(date -u +%FT%TZ)" --arg s "$SKILL" --arg p "$phase" --arg r "$reason" \
         '{ts:$ts, skill:$s, phase:$p, reason:$r}' >> "$TELEMETRY_LOG" 2>/dev/null
-  # No model and no effort: general-purpose has no frontmatter to read, and a
-  # value written here would be a guess that outlives the policy. The caller
-  # sets both on the call (model-policy §2).
-  jq -n '{
+  jq -n --arg m "$fb_model" --arg e "$fb_effort" --arg role "$ROLE" '{
     subagent_type: "general-purpose",
-    resolved_model: null,
-    model_source: "caller",
-    effort: null,
+    resolved_model: $m,
+    model_source: ("tier-table: " + $role),
+    effort: $e,
     count: 1,
     owned_paths_hint: [],
     matched_rule_id: null,
@@ -126,7 +144,7 @@ emit_fallback() {
 # --- Parse routing-table line-by-line ---
 [[ -r "$ROUTING_TABLE" ]] || {
   # No table = always fallback
-  emit_fallback "no-routing-table" "$PHASE"
+  emit_fallback "no-routing-table" "$PHASE" || exit $?
   exit 10
 }
 
@@ -188,7 +206,7 @@ done <<< "$filtered"
 
 count=$(echo "$applicable" | jq 'length')
 if [[ "$count" -eq 0 ]]; then
-  emit_fallback "no-match" "$PHASE"
+  emit_fallback "no-match" "$PHASE" || exit $?
   exit 10
 fi
 
@@ -319,7 +337,7 @@ done <<< "$rules_to_run"
 
 if [[ "$(echo "$entries" | jq 'length')" -eq 0 ]]; then
   # Templates only, and no value had an agent installed
-  emit_fallback "no-agent-installed" "$PHASE"
+  emit_fallback "no-agent-installed" "$PHASE" || exit $?
   exit 10
 fi
 

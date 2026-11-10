@@ -13,8 +13,8 @@ thread never commits.
 
 ## Dispatch
 
-One `Agent` call, `subagent_type: "general-purpose"`, model `sonnet`, with
-this brief (fill the brackets):
+One `Agent` call, `subagent_type: "general-purpose"`, model `sonnet`, effort `medium`
+(a code worker to a spec, model-policy §2), with this brief (fill the brackets):
 
 ```
 Persist the animation trail of <project root> into its permanent PR. Do not

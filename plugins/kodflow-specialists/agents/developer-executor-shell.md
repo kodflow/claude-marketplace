@@ -17,6 +17,7 @@ color: blue
 Restrict shell usage to these command families; anything outside is out of scope for this agent and must be handed back to the caller.
 
 - `Bash(git diff:*)`
+- `Bash(git show:*)` — read-only, to read a file at a revision
 - `Bash(shellcheck:*)`
 - `Bash(hadolint:*)`
 
