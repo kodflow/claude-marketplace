@@ -15,6 +15,12 @@
 // reads it, and an MCP tool's leaves one line of shape and size, no value, in
 // the session directory (mcp-probe.ts).
 //
+// Tier (tier.ts), before fable on the same events: a Workflow's agent()
+// calls must pass the model and the effort their definition does not pin.
+// Judged at the tool.call from the script; warn (the default) appends the
+// advice to the result's context, enforce refuses before the run, once per
+// script. agent.spawn is only logged. Lines go to the session's tier.jsonl.
+//
 // Gated models (fable.ts): an agent.spawn that would run on one passes only
 // with the session's grant in $.store, asked once while the user is at the
 // prompt; a /model the user types grants it (classic.PreModelSwitch). The
@@ -108,6 +114,25 @@ import {
   definitionPaths,
   type SpawnPort,
 } from "./fable.ts";
+import {
+  advice,
+  breakerKey,
+  journalArgv,
+  journalFile,
+  journalText,
+  isoNow,
+  sourceText,
+  judgeSpawn as tierSpawn,
+  judgeWorkflowScript,
+  parseTable,
+  resolveMode,
+  scriptRoots,
+  workflowSource,
+  type JournalLine,
+  type ModeSource,
+  type SourcePort,
+  type TierMode,
+} from "./tier.ts";
 
 // Set once every tool registered; the beat is a promise that they did.
 let toolsReady = false;
@@ -536,24 +561,11 @@ async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort & { skillFil
   return {
     gated: () => gatedText($),
     mode: async () => gateMode(await $.env.get("KODFLOW_FABLE")),
+    // The same lookup as the tier rule's: both judge one file per agentType
     definition: async (type) => {
-      const cfg = await config($);
-      if (!cfg) return undefined;
-      const installed = await $.fs
-        .read(`${cfg}/plugins/installed_plugins.json`)
-        .catch(() => undefined);
-      for (const path of definitionPaths(type, {
-        project: await projectDir($).catch(() => undefined),
-        config: cfg,
-        installed,
-      })) {
-        const text = await $.fs.read(path).catch(() => undefined);
-        if (text !== undefined) {
-          raw.push(text.slice(0, 4000));
-          return text;
-        }
-      }
-      return undefined;
+      const text = await definitionText($, type);
+      if (text !== undefined) raw.push(text.slice(0, 4000));
+      return text;
     },
     envModel: async () => {
       const v = await $.env.get("CLAUDE_CODE_SUBAGENT_MODEL");
@@ -581,6 +593,116 @@ async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort & { skillFil
     present,
     ask: (question, options) => $.ui.ask(question, { options, header: "Gated model" }),
   };
+}
+
+// The text of an agent definition, by fable's resolution order
+async function definitionText($: any, type: string): Promise<string | undefined> {
+  const cfg = await config($);
+  if (!cfg) return undefined;
+  const installed = await $.fs.read(`${cfg}/plugins/installed_plugins.json`).catch(() => undefined);
+  for (const path of definitionPaths(type, {
+    project: await projectDir($).catch(() => undefined),
+    config: cfg,
+    installed,
+  })) {
+    const text = await $.fs.read(path).catch(() => undefined);
+    if (text !== undefined) return text;
+  }
+  return undefined;
+}
+
+type TierCtx = {
+  cfg: string;
+  session: string;
+  dir: string;
+  /** the source as the shell journals it: a file by its path */
+  mode: { mode: TierMode; source: string };
+};
+
+// The tier mode, as the shell reads it (tier.ts resolveMode)
+async function tierCtx($: any): Promise<TierCtx | undefined> {
+  const cfg = await config($);
+  if (!cfg) return undefined;
+  const session = String(await $.session.id());
+  const dir = sessionDir(cfg, session);
+  const read = (path: string) => $.fs.read(path).catch(() => undefined);
+  const mode = resolveMode({
+    env: await $.env.get("KODFLOW_TIER"),
+    session: await read(`${dir}/tier-mode`),
+    global: await read(`${cfg}/kodflow/tier-mode`),
+    skew: await $.fs.exists(`${dir}/tier-skew`).catch(() => false),
+  });
+  return { cfg, session, dir, mode: { mode: mode.mode, source: sourceText(mode.source as ModeSource, dir, cfg) } };
+}
+
+// Appended, never rewritten: $.fs.write would overwrite the shell's lines
+async function tierJournal($: any, dir: string, lines: JournalLine[]): Promise<void> {
+  if (!lines.length) return;
+  await $.process
+    .run(journalArgv(dir, journalFile(dir)), { stdin: journalText(lines), timeoutMs: 3000 })
+    .catch(() => undefined);
+}
+
+// Where a scriptPath may be read: its real path, inside the session's
+// projects/ directory, the project, or the scratchpad
+async function tierSources($: any, ctx: TierCtx): Promise<SourcePort> {
+  const cwd = String(await $.session.cwd());
+  const project = await projectDir($).catch(() => undefined);
+  const stat = async (path: string) => {
+    // `resolve` is not in the reference: realPath, when the host gives it,
+    // is checked too; without it the spelling of the path alone decides
+    const s = await $.fs.stat(path, { resolve: true }).catch(() => undefined);
+    if (!s) return undefined;
+    if (s.isLink && typeof s.realPath !== "string") return undefined;
+    return {
+      real: typeof s.realPath === "string" ? s.realPath : undefined,
+      size: Number(s.size ?? 0),
+      file: s.kind === "file",
+    };
+  };
+  const roots = scriptRoots({ config: ctx.cfg, cwd, project, session: ctx.session });
+  // A root behind a symlink (/tmp, a linked config) is compared by its real path
+  for (const r of [...roots]) {
+    if (typeof r !== "string") continue;
+    const real = (await stat(r.replace(/\/$/, "")))?.real;
+    if (real && !roots.includes(`${real}/`)) roots.push(`${real}/`);
+  }
+  return {
+    stat,
+    read: (path: string) => $.fs.read(path).catch(() => undefined),
+    roots,
+    session: ctx.session,
+  };
+}
+
+// Tier at a spawn: never a refusal; a Workflow agent, a resume, a named
+// agent leave one line. Started, not awaited, and every failure swallowed.
+function noteTierSpawn($: any, e: any): void {
+  void (async () => {
+    if (await off($)) return;
+    const note = tierSpawn(e);
+    if (!note) return;
+    const ctx = await tierCtx($);
+    if (!ctx || ctx.mode.mode === "off") return;
+    await tierJournal($, ctx.dir, [
+      {
+        ts: isoNow(Date.now()),
+        source: "mod",
+        mode: ctx.mode.mode,
+        mode_source: ctx.mode.source,
+        would_refuse: false,
+        action: "pass",
+        reason: note.reason,
+        subagent_type: note.subagent_type,
+        caller: e.parentAgentId ? String(e.parentAgentId) : "main",
+        has_model: note.has_model,
+        has_effort: false,
+        pinned_model: note.model ? `call:${note.model}` : "",
+        pinned_effort: "",
+        tool_use_id: String(e.tool_use_id ?? ""),
+      },
+    ]);
+  })().catch(() => undefined);
 }
 
 export const register: Register = (on) => {
@@ -625,8 +747,89 @@ export const register: Register = (on) => {
     return next(e);
   }).catch(($, e, next) => next(e));
 
-  // The gated-model rule at the spawn: pass or refuse, never a model written
+  // Tier: a Workflow's agent() judged from the script, before the run
+  on("tool.call", { tool: "Workflow" }, async ($, e, next) => {
+    if (await off($)) return next(e);
+    const ctx = await tierCtx($);
+    if (!ctx || ctx.mode.mode === "off") return next(e);
+    const base = {
+      ts: isoNow(Date.now()),
+      source: "mod" as const,
+      mode: ctx.mode.mode,
+      mode_source: ctx.mode.source,
+      subagent_type: "workflow",
+      caller: e.agentId ? String(e.agentId) : "main",
+      tool_use_id: String(e.tool_use_id ?? ""),
+    };
+    const unjudged = (reason: string, why: string): JournalLine => ({
+      ...base,
+      would_refuse: false,
+      action: "pass",
+      reason,
+      why,
+      has_model: false,
+      has_effort: false,
+      pinned_model: "",
+      pinned_effort: "",
+    });
+    const src = await workflowSource(argsOf(e as any), await tierSources($, ctx));
+    if (src.kind === "pass") {
+      await tierJournal($, ctx.dir, [unjudged(src.reason, src.why)]);
+      return next(e);
+    }
+    const table = parseTable(await $.fs.read(`${$.plugin.root}/hooks/tier-table.tsv`).catch(() => undefined));
+    const v = await judgeWorkflowScript(src.text, {
+      definition: (type) => definitionText($, type),
+      envModel: await $.env.get("CLAUDE_CODE_SUBAGENT_MODEL"),
+      envForce: forced(await $.env.get("CLAUDE_CODE_SUBAGENT_MODEL_FORCE")),
+      envEffort: await $.env.get("CLAUDE_CODE_EFFORT_LEVEL"),
+      table,
+    });
+    if (v.kind === "pass") {
+      await tierJournal($, ctx.dir, [unjudged(v.reason, v.why)]);
+      return next(e);
+    }
+    let action: JournalLine["action"] = v.missing.length ? (ctx.mode.mode === "enforce" ? "refuse" : "warn") : "pass";
+    let breaker = false;
+    const key = await breakerKey(ctx.session, src.text);
+    if (action === "refuse" && (await $.store.get(key))) {
+      action = "warn";
+      breaker = true;
+    }
+    const lines: JournalLine[] = v.calls.map((c) => ({
+      ...base,
+      subagent_type: c.agentType ?? "workflow-subagent",
+      index: c.index,
+      would_refuse: c.missing.length > 0,
+      action: c.missing.length ? action : "pass",
+      reason: c.missing.length && breaker ? "tier-breaker" : c.reason,
+      has_model: c.has_model,
+      has_effort: c.has_effort,
+      pinned_model: c.pinned_model,
+      pinned_effort: c.pinned_effort,
+    }));
+    await tierJournal($, ctx.dir, lines);
+    if (!v.missing.length) return next(e);
+    const text = advice(v.missing, table, ctx.mode, ctx.dir);
+    if (action === "refuse") {
+      await $.store.set(key, { at: base.ts });
+      journal($, e, "tier", "deny", undefined, blockOf(text));
+      return { deny: text };
+    }
+    const r: any = await next(e);
+    const context = Array.isArray(r?.context) ? r.context : [];
+    return { ...r, context: [...context, text] };
+  }).catch(($, e, next) => next(e));
+
+  // One handler a spawn (the engine takes one per event without a matcher):
+  // tier first, logged only, then the gated-model rule, which passes or
+  // refuses and never writes a model
   on("agent.spawn", async ($, e, next) => {
+    try {
+      noteTierSpawn($, e);
+    } catch {
+      // tier fails open
+    }
     const raw: unknown[] = [e.model, e.parentModel];
     const at = { tool: "Agent", tool_use_id: e.tool_use_id, agentId: e.parentAgentId };
     let verdict;

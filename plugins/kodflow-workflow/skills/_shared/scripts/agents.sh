@@ -135,7 +135,7 @@ _kf_fm_get() {
         NR == 1 { sub(/^\357\273\277/, ""); if ($0 != "---") exit; next }
         NR > 61 || $0 == "---" { exit }
         index($0, key ":") == 1 {
-            v = $0; sub(/^[A-Za-z_-]+:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
+            v = $0; sub(/^[A-Za-z_-]+:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v); sub(/^#.*$/, "", v)
             sub(/[[:space:]]+$/, "", v)
             if (v ~ /^".*"$/ || v ~ /^'\''.*'\''$/) v = substr(v, 2, length(v) - 2)
             print v; exit

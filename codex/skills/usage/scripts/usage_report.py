@@ -505,6 +505,44 @@ def analyse_workflows(events: list[Event], trace: dict) -> list[dict]:
     return sorted(rows.values(), key=lambda r: r["cost"].total, reverse=True)
 
 
+def analyse_tier(trace: dict, sessions: Path, since: datetime | None,
+                 until: datetime | None) -> dict:
+    """The tier judge's journal joined to the Agent dispatches, per ISO week.
+
+    `<config>/kodflow/sessions/*/tier.jsonl` has one line per judged call. A
+    line joins a dispatch by tool_use_id and takes that dispatch's week; one
+    with no id, or an id the transcripts do not hold, takes its own timestamp's
+    week and is counted as unjoined. Counts only: would_refuse, action, reason.
+    """
+    out: dict = {"rows": 0, "joined": 0, "unjoined": 0, "by_week": {}}
+    if not sessions.is_dir():
+        return out
+    for path in sorted(sessions.glob("*/tier.jsonl")):
+        for row in iter_json_lines(path):
+            when = parse_time(row.get("ts"))
+            call = clean(row.get("tool_use_id"))
+            dispatch = trace["dispatches"].get(call) if call else None
+            if dispatch is not None:
+                when = dispatch["when"]
+            if when is None or (since and when < since) or (until and when > until):
+                continue
+            slot = out["by_week"].setdefault(iso_week(when), {
+                "rows": 0, "joined": 0, "would_refuse": 0, "actions": {}, "reasons": {}})
+            out["rows"] += 1
+            slot["rows"] += 1
+            if dispatch is not None:
+                out["joined"] += 1
+                slot["joined"] += 1
+            else:
+                out["unjoined"] += 1
+            if row.get("would_refuse") is True:
+                slot["would_refuse"] += 1
+            for field, bucket in (("action", "actions"), ("reason", "reasons")):
+                key = clean(row.get(field)) or "(none)"
+                slot[bucket][key] = slot[bucket].get(key, 0) + 1
+    return out
+
+
 def find_repeats(trace: dict) -> dict:
     """Subagent runs that repeat an earlier same-type run, one after the other.
 
@@ -530,7 +568,8 @@ def find_repeats(trace: dict) -> dict:
     return {"candidates": total, "by_agent": dict(sorted(by_agent.items()))}
 
 
-def build_report(events: list[Event], stats: dict, trace: dict | None = None) -> dict:
+def build_report(events: list[Event], stats: dict, trace: dict | None = None,
+                 tier: dict | None = None) -> dict:
     trace = trace or {"runs": {}, "dispatches": {}}
     reprimes = find_reprimes(events)
     unknown: dict[str, dict] = defaultdict(lambda: {"requests": 0, "tokens": 0})
@@ -609,6 +648,7 @@ def build_report(events: list[Event], stats: dict, trace: dict | None = None) ->
     return {
         "stats": stats,
         "dispatches": analyse_dispatches(trace),
+        "tier": tier or {"rows": 0, "joined": 0, "unjoined": 0, "by_week": {}},
         "workflows": analyse_workflows(events, trace),
         "repeats": find_repeats(trace),
         "weeks": weeks,
@@ -730,6 +770,16 @@ def print_text(report: dict, projects: Path, since: str | None, until: str | Non
                 f"{f} {slot[f]['call']} call / {slot[f]['definition']} definition / "
                 f"{slot[f]['unresolved']} unresolved" for f in ("model", "effort"))
             print(f"   {week_name}  {slot['dispatches']:>4}  {states}")
+    tier = report["tier"]
+    if tier["rows"]:
+        print()
+        print(f"── tier judge: {tier['rows']} journal line(s), {tier['joined']} joined to a "
+              f"dispatch by tool_use_id, {tier['unjoined']} not")
+        for week_name, slot in sorted(tier["by_week"].items()):
+            acts = ", ".join(f"{k} {v}" for k, v in sorted(slot["actions"].items()))
+            why = ", ".join(f"{k} {v}" for k, v in sorted(slot["reasons"].items()))
+            print(f"   {week_name}  {slot['rows']:>4}  would_refuse {slot['would_refuse']}"
+                  f" · actions: {acts} · reasons: {why}")
     if report["workflows"]:
         print()
         print(f"── {len(report['workflows'])} workflow run(s)")
@@ -769,6 +819,7 @@ def jsonable(report: dict) -> dict:
         "stats": report["stats"],
         "unknown_models": {k: dict(v) for k, v in report["unknown_models"].items()},
         "dispatches": report["dispatches"],
+        "tier": report["tier"],
         "workflows": [{
             "run_id": w["run_id"], "session": w["session"], "agents": w["agents"],
             "requests": w["requests"], "cost": cost(w["cost"]),
@@ -845,7 +896,10 @@ def main(argv: list[str] | None = None) -> int:
     projects = Path(args.projects).expanduser() if args.projects else default_projects()
     events, stats, trace = collect(projects, parse_day(args.since), parse_day(args.until, end=True),
                             args.project)
-    report = build_report(events, stats, trace)
+    # The judge's journal lives beside the transcripts: <config>/kodflow/sessions.
+    sessions = projects.parent / "kodflow" / "sessions"
+    tier = analyse_tier(trace, sessions, parse_day(args.since), parse_day(args.until, end=True))
+    report = build_report(events, stats, trace, tier)
 
     if args.json:
         json.dump(jsonable(report), sys.stdout, indent=2, sort_keys=False)
