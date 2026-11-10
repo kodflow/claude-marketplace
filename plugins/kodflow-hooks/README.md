@@ -226,7 +226,7 @@ fails by accident blocks every shell call of the session.
 
 | Event | Script | Gate | Block | Transform | Observe |
 |-------|--------|------|-------|-----------|---------|
-| `PreToolUse` · Bash | `on-tool.sh` | no `git`/`gh`/`glab`/`curl`/`wget`/`http` on the line once unquoted (and no `$'…'`) | read by the shell reader below: the main thread producing into a repository (delegation gate) · `--no-verify`, `-n` on a commit, `-c core.hooksPath` · AI attribution or workflow leak in a commit message, AI attribution in a PR/MR title or body · credential shapes in the staged blobs · a forced push (`--force`, `-f`, `+refspec`), with the command to run instead · from a subagent: any merge, any push to the default branch | none: the input is never rewritten | log; a main-thread merge is tagged `root_guard: merge` |
+| `PreToolUse` · Bash | `on-tool.sh` | no `git`/`gh`/`glab`/`curl`/`wget`/`http` on the line once unquoted (and no `$'…'`) | read by the shell reader below: the main thread producing into a repository (delegation gate) · `--no-verify`, `-n` on a commit, `-c core.hooksPath` · AI attribution or workflow leak in a commit message, AI attribution in a PR/MR title or body · credential shapes in the staged blobs · a forced push (`--force`, `-f`, `+refspec`), with the command to run instead · from a subagent: any merge, any push to the default branch | none: the input is never rewritten; a kodflow-specialists agent's command outside its Command scope gets one advice line (read before the gate, never a refusal) | log; a main-thread merge is tagged `root_guard: merge`; `scope.jsonl` |
 | `PreToolUse` · task tools | `on-tool.sh` | the mod's task tools never reach it (a call a function hook answers fires no `PreToolUse`); the old MCP names are logged and passed | built-in `TaskCreate`/`TodoWrite` while the mod beats: their chat panel duplicates the status line, the refusal points at the kodflow task tools | — | log |
 | `PreToolUse` · Write/Edit | `on-tool.sh` | main thread writing inside a git work tree (memory and Claude configuration excepted, and a plugin's `root-write-allow` where the repository enables that plugin) · no file path | the main thread producing into a repository (delegation gate) · protected path (defaults or `.claude/protected-paths`) | — | log (no linter call: ktn-linter reports through its own command hooks) |
 | `PreToolUse` · forge MCP (`mcp__github__*`, `mcp__gitlab__*`, `mcp__GitKraken__*`) | `on-tool.sh` | no message, title, body, description, branch or merge field, and a subagent or a read/merge/review/issue tool (decided without jq) | a forge write from the main thread (files, branches, pull requests) · AI attribution or workflow leak in a commit field (`message`, `commit_message`, `commit_title`, `squash_commit_message`, `merge_commit_message`) · AI attribution in the title, body or description of a PR/MR tool · from a subagent: a merge (`merge_pull_request`, `merge_merge_request`, `merge_when_pipeline_succeeds`, `auto_merge`), a file write to `main`/`master` | — | log; a main-thread merge is tagged `root_guard: merge` |
@@ -656,6 +656,42 @@ session's entries that turns the open needs into one pull request. An entry whos
 has no definition file (a built-in, an agent defined in the session) is kept
 but never proposed: there is no definition to show a diff of.
 
+### Command scope advice (`KODFLOW_SCOPE=off`)
+
+A kodflow-specialists agent's `## Command scope` is an instruction, not a
+permission: its `tools` grant `Bash` whole (#155). `on-tool.sh` compares
+every shell call of a subagent whose `agent_type` is
+`kodflow-specialists:<name>` (and that carries an `agent_id`) with the
+families the installed definition declares (`lib/scope.sh`): each
+`Bash(...)` entry of the section, up to its first placeholder, glob, path or
+quote, the leading command list of a prose bullet (`grep -n`, `grep -c` and
+`sed -n …`, nothing after it, which may name forms the bullet forbids), and,
+for an agent that carries Plan review mode, the commands of its inspection
+line, since the mode is not visible in the payload. The line is read by the
+shell reader (nested `bash -c`, pipes, wrappers, `rtk`, `env`, `VAR=`), git's
+global options are walked past, shell plumbing (`cd`, `echo`, `test`…) and a
+command word it cannot see (`$c`) are not reported.
+
+It never refuses, never rewrites and never causes a permission prompt, and
+stays advisory by the owner's decision (10/11/2026): a command the brief
+allowed is fine, it is only reported. A call outside goes on and carries one
+terse `additionalContext` line naming the commands outside (the name, and its verb
+when the verb is a plain word, never an argument), once per agent and
+command; every such call is a line of `<session>/scope.jsonl` (agent type and
+id, tool_use_id, the commands outside, never the line). No definition, no
+section, no `Bash(...)` entry, a bare agent name, no jq: silence.
+`KODFLOW_SCOPE=off`, `off` in `<config>/kodflow/scope-mode` and a line over
+8192 characters are decided before the line is parsed, so a large heredoc
+costs a specialist what it costs any other caller. Replayed on 480 recorded
+specialist calls, 425 ran a command outside the declared scope, mostly
+`head`, `sed`, `grep`, `cat`, `tail` and `wc` in pipes: what a refusal would
+have stopped, and why there is none. The identity it relies on
+is recorded: every PreToolUse a subagent sends carries `agent_id` and its
+`agent_type`, the plugin-qualified name for a plugin agent
+(`tests/fixtures/specialist-bash.jsonl`). Cost: about 30 ms on a specialist's
+shell call of at most 8192 characters (measured on the replay), nothing
+past that cap and nothing on any other caller. Tested by `tests/test_scope.sh`.
+
 ### Holes — what was not observed, and is not claimed
 
 | Case | What happens |
@@ -992,6 +1028,7 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KODFLOW_ISOLATION=off` | the isolation gate is off for the session |
 | `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
 | `KODFLOW_FEEDBACK=off` | no rule 6, nothing kept, nothing proposed |
+| `KODFLOW_SCOPE=off` | no Command scope advice on a kodflow-specialists agent's shell call, no `scope.jsonl` (also `off` in `<config>/kodflow/scope-mode`) |
 | `KODFLOW_FORGE_BROWSER=ask` · `off` | Claude in Chrome toward a forge: each call asks the user (`ask`, the way to grant one call they agreed to) or is not checked (`off`); refused by default |
 | `KODFLOW_FORGE_HOSTS` | more forge hosts for that check, space- or comma-separated (a GitLab instance the session's directory has no remote for) |
 | `KODFLOW_LINT=off` | no ktn-linter run after an edit and no instruction; ktn-linter's own hooks, when installed, are not affected. For every project: `"env": {"KODFLOW_LINT": "off"}` in `~/.claude/settings.json`. For one project: the same `env` block in that project's `.claude/settings.json` (applied once the workspace is trusted, and in `-p` runs; a hook inherits it) |
@@ -1053,7 +1090,7 @@ the mod) and the task tools' answers are still in English.
 
 ```
 bash scripts/tests/test_hooks.sh
-bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh + test_cleanup.sh + test_identity.sh + test_docs.sh + test_blocks.sh
+bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh + test_cleanup.sh + test_identity.sh + test_docs.sh + test_blocks.sh + test_scope.sh
 claude plugin validate --json plugins/kodflow-hooks
 claude plugin test plugins/kodflow-hooks         # tests/mod/*.test.ts, in the engine
 node plugins/kodflow-hooks/tests/mod/run-node.ts # corpora, real disk, several processes, invariants

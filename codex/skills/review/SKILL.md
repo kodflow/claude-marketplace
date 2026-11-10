@@ -177,9 +177,10 @@ left to its owner, a
 each — never inside the worktree, where the file would land as `??` in the next
 `git status` and fold itself into the diff under review), and these two contracts:
 
-- **Report file.** Write `status: in-progress` into it BEFORE reading anything, append each
+- **Report file.** Write `status: in-progress` into it BEFORE reading the reviewed material (the brief comes first), append each
   finding in the strict JSON schema (triage.md) as soon as it is established — not batched
-  at the end — and flip it to `status: complete` as the last action. **A missing file, or
+  at the end — and end it with a `status: complete` line as the last action (a producer
+  without `Edit` writes the whole file again each time). **A missing file, or
   one not ending in `status: complete`, makes that pass INCOMPLETE**: re-brief it narrower
   or cover that dimension inline. Never read it as a favorable verdict — a producer that
   found nothing and a producer that died mid-read return the same silence.

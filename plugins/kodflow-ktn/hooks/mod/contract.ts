@@ -45,12 +45,25 @@ export const SOCKET_MAX_BYTES = 96;
  * pkg/userdirs `Anchor()`: endpoint.json sits under HOME alone, whatever
  * XDG_STATE_HOME says, so a client finds it when the state is redirected.
  * base_xdg.go: `~/.local/state`; base_darwin.go: `~/Library/Application
- * Support`. Windows (LOCALAPPDATA) is out of the mod's support (#774).
+ * Support`. base_windows.go: `%LOCALAPPDATA%`, which WINDOWS_ANCHOR is
+ * relative to (winpipe.ts, #143).
  */
 export const ANCHORS = [
   ".local/state/ktn-linter/endpoint.json",
   "Library/Application Support/ktn-linter/endpoint.json",
 ] as const;
+export const WINDOWS_ANCHOR = "ktn-linter\\endpoint.json";
+
+/**
+ * kodflow/ktn-linter#989: on Windows the daemon's IPC library listens on a
+ * named pipe it derives from the socket path (proc/ipc `pipeName`, the
+ * version ktn-linter's go.mod pins): this prefix, then the hex of the first
+ * PIPE_HASH_BYTES of SHA-256 over the lower-cased clean path, `-`, the
+ * path's base. winpipe.ts computes it; a change on the other side is a
+ * change here.
+ */
+export const PIPE_PREFIX = "\\\\.\\pipe\\ipc-";
+export const PIPE_HASH_BYTES = 8;
 
 /** pkg/view/wire.go `RoutePath`, mounted on the socket only. */
 export const VIEW_ROUTE = "/api/view";

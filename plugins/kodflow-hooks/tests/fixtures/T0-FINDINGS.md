@@ -46,3 +46,16 @@ per case with a `case` label.
 - A `Task` tool name: never emitted.
 - Interactive and plan permission modes (all runs in `auto`).
 - `context` returned from `tool.call` on an Agent call.
+
+## Specialist shell calls (#155)
+
+`specialist-bash.jsonl` is the shape of a PreToolUse Bash sent from inside a
+plugin subagent, read from the hooks' own session log (`lib/event.jq`, which
+keeps `agent_type` and `agent_id`): 480 such calls from seven
+kodflow-specialists agents, Claude Code 2.1.3xx, permission mode `auto`, every
+one with an `agent_id` and the plugin-qualified `agent_type`
+(`kodflow-specialists:<name>`), the keys `agent_id, agent_type, cwd,
+hook_event_name, permission_mode, session_id, tool_input{command,
+description, run_in_background}, tool_name, tool_use_id, transcript_path`.
+Ids, paths and the command are synthetic. Not observed: a plugin agent
+dispatched under a `name`, whose `agent_type` may then be that name.

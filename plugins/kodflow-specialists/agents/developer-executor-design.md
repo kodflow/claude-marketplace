@@ -219,10 +219,12 @@ solid:
 
 When your brief names a report-file path, that file — not your return value — is where the
 JSON below goes. It lives in the caller's scratch dir, never inside the repository being
-reviewed. Create it with a `status: in-progress` line BEFORE you read anything, append each
-finding as soon as it is established rather than batching them at the end, and flip it to
-`status: complete` as your very last action — a caller that finds no file, or one still
-`in-progress`, must treat your pass as incomplete, not as a clean bill of health.
+reviewed. Create it with a `status: in-progress` line BEFORE you read the reviewed material
+(the brief comes first), append each finding as soon as it is established rather than
+batching them at the end, and end it with a `status: complete` line as your very last action
+— a caller that finds no file, or one whose last `status:` line is not `complete`, must treat
+your pass as incomplete, not as a clean bill of health. Without `Edit`, an append is a
+`Write` of the whole file: what it held, then the new finding.
 
 `Write` creates that one report file, at the path the brief names under the caller's scratch
 directory, and nothing else: never a file inside the reviewed repository, never over another
@@ -232,7 +234,9 @@ report-file path in the brief, write nothing.
 Then return at most ~1500 characters to the caller: the summary line your brief specifies,
 followed by one line per finding as `SEVERITY | file:line | expected fix`, and nothing else
 — no reasoning, no restated diff. If the finding lines would overflow, keep the summary
-line plus the highest-severity ones and leave the rest in the report file.
+line plus the highest-severity ones and leave the rest in the report file. A brief that sets
+its own return (its length or its format) replaces this limit; the report file still holds
+every finding.
 
 ## Output Format (JSON Only)
 

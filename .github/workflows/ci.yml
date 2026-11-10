@@ -319,6 +319,8 @@ jobs:
         run: /bin/bash plugins/kodflow-hooks/tests/test_root_gate.sh
       - name: Routing gate, gated-model fallback and agent feedback under /bin/bash 3.2
         run: HOOK_SHELL=/bin/bash /bin/bash plugins/kodflow-hooks/tests/test_agents.sh
+      - name: Command scope advice under /bin/bash 3.2
+        run: HOOK_SHELL=/bin/bash /bin/bash plugins/kodflow-hooks/tests/test_scope.sh
       - name: The prescribed git commands under /bin/bash 3.2 and BSD script(1)
         run: /bin/bash scripts/tests/test_git_readonly.sh
       - name: Router under /bin/bash 3.2

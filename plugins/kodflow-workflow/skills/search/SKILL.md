@@ -157,9 +157,9 @@ read as "research" produces a context file with no citable sources.
   │     │        Valid ONLY when you name the matched files and their dates.
   │     └─ anything else → compute GAPS, run the engine ↓
   │
-  ├─ engine (Workflow `research`)
+  ├─ engine (Workflow `deep-research`, built into Claude Code)
   │     Scope → Search∥ → Fetch∥ → Verify(3-vote) → Synthesize
-  │     returns { context_md, sources, confidence_map } — writes nothing
+  │     one question in, a cited report out — writes nothing
   │
   ├─ Phase 9  the SKILL writes .claude/contexts/<slug>.md   (sole writer)
   │
@@ -170,7 +170,22 @@ read as "research" produces a context file with no citable sources.
 dates**. "I know this already" is not local coverage; neither is the project's
 own source code. If you cannot cite the documents, the engine runs.
 
-**Degraded path.** If the `Workflow` tool itself errors, fall back to the
+**The engine call.** The engine is Claude Code's built-in `deep-research`
+workflow, called by that name with **one string**: the question. No
+marketplace workflow named `research` exists, and `deep-research` takes no
+`gaps` or domain list, so the question carries them in its text: the query,
+then the GAPS from Phase 2, one per line, then the source preference below
+(tiers 1-2 to support a claim, tier 4 to find one only). The run is
+asynchronous: its result arrives as a notification, so wait for it rather
+than polling. What it returns is a report with its cited sources, not a
+context file: Phases 6-7 (`validate.md`) check every returned source against
+the tier table and drop or chase a claim whose only support is tier 4. The
+preference is an instruction to the engine, not a guarantee, which is why it
+is checked on what comes back.
+
+**Degraded path.** If the `Workflow` tool errors, answers that `deep-research`
+is not found (its error lists the workflows it has), or refuses to start it
+(recent versions start it only on an explicit request), fall back to the
 parallel `Agent` path in `parallel.md` — and say in the output that you did,
 so the result is not mistaken for an engine run.
 

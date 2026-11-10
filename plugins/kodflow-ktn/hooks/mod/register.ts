@@ -208,6 +208,7 @@ function portOf($: any, canRun: boolean): Port {
     after: (ms, fn) => $.clock.after(ms, fn),
     read: (path) => $.fs.read(path),
     home: () => $.env.get("HOME"),
+    localAppData: () => $.env.get("LOCALAPPDATA"),
     fetch: (url, init) => $.http.fetch(url, init),
     run: canRun ? (argv, init) => $.process.run(argv, init) : undefined,
     emit: (daemon: KtnDaemon, model: KtnModel | undefined) => {
