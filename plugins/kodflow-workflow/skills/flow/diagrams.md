@@ -110,6 +110,8 @@ The whole thing. Default view.
   ◆ a draft is shown before it is written; a document is ignored only on your word
   /learn             ~/.claude/docs/learned/
   ◆ nothing is written without your yes
+  /improve           agent-feedback.jsonl ──▶ verdicts ──▶ marketplace PR
+  ◆ nothing opened before your yes; no session detail reaches the PR
 
 
   WHILE IT RUNS
@@ -215,6 +217,8 @@ The whole thing. Default view.
   <> a draft is shown before it is written; a document is ignored only on your word
   /learn            ~/.claude/docs/learned/
   <> nothing is written without your yes
+  /improve          agent-feedback.jsonl --> verdicts --> marketplace PR
+  <> nothing opened before your yes; no session detail reaches the PR
 
 
   WHILE IT RUNS
