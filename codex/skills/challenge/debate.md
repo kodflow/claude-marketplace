@@ -216,6 +216,14 @@ to the repository's, and patch the copy; never install through that link.
 Revision: review the WORKING TREE as it is on disk; when it differs from
 HEAD, say which one each file:line cites (path@HEAD or path@worktree).
 <the files that differ from HEAD, or "none">
+(Or, when the plan is judged against a commit: Revision: <ref> — read files
+as git show <ref>:<path> and cite path@<ref>.)
+
+Reading order: <the files in the order to read them: base plan, amendments, triage>
+
+Measurements: <per figure the plan or this brief states: figure — command → result>
+A description of the code or of a file in the plan or this brief is a claim:
+compare each change it proposes with the current text before objecting.
 
 Measurement: tools outside your Command scope (docker, image tools…) are
 not yours to run; name the exact command that would settle the claim under
@@ -242,6 +250,14 @@ introduced BY an accepted fix is a reopen of that ID, not a new objection.
 A negative verdict reopens that
 ID; do not raise it again as a new objection. These verdicts do not count
 against the budget below.
+How to rule, case by case:
+- remedy right but mis-scoped → reopen, and say the right scope;
+- fix right in one part, wrong in another → reopen, naming the part that fails;
+- fix recorded as applied in the triage but absent from the plan text → reopen;
+- a new fact on an ID you reopen → in that verdict's reason, not a new objection;
+- a defect born where a later plan step meets a fix → reopen if that step is
+  the fix of that ID (your own remedy included), else a new objection.
+Your objections go in your answer, never in a file of the scratch directory.
 
 Return objections only; the output format of
 your own definition does not apply here. Number your new objections 1, 2, 3…
@@ -284,6 +300,12 @@ number. When objections from several reviewers are merged into one triage ID,
 the ID keeps every contributing reviewer and local number, and the claim text
 of each. That mapping is what each reviewer's table in the next brief is cut
 from, so no reviewer has to rebuild it from summaries.
+
+**A reply cut short is read in full, not re-asked.** kodflow-hooks keeps
+each subagent's whole last message at SubagentStop in
+`${CLAUDE_CONFIG_DIR:-~/.claude}/kodflow/sessions/<session id>/agents/<agent id>.md`:
+when a reviewer's answer arrives truncated, triage from that file. Codex's
+verdict is already in its `-o` file.
 
 **Negative verdicts reopen, under their existing IDs.** From round 2, read
 every reviewer's "Prior objections" verdicts before the new objections. A
