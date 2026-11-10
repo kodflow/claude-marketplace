@@ -35,6 +35,17 @@ import { invariants } from "./invariants.ts";
 import { appendArgv, shapeLine, shapeOf } from "../../hooks/mod/mcp-probe.ts";
 import { judgeSpawn, judgeSwitch, parseGated, type SpawnPort } from "../../hooks/mod/fable.ts";
 import {
+  journalArgv,
+  journalFile,
+  journalText,
+  judgeWorkflowScript,
+  parseTable,
+  resolveMode,
+  definitionPins,
+  type JournalLine,
+} from "../../hooks/mod/tier.ts";
+import { TIER_VECTORS_JSONL } from "./tier-vectors.ts";
+import {
   claim,
   closingOf,
   note,
@@ -614,6 +625,69 @@ console.log("== the MCP probe's append, on a real file system");
     const rows = readFileSync(file, "utf8").split("\n").filter(Boolean);
     check(rows.length === 2 && rows.every((r) => JSON.parse(r).form === "string"), "two lines, each a JSON object");
     check(!readFileSync(file, "utf8").includes("body-of-the-result"), "no value of the result is in the file");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+console.log("== tier: the shared vectors (tests/fixtures/tier-vectors.jsonl)");
+{
+  const here = dirname(HERE);
+  const fixture = readFileSync(join(here, "..", "fixtures", "tier-vectors.jsonl"), "utf8");
+  check(fixture === TIER_VECTORS_JSONL, "tier-vectors.ts carries the fixture byte for byte");
+  const table = parseTable(readFileSync(join(here, "..", "..", "hooks", "tier-table.tsv"), "utf8"));
+  check(table.some((r) => r.kind === "role") && table.some((r) => r.kind === "exempt"), "the tier table has role and exempt rows");
+  const rows = fixture.split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  let n = 0;
+  for (const v of rows) {
+    n++;
+    if (v.kind === "frontmatter") {
+      const got = definitionPins(v.text, v.key);
+      check(got === v.pinned, `frontmatter: ${v.name}`, `pinned ${got}, want ${v.pinned}`);
+    } else if (v.kind === "mode") {
+      const got = resolveMode({ env: v.env ?? undefined, session: v.session ?? undefined, global: v.global ?? undefined, skew: v.skew });
+      check(got.mode === v.mode && got.source === v.source, `mode: ${v.name}`, JSON.stringify(got));
+    } else {
+      const got = await judgeWorkflowScript(v.script, { definition: async () => undefined, table });
+      const kind = got.kind === "judged" ? "judged" : got.reason;
+      let ok = kind === v.expect;
+      if (ok && got.kind === "judged") {
+        const missing = got.missing.map((c) => [c.index, c.missing]);
+        ok = got.calls.length === v.calls && JSON.stringify(missing) === JSON.stringify(v.missing);
+      }
+      if (ok && got.kind === "pass" && v.calls !== undefined) ok = got.calls === v.calls;
+      check(ok, `script: ${v.name}`, JSON.stringify(got));
+    }
+  }
+  check(n === rows.length && n > 40, `${n} vectors read`);
+}
+
+console.log("== tier: the journal is appended, never rewritten");
+{
+  const root = mkdtempSync(join(tmpdir(), "tier-journal-"));
+  const dir = join(root, "kodflow", "sessions", "s1");
+  const line = (reason: string): JournalLine => ({
+    ts: 1, source: "mod", mode: "warn", mode_source: "default", would_refuse: false, action: "pass",
+    reason, subagent_type: "workflow", caller: "main", has_model: false, has_effort: false,
+    pinned_model: "none", pinned_effort: "none", tool_use_id: "t",
+  });
+  const append = (text: string) =>
+    new Promise<number | null>((resolve) => {
+      const [cmd, ...args] = journalArgv(dir, journalFile(dir));
+      const p = spawn(cmd!, args, { stdio: ["pipe", "ignore", "ignore"] });
+      p.on("close", resolve);
+      p.stdin.end(text);
+    });
+  try {
+    check((await append(journalText([line("tier-unjudged")]))) === 0, "the session directory and the file are created");
+    writeFileSync(journalFile(dir), readFileSync(journalFile(dir), "utf8") + '{"source":"shell"}\n');
+    check((await append(journalText([line("tier"), line("tier-resume")]))) === 0, "a second append succeeds");
+    const got = readFileSync(journalFile(dir), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    check(
+      got.map((r) => r.reason ?? r.source).join(",") === "tier-unjudged,shell,tier,tier-resume",
+      "the shell's line between the mod's is kept, in order",
+    );
+    check((statSync(journalFile(dir)).mode & 0o077) === 0, "the journal is private (umask 077)");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

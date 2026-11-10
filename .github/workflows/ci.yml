@@ -119,6 +119,14 @@ jobs:
           shellcheck scripts/check-hunt-fixtures.sh
           bash scripts/check-hunt-fixtures.sh
 
+      # The tier judges' shared vectors (frontmatter fields, mode, Workflow
+      # scripts): tests/mod/tier-vectors.ts is the fixture byte for byte, so
+      # the engine's tests read the same cases as the shell and Python.
+      - name: The tier vectors module is the fixture
+        run: |
+          shellcheck scripts/check-tier-vectors.sh
+          bash scripts/check-tier-vectors.sh
+
       # Context cost, not correctness: pinned model/effort, description and
       # SKILL.md budgets, copied memory blocks, bare cross-plugin references.
       # Every finding is a warning until a check is named in COST_CHECKS_STRICT

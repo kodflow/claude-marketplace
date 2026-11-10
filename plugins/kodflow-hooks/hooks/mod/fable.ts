@@ -50,27 +50,41 @@ export function isGated(model: unknown, tokens: readonly string[]): boolean {
 }
 
 /**
- * `model:` of an agent definition's frontmatter: the first block between
- * `---` lines, at most 60 lines read, quotes, a trailing comment and CRLF
- * stripped. Undefined when there is no frontmatter or no model key.
+ * One field of an agent definition's frontmatter: the first block between
+ * `---` lines, at most 60 lines read; a BOM, CRLF, quotes and a trailing
+ * comment stripped. Undefined when there is no frontmatter, no such key, or
+ * a value that is empty, a comment only, `null` or `~` (quoted or not): the
+ * key then pins nothing. `inherit` is returned as written; for `model` the
+ * caller reads it as the parent's model.
  */
-export function frontmatterModel(text: string | undefined): string | undefined {
+export function frontmatterField(text: string | undefined, key: string): string | undefined {
   if (!text) return undefined;
   const lines = text
     .replace(/^\uFEFF/, "")
     .split("\n", 62)
     .map((l) => l.replace(/\s+$/, ""));
   if (lines[0] !== "---") return undefined;
+  const re = new RegExp(`^${key.replace(/[^A-Za-z0-9_-]/g, "\\$&")}\\s*:(.*)$`);
   for (const line of lines.slice(1, 61)) {
     if (line === "---") return undefined;
-    const m = /^model:\s*(.*)$/.exec(line);
+    const m = re.exec(line);
     if (!m) continue;
-    let v = m[1]!.replace(/\s+#.*$/, "").trim();
-    if (v.length >= 2 && (v[0] === '"' || v[0] === "'") && v.endsWith(v[0]!)) v = v.slice(1, -1);
-    return v || undefined;
+    let v = m[1]!.trim();
+    const q = v[0];
+    if (q === '"' || q === "'") {
+      const close = v.indexOf(q, 1);
+      v = close > 0 ? v.slice(1, close) : v.slice(1);
+    } else v = v.replace(/(^|\s)#.*$/, "").trim();
+    v = v.trim();
+    if (v === "" || v === "~" || v.toLowerCase() === "null") return undefined;
+    return v;
   }
   return undefined;
 }
+
+/** `model:` of an agent definition's frontmatter, `inherit` included. */
+export const frontmatterModel = (text: string | undefined): string | undefined =>
+  frontmatterField(text, "model");
 
 /** installed_plugins.json → install paths of a plugin, any marketplace. */
 export function installPaths(json: string | undefined, plugin: string): string[] {
