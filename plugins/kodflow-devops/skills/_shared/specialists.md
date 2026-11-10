@@ -60,7 +60,9 @@ description carries a keyword of an installed agent, is refused with the
 specialist to use. `[general-purpose-ok]` in its description or prompt is the
 deliberate exception, and every skill that means a general-purpose dispatch
 writes it. The keywords are compiled into `kodflow-hooks/hooks/routing-index.tsv`
-by `scripts/build-routing-index.py`; CI fails when the two disagree.
+by `scripts/build-routing-index.py`; CI fails when the two disagree. The same
+script writes, in a fourth column, whether each routed agent delivers a change
+or reviews only ("Who delivers a change" below), and the refusal prints it.
 
 **Scope the evidence before matching.** Route on what the *change* touches, not
 on what the repository contains: a one-file Go change in a repo that also holds
@@ -83,6 +85,18 @@ which specialists to install, not about which to consult.
 
 **Report a match with no installed specialist.** Say the domain went unreviewed.
 Silence reads as "reviewed and clean", which is the opposite of true.
+
+## Who delivers a change
+
+A task that writes — a commit, a push, a pull or merge request — goes to a
+specialist only when that specialist can deliver: it has `Edit` and `Write`, or
+a forge tool that opens a pull or merge request, **and** `Bash` with no
+`## Command scope` or one that covers `git commit` and `git push` (a generic
+`Bash(git:*)` does). Any other specialist reviews only: `general-purpose`
+delivers, its brief carrying `[general-purpose-ok]`, and the specialist reviews
+the result. `scripts/build-routing-index.py` computes this from each routed
+agent's frontmatter and Command scope (`delivers` or `reviews`), so no list is
+kept by hand.
 
 ## What every specialist owes back
 
@@ -127,6 +141,29 @@ more, but that it goes and checks.
   refuses any other. With `KODFLOW_COMMIT_IDENTITY=off`, or no file, the check
   is off and the brief names the identity the user asked for. A brief that does
   not ask for a commit says nothing about identity.
+- **Give every fact and figure its command.** A count, a size, a line number
+  or a "this file does X" carries the command that measured it and its
+  result, or says "not verified": a reviewer handed a bare figure either
+  trusts it or spends its turns reverse-engineering it.
+- **Say which constraint wins.** Two requirements that can collide (the same
+  layout and the same margin; keep a convention and replace a generator) are
+  ranked in the brief, or the subagent picks one alone.
+- **Number the follow-ups.** A second or third message on the same task is
+  labelled v2, v3 and names the last report received from the subagent, so
+  messages that crossed are recognised as such.
+- **Ask for the property, not a frozen value.** "A digest that exists and
+  carries Go 1.x" survives a moved tag; "digest sha256:…" does not.
+- **Say what the subagent may run.** Name what it may execute beyond its
+  definition (a container, a browser, a CI watch) and whether it has network
+  access, so it measures instead of filing the claim under `unverified`.
+- **Diagnose before prescribing.** Give the symptom and the evidence; a
+  suspected cause or a fix named before the diagnosis gets the wrong cause
+  fixed.
+- **Local test dependencies.** When a test needs a package the machine may
+  lack, say how to get it without installing anything:
+  `uv run --no-project --with <package> python3 <test>`.
+- **Example paths stay generic.** A path given as an example starts with `~/`,
+  never with a real home directory.
 
 ## Plan review, one contract for every specialist
 
@@ -148,10 +185,13 @@ This mode is on when the brief starts with `Plan review mode`, asks for objectio
 
 In this mode:
 
-- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command and result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
+- Return objections only. Each objection carries six fields: `severity` (`blocking`, `material` or `minor`), `claim`, `evidence` (a `file:line`, or the plan line it contradicts), `remedy`, `consulted` (the sources actually checked for this claim, one entry per source: a documentation URL, a source file read at a named revision or version as `path@rev` such as `origin/main:path` or `$GOROOT/src/...@go1.x`, or a scratch measurement given as its command, the revision or archived tree it ran on, and its result) and `unverified` (what could not be confirmed, with what was tried). If the brief names a different field list, use the brief's.
 - A claim about how a technology behaves with an empty `consulted` is a memory claim: put it under `unverified`, never present it as fact.
 - A measurement made on data the plan's author produced (extracts such as `.npy` or `.npz` files, caches) is usable, but its `consulted` entry says "author-derived, raw source not re-read", and an `unverified` entry names the raw source whenever it could not be read.
-- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`) when this agent's Command scope lists one, else with WebFetch: a file on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`, an issue or a release on the public REST API (`https://api.github.com/repos/<owner>/<repo>/issues/<n>`, `.../releases/tags/<tag>`); when none of these answers, the exact lookup goes under `unverified` for the caller to run. Never through Claude in Chrome. A documentation page that redirects or cannot be reached is replaced by the first-party source read at the pinned version, not cited from memory.
-- From round 2 on, the brief carries the previous version of the plan and the triage of the earlier objections: first say, objection by objection, whether each fix holds, then attack the new version. Never rebuild the earlier state from conversation history.
+- A GitHub source is read with `mcp__github__*` when the session has it, else with a read-only `gh` command (`gh issue view`, `gh release view`, a GET `gh api`, in scope in this mode as the inspection rule below says), else with WebFetch: a file on `https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`, cited as `<owner>/<repo>:<path>@<tag>`, an issue or a release on the public REST API (`https://api.github.com/repos/<owner>/<repo>/issues/<n>`, `.../releases/tags/<tag>`); when none of these answers, the exact lookup goes under `unverified` for the caller to run. Never through Claude in Chrome. A documentation page that redirects or cannot be reached is replaced by the first-party source read at the pinned version, not cited from memory.
+- From round 2 on, the brief carries the previous version of the plan and the triage of the earlier objections: first say, objection by objection, whether each fix holds, in the verdict format the brief gives, then attack the new version. Never rebuild the earlier state from conversation history.
 - If the plan is sound from this agent's domain, say so and stop. An objection with no concrete failure behind it is noise.
-- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing, unless a section of this file gives a fallback for that case. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
+- Stay read-only on the reviewed repository: no file edits, no change to its Git state, manifests or lockfiles, no formatter or fixer that rewrites files, no install or sync. A write is allowed only where this agent's Command scope permits it, and only under the scratch directory the brief names; when the brief names none, write nothing, unless a section of this file gives a fallback for that case. The tree archive below is the one file a shell command may create. Prefer a check or diff mode, and report a missing tool, or an execution, network access or write the host refuses, under `unverified`.
+- In Plan review mode only, if this agent has Bash: the read-only inspection commands below are in scope in addition to this file's Command scope; nothing else is added. A command in scope may still be refused by the host: report it under `unverified`. They are `git show`, `git log`, `git diff`, `git grep`, `git ls-tree`, `git cat-file`, `gh issue view`, `gh pr view`, `gh release view` and `gh api`, each under the rules that hold in every mode (below), and one tree archive: `git archive --format=tar -o <scratch>/tree.tar <rev> [-- <paths>]` then `python3 -m tarfile --filter data -e <scratch>/tree.tar <scratch>/tree` (Python 3.12 or later), `<scratch>` being the scratch directory the brief names; with none named, no archive. `git archive` runs every filter driver the tree's attributes assign, git-lfs included: list the drivers with `git config --name-only --get-regexp '^filter\.'` and pass, for each driver name N, `-c filter.N.smudge= -c filter.N.process= -c filter.N.required=false` before `archive`. This archive overrides any "never create a file through the shell" of this file, and what it yields is cited as "archived tree at <rev>, export-ignore and export-subst applied".
+
+Holds in every mode, if this agent has Bash: git never gets `--output` (save the tree archive above), `--ext-diff`, `--textconv`, `--filters`, `-O`/`--open-files-in-pager`, `--remote` or `--exec`; a git command that prints a diff (`git diff`, `git log -p`, `git show <commit>`) runs as `git --no-pager <command> --no-ext-diff --no-textconv`, so no configured external diff, textconv driver or pager runs; gh never gets `--web`, and `gh api` runs with `--method GET` and no `-f`, `-F`, `--field`, `--raw-field` or `--input`.
