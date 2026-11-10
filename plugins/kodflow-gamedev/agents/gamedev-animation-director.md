@@ -56,7 +56,9 @@ Return `"status": "refused"` with the reason, and no spec, when:
 - the governing martial agent failed or timed out, or returned no technique
   with all four name parts (original, transliteration, translation, tier-1/2
   source): there is nothing to adopt whole. A `partial` answer that carries
-  such a technique is adopted, its gaps carried to `open`;
+  such a technique is adopted, its gaps carried to `open`, only when that
+  tier-1/2 source passed the source check (exact or normalised match);
+  otherwise refuse and name the source to re-check;
 - an armed move has no `grip` block from `rig-specialist-ik`;
 - an owner hard rule from the digest forbids what the governing technique
   requires and no alternative was proposed: report the conflict, do not

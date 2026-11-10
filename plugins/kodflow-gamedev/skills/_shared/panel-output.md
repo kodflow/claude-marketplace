@@ -129,7 +129,8 @@ are added to it, and nothing else:
 
 - Pipe the body into `grep -n -F '<phrase>'` to find an excerpt in a long
   page, or into `shasum -a 256` for `sha256`: one pipe per fetch, fetch
-  again for the other. `-w '\n%{http_code}\n'` prints `http_status`.
+  again for the other. `-w '\n%{http_code}\n'` prints `http_status`, never
+  on a fetch piped into `shasum`: the hash covers the body alone.
   Never `-o`, not even to `/dev/null`, and no file in `$TMPDIR`.
 - Local files, JSON included, are read with Read (with `offset` and
   `limit` when large), Glob and Grep, never with `cat`, `sed`, `find`,

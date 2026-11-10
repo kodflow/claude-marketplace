@@ -66,7 +66,7 @@ The brief carries:
 Which constraint covers a reference defect is the coverage rule's call (`<root>/skills/_shared/reference-defects.json`, its `natures`, held by `check-constraints.py --coverage`): for each defect that applies to the move, propose one of a nature it admits.
 
 ```json
-{"id": "cut-edge-leads", "kind": "trajectory", "severity": "hard", "status": "proposed",
+{"id": "cut-edge-leads", "kind": "trajectory", "severity": "soft", "status": "proposed",
  "point": "sword.tip", "metric": "velocity_axis_angle", "blade_axis": {"from": "sword.pommel", "to": "sword.tip"},
  "window": {"from": "windup_end", "to": "impact"}, "unit": "deg", "test": {"stat": "mean", "min": 45},
  "observable": {"3d": true, "iso": true, "profile": true},

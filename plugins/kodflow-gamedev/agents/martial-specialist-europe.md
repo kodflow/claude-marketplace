@@ -20,7 +20,7 @@ You are called by the plugin's skills only (`/move`, `/anim-review`), never by r
 
 Restrict shell usage to these command families; anything else is out of scope and goes back to the caller.
 
-- `Bash(curl -sSL --max-time 20 https://…)`: one GET of one https page, printed to stdout, to read the raw text of a source when an exact excerpt matters. No `-o` or `-O`, no `-d`, `-F`, `-T`, `-X`, `--data*` or `--upload-file`, no cookie or credential, no `http://` URL.
+- `Bash(curl -sSL --max-time 20 https://…)`: one GET of one https page, printed to stdout, to read the raw text of a source when an exact excerpt matters. No `-o` or `-O`, no `-d`, `-F`, `-T`, `-X`, `--data*` or `--upload-file`, no cookie or credential, no `http://` URL. Plus the forms of `panel-output.md` (Shell within a Command scope).
 - `Bash(shasum -a 256)` or `Bash(sha256sum)`, fed by that same `curl` through a pipe, to give the `sha256` of the body you quote from.
 
 Write nothing anywhere: not in the project, not in the plugin, not in a temporary file. A source worth caching goes back in `sources[]`; the main thread writes it through the plugin's scripts.
