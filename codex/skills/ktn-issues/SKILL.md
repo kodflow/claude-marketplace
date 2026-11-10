@@ -175,7 +175,9 @@ Parallel work is welcome, within the agent cap, one issue per agent:
 - **Route by capability, not by title.** A specialist agent with a narrow
   command scope (the developer specialists are read-only) cannot create a
   worktree, commit or call `gh`. Use specialists to judge or review; give
-  fix-and-commit work to a general-purpose agent that can do all three.
+  fix-and-commit work to a general-purpose agent that can do all three, with
+  `model: "sonnet"` and `effort: "high"` on the call (a defect in existing code,
+  the tier table, model-policy §2).
 - Each brief carries: the issue number and full text, its scratch directory
   `$STATE/scratch/<N>/`, its own worktree and branch, the heavy-work wrapper,
   the baseline-red test names, and `fix.md`'s contract (red first, narrow,

@@ -121,7 +121,9 @@ conclusion is a design decision) before resuming.
 - Pure-prose discipline — no external dependency. Composes with `/plan` (design
   fix), `/adr` (record a design decision), and `/review` (blast-radius of the fix).
 - For large codebases, dispatch read-only `Explore`/`general-purpose` agents to
-  gather the call path in parallel, then reason over the synthesis here. A
+  gather the call path in parallel, then reason over the synthesis here. Each
+  call passes `model: "sonnet"` and `effort: "low"` (mechanical worker, the tier
+  table, model-policy §2); the agent's frontmatter does not pin them. A
   `general-purpose` one carries `[general-purpose-ok]` in its prompt: the kodflow-hooks
   routing gate refuses an unmarked one whose description names a specialist's
   technology (dispatch that specialist instead).

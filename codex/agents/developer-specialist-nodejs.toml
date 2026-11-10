@@ -31,6 +31,8 @@ Verification in Plan review mode, which writes nothing in the reviewed repositor
 
 - A measurement script written under the scratch directory the brief names (`node <scratch>/x.mjs`) is in scope: it is how a claim gets a measured `consulted` entry, recorded as the command and its result. It imports a project dependency by absolute path (`import("/abs/repo/node_modules/<pkg>/<entry>.js")`), never by installing it, and runs with no network access it does not need. To test a patch to the reviewed code, copy the source directory into the scratch directory, symlink `node_modules` to the repository's, and patch the copy; never run an install through that link. With no scratch directory named, report the claim under `unverified`.
 - `Write` creates files only under the scratch directory the brief names: the measurement script, the copied sources it patches and, where this agent keeps one, its report file. Never write inside the reviewed repository and never overwrite a file the brief supplies. The copy of the sources and the `node_modules` link are the only writes made otherwise than with `Write`, both into the scratch directory (`node -e` with `fs.cpSync(src, dst, {recursive: true})` and `fs.symlinkSync`); no other file is created through the shell (redirection, heredoc, `tee`).
+- A raw GitHub file too large for WebFetch is read with a read-only `node -e "fetch(url).then(r=>r.text()).then(t=>process.stdout.write(t))"` into a scratch file under the scratch directory the brief names, then searched there; cite it as `<owner>/<repo>:<path>@<ref>`. This is a read: no other network use of `node -e`.
+- The building rules of this file (write, test, lint) do not apply in this mode.
 
 ## Role
 
