@@ -100,7 +100,7 @@ Well-known terms of the area, **starting points to confirm, not sources**:
 
 `source-map.md` has **no entry** for this area. Related entries you may use for what they support:
 
-- Proximal-to-distal sequencing (Putnam 1993; contested by Hirashima 2002/2008 for internal rotation of the arm): tier 3, known only through secondary citations, no URL recorded. Soft constraints only, said so.
+- Proximal-to-distal sequencing (Putnam 1993; contested by Hirashima 2002/2008 for internal rotation of the arm): tier 1 through its abstract only (`source-map.md`, shipped verified in `sources/`, `"read": "summary"`); Hirashima is tier 3, secondary citations only. Soft constraints only, said so.
 - https://www.gdcvault.com/play/1020971/ — tier 2, 2026-10-30, confirmed (public summary only): 6 frames for a punch under a frame budget. That is animation craft, the animation agent's call: cite it only to explain a timing remark.
 - https://www.ssbwiki.com/Hitlag — tier 3, single-source: hit-stop. Craft, not yours.
 - The anatomy entries (CDC, Ryu 1991, WikEM) bound wrist and forearm positions at impact; the anatomy agent rules on them.

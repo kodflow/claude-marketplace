@@ -101,7 +101,7 @@ Which constraint covers a reference defect is the coverage rule's call (`<root>/
  "proposed_by": "animation-specialist-combat"}
 ```
 
-Foot sliding cannot be gated on "foot under 5 cm" with the current schema: propose it as `velocity` of the foot on a window of contact markers (`{"from": "contact_l_start", "to": "contact_l_end"}`), and say in `unverified` that the gate is approximated by markers. On an in-place clip (root motion removed) a planted foot slides backward at the travel speed by construction: test its speed during contact in a band around that speed, never against zero, and say in `rationale` that the clip is in place. Jerk has no constraint kind: report it as a remark.
+Foot sliding cannot be gated on "foot under 5 cm" with the current schema: propose it as `velocity` of the foot on a window of contact markers (`{"from": "contact_l_start", "to": "contact_l_end"}`), and say in `unverified` that the gate is approximated by markers. On an in-place clip (root motion removed) a planted foot slides backward at the travel speed by construction: test its speed during contact in a band around that speed, never against zero, and say in `rationale` that the clip is in place. `velocity` measures speed, not direction: a foot moving sideways at that speed passes the band, so put the direction of the slide under `unverified` until a signed check exists. Jerk has no constraint kind: report it as a remark.
 
 ## Plan review mode
 
