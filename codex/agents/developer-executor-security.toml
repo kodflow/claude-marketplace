@@ -269,7 +269,7 @@ documentation:
 fp_exclusions:
   brief_scope: "A class the brief explicitly puts in scope (denial of service, resource limits, decompression bombs) is reported despite do_not_report."
   do_not_report:
-    - "Denial of Service vulnerabilities (out of scope for code review)"
+    - "Denial of Service vulnerabilities (out of scope unless the brief puts it in scope)"
     - "Rate limiting concerns (infrastructure responsibility)"
     - "Memory safety issues in Rust or other memory-safe languages"
     - "Issues found only in unit test files"
