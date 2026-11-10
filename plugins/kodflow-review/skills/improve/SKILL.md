@@ -10,7 +10,7 @@ when_to_use: Use when subagent feedback has piled up (the Stop hook proposes it,
   (`kodflow-workflow:fix`).
 argument-hint: '[--session <id>] [--since <days>] [--agent <type>] [--target <prefix>] [--check]'
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

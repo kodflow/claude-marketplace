@@ -1,6 +1,6 @@
 # generated-from: plugins/*/agents/devops-specialist-kubernetes.md
 name = "devops-specialist-kubernetes"
-description = """Kubernetes specialist — K8s, K3s, minikube, Helm, operators and GitOps; returns JSON with manifests and recommendations. Use when a task touches Kubernetes manifests, Helm charts, kustomize, kubectl output or an Argo CD or Flux setup. Escalate to sonnet/high when a defect sits in existing code or the failure is unclear."""
+description = """Kubernetes specialist — K8s, K3s, minikube, Helm, operators and GitOps; returns JSON with manifests and recommendations. Use when a task touches Kubernetes manifests, Helm charts, kustomize, kubectl output or an Argo CD or Flux setup."""
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 

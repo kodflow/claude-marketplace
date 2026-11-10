@@ -3,7 +3,7 @@ name: asset-specialist-meshy
 description: "Meshy-generated 3D assets for the game: writes the Meshy request (prompt and parameters) for a character, weapon or prop that fits the art direction and the rig, judges the result (topology, scale, orientation, pivot, grip axis, polycount) and prepares the retarget of Meshy's auto-rig to the project rig. Called by /meshy; returns panel-member/v1."
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
-effort: high
+effort: medium
 color: green
 ---
 

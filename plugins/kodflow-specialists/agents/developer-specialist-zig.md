@@ -2,11 +2,11 @@
 name: developer-specialist-zig
 description: Zig specialist — analyses Zig but has no Write tool and does not create worktrees,
   commit, or use gh/make; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a
-  change touches .zig files, build.zig or build.zig.zon. Escalate to opus/high when it spans several
-  modules, threads, or a wire protocol.
+  change touches .zig files, build.zig or build.zig.zon. Escalate to opus/medium when it spans
+  several modules, threads, or a wire protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
-effort: high
+effort: medium
 color: blue
 ---
 

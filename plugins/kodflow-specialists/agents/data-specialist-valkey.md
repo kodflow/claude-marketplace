@@ -1,12 +1,12 @@
 ---
 name: data-specialist-valkey
-description: Valkey specialist, including Redis-protocol compatibility, covering data structures, persistence,
-  replication and failover. Use when valkey.conf, sentinel.conf, a Valkey or Redis client or Lua scripts
-  are present. Escalate to opus/high when failover, consistency or several services interact, such as
-  replica lag, split brain or client reconnects.
+description: Valkey specialist, including Redis-protocol compatibility, covering data structures,
+  persistence, replication and failover. Use when valkey.conf, sentinel.conf, a Valkey or Redis
+  client or Lua scripts are present. Escalate to opus/medium when failover, consistency or several
+  services interact, such as replica lag, split brain or client reconnects.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
 model: sonnet
-effort: high
+effort: medium
 color: cyan
 ---
 

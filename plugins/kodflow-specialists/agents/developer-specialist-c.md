@@ -1,12 +1,11 @@
 ---
 name: developer-specialist-c
-description: C specialist — analyses C but has no Write tool and does not create worktrees,
-  commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a
-  change touches .c/.h files or Makefile/CMake C targets. Escalate to opus/xhigh when an autonomous
-  run exceeds 30 minutes or a cross-cutting memory or ABI invariant is at stake.
+description: C specialist — analyses C but has no Write tool and does not create worktrees, commit,
+  or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a change
+  touches .c/.h files or Makefile/CMake C targets.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
-effort: high
+effort: medium
 color: blue
 ---
 

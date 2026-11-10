@@ -1,8 +1,8 @@
 # generated-from: plugins/*/agents/developer-specialist-nodejs.md
 name = "developer-specialist-nodejs"
-description = """Node.js/TypeScript specialist — writes and analyses it but does not create worktrees, commit, or use gh/make; a fix-and-commit brief goes to general-purpose with [general-purpose-ok]. Use when a change touches .ts/.js files, package.json or tsconfig.json. Escalate to opus/high when it spans several packages, async concurrency, or a wire protocol."""
+description = """Node.js/TypeScript specialist — writes and analyses it but does not create worktrees, commit, or use gh/make; a fix-and-commit brief goes to general-purpose with [general-purpose-ok]. Use when a change touches .ts/.js files, package.json or tsconfig.json. Escalate to opus/medium when it spans several packages, async concurrency, or a wire protocol."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 
 developer_instructions = """
 # Node.js/TypeScript Specialist - Academic Rigor

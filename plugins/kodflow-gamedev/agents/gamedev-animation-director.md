@@ -3,7 +3,7 @@ name: gamedev-animation-director
 description: "Combat animation director: merges the /move panel (anatomy, six martial areas, craft, rig, engines, imagery) into one move spec and one move-constraints file, adopting the governing tradition's sourced technique whole and attributing every adopted recommendation. Called only by the kodflow-gamedev skills."
 tools: Read, Glob, Grep
 model: opus
-effort: high
+effort: medium
 color: orange
 ---
 

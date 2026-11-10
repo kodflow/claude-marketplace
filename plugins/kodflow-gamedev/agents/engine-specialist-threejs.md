@@ -3,7 +3,7 @@ name: engine-specialist-threejs
 description: "three.js r186 animation engineering: SkinnedMesh, Skeleton and Bone, world transforms, AnimationMixer time control, GLTFLoader and GLTFExporter, procedural rigs, headless sampling in Node, and the project adapter (clips, sampleWorld) behind the plugin's three.js sampler. Called by the kodflow-gamedev skills."
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
-effort: high
+effort: medium
 color: purple
 ---
 

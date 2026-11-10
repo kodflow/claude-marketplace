@@ -48,15 +48,22 @@ Effort is the reasoning budget each call is asked to spend (`low`, `medium`,
 text, tool calls and thinking — and each model has its own scale: Sonnet at
 `medium` is not Opus at `medium`.
 
+**`medium` is the default** (decided on 2026-11-10), the default of Opus 5.5,
+which Anthropic's tests put level with or above Opus 5 at `high`. A row above
+it is an exception that states its reason: only review / verify and the
+correctness and security executors have one, because Anthropic's *Prompting
+Claude Opus 5.5* guide reserves `xhigh` and `max` "for work where you've
+measured a quality gain". To get less thinking, lower the effort first.
+
 | Role | Model | Effort | Why this one |
 |------|-------|--------|--------------|
-| **Orchestrator** (the main session, every skill) | `CLAUDE_TOP_UNGATED` | `high` | It decomposes, routes and synthesises. Reasoning depth belongs in the workers; an orchestrator at `max` mostly deliberates about delegation. A gated model only per §6 |
+| **Orchestrator** (the main session, every skill) | `CLAUDE_TOP_UNGATED` | `medium` | It decomposes, routes and synthesises. Reasoning depth belongs in the workers; an orchestrator at `max` mostly deliberates about delegation. A gated model only per §6 |
 | **Code worker, well specified** | Sonnet | `medium` | The plan already decided the approach; the worker writes correct, idiomatic, complete code to it |
-| **Code worker, defect in existing code** | Sonnet | `high` | Reading code it did not write and finding why it fails takes more than writing to a spec. Hook and mod code is always this row: a guard that fails open in silence is a defect nobody sees |
-| **Code worker, several modules, concurrency or a protocol** | Opus | `high` | The work is an invariant held across files or across interleavings, not a function |
+| **Code worker, defect in existing code** | Sonnet | `medium` | Reading code it did not write and finding why it fails takes more than writing to a spec. Hook and mod code is always this row: a guard that fails open in silence is a defect nobody sees |
+| **Code worker, several modules, concurrency or a protocol** | Opus | `medium` | The work is an invariant held across files or across interleavings, not a function |
 | **Review / verify worker** | Opus | `high` | A missed defect costs more than the tokens that would have caught it |
 | **Correctness and security executors** | Opus | `xhigh` | Counterexamples and taint paths: the one place where searching longer is the job |
-| **Autonomous run over 30 minutes** | Opus | `xhigh` | Long agentic work is what `xhigh` exists for |
+| **Autonomous run over 30 minutes** | Opus | `medium` | Long agentic work needs the model, not a higher effort: `xhigh` is reserved for work where a quality gain was measured |
 | **Mechanical worker** | Sonnet | `low` | Search, extract, classify, per-file transform. The answer is looked up, not reasoned to |
 | **Bulk / triage worker** | Haiku | `low` | High volume, shallow judgement, throwaway output |
 

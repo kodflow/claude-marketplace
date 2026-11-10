@@ -2,11 +2,11 @@
 name: developer-specialist-go
 description: Go specialist — writes and analyses Go but does not create worktrees, commit, or use
   gh/make; a fix-and-commit brief goes to general-purpose with [general-purpose-ok]. Use when a
-  change touches .go files, go.mod or go.work, or a Go API or design question. Escalate to opus/high
-  when it spans several packages, goroutine state, or a wire protocol.
+  change touches .go files, go.mod or go.work, or a Go API or design question. Escalate to
+  opus/medium when it spans several packages, goroutine state, or a wire protocol.
 tools: Read, Glob, Grep, Write, Bash, WebFetch, mcp__context7__*
 model: sonnet
-effort: high
+effort: medium
 color: blue
 ---
 

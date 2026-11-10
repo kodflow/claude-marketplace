@@ -2,8 +2,7 @@
 name: developer-specialist-review
 description: Code review specialist using RLM decomposition — coordinates correctness, security,
   design, quality and shell sub-agents in parallel on GitHub PRs, GitLab MRs or local diffs; output
-  is a local plan file. Use when a PR, MR or diff needs a full review. Escalate to sonnet/high when
-  a defect sits in existing code or the failure is unclear.
+  is a local plan file. Use when a PR, MR or diff needs a full review.
 tools: Read, Edit, Write, Glob, Grep, Task, TaskCreate, TaskUpdate, TaskList, Bash, mcp__github__pull_request_read,
   mcp__github__list_pull_requests, mcp__gitlab__get_merge_request, mcp__gitlab__get_merge_request_changes,
   mcp__gitlab__list_merge_request_notes, mcp__gitlab__list_merge_request_discussions, mcp__gitlab__list_merge_requests,

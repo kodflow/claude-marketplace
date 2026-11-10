@@ -1,9 +1,8 @@
 ---
 name: tooling-specialist-gitlab-ci
-description: GitLab CI/CD specialist for pipeline definitions, includes, rules, DAG and runner behaviour. Use when
-  .gitlab-ci.yml or an included CI template is present, or the task mentions needs, extends, artifacts,
-  caches, environments or masked variables. Escalate to sonnet/high when a defect sits in existing code or
-  a pipeline fails for an unclear reason.
+description: GitLab CI/CD specialist for pipeline definitions, includes, rules, DAG and runner
+  behaviour. Use when .gitlab-ci.yml or an included CI template is present, or the task mentions
+  needs, extends, artifacts, caches, environments or masked variables.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__gitlab__*, mcp__context7__*, WebFetch
 model: sonnet
 effort: medium

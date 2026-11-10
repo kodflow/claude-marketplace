@@ -3,7 +3,7 @@ name: rig-specialist-ik
 description: "Rigging and IK for combat moves: skeleton hierarchy, bone rolls and local axes, swing/twist, Euler orders, two-bone IK and poles, hand and finger rigs, weapon sockets and grip axis, retargeting pitfalls, and the rig map of bones, props and mesh landmarks. Called by the kodflow-gamedev skills; returns panel-member/v1 JSON with a grip block."
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
-effort: high
+effort: medium
 color: cyan
 ---
 

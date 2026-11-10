@@ -1,8 +1,8 @@
 # generated-from: plugins/*/agents/developer-specialist-python.md
 name = "developer-specialist-python"
-description = """Python specialist — analyses Python but has no Write tool and does not create worktrees, commit, use make, or write through gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a change touches .py files, pyproject.toml or requirements files. Escalate to opus/high when it spans several modules, asyncio or thread concurrency, or a protocol."""
+description = """Python specialist — analyses Python but has no Write tool and does not create worktrees, commit, use make, or write through gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a change touches .py files, pyproject.toml or requirements files. Escalate to opus/medium when it spans several modules, asyncio or thread concurrency, or a protocol."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 
 developer_instructions = """
 # Python Specialist - Academic Rigor

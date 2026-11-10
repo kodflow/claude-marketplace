@@ -49,7 +49,7 @@ agent_dispatch:
 
 A cloud provider with no installed specialist is analysed inline, never by a
 bare `general-purpose` dispatch; if one is wanted, the call passes `model` and
-`effort` from the tier table (model-policy §2, sonnet/high for a defect in
+`effort` from the tier table (model-policy §2, sonnet/medium for a defect in
 existing code) and its prompt carries
 `[general-purpose-ok]` (the kodflow-hooks routing gate otherwise sends a description naming
 Terraform or Vault to the specialist).

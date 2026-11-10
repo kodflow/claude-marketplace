@@ -1,6 +1,6 @@
 # generated-from: plugins/*/agents/developer-commentator.md
 name = "developer-commentator"
-description = """Comment audit orchestrator — dispatches Haiku workers per file so comments explain WHY not WHAT, functions carry docstrings and language conventions hold. Use when comments or docstrings must be audited across a project or directory, not a single file. Escalate to sonnet/high when the audit exposes defects in existing code or an unclear failure."""
+description = """Comment audit orchestrator — dispatches Haiku workers per file so comments explain WHY not WHAT, functions carry docstrings and language conventions hold. Use when comments or docstrings must be audited across a project or directory, not a single file."""
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 

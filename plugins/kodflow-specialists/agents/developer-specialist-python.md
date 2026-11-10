@@ -2,12 +2,12 @@
 name: developer-specialist-python
 description: Python specialist — analyses Python but has no Write tool and does not create
   worktrees, commit, use make, or write through gh; a fix brief goes to general-purpose with
-  [general-purpose-ok].
-  Use when a change touches .py files, pyproject.toml or requirements files. Escalate to opus/high
-  when it spans several modules, asyncio or thread concurrency, or a protocol.
+  [general-purpose-ok]. Use when a change touches .py files, pyproject.toml or requirements files.
+  Escalate to opus/medium when it spans several modules, asyncio or thread concurrency, or a
+  protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
-effort: high
+effort: medium
 color: blue
 ---
 

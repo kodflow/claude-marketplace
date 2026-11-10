@@ -3,7 +3,7 @@ name: engine-specialist-godot
 description: "Godot 4.7 3D animation engineering: Skeleton3D poses, BoneAttachment3D props, AnimationPlayer and AnimationTree, GLB skeleton import, SkeletonModifier3D and IK, landmark nodes, deterministic per-frame sampling of bones, props and landmarks for the plugin's Godot sampler, and the Godot MCP tools. Called by the kodflow-gamedev skills."
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
-effort: high
+effort: medium
 color: blue
 ---
 

@@ -1,6 +1,6 @@
 # generated-from: plugins/*/agents/devops-specialist-docker.md
 name = "devops-specialist-docker"
-description = """Docker specialist — Dockerfile optimization, Docker Compose, container security and image management. Use when a task touches a Dockerfile, compose.yaml or docker-compose.yml, .dockerignore, or an image build or size question. Escalate to sonnet/high when a defect sits in existing code or the failure is unclear."""
+description = """Docker specialist — Dockerfile optimization, Docker Compose, container security and image management. Use when a task touches a Dockerfile, compose.yaml or docker-compose.yml, .dockerignore, or an image build or size question."""
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 

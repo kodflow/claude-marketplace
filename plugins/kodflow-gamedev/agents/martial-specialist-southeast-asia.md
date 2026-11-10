@@ -3,7 +3,7 @@ name: martial-specialist-southeast-asia
 description: "Southeast Asian martial arts expert: Filipino Arnis, Eskrima and Kali, Pencak silat, Krabi-krabong, Muay Thai (Mae Mai, Look Mai), Bokator and Vietnamese arts. Names in Thai, Khmer or Vietnamese script with a named romanization. Called only by the kodflow-gamedev skills /move and /anim-review."
 tools: Read, Glob, Grep, Bash, WebFetch
 model: opus
-effort: high
+effort: medium
 color: green
 experimental: true
 ---

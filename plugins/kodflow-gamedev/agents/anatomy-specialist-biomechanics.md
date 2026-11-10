@@ -3,7 +3,7 @@ name: anatomy-specialist-biomechanics
 description: "Human anatomy and biomechanics for combat animation: joint ranges of motion from a sourced table, proximal-to-distal sequencing, forearm pronation and handedness, grip, stance, centre of mass, arm and leg counter-rotation in a run. Called by the kodflow-gamedev skills; returns panel-member/v1 JSON with measurable constraints."
 tools: Read, Glob, Grep, Bash, WebFetch
 model: opus
-effort: high
+effort: medium
 color: green
 ---
 

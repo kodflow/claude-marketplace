@@ -3,10 +3,10 @@ name: developer-specialist-rust
 description: Rust specialist — analyses Rust but has no Write tool and does not create worktrees,
   commit, use make, or write through gh; a fix brief goes to general-purpose with
   [general-purpose-ok]. Use when a change touches .rs files, Cargo.toml or Cargo.lock. Escalate to
-  opus/high when it spans several crates, unsafe code, async concurrency, or a protocol.
+  opus/medium when it spans several crates, unsafe code, async concurrency, or a protocol.
 tools: Read, Glob, Grep, SendMessage, TaskUpdate, Bash, WebFetch, mcp__context7__*
 model: sonnet
-effort: high
+effort: medium
 color: blue
 ---
 

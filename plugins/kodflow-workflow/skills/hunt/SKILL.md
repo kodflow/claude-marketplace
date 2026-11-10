@@ -7,7 +7,7 @@ when_to_use: Use when a whole topic needs its defects found and fixed, not a sin
   express as a matrix of cells with a runnable witness each.
 argument-hint: '"<topic>" | --resume <slug> | --status <slug> | --teardown <slug> [--force]'
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Bash(hunt-ledger:*)
 - Bash(hunt-status:*)

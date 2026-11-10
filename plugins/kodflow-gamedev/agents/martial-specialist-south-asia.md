@@ -3,7 +3,7 @@ name: martial-specialist-south-asia
 description: "South Asian martial arts expert: Kalaripayattu (vadivu, meythari, kolthari, ankathari, verumkai), Gatka, Silambam, Mallakhamba, Dhanurveda and weapons such as urumi, otta, gada, chakram, talwar, khanda, katar. Names in original script with IAST. Called only by the kodflow-gamedev skills /move and /anim-review."
 tools: Read, Glob, Grep, Bash, WebFetch
 model: opus
-effort: high
+effort: medium
 color: yellow
 experimental: true
 ---

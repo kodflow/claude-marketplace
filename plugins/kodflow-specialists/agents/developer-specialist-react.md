@@ -2,11 +2,11 @@
 name: developer-specialist-react
 description: React 19 specialist — JSX/TSX, hooks, React Server Components, Suspense boundaries,
   Concurrent Mode. Use when a change touches .jsx or .tsx files, or a node project declares a react
-  dependency. Escalate to opus/high when the change spans several modules, server/client boundaries,
-  or concurrent rendering.
+  dependency. Escalate to opus/medium when the change spans several modules, server/client
+  boundaries, or concurrent rendering.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
 model: sonnet
-effort: high
+effort: medium
 color: blue
 ---
 

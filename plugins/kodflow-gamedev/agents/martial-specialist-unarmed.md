@@ -3,7 +3,7 @@ name: martial-specialist-unarmed
 description: "Unarmed combat expert across cultures: boxing, wrestling under UWW rules, judo, jujutsu, grappling, kicks, strikes and falls, described as a fighter performs them, cited from rulebooks and primary texts. Names the technique, describes it in joint terms, proposes constraints. Called only by the kodflow-gamedev skills /move and /anim-review."
 tools: Read, Glob, Grep, Bash, WebFetch
 model: opus
-effort: high
+effort: medium
 color: cyan
 experimental: true
 ---

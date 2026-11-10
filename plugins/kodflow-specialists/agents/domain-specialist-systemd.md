@@ -1,9 +1,8 @@
 ---
 name: domain-specialist-systemd
-description: systemd semantics reviewer — unit-file directives and sections, Exec prefixes, sd_notify,
-  readiness and watchdog — checked against raw freedesktop.org man pages, never a summary. Use when a plan
-  or code writes or relies on unit files or sd_notify. Escalate to opus/xhigh when the question spans
-  several systemd releases or units.
+description: systemd semantics reviewer — unit-file directives and sections, Exec prefixes,
+  sd_notify, readiness and watchdog — checked against raw freedesktop.org man pages, never a
+  summary. Use when a plan or code writes or relies on unit files or sd_notify.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
 effort: high

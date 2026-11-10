@@ -1,9 +1,8 @@
 ---
 name: developer-specialist-protobuf
-description: Protocol Buffers and gRPC specialist for schema design, wire compatibility and code generation. Use when
-  *.proto, buf.yaml, buf.gen.yaml or generated pb files are present, or the task changes a gRPC service or
-  message. Escalate to sonnet/high when a defect sits in existing code or a compatibility break has an
-  unclear cause.
+description: Protocol Buffers and gRPC specialist for schema design, wire compatibility and code
+  generation. Use when *.proto, buf.yaml, buf.gen.yaml or generated pb files are present, or the
+  task changes a gRPC service or message.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
 model: sonnet
 effort: medium

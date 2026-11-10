@@ -3,7 +3,7 @@ name: martial-specialist-east-asia
 description: "East Asian martial arts expert: Japanese koryu (kenjutsu, iaijutsu, named cuts), Chinese military manuals (Jixiao Xinshu, Wubei Zhi; jian, dao, qiang) and Korean Muyedobotongji. Names in kanji, hanzi or hangul with Hepburn, Pinyin or Revised Romanization. Called only by the kodflow-gamedev skills /move and /anim-review."
 tools: Read, Glob, Grep, Bash, WebFetch
 model: opus
-effort: high
+effort: medium
 color: pink
 experimental: true
 ---

@@ -1,6 +1,6 @@
 # generated-from: plugins/*/agents/tooling-specialist-ansible.md
 name = "tooling-specialist-ansible"
-description = """Ansible specialist for playbooks, roles, inventories, collections and idempotence. Use when ansible.cfg, playbooks or roles/ are present, or the task mentions ansible-lint, molecule or vault-encrypted vars. Escalate to sonnet/high when a defect sits in existing code or a play fails for an unclear reason."""
+description = """Ansible specialist for playbooks, roles, inventories, collections and idempotence. Use when ansible.cfg, playbooks or roles/ are present, or the task mentions ansible-lint, molecule or vault-encrypted vars."""
 model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 

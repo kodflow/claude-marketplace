@@ -1,8 +1,8 @@
 # generated-from: plugins/*/agents/developer-specialist-cpp.md
 name = "developer-specialist-cpp"
-description = """C++ specialist — analyses C++ but has no Write tool and does not create worktrees, commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a change touches .cpp, .hpp or .cc files, or CMakeLists.txt. Escalate to opus/high when it spans several modules, threads or atomics, or a wire protocol."""
+description = """C++ specialist — analyses C++ but has no Write tool and does not create worktrees, commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a change touches .cpp, .hpp or .cc files, or CMakeLists.txt. Escalate to opus/medium when it spans several modules, threads or atomics, or a wire protocol."""
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 
 developer_instructions = """
 # C++ Specialist - Academic Rigor

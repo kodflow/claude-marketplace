@@ -3,7 +3,7 @@ name: martial-specialist-europe
 description: "European historical martial arts expert: German and Italian longsword, MS I.33, destreza, messer, polearms and armoured fencing, read from the treatises. Names the technique, describes it in joint terms and proposes measurable constraints. Called only by the kodflow-gamedev skills /move and /anim-review."
 tools: Read, Glob, Grep, Bash, WebFetch
 model: opus
-effort: high
+effort: medium
 color: red
 experimental: true
 ---

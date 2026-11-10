@@ -1,12 +1,11 @@
 ---
 name: domain-specialist-telecom
-description: Mobile core and lawful-interception specialist (public standards only) for 3GPP EPC and 5GC functions,
-  Diameter, GTP, PFCP, SBI, NAS and ETSI X1/X2/X3 handover. Use when code or logs mention MME, AMF, SMF,
-  UPF, UDM, NRF, S6a, IMSI or SUPI. Escalate to opus/xhigh when the question needs cross-spec reasoning
-  across several releases or interfaces.
+description: Mobile core and lawful-interception specialist (public standards only) for 3GPP EPC and
+  5GC functions, Diameter, GTP, PFCP, SBI, NAS and ETSI X1/X2/X3 handover. Use when code or logs
+  mention MME, AMF, SMF, UPF, UDM, NRF, S6a, IMSI or SUPI.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
 model: opus
-effort: high
+effort: medium
 color: purple
 ---
 

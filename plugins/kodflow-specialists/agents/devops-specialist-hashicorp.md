@@ -2,8 +2,7 @@
 name: devops-specialist-hashicorp
 description: HashiCorp stack specialist — Vault, Consul, Nomad, Packer and Boundary; returns JSON
   with configurations and recommendations. Use when a task touches .hcl or .nomad files, Vault
-  policies, Consul config or Packer templates. Escalate to sonnet/high when a defect sits in
-  existing code or the failure is unclear.
+  policies, Consul config or Packer templates.
 tools: Read, Glob, Grep, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, WebFetch, mcp__context7__*
 model: sonnet
 effort: medium

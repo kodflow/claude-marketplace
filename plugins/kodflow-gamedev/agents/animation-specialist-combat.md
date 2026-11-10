@@ -3,7 +3,7 @@ name: animation-specialist-combat
 description: "Combat animation craft: key poses, anticipation, timing under frame budgets, arcs, follow-through, hit-stop, silhouette and readability in 3D, iso and profile views, foot sliding and jerk, weapon secondary motion, cut versus thrust tip paths. Called by the kodflow-gamedev skills; returns panel-member/v1 JSON."
 tools: Read, Glob, Grep, Bash, WebFetch
 model: opus
-effort: high
+effort: medium
 color: orange
 ---
 

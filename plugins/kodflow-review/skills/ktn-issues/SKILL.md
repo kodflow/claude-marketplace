@@ -7,7 +7,7 @@ when_to_use: Use when the issue queue of ktn-linter, or of another linter run th
   on a project (`/lint`).
 argument-hint: '[<owner>/<repo>] [--triage-only] [--issue <N>[,<N>...]] [--resume]'
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

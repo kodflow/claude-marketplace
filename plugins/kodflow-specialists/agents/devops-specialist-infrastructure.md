@@ -2,8 +2,7 @@
 name: devops-specialist-infrastructure
 description: Infrastructure-as-code specialist — Terraform, OpenTofu and cloud provisioning; returns
   JSON with plans and warnings. Use when a task touches .tf or .tfvars files, terragrunt.hcl, a
-  terraform plan, or cloud resource provisioning. Escalate to sonnet/high when a defect sits in
-  existing code or the failure is unclear.
+  terraform plan, or cloud resource provisioning.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: medium

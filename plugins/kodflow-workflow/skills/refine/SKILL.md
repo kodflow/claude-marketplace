@@ -14,7 +14,7 @@ when_to_use: Use to turn a plan or a loose description into a /goal contract wit
   of success.
 argument-hint: <slug> | "<description>" [--bare] [--full <slug>] [--lenses light|full]
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)
