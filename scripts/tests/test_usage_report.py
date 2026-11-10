@@ -53,7 +53,8 @@ def meta(path, **fields):
 
 
 M = 1_000_000
-tmp = pathlib.Path(tempfile.mkdtemp())
+base = pathlib.Path(tempfile.mkdtemp())   # a stand-in <config> dir
+tmp = base / "projects"
 sess = tmp / "proj" / "s1"
 sub = sess / "subagents"
 T = "2026-11-03T10:{:02d}:00Z"
@@ -119,6 +120,16 @@ lone = sub / "agent-lone.jsonl"
 write(lone, [record("m-lone", T.format(46), "claude-sonnet-5-5", usage(M), "max")])
 meta(lone, agentType="workflow-subagent", workflowPhase="Solo")
 
+# The tier judge's journal: <config>/kodflow/sessions/<sid>/tier.jsonl, beside projects/.
+tier_dir = base / "kodflow" / "sessions" / "s1"
+tier_dir.mkdir(parents=True)
+(tier_dir / "tier.jsonl").write_text("".join(json.dumps(x) + "\n" for x in (
+    {"ts": "2026-11-03T10:30:00Z", "action": "warn", "reason": "tier", "would_refuse": True, "tool_use_id": "tu-c"},
+    {"ts": "2026-11-03T10:30:01Z", "action": "pass", "reason": "tier-inert", "would_refuse": False, "tool_use_id": "tu-a"},
+    {"ts": "2026-11-10T10:00:00Z", "action": "pass", "reason": "tier-nodef", "would_refuse": False, "tool_use_id": "tu-gone"},
+    {"ts": "2026-11-03T10:31:00Z", "action": "pass", "reason": "tier-nodef", "would_refuse": False},
+)) + "not json\n")
+
 r = subprocess.run([sys.executable, str(REPORT), "--projects", str(tmp), "--json"],
                    capture_output=True, text=True)
 check("the report runs", r.returncode == 0, r.stderr.strip())
@@ -156,6 +167,15 @@ w = d["by_week"]["2026-W45"]
 check("model: 2 by call, 0 by definition, 1 unresolved", w["model"] == {"call": 2, "definition": 0, "unresolved": 1}, str(w))
 check("effort: 1 by call, 1 by definition (meta), 1 unresolved", w["effort"] == {"call": 1, "definition": 1, "unresolved": 1}, str(w))
 
+tier = out["tier"]
+check("tier journal: 4 lines read, 2 joined by tool_use_id, 2 not", (tier["rows"], tier["joined"], tier["unjoined"]) == (4, 2, 2), str(tier))
+w45, w46 = tier["by_week"]["2026-W45"], tier["by_week"]["2026-W46"]
+check("tier journal: week 45 holds the joined pair and the id-less line", w45["rows"] == 3 and w45["joined"] == 2, str(w45))
+check("tier journal: would_refuse, actions and reasons counted per week",
+      w45["would_refuse"] == 1 and w45["actions"] == {"warn": 1, "pass": 2}
+      and w45["reasons"] == {"tier": 1, "tier-inert": 1, "tier-nodef": 1}, str(w45))
+check("tier journal: an unjoined line takes its own timestamp's week", w46["rows"] == 1 and w46["joined"] == 0, str(w46))
+
 rep = out["sequential_repeat_candidates"]
 check("a 3-wide parallel group is not a repetition; one sequential repeat is",
       rep["candidates"] == 1 and rep["by_agent"] == {"seq-type": 1}, str(rep))
@@ -172,6 +192,7 @@ check("a workflowPhase without a path segment is still a workflow run", "(no run
 
 text = subprocess.run([sys.executable, str(REPORT), "--projects", str(tmp)], capture_output=True, text=True)
 check("the text report runs", text.returncode == 0 and "dispatches" in text.stdout, text.stderr.strip())
+check("the text report has the tier section", "tier judge: 4 journal line(s)" in text.stdout and "would_refuse 1" in text.stdout, text.stdout[-600:])
 check("no description or prompt text is printed",
       "same prompt" not in text.stdout and "priced p-opus" not in text.stdout)
 
