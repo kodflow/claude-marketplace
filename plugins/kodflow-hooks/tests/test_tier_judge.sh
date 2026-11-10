@@ -57,7 +57,7 @@ check "hookEventName PreToolUse" "$(printf '%s' "$OUT" | jq -e '.hookSpecificOut
 check "names both fields" "$(ctx | grep -q 'names no model and effort' && echo yes)" "$(ctx)"
 check "table values for the roles" "$(ctx | grep -q 'Code worker, well specified: model sonnet, effort medium' && echo yes)"
 check "mode and its source" "$(ctx | grep -q 'Mode: warn (default)' && echo yes)"
-check "the command to turn it off" "$(ctx | grep -qF "printf off > $SD/tier-mode" && echo yes)"
+check "the command to turn it off" "$(ctx | grep -qF "printf off > '$SD/tier-mode'" && echo yes)"
 check "journal: warn, would_refuse" "$([ "$(last '.action + " " + (.would_refuse|tostring) + " " + .reason')" = "warn true tier" ] && echo yes)" "$(cat "$J")"
 check "journal fields" "$(tail -n 1 "$J" | jq -e 'has("ts") and has("mode") and has("mode_source") and has("caller") and has("has_model") and has("has_effort") and has("pinned_model") and has("pinned_effort") and has("tool_use_id")' >/dev/null && echo yes)"
 echo "--- exact warn message (bare general-purpose call) ---"; ctx; echo "---"
@@ -164,7 +164,7 @@ check "session file enforce, no marker: pass + tier-inert" "$([ $RC -eq 0 ] && [
 seen main
 run "$(payload general-purpose "" "")"
 check "enforce + main marker: exit 2" "$([ $RC -eq 2 ] && echo yes)" "rc=$RC err=$ERR"
-check "refusal names the fields, the table and the command" "$(printf '%s' "$ERR" | grep -q 'names no model and effort' && printf '%s' "$ERR" | grep -q 'Code worker, well specified' && printf '%s' "$ERR" | grep -qF "printf off > $SD/tier-mode" && printf '%s' "$ERR" | grep -q 'Mode: enforce (from' && echo yes)" "$ERR"
+check "refusal names the fields, the table and the command" "$(printf '%s' "$ERR" | grep -q 'names no model and effort' && printf '%s' "$ERR" | grep -q 'Code worker, well specified' && printf '%s' "$ERR" | grep -qF "printf off > '$SD/tier-mode'" && printf '%s' "$ERR" | grep -q 'Mode: enforce (from' && echo yes)" "$ERR"
 check "journal: refuse, would_refuse" "$([ "$(last '.action + " " + (.would_refuse|tostring)')" = "refuse true" ] && echo yes)"
 check "blocks.jsonl records the refusal" "$(grep -q '"motif":"tier"' "$SD/blocks.jsonl" 2>/dev/null && echo yes)"
 run "$(payload general-purpose haiku low)"
