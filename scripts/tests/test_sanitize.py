@@ -59,6 +59,13 @@ MUST_PASS = {
     "env-url":         "DATABASE_URL=postgres://${DB_USER}:${DB_PASS}@db/app",
 }
 
+def git_file_ignored() -> bool:
+    # In a worktree `.git` is a file holding the clone's absolute path.
+    with tempfile.TemporaryDirectory() as d:
+        (pathlib.Path(d) / ".git").write_text("gitdir: /home/" + "someone/clone/.git\n")
+        return subprocess.run([sys.executable, str(SANITIZE), d],
+                              capture_output=True).returncode == 0
+
 def blocked(content: str) -> bool:
     with tempfile.TemporaryDirectory() as d:
         (pathlib.Path(d) / "case.txt").write_text(content + "\n")
@@ -71,6 +78,8 @@ def main() -> int:
         if not blocked(c): fails.append(f"NOT BLOCKED (should be): {name}")
     for name, c in MUST_PASS.items():
         if blocked(c): fails.append(f"BLOCKED (should pass): {name}")
+
+    if not git_file_ignored(): fails.append("worktree .git file was scanned")
 
     total = len(MUST_BLOCK) + len(MUST_PASS)
     if fails:

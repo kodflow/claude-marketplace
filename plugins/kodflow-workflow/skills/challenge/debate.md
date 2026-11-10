@@ -176,7 +176,9 @@ and the panel agree. For each topic record at least one source, found in the
 order "What every specialist owes back" in `../_shared/specialists.md` sets.
 Each entry is a topic, a URL or a path, and a one-line purpose; a page already
 downloaded as plain text into `$SCRATCH` is cited by its scratch path and its
-URL. **A topic with no entry blocks dispatch**: fill the gap first, or a missing
+URL. A topic settled by reading upstream source names the exact tag the project
+deploys, taken from its version pin (a lock file, a versions file), so the
+specialist reads that revision rather than looking it up. **A topic with no entry blocks dispatch**: fill the gap first, or a missing
 page (the `systemd.socket(5)` the plan relied on) surfaces only in round 2.
 
 ### 2.1 Argue — all reviewers, one message, in parallel

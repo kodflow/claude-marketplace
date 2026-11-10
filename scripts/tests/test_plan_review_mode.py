@@ -182,7 +182,9 @@ check("canonical text names the one tree archive, its filters neutralised, under
       and "`git archive --format=tar -o <scratch>/tree.tar <rev> [-- <paths>]`" in canon
       and "`python3 -m tarfile --filter data -e <scratch>/tree.tar <scratch>/tree`" in canon
       and "`-c filter.N.smudge= -c filter.N.process= -c filter.N.required=false`" in canon
-      and "overrides any \"never create a file through the shell\"" in canon
+      and "override any \"never create a file through the shell\"" in canon
+      and "`gh api --method GET` at a named tag and saved under `<scratch>`" in canon
+      and "(each also as `git -C <repo> …` on a repository the brief names)" in canon
       and "\"archived tree at <rev>, export-ignore and export-subst applied\"" in canon)
 check("canonical text cites a measurement with its revision and defers verdict format to the brief",
       canon is not None and "its command, the revision or archived tree it ran on, and its result" in canon
