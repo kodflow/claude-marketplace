@@ -561,24 +561,11 @@ async function spawnPort($: any, raw: unknown[]): Promise<SpawnPort & { skillFil
   return {
     gated: () => gatedText($),
     mode: async () => gateMode(await $.env.get("KODFLOW_FABLE")),
+    // The same lookup as the tier rule's: both judge one file per agentType
     definition: async (type) => {
-      const cfg = await config($);
-      if (!cfg) return undefined;
-      const installed = await $.fs
-        .read(`${cfg}/plugins/installed_plugins.json`)
-        .catch(() => undefined);
-      for (const path of definitionPaths(type, {
-        project: await projectDir($).catch(() => undefined),
-        config: cfg,
-        installed,
-      })) {
-        const text = await $.fs.read(path).catch(() => undefined);
-        if (text !== undefined) {
-          raw.push(text.slice(0, 4000));
-          return text;
-        }
-      }
-      return undefined;
+      const text = await definitionText($, type);
+      if (text !== undefined) raw.push(text.slice(0, 4000));
+      return text;
     },
     envModel: async () => {
       const v = await $.env.get("CLAUDE_CODE_SUBAGENT_MODEL");
@@ -676,6 +663,7 @@ async function tierSources($: any, ctx: TierCtx): Promise<SourcePort> {
   const roots = scriptRoots({ config: ctx.cfg, cwd, project, session: ctx.session });
   // A root behind a symlink (/tmp, a linked config) is compared by its real path
   for (const r of [...roots]) {
+    if (typeof r !== "string") continue;
     const real = (await stat(r.replace(/\/$/, "")))?.real;
     if (real && !roots.includes(`${real}/`)) roots.push(`${real}/`);
   }

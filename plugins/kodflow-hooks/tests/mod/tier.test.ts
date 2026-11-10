@@ -7,7 +7,9 @@ import { TIER_VECTORS_JSONL } from "./tier-vectors.ts";
 import {
   definitionPins,
   judgeWorkflowScript,
+  offCommand,
   parseTable,
+  projectSlug,
   resolveMode,
 } from "../../hooks/mod/tier.ts";
 import { frontmatterModel } from "../../hooks/mod/fable.ts";
@@ -55,7 +57,7 @@ type Host = {
   spawned: any[];
 };
 
-function host(on: any, env: Record<string, string>, opts: { noRealPath?: boolean } = {}): Host {
+function host(on: any, env: Record<string, string>, opts: { noRealPath?: boolean; cwd?: string } = {}): Host {
   const h: Host = {
     files: new Map(),
     store: new Map(),
@@ -68,8 +70,8 @@ function host(on: any, env: Record<string, string>, opts: { noRealPath?: boolean
   h.files.set(`${CFG}/plugins/installed_plugins.json`, INSTALLED);
   mock.env(on, env);
   on("session.id", async () => ({ value: SID }));
-  on("session.cwd", async () => ({ value: CWD }));
-  on("session.root", async () => ({ value: CWD }));
+  on("session.cwd", async () => ({ value: opts.cwd ?? CWD }));
+  on("session.root", async () => ({ value: opts.cwd ?? CWD }));
   on("store.get", async (_$: any, e: any) => ({ value: h.store.get(e.key) }));
   on(
     "store.set",
@@ -163,7 +165,7 @@ test("one bare agent(): warn by default, the run goes on, the advice in context"
   );
   expect(text).not.toContain("Orchestrator");
   expect(text).toContain("Mode warn (source: default)");
-  expect(text).toContain(`printf off > ${DIR}/tier-mode`);
+  expect(text).toContain(`printf off > '${DIR}/tier-mode'`);
   expect(h.journal.length).toBe(1);
   expect(h.journal[0].ts).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
   expect(h.journal[0]).toEqual(
@@ -539,4 +541,36 @@ test("the context added is the recorded accepted shape: an array of strings next
   expect(Array.isArray(r.context) && r.context.every((c: unknown) => typeof c === "string")).toBe(true);
   expect(Object.keys(r).filter((k) => k in accepted).sort()).toEqual(["context", "result"]);
   expect(r.additionalContext).toBeUndefined();
+});
+
+test("the project slug is the engine's: every character outside [A-Za-z0-9] becomes -", async ($, on) => {
+  // T0: /workspace/probe → -workspace-probe (tests/fixtures/tier-workflow-results.jsonl)
+  expect(projectSlug("/workspace/probe")).toBe("-workspace-probe");
+  expect(projectSlug("/Users/a b/my_proj.v2@x")).toBe("-Users-a-b-my-proj-v2-x");
+  const cwd = "/Users/a b/my_proj.v2";
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_TIER: "enforce" }, { cwd });
+  const persisted = `${CFG}/projects/-Users-a-b-my-proj-v2/${SID}/workflows/scripts/bare-wf_9.js`;
+  h.files.set(persisted, BARE);
+  const r: any = await $.tool.call(wf({ scriptPath: persisted }));
+  expect(r.deny).toContain("agent() #1");
+  expect(h.journal[0].reason).toBe("tier");
+});
+
+test("a slug over 200 characters: cut, any base-36 suffix, this session only", async ($, on) => {
+  const cwd = `/${"d".repeat(230)}`;
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_TIER: "enforce" }, { cwd });
+  const dir = `${CFG}/projects/-${"d".repeat(199)}-1x9z`;
+  h.files.set(`${dir}/${SID}/workflows/scripts/a-wf_1.js`, BARE);
+  h.files.set(`${dir}/other-session/workflows/scripts/a-wf_1.js`, `${BARE}\n// other`);
+  const mine: any = await $.tool.call(wf({ scriptPath: `${dir}/${SID}/workflows/scripts/a-wf_1.js` }));
+  expect(mine.deny).toContain("agent() #1");
+  const other: any = await $.tool.call(wf({ scriptPath: `${dir}/other-session/workflows/scripts/a-wf_1.js` }));
+  expect(other.deny).toBeUndefined();
+});
+
+test("the off command is quoted: a space or a quote in the config path survives the copy", () => {
+  expect(offCommand("/Users/Jane Doe/.claude/kodflow/sessions/s")).toBe(
+    "printf off > '/Users/Jane Doe/.claude/kodflow/sessions/s/tier-mode'",
+  );
+  expect(offCommand("/x/it's")).toBe("printf off > '/x/it'\\''s/tier-mode'");
 });

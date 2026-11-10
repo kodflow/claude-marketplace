@@ -564,7 +564,7 @@ export async function judgeWorkflowScript(
 
 /** The command that turns the check off for one session. */
 export const offCommand = (sessionDir: string): string =>
-  `printf off > ${sessionDir}/tier-mode`;
+  `printf off > '${`${sessionDir}/tier-mode`.replace(/'/g, `'\\''`)}'`;
 
 /**
  * The one message for a script with missing fields: each agent() by index,
@@ -616,8 +616,16 @@ export type Source =
 
 export const MAX_SCRIPT = 256 * 1024;
 
-/** The project slug of the config's projects/ directory: the cwd with / and . as -. */
-export const projectSlug = (cwd: string): string => cwd.replace(/[/.]/g, "-");
+/**
+ * The project slug of the config's projects/ directory, as the engine makes
+ * it (2.1.321): every character outside [A-Za-z0-9] becomes "-"; a slug over
+ * 200 characters is cut at 200 and given "-<hash in base 36>", a hash this
+ * module does not reproduce (scriptRoots then matches any such suffix).
+ */
+export const SLUG_MAX = 200;
+export const projectSlug = (cwd: string): string => cwd.replace(/[^a-zA-Z0-9]/g, "-");
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
 /**
  * Where a scriptPath may be read from, real paths only (T0 #12): the
@@ -629,9 +637,16 @@ export function scriptRoots(where: {
   cwd: string;
   project?: string;
   session: string;
-}): string[] {
+}): Root[] {
   const slug = projectSlug(where.cwd);
-  const roots = [`${where.config}/projects/${slug}/${where.session}/`];
+  const roots: Root[] =
+    slug.length <= SLUG_MAX
+      ? [`${where.config}/projects/${slug}/${where.session}/`]
+      : [
+          new RegExp(
+            `^${escapeRe(`${where.config}/projects/${slug.slice(0, SLUG_MAX)}-`)}[0-9a-z]+/${escapeRe(where.session)}/`,
+          ),
+        ];
   if (where.project) roots.push(`${where.project.replace(/\/+$/, "")}/`);
   if (where.cwd !== where.project)
     roots.push(`${where.cwd.replace(/\/+$/, "")}/`);
@@ -644,12 +659,16 @@ export const isScratchpad = (real: string, session: string): boolean =>
     `^(/private)?/tmp/claude-[0-9]+/[^/]+/${session.replace(/[^A-Za-z0-9-]/g, "\\$&")}/scratchpad/`,
   ).test(real);
 
+/** A directory prefix, or a pattern for a session directory under a long slug */
+export type Root = string | RegExp;
+
 export const insideRoots = (
   real: string,
-  roots: string[],
+  roots: Root[],
   session: string,
 ): boolean =>
-  roots.some((r) => real.startsWith(r)) || isScratchpad(real, session);
+  roots.some((r) => (typeof r === "string" ? real.startsWith(r) : r.test(real))) ||
+  isScratchpad(real, session);
 
 /**
  * A path judged by its spelling alone: absolute, no `.` or `..` segment, no
@@ -666,7 +685,7 @@ export type SourcePort = {
     path: string,
   ) => Promise<{ real?: string; size: number; file: boolean } | undefined>;
   read: (path: string) => Promise<string | undefined>;
-  roots: string[];
+  roots: Root[];
   /** realpath of each root, for a root that is itself a symlink (/tmp on macOS) */
   session: string;
 };
