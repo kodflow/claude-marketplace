@@ -189,6 +189,17 @@ test("CLAUDE_CODE_SUBAGENT_MODEL_FORCE makes the environment win over the call",
   expect(h.spawned.length).toBe(0);
 });
 
+test("CLAUDE_CODE_SUBAGENT_MODEL_FORCE alone ignores the call's model: the parent's decides", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" });
+  const ok: any = await $.agent.spawn(spawn({ model: "claude-fable-5-1", parentModel: "claude-sonnet-5-5" }) as any);
+  expect(ok.deny).toBeUndefined();
+  const no: any = await $.agent.spawn(spawn({ model: "haiku", parentModel: "claude-fable-5-1" }) as any);
+  expect(no.deny).toContain("parent model");
+  const ex: any = await $.agent.spawn(spawn({ subagentType: "Explore", model: "claude-fable-5-1", parentModel: "claude-sonnet-5-5" }) as any);
+  expect(ex.deny).toBeUndefined();
+  expect(h.spawned.length).toBe(2);
+});
+
 test("malformed frontmatter on a non-gated dispatch still spawns", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
   h.files.set(`${AGENTS}/broken.md`, "no frontmatter at all\nmodel: fable\n");

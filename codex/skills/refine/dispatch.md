@@ -80,8 +80,10 @@ Pipeline invariants (locked by `refine-pipeline-rewire.bats`):
 A lens the router answers with its `general-purpose` fallback (exit 10) is
 dispatched with `[general-purpose-ok]` in its prompt, the `marker` field of that JSON:
 the kodflow-hooks routing gate refuses an unmarked general-purpose dispatch whose
-description names a specialist's technology. That JSON holds no model and no
-effort (`null`): the caller sets both on the call, per `model-policy.md` §2.
+description names a specialist's technology. That JSON carries the model and
+effort of a tier-table row (`--role`, default "Code worker, well specified"): the
+call passes both, per `model-policy.md` §2; a lens that is a review worker passes
+`--role "Review / verify worker"`.
 
 ### Static fallback (refine-* pipeline)
 

@@ -60,6 +60,7 @@ detect_distro:
     2. Match ID to routing_table
     3. IF match found:
        Task(subagent_type=<agent_name>, prompt="<original_query>")
+       (the specialist pins its model and effort in its frontmatter: pass neither)
     4. ELSE: Handle directly with generic knowledge below
 ```
 
