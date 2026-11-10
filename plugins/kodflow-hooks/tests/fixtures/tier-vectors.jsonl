@@ -1,0 +1,53 @@
+{"kind": "frontmatter", "name": "model plain", "text": "---\nname: a\nmodel: sonnet\n---\n", "key": "model", "pinned": true}
+{"kind": "frontmatter", "name": "effort plain", "text": "---\nname: a\neffort: high\n---\n", "key": "effort", "pinned": true}
+{"kind": "frontmatter", "name": "model null", "text": "---\nname: a\nmodel: null\n---\n", "key": "model", "pinned": false}
+{"kind": "frontmatter", "name": "effort tilde", "text": "---\nname: a\neffort: ~\n---\n", "key": "effort", "pinned": false}
+{"kind": "frontmatter", "name": "model trailing comment", "text": "---\nname: a\nmodel: opus # pinned\n---\n", "key": "model", "pinned": true}
+{"kind": "frontmatter", "name": "effort comment only", "text": "---\nname: a\neffort: # none yet\n---\n", "key": "effort", "pinned": false}
+{"kind": "frontmatter", "name": "model double quotes", "text": "---\nname: a\nmodel: \"haiku\"\n---\n", "key": "model", "pinned": true}
+{"kind": "frontmatter", "name": "effort single quotes", "text": "---\nname: a\neffort: 'low' # c\n---\n", "key": "effort", "pinned": true}
+{"kind": "frontmatter", "name": "model quoted null", "text": "---\nname: a\nmodel: \"null\"\n---\n", "key": "model", "pinned": false}
+{"kind": "frontmatter", "name": "model empty quotes", "text": "---\nname: a\nmodel: ''\n---\n", "key": "model", "pinned": false}
+{"kind": "frontmatter", "name": "model empty", "text": "---\nname: a\nmodel:\n---\n", "key": "model", "pinned": false}
+{"kind": "frontmatter", "name": "model CRLF", "text": "---\r\nname: a\r\nmodel: sonnet\r\n---\r\n", "key": "model", "pinned": true}
+{"kind": "frontmatter", "name": "effort BOM", "text": "﻿---\nname: a\neffort: medium\n---\n", "key": "effort", "pinned": true}
+{"kind": "frontmatter", "name": "model inherit", "text": "---\nname: a\nmodel: inherit\n---\n", "key": "model", "pinned": false}
+{"kind": "frontmatter", "name": "model Inherit quoted", "text": "---\nname: a\nmodel: \"Inherit\"\n---\n", "key": "model", "pinned": false}
+{"kind": "frontmatter", "name": "effort absent", "text": "---\nname: a\nmodel: sonnet\n---\n", "key": "effort", "pinned": false}
+{"kind": "frontmatter", "name": "key after the frontmatter", "text": "---\nname: a\n---\nmodel: sonnet\n", "key": "model", "pinned": false}
+{"kind": "frontmatter", "name": "no frontmatter", "text": "model: sonnet\n", "key": "model", "pinned": false}
+{"kind": "frontmatter", "name": "indented key is not top-level", "text": "---\nname: a\nmeta:\n  model: sonnet\n---\n", "key": "model", "pinned": false}
+{"kind": "mode", "name": "nothing set: warn by default", "env": null, "session": null, "global": null, "skew": false, "mode": "warn", "source": "default"}
+{"kind": "mode", "name": "env enforce", "env": "enforce", "session": null, "global": null, "skew": false, "mode": "enforce", "source": "KODFLOW_TIER"}
+{"kind": "mode", "name": "env before session", "env": "warn", "session": "enforce\n", "global": null, "skew": false, "mode": "warn", "source": "KODFLOW_TIER"}
+{"kind": "mode", "name": "session before global", "env": null, "session": "enforce\n", "global": "warn", "skew": false, "mode": "enforce", "source": "session"}
+{"kind": "mode", "name": "global alone", "env": null, "session": null, "global": "enforce", "skew": false, "mode": "enforce", "source": "global"}
+{"kind": "mode", "name": "off in the global file wins over env enforce", "env": "enforce", "session": null, "global": "off\n", "skew": false, "mode": "off", "source": "global"}
+{"kind": "mode", "name": "off in the session file wins", "env": "enforce", "session": "off", "global": "enforce", "skew": false, "mode": "off", "source": "session"}
+{"kind": "mode", "name": "env off", "env": "OFF", "session": null, "global": "enforce", "skew": false, "mode": "off", "source": "KODFLOW_TIER"}
+{"kind": "mode", "name": "unknown value ignored", "env": "bogus", "session": "enforce", "global": null, "skew": false, "mode": "enforce", "source": "session"}
+{"kind": "mode", "name": "skew turns enforce into warn", "env": null, "session": null, "global": "enforce", "skew": true, "mode": "warn", "source": "tier-skew"}
+{"kind": "mode", "name": "skew leaves warn", "env": null, "session": null, "global": null, "skew": true, "mode": "warn", "source": "default"}
+{"kind": "mode", "name": "skew leaves off", "env": null, "session": null, "global": "off", "skew": true, "mode": "off", "source": "global"}
+{"kind": "script", "name": "T0 probe, both fields", "script": "export const meta = {name: 't0-probe', description: 'recorder probe'}\nconst r = await agent('Reply ok.', {model: 'haiku', effort: 'low', label: 'w1'})\nreturn r", "expect": "judged", "calls": 1, "missing": []}
+{"kind": "script", "name": "one bare agent()", "script": "export const meta = {name: 'bare', description: 'one bare agent'}\nreturn await agent('Do the thing.')", "expect": "judged", "calls": 1, "missing": [[1, ["model", "effort"]]]}
+{"kind": "script", "name": "options without model or effort", "script": "await agent('x', {label: 'a'})", "expect": "judged", "calls": 1, "missing": [[1, ["model", "effort"]]]}
+{"kind": "script", "name": "shorthand keys", "script": "const model = 'sonnet', effort = 'low'\nawait agent('x', {model, effort})", "expect": "judged", "calls": 1, "missing": []}
+{"kind": "script", "name": "quoted keys", "script": "await agent('x', {'model': 'opus', \"effort\": 'high'})", "expect": "judged", "calls": 1, "missing": []}
+{"kind": "script", "name": "schema.effort nested does not count", "script": "await agent('x', {model: 'sonnet', schema: {type: 'object', properties: {effort: {type: 'string'}}}})", "expect": "judged", "calls": 1, "missing": [[1, ["effort"]]]}
+{"kind": "script", "name": "effort: undefined is missing", "script": "await agent('x', {model: 'sonnet', effort: undefined})", "expect": "judged", "calls": 1, "missing": [[1, ["effort"]]]}
+{"kind": "script", "name": "spread", "script": "const base = {model: 'sonnet', effort: 'low'}\nawait agent('x', {...base, label: 'a'})", "expect": "tier-nonliteral", "calls": 1}
+{"kind": "script", "name": "computed key", "script": "const k = 'model'\nawait agent('x', {[k]: 'sonnet', effort: 'low'})", "expect": "tier-nonliteral", "calls": 1}
+{"kind": "script", "name": "non-literal options", "script": "const o = {model: 'sonnet', effort: 'low'}\nawait agent('x', o)", "expect": "tier-nonliteral", "calls": 1}
+{"kind": "script", "name": "agentType not a string", "script": "await agent('x', {agentType: t, model: 'sonnet', effort: 'low'})", "expect": "tier-nonliteral", "calls": 1}
+{"kind": "script", "name": "regex literal and division", "script": "const half = n / 2 / 1\nconst re = /agent\\('\"x/g\nawait agent('x', {model: 'sonnet', effort: 'low'})\nawait agent('y')", "expect": "judged", "calls": 2, "missing": [[2, ["model", "effort"]]]}
+{"kind": "script", "name": "template with ${} and agent( in its text", "script": "const p = `agent(${n}) is text, ${ {a: 1}.a } too`\nawait agent(p, {model: 'haiku', effort: 'low'})", "expect": "judged", "calls": 1, "missing": []}
+{"kind": "script", "name": "agent() inside ${} is not judged", "script": "const s = `${await agent('inner')}`\nawait agent('x', {model: 'haiku', effort: 'low'})", "expect": "judged", "calls": 1, "missing": []}
+{"kind": "script", "name": "comments", "script": "// agent('commented')\n/* agent('block', {}) */\nawait agent('x', /* opts */ {model: 'haiku', // m\n effort: 'low'})", "expect": "judged", "calls": 1, "missing": []}
+{"kind": "script", "name": ".agent( and ?.agent( are methods", "script": "await obj.agent('a')\nawait obj?.agent('b')\nawait agent('c', {model: 'haiku', effort: 'low'})", "expect": "judged", "calls": 1, "missing": []}
+{"kind": "script", "name": "agent in a string", "script": "const t = \"call agent('x') now\"\nawait agent(t, {model: 'haiku', effort: 'low'})", "expect": "judged", "calls": 1, "missing": []}
+{"kind": "script", "name": "unterminated string", "script": "await agent('x, {model: 'haiku'})", "expect": "tier-unparsed"}
+{"kind": "script", "name": "unbalanced brackets", "script": "await agent('x', {model: 'haiku', effort: 'low'}", "expect": "tier-unparsed"}
+{"kind": "script", "name": "spaced method call fools the count", "script": "await obj. agent('x')\nawait agent('y', {model: 'haiku', effort: 'low'})", "expect": "tier-unparsed"}
+{"kind": "script", "name": "trailing comma, no options", "script": "await agent('x',)", "expect": "judged", "calls": 1, "missing": [[1, ["model", "effort"]]]}
+{"kind": "script", "name": "twenty agent() calls", "script": "export const meta = {name: 'twenty', description: 'twenty agents'}\nconst rs = await Promise.all([\n  agent(`task ${1}`, {model: 'haiku', effort: 'low', label: 'l1'}),\n  agent(`task ${2}`, {model: 'haiku', effort: 'low', label: 'l2'}),\n  agent(`task ${3}`, {model: 'haiku', effort: 'low', label: 'l3'}),\n  agent(`task ${4}`, {model: 'haiku', effort: 'low', label: 'l4'}),\n  agent('task 5', {label: 'l5'}),\n  agent(`task ${6}`, {model: 'haiku', effort: 'low', label: 'l6'}),\n  agent('task 7', {model: 'sonnet', label: 'l7'}),\n  agent(`task ${8}`, {model: 'haiku', effort: 'low', label: 'l8'}),\n  agent(`task ${9}`, {model: 'haiku', effort: 'low', label: 'l9'}),\n  agent('task 10', {label: 'l10'}),\n  agent(`task ${11}`, {model: 'haiku', effort: 'low', label: 'l11'}),\n  agent(`task ${12}`, {model: 'haiku', effort: 'low', label: 'l12'}),\n  agent(`task ${13}`, {model: 'haiku', effort: 'low', label: 'l13'}),\n  agent('task 14', {model: 'sonnet', label: 'l14'}),\n  agent('task 15', {label: 'l15'}),\n  agent(`task ${16}`, {model: 'haiku', effort: 'low', label: 'l16'}),\n  agent(`task ${17}`, {model: 'haiku', effort: 'low', label: 'l17'}),\n  agent(`task ${18}`, {model: 'haiku', effort: 'low', label: 'l18'}),\n  agent(`task ${19}`, {model: 'haiku', effort: 'low', label: 'l19'}),\n  agent('task 20', {label: 'l20'}),\n])\nreturn rs.length", "expect": "judged", "calls": 20, "missing": [[5, ["model", "effort"]], [7, ["effort"]], [10, ["model", "effort"]], [14, ["effort"]], [15, ["model", "effort"]], [20, ["model", "effort"]]]}

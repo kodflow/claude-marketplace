@@ -18,7 +18,7 @@ need **Claude Code 2.1.293 or later**.
 `hooks/mod/register.ts` is wiring only, one `on(...)` per event; the logic
 sits in pure modules beside it (`tasks.ts`, `store.ts`, `calls.ts`,
 `paths.ts`, `lint.ts`, `shell.ts`, `patterns.ts`, `guards.ts`,
-`filter.ts`, `veil.ts`, `mcp-probe.ts`, `pipeline.ts`, `fable.ts`, `cleanup.ts`, and for the three machine
+`filter.ts`, `veil.ts`, `mcp-probe.ts`, `pipeline.ts`, `fable.ts`, `tier.ts`, `cleanup.ts`, and for the three machine
 guards `machine-guards.ts` over a port, with `modwall.ts`, `collision.ts`,
 `zsh.ts`), which never touch `$`: the engine follows `$` and `on` only inside
 register.ts.
@@ -40,6 +40,8 @@ register.ts.
 | `session.start` | **zsh-safe**: `ZDOTDIR` → `hooks/zsh`, the user's own in `KODFLOW_USER_ZDOTDIR` (`""` when unset); `hooks/zsh/.zshenv` gives ZDOTDIR back, sources the user's `.zshenv`, then `setopt nonomatch noequals`: `echo *.none` prints `*.none` instead of failing |
 | `tool.call` on `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | **collision-guard**: when another session of this machine, beating within 30 min, wrote the same file within 30 min (its `edits.tsv`), asks Continue / Move to a worktree (the model is told to call `EnterWorktree`) / Cancel, but only when the user typed a prompt at the terminal (`origin.kind` `composer`, noted by `prompt.submit`) in the last 10 minutes (the presence rule): otherwise it journals the collision to the debug log and lets the edit through, so a night run never waits on a question; once written, notes `<seconds>\t<path>` in `<config>/kodflow/sessions/<session>/edits.tsv` (no prompt, no content); `<config>/projects` is never checked |
 | `session.end` | empties this session's `edits.tsv` |
+| `tool.call` on `Workflow` | **tier**: every `agent()` of the script (`scriptPath` read from its real path inside the session's `<config>/projects/<slug>/<session>/`, the project or the scratchpad, at most 256 kB; else the inline `script`) must pass the model and the effort its `agentType` definition or the environment (`CLAUDE_CODE_SUBAGENT_MODEL`, `CLAUDE_CODE_EFFORT_LEVEL` other than `auto`) does not pin. Only the top-level keys of an object literal given as the 2nd argument are read; a spread, a computed key, a non-literal argument (`tier-nonliteral`) or a text the lexer and an independent count disagree on (`tier-unparsed`) passes. `name` alone (`tier-unjudged`) and `resumeFromRunId` (`tier-resume`) are not judged. Mode as the shell's: `off` anywhere wins, else `KODFLOW_TIER`, `<config>/kodflow/sessions/<session>/tier-mode`, `<config>/kodflow/tier-mode`, warn; `tier-skew` turns enforce into warn. Warn appends the advice to the result's `context`; enforce refuses before the run, and the same script refused once passes the second time (`tier-breaker`, in `$.store`). One line per `agent()` appended to the session's `tier.jsonl` |
+| `agent.spawn` | **tier** first, logged only: a Workflow agent (`tier-workflow`), a resume (`tier-resume`), a named agent (`tier-teammate`) — never refused, since a spawn carries no effort |
 | `agent.spawn` | **gated models**: passes or refuses a spawn on the model it would run on, never writes one (below) |
 | `tool.call` on `Skill` | **gated models**: a skill whose frontmatter names one passes only with the session's grant, asked once like a spawn |
 | `classic.PreModelSwitch` | a `/model` the user typed or picked grants the session a gated model; a switch from the SDK asks, and is refused with nobody at the prompt |
