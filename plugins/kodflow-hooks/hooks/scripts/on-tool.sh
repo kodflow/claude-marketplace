@@ -1858,7 +1858,7 @@ pre_agent() {
     [ "$EV" = PreToolUse ] && [ -z "$AID" ] || { _log; exit 0; }
     _isolation_gate
     [ "${KODFLOW_ROUTE:-}" = off ] && { _log; exit 0; }
-    local st desc idx hits line agent kw
+    local st desc idx hits line agent kw how note
     eval "$(printf '%s' "$INPUT" | jq -r '@sh "st=\(.tool_input.subagent_type // "") desc=\(.tool_input.description // "")"' 2>/dev/null)" || { _log; exit 0; }
     case "$st" in ""|general-purpose) ;; *) _log; exit 0 ;; esac
     case "$INPUT" in *'[general-purpose-ok]'*) ROOT_GUARD=route-override; _log; exit 0 ;; esac
@@ -1869,8 +1869,9 @@ pre_agent() {
     hits=$(kf_route_match "$idx" "$desc")
     [ -n "$hits" ] || { _log; exit 0; }
     local -a use=()
-    while IFS=$'\t' read -r agent kw; do
-        [ -n "$agent" ] && use+=("subagent_type: $agent  (the description names: ${kw//,/, })")
+    while IFS=$'\t' read -r agent kw how; do
+        note=""; [ "$how" = reviews ] && note="; reviews only, delivers no commit or PR"
+        [ -n "$agent" ] && use+=("subagent_type: $agent  (the description names: ${kw//,/, }$note)")
     done <<< "$hits"
     ROOT_GUARD=route-deny
     desc=$(printf '%s' "$desc" | tr -d '[:cntrl:]' | cut -c1-80)
@@ -1878,6 +1879,7 @@ pre_agent() {
         "${use[@]}" \
         "general-purpose would run it without that agent's pinned model, effort and checks." \
         "Several lines: dispatch each specialist its part. A deliberate general-purpose dispatch carries [general-purpose-ok] in its description or prompt." \
+        "A task that commits, pushes or opens a PR goes to a specialist marked as delivering; else general-purpose delivers with [general-purpose-ok] and the specialist reviews (\"Who delivers a change\" in skills/_shared/specialists.md)." \
         "KODFLOW_ROUTE=off turns this gate off."
 }
 

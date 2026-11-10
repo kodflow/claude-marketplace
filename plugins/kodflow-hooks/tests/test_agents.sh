@@ -58,8 +58,9 @@ agent() {
         | jq -c --arg d "$1" --arg t "${2:-}" --arg p "${3:-Reply ok.}" --arg m "${4:-}" \
             '.tool_input = ({description: $d, prompt: $p} + (if $t == "" then {} else {subagent_type: $t} end) + (if $m == "" then {} else {model: $m} end))'
 }
-# run SCRIPT JSON [ENV-assignment...] → RC, OUT, ERR
-run() { local s=$1 json=$2; shift 2; OUT=$(printf '%s' "$json" | env "$@" bash "$S/$s" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err"); }
+# run SCRIPT JSON [ENV-assignment...] → RC, OUT, ERR, under HOOK_SHELL
+# (default bash; macOS CI sets /bin/bash, the shell hooks run with there)
+run() { local s=$1 json=$2; shift 2; OUT=$(printf '%s' "$json" | env "$@" "${HOOK_SHELL:-bash}" "$S/$s" 2>"$T/err"); RC=$?; ERR=$(cat "$T/err"); }
 expect_rc() { [ "$RC" -eq "$2" ] && ok "$1" || bad "$1" "rc=$RC out=${OUT:0:200} err=${ERR:0:300}"; }
 motif() { printf '%s' "$ERR" | grep -q "\[motif:$1\]"; }
 
@@ -121,6 +122,16 @@ installed kodflow-specialists
 touch -t 200001010000 "$SD/routing-installed.tsv"; printf 'stale\n' > "$SD/routing-installed.tsv"; touch -t 200001010000 "$SD/routing-installed.tsv"
 run on-tool.sh "$(agent "Fix the golang race")"
 [ "$RC" -eq 2 ] && grep -q golang "$SD/routing-installed.tsv" && ok "an index older than the shipped one is rebuilt" || bad "stale index" "rc=$RC"
+
+echo "== the routing gate · who delivers a change"
+# The refusal says, per specialist, whether it can carry a commit and a PR
+# (routing-index.tsv's fourth column), and where the rule lives.
+run on-tool.sh "$(agent "Fix the golang race" general-purpose)"
+[ "$RC" -eq 2 ] && motif route && printf '%s' "$ERR" | grep -q 'developer-specialist-go.*reviews only, delivers no commit or PR' \
+    && printf '%s' "$ERR" | grep -q 'Who delivers a change' \
+    && ok "general-purpose with a keyword: refused, the delivery rule printed" || bad "route delivery" "rc=$RC $ERR"
+run on-tool.sh "$(agent "Draft the release notes" general-purpose)"
+expect_rc "general-purpose with no keyword passes" 0
 
 echo "== the routing gate · real descriptions"
 # What sessions dispatch as general-purpose (recorded, or written by these
@@ -371,6 +382,28 @@ stop KODFLOW_MOD=off; proposes && printf '%s' "$OUT" | grep -q 'Later' && ok "so
 printf '%s\n' "$(( $(date +%s) - 3600 ))" > "$SD/composer-at"
 run on-user.sh "$(jq -n -c --arg sid "$SID" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:$sid,hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"<task-notification>x</task-notification>"}')" KODFLOW_MOD=off
 [ $(( $(date +%s) - $(cat "$SD/composer-at") )) -ge 3000 ] && ok "a system turn does not" || bad "presence systurn" ""
+
+echo "== SubagentStart · forge, push and worktree rules (#134)"
+. "$S/lib/rules.sh"
+run on-agent.sh "$(fixture "SubagentStart, plugin agent")"
+C=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null)
+case "$C" in *"$KF_FORGE_RULE"*) ok "the forge rule comes from lib/rules.sh" ;; *) bad "forge rule" "$C" ;; esac
+printf '%s' "$C" | grep -q 'lacks the forge MCP uses gh or glab directly' && ok "a subagent without the MCP falls back to gh" || bad "mcp fallback" "$C"
+printf '%s' "$C" | grep -q 'only as --force-with-lease, never --force' && ok "push: --force-with-lease, never --force" || bad "force-with-lease" "$C"
+printf '%s' "$C" | grep -q 'worktree you did not create: never reuse that worktree and never remove it' && ok "a worktree held by another agent: reported, never reused" || bad "worktree" "$C"
+case "$C" in *"$KF_CI_WATCH_RULE"*) ok "the CI watch rule is given" ;; *) bad "ci watch" "$C" ;; esac
+
+echo "== SubagentStop · the whole last message is kept (#134)"
+# A reviewer without Write (developer-specialist-python) cannot save its
+# report; the hook does, so a reply cut short is read from the file.
+LONG=$(awk 'BEGIN { for (i = 1; i <= 400; i++) printf "objection %d line\\n", i }')
+run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" \
+    ".agent_id = \"a-rep/../x\" | .agent_type = \"kodflow-specialists:developer-specialist-python\" | .last_assistant_message = \"$LONG end\"")"
+RP=$SD/agents/a-repx.md
+[ -s "$RP" ] && grep -q '^objection 400 line$' "$RP" && grep -q '^ end$' "$RP" \
+    && ok "agents/<id>.md holds the full message, the id sanitised" || bad "agent report" "$(ls "$SD/agents" 2>&1)"
+run on-agent.sh "$(fixture "auto mode: SubagentStop after the hand-back (stop_hook_active, no message)" '.agent_id = "a-empty"')"
+[ ! -e "$SD/agents/a-empty.md" ] && ok "a stop with no message writes nothing" || bad "empty report" ""
 
 echo "== every script fed the recorded payloads exits 0 or blocks on purpose"
 while IFS= read -r c; do
