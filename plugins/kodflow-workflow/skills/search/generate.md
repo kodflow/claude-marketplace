@@ -36,7 +36,7 @@ generated: <ISO8601>
 query: "<verbatim query>"
 class: VERSIONED | CONCEPTUAL
 gate: LOCAL_COMPLETE | LOCAL_PARTIAL | LOCAL_NONE
-engine: workflow:research | degraded:agents | none
+engine: workflow:deep-research | degraded:agents | none
 ---
 
 # Context: <topic>
