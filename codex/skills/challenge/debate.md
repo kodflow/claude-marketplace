@@ -185,7 +185,8 @@ mode` and carries the same six-field contract: that marker is what switches a
 specialist from the output format of its own definition to this one, and the
 caller's format wins over the agent's, always (see "Plan review mode" in
 `../_shared/specialists.md`). The three lenses run on `general-purpose` by
-design, so their brief opens with `[general-purpose-ok]`, the marker the
+design, each call passing `model: "opus"` and `effort: "high"` (review worker,
+model-policy §2: a built-in agent pins neither), so their brief opens with `[general-purpose-ok]`, the marker the
 kodflow-hooks routing gate reads as a deliberate dispatch, then the line
 `Plan review mode`; a specialist's brief starts with `Plan review mode` alone.
 

@@ -109,8 +109,18 @@ echo "exit 10 — general-purpose fallback"
 run /nope nope; rc 10 "no rule matches"
 field '.[0].subagent_type' general-purpose "the fallback agent"
 field '.[0].marker' '[general-purpose-ok]' "carries the gate's marker"
-field '.[0].resolved_model' null "no model invented"
-field '.[0].effort' null "no effort invented"
+field '.[0].resolved_model' sonnet "the tier-table model, never null"
+field '.[0].effort' medium "the tier-table effort, never null"
+OUT=$(bash "$R" --skill /nope --phase nope --profile "$T/profile.json" --role "Review / verify worker" 2>/dev/null)
+field '.[0].resolved_model' opus "--role picks another row: model"
+field '.[0].effort' high "--role picks another row: effort"
+OUT=$(bash "$R" --skill /nope --phase nope --profile "$T/profile.json" --role "Orchestrator" 2>/dev/null); RC=$?
+rc 32 "a row that claims no model is refused, not nulled"
+OUT=$(bash "$R" --skill /nope --phase nope --profile "$T/profile.json" --role "No such role" 2>/dev/null); RC=$?
+rc 32 "an unknown role is refused"
+OUT=$(CLAUDE_TIER_TABLE=$T/absent.tsv bash "$R" --skill /nope --phase nope --profile "$T/profile.json" 2>/dev/null); RC=$?
+rc 32 "no tier table is refused"
+run /nope nope
 [ -s "$T/telemetry.jsonl" ] && ok "the fallback is logged" || bad "the fallback is logged" "no telemetry"
 export CLAUDE_ROUTING_TABLE=$T/absent.jsonl; run /refine lens-1-correctness; rc 10 "no table at all"
 table '{"id":"t","skill":"/x","phase":"p","agent":"developer-executor-security","guard":".nope == 1"}'

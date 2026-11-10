@@ -91,13 +91,16 @@ probe_policy:
 
   explore_when_large: |
     tracked_files >= 300 and at least one probe still open: launch the open
-    probes as Explore agents, ALL in ONE message so they run concurrently.
+    probes as Explore agents (each call: model sonnet, effort low, the tier
+    table, model-policy §2), ALL in ONE message so they run concurrently.
     Never more than the open ones.
 ```
 
 ```yaml
 probes:
   agent: "Explore"          # read-only, returns conclusions not file dumps
+  model: sonnet             # mechanical worker (tier table, model-policy §2)
+  effort: low
 
   - name: source
     breadth: medium

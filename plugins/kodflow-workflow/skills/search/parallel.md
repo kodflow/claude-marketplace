@@ -1,7 +1,9 @@
 # Phase 3.0: Parallel Search (RLM Pattern: Partition + Map)
 
 **Per PR4 — Skills Architecture v1.3, /search dispatches per-language
-specialists via the router rather than the generic Explore agent.**
+specialists via the router rather than the generic Explore agent.** A routed dispatch carries the model and
+effort the router returns; an unrouted one passes both per the tier table
+(model-policy §2).
 
 ```bash
 # Route once per concept; expand to per-language specialists via agent_template
@@ -20,13 +22,14 @@ documentation (Go: go.dev, Python: docs.python.org, Node: nodejs.org)
 plus the local Design-Patterns KB, read directly with Grep/Read over
 `~/.claude/docs/` (it is a flat markdown tree — no agent needed).
 
-Legacy `Explore`-based dispatch (kept for unrouted contexts):
+Legacy `Explore`-based dispatch (kept for unrouted contexts; `model` and `effort` on the call, bulk worker per the tier table):
 
 ```
 Task({
   subagent_type: "Explore",
   prompt: "Search <concept> on <domain>. Extract: definition, usage, examples.",
-  model: "haiku"
+  model: "haiku",
+  effort: "low"
 })
 ```
 
@@ -34,12 +37,12 @@ Task({
 
 **Multi-agent example** (no `subagent_type`: `general-purpose`, so each prompt
 carries `[general-purpose-ok]`, the marker the kodflow-hooks routing gate reads as a
-deliberate dispatch):
+deliberate dispatch, and `model` and `effort` ride on each call):
 ```
 // Single message with 3 Task calls
-Task({ description: "OAuth2 spec lookup", prompt: "[general-purpose-ok] OAuth2 on rfc-editor.org", model: "haiku", ... })
-Task({ description: "JWT spec lookup", prompt: "[general-purpose-ok] JWT on tools.ietf.org", model: "haiku", ... })
-Task({ description: "REST API lookup", prompt: "[general-purpose-ok] REST API on developer.mozilla.org", model: "haiku", ... })
+Task({ description: "OAuth2 spec lookup", prompt: "[general-purpose-ok] OAuth2 on rfc-editor.org", model: "haiku", effort: "low", ... })
+Task({ description: "JWT spec lookup", prompt: "[general-purpose-ok] JWT on tools.ietf.org", model: "haiku", effort: "low", ... })
+Task({ description: "REST API lookup", prompt: "[general-purpose-ok] REST API on developer.mozilla.org", model: "haiku", effort: "low", ... })
 ```
 
 ---
