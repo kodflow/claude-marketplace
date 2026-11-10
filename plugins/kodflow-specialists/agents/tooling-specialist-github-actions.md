@@ -39,8 +39,9 @@ permission over-grants.
 
 Every page of docs.github.com is a Markdown file of the public `github/docs`
 repository: `https://docs.github.com/en/<path>` is `content/<path>.md` (or
-`content/<path>/index.md`), and text pulled in by `{% data reusables.<a>.<b> %}`
-lives in `data/reusables/<a>/<b>.md`. When a page 404s, moves, or its WebFetch summary
+`content/<path>/index.md`), and text pulled in by `{% data reusables.<a>.<b>.<c> %}`
+lives in `data/reusables/<a>/<b>/<c>.md`: every dot-separated part after
+`reusables` is one path component, however many there are. When a page 404s, moves, or its WebFetch summary
 lacks the sentence you need, read that file (`mcp__github__get_file_contents`,
 owner `github`, repo `docs`) and cite it as `github/docs:<path>@<commit>`.
 
