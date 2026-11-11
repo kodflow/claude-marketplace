@@ -130,7 +130,10 @@ credentials in a URL — while distinguishing a real one from a placeholder or a
 detection pattern, so a security skill can ship the regexes it needs. CI also
 refuses machine paths and internal hostnames, validates every skill and agent
 against the documented frontmatter schema, checks that module links resolve, and
-parses every shell script.
+parses every shell script. Run locally, the generators and validators that read
+YAML (`build-codex.py`, `validate-frontmatter.py`, `ci-gates-check.py`) need
+PyYAML, which `uv run --no-project --with pyyaml python3 scripts/<name>.py`
+provides without installing anything.
 
 `mcp/mcp.example.json` references credentials as `${VAR}` and contains none. The
 installer seeds it **only when no config exists** — it never overwrites a file
