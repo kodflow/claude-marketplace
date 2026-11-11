@@ -9,7 +9,7 @@ set +e
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
-eval "$(printf '%s' "$INPUT" | jq -r '@sh "SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") ACTIVE=\(.stop_hook_active // false)"' 2>/dev/null)" || exit 0
+eval "$(printf '%s' "$INPUT" | jq -r '@sh "SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") ACTIVE=\(.stop_hook_active // false) AGENT_ID=\(.agent_id // "") PMODE=\(.permission_mode // "")"' 2>/dev/null)" || exit 0
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
@@ -37,18 +37,86 @@ _log() {
     ) >/dev/null 2>&1 </dev/null &
 }
 
+# --- CONTINUE: open tasks relaunch the turn, twice per task at most ----------
+# "Treat a text-only end of turn as a report rather than as proof the task is
+# done" and "stop after two or three automatic continuations on the same task"
+# (Anthropic, Prompting Claude Opus 5.5). When the main agent ends its turn
+# with tasks of the kodflow list still to do, the stop is blocked with the
+# guide's reminder naming them. To do means: the main agent's, in an epic,
+# pending with every blocker done, or in progress and not on a running
+# subagent (whose notification will wake the turn). A waiting task is the
+# user's to unblock and never relaunches anything. Each task relaunches the
+# turn twice at most in the session ($STATE/stop-continue, `id<TAB>count`),
+# so the loop ends even when stop_hook_active stays true; a counter that
+# cannot be written blocks nothing. Never for a subagent, never in plan mode,
+# off with KODFLOW_STOP_CONTINUE=off or KODFLOW_STOP_TASKS=off. Every error
+# lets the stop through.
+CONT_MAX=2
+cont_reason=""
+_continue() {
+    [ -z "$AGENT_ID" ] || return 0
+    [ "$PMODE" != plan ] || return 0
+    [ "${KODFLOW_STOP_CONTINUE:-}" != off ] && [ "${KODFLOW_STOP_TASKS:-}" != off ] || return 0
+    local cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude} store ag='{}' open f=$STATE/stop-continue counts="" due="" items="" id subj n
+    store=$cfg/kodflow/sessions/$SID/tasks.json
+    [ -s "$store" ] || return 0
+    [ -s "${store%/*}/agents.json" ] && ag=$(jq -c '.agents // {} | if type == "object" then . else {} end' "${store%/*}/agents.json" 2>/dev/null)
+    [[ $ag == \{* ]] || ag='{}'
+    open=$(jq -r -L "$LIB" --argjson ag "$ag" --argjson cut "$(( $(date +%s) - 43200 ))" '
+        include "epics"; v2
+        | def alive: type == "object" and .stopped == null and (.started // 0) >= $cut;
+          def settled($s): $s == null or $s == "completed" or $s == "deleted";
+        [.epics[] | select((.agent // "main") == "main") | .id] as $eps
+        | (reduce (.tasks[] | select((.agent // "main") == "main")) as $t ({}; .[$t.id | tostring] = $t.status)) as $st
+        | .tasks[] | select((.agent // "main") == "main")
+        | (.epic // 0) as $e | select($e != 0 and any($eps[]; . == $e))
+        | select((.status == "pending"
+                  and ((.blockedBy // []) | if type == "array" then all(.[]; settled($st[tostring])) else true end))
+                 or (.status == "in_progress" and (($ag[.worker_id // ""] // null) | alive | not)))
+        | [(.id | tostring), ((.subject // "") | tostring | gsub("[\u0000-\u001f]"; " "))] | join("\u001f")' "$store" 2>/dev/null) || return 0
+    [ -n "$open" ] || return 0
+    [ -f "$f" ] && counts=$(cat "$f" 2>/dev/null)
+    while IFS=$'\x1f' read -r id subj; do
+        [ -n "$id" ] || continue
+        n=$(printf '%s\n' "$counts" | awk -F '\t' -v k="$id" '$1 == k { print $2; exit }')
+        case "$n" in ''|*[!0-9]*) n=0 ;; esac
+        [ "$n" -lt "$CONT_MAX" ] || continue
+        due="$due$id$NL"; items="${items:+$items; }#$id $subj"
+    done <<<"$open"
+    [ -n "$due" ] || return 0
+    # Count first: a relaunch the counter does not record could repeat for ever.
+    printf '%s\n%s' "$counts" "$due" | awk -F '\t' 'NF { k = $1; c[k] = ($2 == "" ? c[k] + 1 : $2) } END { for (k in c) printf "%s\t%d\n", k, c[k] }' > "$f.$$" 2>/dev/null \
+        && mv -f "$f.$$" "$f" 2>/dev/null || { rm -f "$f.$$" 2>/dev/null; return 0; }
+    while IFS= read -r id; do
+        [ -n "$id" ] || continue
+        grep -qx "$id"$'\t''[0-9]*' "$f" 2>/dev/null || return 0
+    done <<<"$due"
+    kf_msg_color 0
+    cont_reason=$(kf_msg stop.continue items="$items")
+    [ -n "$cont_reason" ] || cont_reason="Your task list still has open items: $items. Continue with them. If one is blocked, say what is blocking it."
+    kf_msg_color 1
+    return 0
+}
+
 # --- GATE: loop guards -------------------------------------------------------
 # stop_hook_active is Claude Code's own signal that this turn exists because a
-# stop hook asked for it. Anything emitted now would ask again.
-[ "$ACTIVE" = true ] && { _log; exit 0; }
+# stop hook asked for it. Anything emitted now would ask again, except the
+# open-tasks relaunch, which its per-task counter bounds.
+NL=$'\n'
+kf_msg() { :; }; kf_lang() { :; }; kf_msg_color() { :; }
+. "$LIB/msg.sh" 2>/dev/null
+kf_lang "$PROJECT_DIR"
+mkdir -p "$STATE" 2>/dev/null
+_continue
+_block() { jq -n -c --arg r "$cont_reason" '{decision:"block",reason:$r}' 2>/dev/null; }
+[ "$ACTIVE" = true ] && { [ -n "$cont_reason" ] && _block; _log; exit 0; }
 # Belt and braces: three feedbacks without a new user prompt is a loop,
 # whatever the input says. UserPromptSubmit resets the counter.
-mkdir -p "$STATE" 2>/dev/null
 count=0; [ -f "$STATE/stop-count" ] && read -r count < "$STATE/stop-count"
 count=$((count + 1)); printf '%d' "$count" > "$STATE/stop-count" 2>/dev/null
-[ "$count" -ge 3 ] && { printf '{"terminalSequence":"\\u0007"}'; _log; exit 0; }
+[ "$count" -ge 3 ] && { jq -n -c --arg r "$cont_reason" '{terminalSequence:"\u0007"} + (if $r == "" then {} else {decision:"block",reason:$r} end)' 2>/dev/null || printf '{"terminalSequence":"\\u0007"}'; _log; exit 0; }
 
-ctx="" NL=$'\n'
+ctx=""
 
 # Every text below comes from hooks/messages.json in the user's language
 # (lib/msg.sh). This document's additionalContext is what the screen shows as
@@ -56,9 +124,7 @@ ctx="" NL=$'\n'
 # colours (measured in a pty, 2.1.309), so the label of each line is
 # coloured; the colour costs the model a few tokens, and only on a turn the
 # hook speaks.
-kf_msg() { :; }; kf_lang() { :; }; kf_msg_color() { :; }
-. "$LIB/msg.sh" 2>/dev/null
-kf_lang "$PROJECT_DIR"; kf_msg_color 1
+kf_msg_color 1
 _add() { [ -n "$1" ] && ctx="${ctx:+$ctx$NL}$1"; }
 
 # _say CAUSE STATE KEY [name=value...]: one line per cause, said once per
@@ -246,6 +312,10 @@ fi
 
 # Hooks have no terminal: the bell travels in the JSON, alongside the
 # feedback, so the document stays single.
-jq -n -c --arg c "$ctx" '{terminalSequence:"\u0007"} + (if $c == "" then {} else {hookSpecificOutput:{hookEventName:"Stop",additionalContext:$c}} end)' 2>/dev/null
+# The relaunch rides in the same document: decision and reason beside the
+# feedback, which Claude Code reads together.
+jq -n -c --arg c "$ctx" --arg r "$cont_reason" '{terminalSequence:"\u0007"}
+    + (if $c == "" then {} else {hookSpecificOutput:{hookEventName:"Stop",additionalContext:$c}} end)
+    + (if $r == "" then {} else {decision:"block",reason:$r} end)' 2>/dev/null
 _log
 exit 0

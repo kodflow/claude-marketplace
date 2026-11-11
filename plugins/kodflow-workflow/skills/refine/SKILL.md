@@ -14,7 +14,7 @@ when_to_use: Use to turn a plan or a loose description into a /goal contract wit
   of success.
 argument-hint: <slug> | "<description>" [--bare] [--full <slug>] [--lenses light|full]
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)
@@ -244,8 +244,8 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models
 Every plan carries the allocation, in one line under its constraints:
 
 ```
-Models: orchestrator <CLAUDE_TOP_UNGATED> @high · code workers Sonnet @medium
-        (@high on a defect or hook code, Opus @high across modules) · review
+Models: orchestrator <CLAUDE_TOP_UNGATED> @medium · code workers Sonnet @medium
+        (@medium on a defect or hook code, Opus @medium across modules) · review
         workers Opus @high · mechanical workers Sonnet @low · workers never
         inherit the orchestrator model · worktree isolation wherever workers
         write concurrently.

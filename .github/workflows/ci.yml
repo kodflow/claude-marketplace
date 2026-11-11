@@ -243,6 +243,44 @@ jobs:
       - name: Vendored patterns match kodflow/post-commit at the pinned commit
         run: bash scripts/sync-post-commit-patterns.sh --check
 
+      # The zsh suites need zsh. Installing it is a network call that has failed
+      # on a resolver outage (security.ubuntu.com, which the runner's apt mirror
+      # list routes every pocket through), so it gets its own step, short bounded
+      # attempts, and a fallback to the plain Ubuntu archives, bypassing the
+      # runner's mirror list. If zsh is still missing the step fails: a suite is
+      # never skipped for want of its shell.
+      - name: zsh is available for the zsh suites
+        timeout-minutes: 12
+        run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15"
+            codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+            # The fallback list: the main archive, no mirror indirection.
+            alt=$(mktemp -d)
+            printf 'deb http://archive.ubuntu.com/ubuntu %s main universe\ndeb http://archive.ubuntu.com/ubuntu %s-updates main universe\n' \
+              "$codename" "$codename" > "$alt/alt.list"
+            install_zsh() {
+              # shellcheck disable=SC2086
+              sudo timeout 90 apt-get update -qq $opts "$@" \
+                || echo "::warning::apt-get update failed, installing from the index at hand"
+              # shellcheck disable=SC2086
+              sudo timeout 120 apt-get install -y -qq $opts "$@" zsh
+            }
+            for attempt in 1 2 3; do
+              if [ "$attempt" -eq 1 ]; then
+                install_zsh && break
+              else
+                echo "::warning::falling back to archive.ubuntu.com (attempt $attempt)"
+                getent hosts archive.ubuntu.com security.ubuntu.com || true
+                install_zsh -o Dir::Etc::sourcelist="$alt/alt.list" -o Dir::Etc::sourceparts=/dev/null && break
+              fi
+              echo "::warning::zsh install failed (attempt $attempt)"
+              sleep $((attempt * 15))
+            done
+          fi
+          command -v zsh >/dev/null 2>&1 || { echo "::error::zsh could not be installed, the zsh suites cannot run"; exit 1; }
+          zsh --version
+
       # A plugin that ships a suite gets it run. Discovered, not listed: a
       # hand-kept list is how kodflow-shell's 31 assertions sat in the tree
       # for a day without anything running them.
@@ -254,8 +292,7 @@ jobs:
             [ -x "$suite" ] || continue
             echo "--- $suite"
             case "$suite" in
-              *.zsh) command -v zsh >/dev/null 2>&1 || { sudo apt-get update -qq && sudo apt-get install -y -qq zsh; }
-                     zsh "$suite" ;;
+              *.zsh) zsh "$suite" ;;
               *)     bash "$suite" ;;
             esac
             ran=$((ran + 1))

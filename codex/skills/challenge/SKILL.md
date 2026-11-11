@@ -109,7 +109,10 @@ Resolve the argument to a plan. Read the project's constraint ledger too
 `MUST` is wrong before any reviewer opens it, and that check costs nothing.
 Same for the project's documents (the `ok` entries of
 `bash "${CODEX_HOME:-$HOME/.codex}"/skills/docs/scripts/docs.sh compute`)
-and the ADRs that concern the plan: hand them to every reviewer, and treat a
+and the ADRs that concern the plan, each checked for a later ADR that amends or
+supersedes it. A superseded ADR is replaced by the one in force; a partly
+amended one is handed with its amendment, naming what of the earlier text still
+holds. Hand them to every reviewer, and treat a
 contradiction with one as a finding citing `fichier:ligne`. Every brief also
 names the reference sources per technology topic of the plan (`debate.md`).
 

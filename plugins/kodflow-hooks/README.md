@@ -250,7 +250,7 @@ fails by accident blocks every shell call of the session.
 | `SubagentStart` | `on-agent.sh` | — | — | the standing rules, injected into the subagent (forge and CI-watch rules from `lib/rules.sh`, `--force-with-lease` only, own worktree and never one it did not create, deliver through a PR, and rule 6: end with `## Agent feedback`) | running-agents registry, with the main agent's active epic at start · log |
 | `SubagentStop` | `on-agent.sh` | `stop_hook_active` | — | — | running-agents registry · its whole last message in `<session>/agents/<agent id>.md` · its agent feedback in `agent-feedback.jsonl` · log |
 | `TaskCreated` · `TaskCompleted` · `TeammateIdle` | `on-agent.sh` | — | — | — | log |
-| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt | — | feedback in one document, one line per cause, each task named once, each cause said once per state (below, « The Stop feedback ») · the CLAUDE.md of each directory changed this session, once per directory · a triage cause left unsettled (`triage-pending`), not on a system turn · the subagents' new agent feedback, once, to a user present in the last 10 minutes, never for an agent with no definition file | bell · log |
+| `Stop` | `on-stop.sh` | `stop_hook_active` · 3 feedbacks without a new prompt (the open-tasks relaunch is bounded by its own per-task counter instead) | `decision: block` while the main agent has tasks to do in an epic, twice per task at most (below, « Relaunch on open tasks ») | feedback in one document, one line per cause, each task named once, each cause said once per state (below, « The Stop feedback ») · the CLAUDE.md of each directory changed this session, once per directory · a triage cause left unsettled (`triage-pending`), not on a system turn · the subagents' new agent feedback, once, to a user present in the last 10 minutes, never for an agent with no definition file | bell · log |
 
 ## Main thread = reviewer, code is delegated
 
@@ -1032,7 +1032,8 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KODFLOW_FORGE_BROWSER=ask` · `off` | Claude in Chrome toward a forge: each call asks the user (`ask`, the way to grant one call they agreed to) or is not checked (`off`); refused by default |
 | `KODFLOW_FORGE_HOSTS` | more forge hosts for that check, space- or comma-separated (a GitLab instance the session's directory has no remote for) |
 | `KODFLOW_LINT=off` | no ktn-linter run after an edit and no instruction; ktn-linter's own hooks, when installed, are not affected. For every project: `"env": {"KODFLOW_LINT": "off"}` in `~/.claude/settings.json`. For one project: the same `env` block in that project's `.claude/settings.json` (applied once the workspace is trusted, and in `-p` runs; a hook inherits it) |
-| `KODFLOW_STOP_TASKS=off` | no Stop line about the task list (`stopped`, `overcount`, `idle`, `loose`, `builtin`); the triage line and the delegation line (`unattended`, `KODFLOW_ROOT`) stay |
+| `KODFLOW_STOP_TASKS=off` | no Stop line about the task list (`stopped`, `overcount`, `idle`, `loose`, `builtin`); the triage line and the delegation line (`unattended`, `KODFLOW_ROOT`) stay; no relaunch on open tasks either |
+| `KODFLOW_STOP_CONTINUE=off` | the Stop hook never relaunches the turn on open tasks (« Relaunch on open tasks ») |
 | `KODFLOW_LANG=en` · `fr` | the language of the texts, over Claude Code's `language` setting |
 | `NO_COLOR` · `KODFLOW_COLOR=off` | the Stop feedback without colour |
 | `KODFLOW_COMMIT_IDENTITY=<path>` · `off` | another commit-identity rules file, or the check off (default `${CLAUDE_CONFIG_DIR:-~/.claude}/kodflow/commit-identity.conf`, absent means off) |
@@ -1069,6 +1070,25 @@ three sections and nine lines; it is now one:
 ```
 Tâches à remettre d'aplomb : #99 #100 #101 (sous-agent arrêté : terminer, remettre en pending ou waiting, ou relancer l'agent)
 ```
+
+**Relaunch on open tasks.** Anthropic's *Prompting Claude Opus 5.5* says to
+"treat a text-only end of turn as a report rather than as proof the task is
+done" and to "stop after two or three automatic continuations on the same
+task". When the main agent ends its turn with tasks to do, the same document
+carries `decision: "block"` and a `reason` built on the guide's sample:
+
+```
+Your task list still has open items: #7 Ship the hook. Continue with them. If one is blocked, say what is blocking it.
+```
+
+To do means the main agent's task, in an epic, `pending` with every
+`blocked_by` done, or `in_progress` and not on a running subagent. A
+`waiting` task never relaunches anything. Each task relaunches the turn twice
+at most per session (`stop-continue` in the scratchpad, `id<TAB>count`,
+written before the block is sent; a counter that cannot be written blocks
+nothing), so the relaunch passes `stop_hook_active` without looping. Never for
+a subagent, never in plan mode, off with `KODFLOW_STOP_CONTINUE=off` or
+`KODFLOW_STOP_TASKS=off`, and any error lets the stop through.
 
 **Colour.** Claude Code 2.1.309 renders the ANSI colours of a Stop hook's
 `additionalContext` and `systemMessage` (measured in a pty: the escape

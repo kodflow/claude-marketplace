@@ -56,8 +56,13 @@ check("kinds are role|exempt|fork|mode", all(r[0] in ("role", "exempt", "fork", 
 roles = [r for r in rows if r[0] == "role" and r[1] != "Orchestrator"]
 check("role rows stay in the closed vocabulary",
       all(r[2] in ("sonnet", "opus", "haiku") and r[3] in ("low", "medium", "high", "xhigh", "max") for r in roles))
-check("orchestrator is a role row, model -, effort high",
-      ["role", "Orchestrator", "-", "high"] in rows and "CLAUDE_TOP_UNGATED" not in a)
+check("orchestrator is a role row, model -, effort medium",
+      ["role", "Orchestrator", "-", "medium"] in rows and "CLAUDE_TOP_UNGATED" not in a)
+# 2026-11-10: medium is the default (the Opus 5.5 guide keeps xhigh and max for
+# a measured gain); only review / verify and the executors sit above it.
+above = {r[1]: r[3] for r in rows if r[0] == "role" and r[3] in ("high", "xhigh", "max")}
+check("no role above medium but review / verify (high) and the executors (xhigh)",
+      above == {"Review / verify worker": "high", "Correctness and security executors": "xhigh"}, above)
 check("plan is a mode row", ["mode", "plan", "-", "-"] in rows)
 check("`-` only where allowed",
       all(r[2] != "-" or r[0] in ("exempt", "fork", "mode") or r[1] == "Orchestrator" for r in rows)

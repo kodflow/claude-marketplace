@@ -8,7 +8,7 @@ when_to_use: Use before implementing anything non-trivial — a feature, a refac
   ledger.
 argument-hint: <description> [--context[=<slug>]] [--goal [--fast]] [--auto]
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)
@@ -162,11 +162,11 @@ Wait for all 4 TeammateIdle → synthesize in Phase 5.0. Token ceiling ≤ 2x le
 When `--auto` is passed, ALL interactive checkpoints are skipped:
 - Phase 1.5 (validate scope) → AI decides scope internally
 - Phase 2.5 (validate objectives, explore.md) → AI decides decomposition internally
-- Phase 3.5 (propose approaches, synthesize.md) → AI picks best approach with internal reasoning
+- Phase 3.5 (propose approaches, synthesize.md) → AI picks the best approach itself
 - Phase 5.9 (risk review) → AI assesses risks internally
 - Plan is presented at the end for user review via ExitPlanMode
 
-The AI documents its reasoning in the plan file under a "## Reasoning" section so the user can review why choices were made.
+The plan file gives a short rationale for each choice, one or two lines, under a "## Rationale" section so the user can review why choices were made. A rationale, not a transcript of the reasoning.
 
 **When to use `--auto`:** When you trust the AI's judgment and want speed over interaction. You always review the final plan before `/refine → /goal`.
 
@@ -251,7 +251,14 @@ Phase 5.8: Frontend Guidelines (conditional)
     - "Choose distinctive fonts (AVOID: Arial, Inter, Roboto)"
     - "Use CSS variables for color consistency"
     - "Prioritize one well-orchestrated animation over scattered micro-interactions"
-    - "FORBIDDEN AI cliches: purple gradients on white, predictable centered layouts"
+    - "FORBIDDEN unless the user or the project's design system requires it, named
+       styles rather than 'avoid a generic AI look': purple gradients
+       on white, predictable centered layouts, a cream or off-white background, italic
+       accent words in headlines, numbered 01/02/03 section labels, monospace labels,
+       pill-shaped buttons"
+    - "Check the styles of the first result against that list, and add to the list
+       (in the plan) every recurring default it shows that nothing requires, before
+       the next iteration"
     - "Each design must feel context-specific, never cookie-cutter"
 
 Phase 6.0: Validation Request
@@ -283,8 +290,8 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models
 Every plan carries the allocation, in one line under its constraints:
 
 ```
-Models: orchestrator <CLAUDE_TOP_UNGATED> @high · code workers Sonnet @medium
-        (@high on a defect or hook code, Opus @high across modules) · review
+Models: orchestrator <CLAUDE_TOP_UNGATED> @medium · code workers Sonnet @medium
+        (@medium on a defect or hook code, Opus @medium across modules) · review
         workers Opus @high · mechanical workers Sonnet @low · workers never
         inherit the orchestrator model · worktree isolation wherever workers
         write concurrently.

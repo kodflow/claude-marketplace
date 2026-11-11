@@ -8,7 +8,7 @@ when_to_use: Use for a bug whose cause is not obvious — a flaky test, an inter
   names the line.
 argument-hint: <symptom> [--loop]
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)

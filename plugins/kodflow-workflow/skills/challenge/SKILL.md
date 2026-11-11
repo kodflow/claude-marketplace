@@ -14,7 +14,7 @@ when_to_use: Use once a plan exists and before it is executed — after /plan, /
   is suspect. Not for a task whose steps are already obvious.
 argument-hint: <plan slug|file|description> [--concurrency N] [--no-codex] [--dry-run]
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Read(**/*)
 - Glob(**/*)
@@ -132,7 +132,10 @@ Resolve the argument to a plan. Read the project's constraint ledger too
 `MUST` is wrong before any reviewer opens it, and that check costs nothing.
 Same for the project's documents (the `ok` entries of
 `bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute`)
-and the ADRs that concern the plan: hand them to every reviewer, and treat a
+and the ADRs that concern the plan, each checked for a later ADR that amends or
+supersedes it. A superseded ADR is replaced by the one in force; a partly
+amended one is handed with its amendment, naming what of the earlier text still
+holds. Hand them to every reviewer, and treat a
 contradiction with one as a finding citing `fichier:ligne`. Every brief also
 names the reference sources per technology topic of the plan (`debate.md`).
 

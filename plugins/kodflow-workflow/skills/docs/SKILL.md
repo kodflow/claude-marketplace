@@ -9,7 +9,7 @@ when_to_use: Use when the documents panel shows missing documents, after /projec
   been written down. Not for an ADR on a single decision, which is /kodflow-review:adr.
 argument-hint: '[<id>[,<id>…]] [--mode ask|context|both] [--help]'
 model: inherit
-effort: high
+effort: medium
 allowed-tools:
 - Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh:*)
 - Bash(git log:*)

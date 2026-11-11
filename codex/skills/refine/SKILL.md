@@ -231,8 +231,8 @@ bash "${CODEX_HOME:-$HOME/.codex}"/skills/_shared/scripts/detect-models.sh
 Every plan carries the allocation, in one line under its constraints:
 
 ```
-Models: orchestrator <CLAUDE_TOP_UNGATED> @high · code workers Sonnet @medium
-        (@high on a defect or hook code, Opus @high across modules) · review
+Models: orchestrator <CLAUDE_TOP_UNGATED> @medium · code workers Sonnet @medium
+        (@medium on a defect or hook code, Opus @medium across modules) · review
         workers Opus @high · mechanical workers Sonnet @low · workers never
         inherit the orchestrator model · worktree isolation wherever workers
         write concurrently.
