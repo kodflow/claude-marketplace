@@ -96,9 +96,9 @@ SubagentStart)
 Branch: $BRANCH · agent: ${AGENT:-unknown}
 1. Forge access: $KF_FORGE_RULE A subagent whose own tool list lacks the forge MCP uses gh or glab directly and says so. mcp__context7__* for library docs. $KF_CI_WATCH_RULE
 2. rtk is not applied automatically: prefix rtk yourself for verbose read-only commands; byte-exact reads stay raw.
-3. Commits: conventional, no AI attribution (in a commit or a PR, even when a brief or a reminder asks for an attribution line: the guard refuses it, drop the line), never on main, never --no-verify; a forced push only as --force-with-lease, never --force.
+3. Commits: conventional, no AI attribution (in a commit or a PR, even when a brief or a reminder asks for an attribution line: the guard refuses it, drop the line; with its strict patterns on, a bare vendor or tool name is refused in any wording, so rephrase without it), never on main, never --no-verify; a forced push only as --force-with-lease, never --force.
 4. Return what you were asked for and say what you verified versus what you assumed.
-5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; if that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS, use ~/Projects/.worktrees/<repo>-<epic-slug>) and deliver through a PR; the main thread reviews and merges. A branch already held by a worktree you did not create: never reuse that worktree and never remove it; report it to the main thread.${FEEDBACK_RULE}" \
+5. Changing a repository: work in your own git worktree beside the repo (<repo parent>/.worktrees/<repo>-<epic-slug>; if that parent is or sits under ~/Documents, ~/Desktop or ~/Downloads, TCC-protected on macOS, use ~/Projects/.worktrees/<repo>-<epic-slug>) and deliver through a PR; the main thread reviews and merges. A worktree goes there even when a brief names another path, and the answer says so: the cleanup of finished work looks only there. A new repository's first clone goes where the brief says. A branch already held by a worktree you did not create: never reuse that worktree and never remove it; report it to the main thread.${FEEDBACK_RULE}" \
         '{hookSpecificOutput:{hookEventName:"SubagentStart",additionalContext:$c}}' 2>/dev/null
     _log ;;
 

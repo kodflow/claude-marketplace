@@ -183,7 +183,7 @@ kf_ident_check() {
         "expected:  $en <$ee>" \
         "author:    $an <$ae>${src:+  (from $src)}" \
         "committer: $cn <$ce>" \
-        "Set it in this repository (the hook never changes the configuration):" \
+        "Set it in this repository, in a Bash call of its own before the commit (the hook never changes the configuration, and reads it before the line runs):" \
         "  git -C $dir config user.name \"$en\"" \
         "  git -C $dir config user.email \"$ee\"" \
         "and drop any --author, -c user.*, GIT_AUTHOR_* or GIT_COMMITTER_* on the line that sets another identity.")
