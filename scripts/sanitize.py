@@ -138,7 +138,7 @@ if __name__ == "__main__":
         sys.exit(f"sanitize: {root} is not a directory — nothing was scanned")
     findings, residue, unread = [], [], []
     for f in root.rglob("*"):
-        if not f.is_file() or ".git/" in str(f): continue
+        if not f.is_file() or ".git/" in str(f) or f.name == ".git": continue
         try: t = f.read_text()
         except UnicodeDecodeError: continue          # binary: not text, not scanned
         except Exception as e: unread.append(f"{f.relative_to(root)}: {e}"); continue

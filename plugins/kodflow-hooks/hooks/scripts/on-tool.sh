@@ -1178,15 +1178,28 @@ pre_bash() {
     F_IDENT_T=""; F_IDENT_M=(); F_IDENT_OFF=""; ID_LINE_ENV=(); ID_CMD_ENV=()
     F_CR=""; F_CR_REPO=""; F_CR_PR=""; F_CR_MATCH=""; F_CRM=0
 
+    # SCOPE (#155): a kodflow-specialists agent's call against the Command
+    # scope its own definition declares. Before the gate, since what falls
+    # outside is rarely a verb this hook knows. Advice only, never a refusal
+    # (the owner's decision), silent on any miss, and switched off or past
+    # 8192 characters it is skipped before the line is parsed (lib/scope.sh).
+    SCOPE_CTX=""; P_DONE=0
+    case "$ATYPE" in kodflow-specialists:*)
+        if [ -n "$AID" ] && . "$LIB/scope.sh" 2>/dev/null && kf_scope_enabled "$CMD"; then
+            _p_parse "$CMD"; P_DONE=1
+            kf_scope_check
+        fi ;;
+    esac
+
     # GATE: no verb this hook knows, even once unquoted, leaves at once. A
     # $'…' string may spell one in escapes, so it is always read. tr, not
     # ${CMD//…/}: a global substitution is quadratic in bash 3.2 (1.5 s on a
     # 2.5 kB commit message).
     local t=$CMD
     case "$t" in *[\"\'\\]*) t=$(printf '%s' "$CMD" | tr -d "\"'\\\\") ;; esac
-    case "$t" in *git*|*gh*|*glab*|*curl*|*wget*|*http*|*skills*|*claude*) ;; *) case "$CMD" in *"\$'"*) ;; *) _log; exit 0 ;; esac ;; esac
+    case "$t" in *git*|*gh*|*glab*|*curl*|*wget*|*http*|*skills*|*claude*) ;; *) case "$CMD" in *"\$'"*) ;; *) _scope_emit; _log; exit 0 ;; esac ;; esac
 
-    _p_parse "$CMD"
+    [ "$P_DONE" = 1 ] || _p_parse "$CMD"
     local k=0 rd r
     while [ $k -lt $P_N ]; do
         rd=${P_RD[k]:-}
@@ -1314,12 +1327,20 @@ pre_bash() {
         ctx=$(kf_coderabbit_hint "$F_CR" "$cwd" "$F_CR_REPO")
     fi
     local merged=""
+    [ -n "$SCOPE_CTX" ] && ctx=${ctx:+$ctx$'\n\n'}$SCOPE_CTX
     [ -n "$ctx" ] && merged=$(printf '%s' "${note:-"{}"}" | jq -c --arg c "$ctx" '. + {hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}' 2>/dev/null)
     # A merge that failed must not cost the notice: fall back to it alone.
     if [ -n "$merged" ]; then printf '%s\n' "$merged"
     elif [ -n "$note" ]; then printf '%s\n' "$note"; fi
     _log
     exit 0
+}
+
+# The scope advice alone, on the gate's early way out: one JSON document.
+_scope_emit() {
+    [ -n "${SCOPE_CTX:-}" ] || return 0
+    jq -cn --arg c "$SCOPE_CTX" '{hookSpecificOutput:{hookEventName:"PreToolUse",additionalContext:$c}}' 2>/dev/null
+    return 0
 }
 
 # The CodeRabbit merge gate (lib/coderabbit.sh → probe.py merge-gate), for

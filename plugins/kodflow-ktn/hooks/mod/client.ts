@@ -47,6 +47,7 @@ import {
   type Failure,
 } from "./daemon.ts";
 import { anchorPaths, parseEndpoint, type Endpoint } from "./endpoint.ts";
+import { driveRoot, isWindowsAbsolute, pipeNameOf, type Digest } from "./winpipe.ts";
 import { clean } from "./sanitize.ts";
 
 export type Answer = { status: number; text: string };
@@ -60,6 +61,10 @@ export type Port = {
   /** `$.fs.read`: rejects when the file is missing. */
   read(path: string): Promise<string>;
   home(): Promise<string | undefined>;
+  /** `$.env.get("LOCALAPPDATA")`: the Windows anchor's base (#143); absent, none. */
+  localAppData?: () => Promise<string | undefined>;
+  /** SHA-256 for the Windows pipe name; the engine's WebCrypto when absent. */
+  digest?: Digest;
   /** `$.http.fetch` over the socket: resolves any status, rejects on transport. */
   fetch(url: string, init: { socketPath: string; method?: string }): Promise<Answer>;
   /** `$.process.run`; absent where the surface has no host commands. */
@@ -93,6 +98,11 @@ export class Client {
   /** The model last handed to `emit`, so an unchanged one is not sent again. */
   emitted: KtnModel | undefined = undefined;
   endpoint: Endpoint | undefined = undefined;
+  /**
+   * What `socketPath` is given: the socket itself on POSIX; on Windows the
+   * named pipe the daemon derives from it (#143, winpipe.ts).
+   */
+  dial = "";
   endpointText: string | undefined = undefined;
   handshaken = false;
   incompatible = false;
@@ -194,7 +204,7 @@ export class Client {
 
   /** One request over the socket, raced; a failure is a value, never a throw. */
   private async request(path: string, waitS: number, method?: string): Promise<Outcome> {
-    const socketPath = this.endpoint!.socket;
+    const socketPath = this.dial;
     const mine = ++this.gen;
     const long = waitS > 0;
     this.inflight++;
@@ -249,7 +259,12 @@ export class Client {
 
   /** endpoint.json from its anchors; a move resets what the old one taught. */
   private async readEndpoint(): Promise<{ ok: true } | { ok: false; detail: string }> {
-    const paths = anchorPaths(await this.port.home());
+    // A LOCALAPPDATA read that throws or rejects is no Windows anchor, never
+    // a broken POSIX state.
+    const localAppData = await Promise.resolve()
+      .then(() => this.port.localAppData?.())
+      .catch(() => undefined);
+    const paths = anchorPaths(await this.port.home(), localAppData);
     for (const path of paths) {
       let text: string;
       try {
@@ -264,12 +279,19 @@ export class Client {
         this.failures = 0;
         this.breakerUntil = 0;
       }
-      const parsed = parseEndpoint(text);
+      const parsed = parseEndpoint(text, { windows: isWindowsAbsolute(path) });
       if (!parsed.ok) {
         this.endpoint = undefined;
         return { ok: false, detail: parsed.reason };
       }
+      const socket = parsed.endpoint.socket;
+      const dial = isWindowsAbsolute(socket) ? await pipeNameOf(socket, this.port.digest) : socket;
+      if (dial === undefined) {
+        this.endpoint = undefined;
+        return { ok: false, detail: "socket Windows dont le tube nommé ne peut être déduit" };
+      }
       this.endpoint = parsed.endpoint;
+      this.dial = dial;
       return { ok: true };
     }
     this.endpoint = undefined;
@@ -465,7 +487,8 @@ export class Client {
   /**
    * The launch button. Compare-and-set before any await, so two presses run
    * one command; the binary is the absolute one endpoint.json names, never a
-   * name looked up in PATH; the working directory is `/`, never the project.
+   * name looked up in PATH; the working directory is `/` (a drive root on
+   * Windows), never the project.
    */
   async launch(): Promise<void> {
     if (this.launching) return;
@@ -479,7 +502,7 @@ export class Client {
       let error = "";
       try {
         exit = await this.port.run([exe, "daemon", "ensure"], {
-          cwd: "/",
+          cwd: isWindowsAbsolute(exe) ? driveRoot(exe) : "/",
           timeoutMs: LAUNCH_TIMEOUT_MS,
           env: { KTN_USER_DAEMON: "1" },
         });
@@ -530,7 +553,7 @@ export class Client {
    */
   async mint(): Promise<UiLink | { error: string }> {
     if (!this.endpoint) return { error: "daemon injoignable" };
-    const socketPath = this.endpoint.socket;
+    const socketPath = this.dial;
     const underlying = this.port
       .fetch(`http://ktn${UI_BOOT}`, { socketPath, method: "POST" })
       .then(

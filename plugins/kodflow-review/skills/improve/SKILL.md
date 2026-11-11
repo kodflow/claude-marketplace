@@ -104,7 +104,11 @@ read it before contesting an attribution.
 Exact duplicates are merged by the script. Near-duplicates — the same need in
 other words, across agents of one family, or the same gap reported for every
 routed agent — are merged here, by reading: one need, the sum of its counts,
-every key it absorbed kept for the ledger. Then say the size of the run:
+every key it absorbed kept for the ledger. A report holding several needs is
+split, its key kept under each; a report that names no need is out of scope
+("no need reported"). One need may touch several canonical files; its diff
+carries one hunk per file. Needs whose diffs land in the same file are delivered
+as one patch built in sequence. Then say the size of the run:
 targets, distinct needs, entries. With more than about thirty needs, propose
 `--target` or `--since` before going on.
 
@@ -164,7 +168,9 @@ edits in their answer is shown again as a diff before it is written.
 In the worktree of Phase 1:
 
 1. Apply the changes; run every generator whose output a touched file feeds
-   (each named in `ci.yml`), the plugin version stamp included.
+   (each named in `ci.yml`), the plugin version stamp included, after staging that plugin (`stamp-versions.py`
+   hashes the git index). A test that pins a text word for word is updated with
+   the change, never left red.
 2. Run the `ci.yml` steps that the touched paths concern, and the privacy
    steps always (below). A red step is fixed before the commit, or the change
    that reddens it is dropped and the user told why.

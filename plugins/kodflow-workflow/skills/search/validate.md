@@ -1,5 +1,11 @@
 # Phase 6.0: Cross-referencing and Validation
 
+**Every source gets its tier first** (the Source preference table of
+`SKILL.md`), whoever found it: the engine's report, a degraded-path agent or a
+fetch of yours. A tier-4 source is never counted below; a claim it alone
+supports is chased to a tier 1-2 source or dropped. The engine was told the
+preference in its question; this is where it is held.
+
 | Situation | Confidence | Action |
 |-----------|------------|--------|
 | Local + 2+ externals confirm | HIGHEST | Include (local takes priority) |
