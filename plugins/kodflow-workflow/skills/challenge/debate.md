@@ -80,7 +80,9 @@ first — the panel must never claim a reviewer that did not run:
 command -v codex >/dev/null 2>&1 && codex doctor 2>&1 | grep -q "auth is configured"
 ```
 
-Invoke it as a structured panel member, not as a chat:
+Invoke it as a structured panel member, not as a chat. `$SCHEMA` is
+`$SCRATCH/codex-schema-r$ROUND.json`: every file named `codex-*` is for the
+external CLI alone, and the other briefs say so.
 
 ```bash
 codex exec --skip-git-repo-check --ephemeral -s read-only \
@@ -147,8 +149,8 @@ TS="$(date +%Y%m%d-%H%M%S)"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/challenge-${TS}.XXXXXX")"
 ```
 
-Its top level holds the round records only (the briefs, `plan-r$ROUND.md`,
-`triage-r$ROUND.md`). Each reviewer gets a subdirectory of its own, created
+Its top level holds the round records only (the briefs, Codex's `codex-*`
+brief and schema, `plan-r$ROUND.md`, `triage-r$ROUND.md`). Each reviewer gets a subdirectory of its own, created
 before dispatch (`mkdir "$SCRATCH/<reviewer>"`, the lens or agent name), so
 reviewers running in parallel never overwrite or read each other's files. That
 subdirectory is the only place a reviewer may write (a throwaway measurement, a
@@ -205,6 +207,11 @@ Here is a plan. Argue against it from the <lens> lens.
 
 Constraints this project has already accepted:
 <the MUST/MUST NOT constraints from the ledger, verbatim>
+
+Decisions the user made on this plan (settled; an objection to one names a
+failure the user did not weigh, and triage puts it to the user):
+<question — answer, per decision, or "none">
+Everything else in the plan is the plan's own choice, open to objection.
 
 Project records:
 <path — one-line purpose, per record>
@@ -272,8 +279,11 @@ Your objections go in your answer, never in a file of the scratch directory.
 
 Return objections only, in prose, each field labelled; the output format of
 your own definition does not apply here, and an output schema replaces this
-layout only where the caller enforces one (the external CLI). Number your new
-objections 1, 2, 3… (a label, not a field). At most 8 objections, each with the six fields:
+layout only where the caller enforces one (the external CLI): the `codex-*`
+files of the scratch directory bind no other reviewer, and another reviewer's
+subdirectory is not yours to read. Number your new
+objections 1, 2, 3… (a label, not a field). One objection holds one claim; two
+findings with one remedy may share it, each claim stated. At most 8 objections, each with the six fields:
 severity (blocking / material / minor), claim, evidence (file:line, or the plan
 line it contradicts), remedy, consulted (the sources you checked, one entry per
 source: a URL, a file read at a revision as path@rev, or a scratch measurement
