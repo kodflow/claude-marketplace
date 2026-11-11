@@ -133,7 +133,9 @@ Resolve the argument to a plan. Read the project's constraint ledger too
 Same for the project's documents (the `ok` entries of
 `bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute`)
 and the ADRs that concern the plan, each checked for a later ADR that amends or
-supersedes it and handed as the one in force: hand them to every reviewer, and treat a
+supersedes it. A superseded ADR is replaced by the one in force; a partly
+amended one is handed with its amendment, naming what of the earlier text still
+holds. Hand them to every reviewer, and treat a
 contradiction with one as a finding citing `fichier:ligne`. Every brief also
 names the reference sources per technology topic of the plan (`debate.md`).
 
