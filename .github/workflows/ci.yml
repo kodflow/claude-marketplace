@@ -3,7 +3,9 @@ on: [push, pull_request]
 
 jobs:
   guard:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to an image (resolute) whose apt mirrors
+    # did not resolve; the zsh install below needs a stable apt.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
