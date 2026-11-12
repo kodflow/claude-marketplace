@@ -175,12 +175,15 @@ own source code. If you cannot cite the documents, the engine runs.
 
 **Size the run before starting the engine.** `deep-research` fans out many
 agents, they inherit the session's model, and the call takes no `model` or
-`effort`: its cost does not shrink with the question. Count the GAPS from
-Phase 2. With two or fewer, all bearing on one narrow fact (one symbol, one
+`effort`: its cost does not shrink with the question. Count the tasks
+Phase 2 produced: its GAPS plus its confirmation tasks for the `stale` docs
+relied on. With two or fewer, all bearing on one narrow fact (one symbol, one
 default, one limit, one version), take the parallel `Agent` path in
-`parallel.md` instead, one call per gap, with the model and effort of the
-tier table's bulk or mechanical row on each call, and say so in the output.
-The engine is for three or more independent gaps, or for a question whose
+`parallel.md` instead, with the model and effort of the tier table's bulk or
+mechanical row on each call, and say so in the output: one call per gap, one
+per stale-doc confirmation, and for a VERSIONED query one web call even when
+both counts are zero, since its web pass is mandatory at any coverage. The
+engine is for three or more independent tasks, or for a question whose
 answer needs cross-validation across many sources.
 
 **The engine call.** The engine is Claude Code's built-in `deep-research`
