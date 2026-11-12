@@ -157,7 +157,10 @@ read as "research" produces a context file with no citable sources.
   │     │        Valid ONLY when you name the matched files and their dates.
   │     └─ anything else → compute GAPS, run the engine ↓
   │
-  ├─ engine (Workflow `deep-research`, built into Claude Code)
+  ├─ size the run: ≤ 2 GAPS, one narrow fact → parallel.md path (tier-table
+  │     bulk worker, model + effort on every call)
+  │
+  ├─ engine (Workflow `deep-research`, built into Claude Code) — 3+ GAPS
   │     Scope → Search∥ → Fetch∥ → Verify(3-vote) → Synthesize
   │     one question in, a cited report out — writes nothing
   │
@@ -169,6 +172,16 @@ read as "research" produces a context file with no citable sources.
 `LOCAL_COMPLETE` requires **naming the matched files with their `verified`
 dates**. "I know this already" is not local coverage; neither is the project's
 own source code. If you cannot cite the documents, the engine runs.
+
+**Size the run before starting the engine.** `deep-research` fans out many
+agents, they inherit the session's model, and the call takes no `model` or
+`effort`: its cost does not shrink with the question. Count the GAPS from
+Phase 2. With two or fewer, all bearing on one narrow fact (one symbol, one
+default, one limit, one version), take the parallel `Agent` path in
+`parallel.md` instead, one call per gap, with the model and effort of the
+tier table's bulk or mechanical row on each call, and say so in the output.
+The engine is for three or more independent gaps, or for a question whose
+answer needs cross-validation across many sources.
 
 **The engine call.** The engine is Claude Code's built-in `deep-research`
 workflow, called by that name with **one string**: the question. No
