@@ -5,17 +5,18 @@
 # agent feedback by test_agents.sh, the Go-project rule by test_gomod.sh, the
 # cleanup of a subagent's worktree on close by test_cleanup.sh, the commit
 # identity by test_identity.sh, the project's documents by test_docs.sh, the
-# journal of refusals by test_blocks.sh, the Command scope advice by
-# test_scope.sh, the mod by tests/mod: run-node.ts under node, the
+# Command scope advice by test_scope.sh, the epic predicates (jq) by
+# test_epic_predicates.sh, the mod by tests/mod: run-node.ts under node, the
 # *.test.ts files under `claude plugin test`).
 set -e
 cd "$(dirname "$0")"
 # node runs the TypeScript as it is from 22.18 (type stripping on by default);
-# an older node, or none, leaves the mod to the CI job that installs one.
+# an older node, or none, fails the suite: a skipped mod is not a green one.
 if command -v node >/dev/null 2>&1 && node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=18)?0:1)'; then
     node mod/run-node.ts
 else
-    echo "mod: node >= 22.18 not found, tests/mod/run-node.ts skipped"
+    echo "mod: node >= 22.18 not found, tests/mod/run-node.ts cannot run" >&2
+    exit 1
 fi
 bash test_root_gate.sh
 bash test_agents.sh
@@ -25,10 +26,10 @@ bash test_gomod.sh
 bash test_cleanup.sh
 bash test_identity.sh
 bash test_docs.sh
-bash test_blocks.sh
 bash test_tier.sh
 bash test_scope.sh
 bash test_tier_judge.sh
 bash test_tier_vectors.sh
+bash test_epic_predicates.sh
 bash test_coderabbit.sh
 python3 -I -m unittest discover -s coderabbit

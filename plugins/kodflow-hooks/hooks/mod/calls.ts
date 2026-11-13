@@ -67,7 +67,8 @@ const given = (v: unknown): boolean =>
   typeof v === "string" ? v.trim() !== "" : v !== undefined && v !== null;
 
 /**
- * Whether a task call that succeeded settles one cause of the triage gate.
+ * Whether a task call that succeeded settles one cause of the triage gate
+ * (alone; once a write was tried, settlesAny settles them all).
  * A user message is settled by a task of its own (task_create,
  * task_assign_human) or by context added to the task in progress
  * (task_update with a description); a resumed session by a status set
@@ -111,6 +112,53 @@ export function settleCauses(
   }
   return left;
 }
+
+/**
+ * The triage gate's read list (hooks/scripts/lib/read-tools.txt, the file
+ * on-tool.sh reads too): one exact tool name per line, `#` comments, a line
+ * ending in `*` a prefix. Unreadable text lists nothing.
+ */
+export function parseReadList(text: string | undefined): string[] {
+  if (typeof text !== "string") return [];
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    // A bare `*` would list every tool: never a prefix (readlist.sh agrees)
+    .filter((l) => l && l !== "*" && !l.startsWith("#"));
+}
+
+/** Whether a tool is on the read list: by its exact name, or under a `*` prefix. */
+export function isReadTool(list: readonly string[], tool: unknown): boolean {
+  if (typeof tool !== "string" || !tool) return false;
+  return list.some((l) =>
+    l.endsWith("*") ? tool.startsWith(l.slice(0, -1)) : l === tool,
+  );
+}
+
+/**
+ * Whether a main-loop call is an attempt to write while the gate is up: a
+ * tool off the read list that is not Bash (Bash passes the gate on its own
+ * checks and marks nothing). A subagent's never is.
+ */
+export function triesToWrite(
+  list: readonly string[],
+  tool: unknown,
+  agentId: unknown,
+): boolean {
+  return mainLoop(agentId) && tool !== "Bash" && !isReadTool(list, tool);
+}
+
+/**
+ * A task call that settles a cause of the gate, whichever it is: once a
+ * write was tried (triage-wrote), the first one settles them all.
+ */
+export const settlesAny = (
+  tool: ToolName,
+  args: Record<string, unknown>,
+  agentId: unknown,
+): boolean =>
+  liftsTriage(tool, args, agentId, "prompt") ||
+  liftsTriage(tool, args, agentId, "resume");
 
 /** The payload on-mod.sh logs for a task call, shaped like a PostToolUse. */
 export function logPayload(

@@ -269,6 +269,8 @@ printf '%s' '{"version":2,"active":{"main":2},
   "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Fix daemon","status":"pending"},
            {"id":"3","agent":"main","epic":2,"subject":"Freeze golden renders now","status":"in_progress"},
            {"id":"5","agent":"main","epic":0,"subject":"Loose","status":"pending"}]}' > "$MS/tasks.json"
+# Touched now, order kept: an epic idle for 24 h would add a line of its own
+jq -c --argjson n "$(date +%s)" '.epics |= map(.touched += $n)' "$MS/tasks.json" > "$MS/t" && mv -f "$MS/t" "$MS/tasks.json"
 user
 printf '%s' "$C" | grep -q 'dispatch a subagent' && printf '%s' "$C" | grep -q 'do not write it' \
     && ok "the directive sends the work to a subagent" || bad "directive" "$C"

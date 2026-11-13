@@ -1,8 +1,9 @@
 // paths.ts — where the mod keeps a session's state. Pure.
 //
-// <config>/kodflow/sessions/<session>/ is shared with the shell hooks and the
-// status line: tasks.json (the task list), agents.json (on-agent.sh),
-// triage-pending (the triage gate) and mod-beat (the proof the mod is loaded).
+// <config>/kodflow/sessions/<session>/ is shared with the shell hooks,
+// /recap and kodflow-hud: tasks.json (the task list), agents.json (on-agent.sh),
+// triage-pending (the triage gate), triage-wrote (a write tried while it
+// was up) and mod-beat (the proof the mod is loaded).
 
 /**
  * The Claude configuration directory: CLAUDE_CONFIG_DIR, else ~/.claude.
@@ -33,6 +34,8 @@ export const sessionDir = (config: string, session: string): string =>
 export const tasksFile = (dir: string): string => `${dir}/tasks.json`;
 export const agentsFile = (dir: string): string => `${dir}/agents.json`;
 export const triageFile = (dir: string): string => `${dir}/triage-pending`;
+/** Written by the mod when the main loop tries a tool off the read list while the gate is up. */
+export const wroteFile = (dir: string): string => `${dir}/triage-wrote`;
 export const beatFile = (dir: string): string => `${dir}/mod-beat`;
 
 /** The beat's content: the time in whole seconds, as the shell compares it. */

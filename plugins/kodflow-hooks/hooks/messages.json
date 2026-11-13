@@ -29,12 +29,12 @@
     "fr": "{O}Tâches ouvertes (TaskUpdate){X} : {ids} (completed si faites, deleted si caduques, waiting si bloquées sur l'utilisateur)"
   },
   "stop.triage.one": {
-    "en": "{O}Message with no task{X} (one per message, a question included: task_create with its epic, 0 for none, or task_update(id, description) for context, then completed)",
-    "fr": "{O}Message sans tâche{X} (une par message, question comprise : task_create avec son épique, 0 sans épique, ou task_update(id, description) pour du contexte, puis completed)"
+    "en": "{O}Work with no task{X} (this turn tried to write before its message had one: task_create with its epic, 0 for none, or task_update(id, description) for context; a question answered by reading needs none)",
+    "fr": "{O}Travail sans tâche{X} (ce tour a tenté d'écrire avant que son message en ait une : task_create avec son épique, 0 sans épique, ou task_update(id, description) pour du contexte ; une question résolue en lisant n'en demande pas)"
   },
   "stop.triage.many": {
-    "en": "{O}{n} messages with no task{X} (one per message, a question included: task_create with its epic, 0 for none, or task_update(id, description) for context, then completed)",
-    "fr": "{O}{n} messages sans tâche{X} (une par message, question comprise : task_create avec son épique, 0 sans épique, ou task_update(id, description) pour du contexte, puis completed)"
+    "en": "{O}{n} messages with no task{X} (this turn tried to write before they had one: one task call settles them all — task_create with its epic, 0 for none, or task_update(id, description); a question answered by reading needs none)",
+    "fr": "{O}{n} messages sans tâche{X} (ce tour a tenté d'écrire avant qu'ils en aient une : un seul appel de tâche les règle tous — task_create avec son épique, 0 sans épique, ou task_update(id, description) ; une question résolue en lisant n'en demande pas)"
   },
   "stop.resume": {
     "en": "{O}Tasks left open at the session start{X} (task_update each: in_progress for the one you resume, completed, deleted or waiting for the others)",
@@ -96,9 +96,13 @@
     "en": " (task_update completed once answered)",
     "fr": " (task_update completed une fois répondu)"
   },
+  "user.epics.idle": {
+    "en": "Idle for 24 h: {epics}. Close? (settle its tasks in progress first, then task_focus(epic, close=true))",
+    "fr": "Inactives depuis 24 h : {epics}. Clore ? (régler d'abord les tâches en cours, puis task_focus(epic, close=true))"
+  },
   "user.triage": {
-    "en": "TRIAGE this message before acting (kodflow task tools), one task per message; task_create always names its epic (epic=id, 0 for none, no default):\n- new work for an open epic: task_create(epic=id)\n- context on the in_progress task: task_update(id, description)\n- change to a completed task: task_create \"Rework #N: ...\" in its epic\n- new subject: task_epic(title, 20 chars max), then task_create(epic=its id)\n- question: task_create(epic=0), completed once answered\n- subject (create, update): 30 characters max, refused beyond; detail goes in description",
-    "fr": "TRIER ce message avant d'agir (outils de tâches kodflow), une tâche par message ; task_create nomme toujours son épique (epic=id, 0 sans épique, aucun défaut) :\n- travail d'une épique ouverte : task_create(epic=id)\n- contexte sur la tâche in_progress : task_update(id, description)\n- retouche d'une tâche terminée : task_create \"Rework #N: ...\" dans son épique\n- nouveau sujet : task_epic(title, 20 car. max), puis task_create(epic=son id)\n- question : task_create(epic=0), completed une fois répondue\n- subject : 30 car. max, refusé au-delà ; le détail dans description"
+    "en": "TRIAGE: work that writes (edit, dispatch, forge write) needs a task first; a question answered by reading needs none. task_create always names its epic (epic=id, 0 for none, no default):\n- new work for an open epic: task_create(epic=id)\n- context on the in_progress task: task_update(id, description)\n- change to a completed task: task_create \"Rework #N: ...\" in its epic\n- new subject: task_epic(title, 20 chars max), then task_create(epic=its id)\n- subject (create, update): 30 characters max, refused beyond; detail goes in description",
+    "fr": "TRI : un travail qui écrit (modification, délégation, écriture forge) demande d'abord une tâche ; une question résolue en lisant n'en demande pas. task_create nomme toujours son épique (epic=id, 0 sans épique, aucun défaut) :\n- travail d'une épique ouverte : task_create(epic=id)\n- contexte sur la tâche in_progress : task_update(id, description)\n- retouche d'une tâche terminée : task_create \"Rework #N: ...\" dans son épique\n- nouveau sujet : task_epic(title, 20 car. max), puis task_create(epic=son id)\n- subject : 30 car. max, refusé au-delà ; le détail dans description"
   },
   "user.root": {
     "en": "Code in a repository: dispatch a subagent (own worktree, delivers a PR) or SendMessage the epic's subagent; you review and merge, you do not write it.",

@@ -148,19 +148,21 @@ command -v jq >/dev/null 2>&1 || exit 0
 mkdir -p "$CLAUDE_CONFIG_DIR" 2>/dev/null
 [ -f "$SETTINGS" ] || printf '{}\n' > "$SETTINGS"
 
-# The task in progress pulses on alternate seconds, and the host only redraws
-# on its own events unless refreshInterval asks it to: 1 second, its minimum.
-# Added to a status line that is ours; a value the user set is kept.
+# The host only redraws on its own events unless refreshInterval asks it to:
+# every 5 seconds keeps the gauges and the clock fresh without redrawing for
+# nothing (the line shows no task any more, so nothing pulses). Written for a
+# new install, or added to a status line of ours that has none; a value
+# already there, the user's or an older install's, is kept.
 current=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null)
 case "$current" in
     # Nothing configured: ours to fill
-    "")             filter='.statusLine = {type:"command", command:$cmd, refreshInterval:1}'
+    "")             filter='.statusLine = {type:"command", command:$cmd, refreshInterval:5}'
                     done_msg="statusLine configuré sur $TARGET" ;;
     # Already us, by path or by name on PATH: only the refresh may be missing
     "$TARGET"|"$BIN_NAME"|"$BIN_NAME$EXT")
                     jq -e '.statusLine.refreshInterval' "$SETTINGS" >/dev/null 2>&1 && exit 0
-                    filter='.statusLine.refreshInterval = 1'
-                    done_msg="statusLine : rafraîchissement toutes les secondes activé" ;;
+                    filter='.statusLine.refreshInterval = 5'
+                    done_msg="statusLine : rafraîchissement toutes les 5 secondes activé" ;;
     # Someone else's status line: leave it alone, whatever the flags
     *)              say "statusLine déjà configuré sur $current — inchangé"; exit 0 ;;
 esac

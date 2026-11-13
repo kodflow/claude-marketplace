@@ -333,16 +333,16 @@ sl=$fakehome/.claude/settings.json
 print '{}' > $sl
 run_sl $fakehome >/dev/null 2>&1 || true
 is "configure la commande" "$(jq -r .statusLine.command $sl)" "$fakehome/.local/bin/status-line"
-is "rafraîchit toutes les secondes" "$(jq -r .statusLine.refreshInterval $sl)" "1"
+is "rafraîchit toutes les 5 secondes à l'installation" "$(jq -r .statusLine.refreshInterval $sl)" "5"
 
 print '{"statusLine":{"type":"command","command":"status-line"}}' > $sl
 run_sl $fakehome >/dev/null 2>&1 || true
-is "ajoute le rafraîchissement à une commande par nom" "$(jq -r .statusLine.refreshInterval $sl)" "1"
+is "ajoute le rafraîchissement à une commande par nom" "$(jq -r .statusLine.refreshInterval $sl)" "5"
 is "garde la commande par nom" "$(jq -r .statusLine.command $sl)" "status-line"
 
-print '{"statusLine":{"type":"command","command":"status-line","refreshInterval":5}}' > $sl
+print '{"statusLine":{"type":"command","command":"status-line","refreshInterval":1}}' > $sl
 run_sl $fakehome >/dev/null 2>&1 || true
-is "garde un intervalle choisi" "$(jq -r .statusLine.refreshInterval $sl)" "5"
+is "garde un intervalle déjà là (1 s d'une installation plus ancienne)" "$(jq -r .statusLine.refreshInterval $sl)" "1"
 
 print '{"statusLine":{"type":"command","command":"/opt/autre"}}' > $sl
 run_sl $fakehome >/dev/null 2>&1 || true

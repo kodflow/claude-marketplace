@@ -2,12 +2,23 @@
 // worker is doing. Pure: no `$`, no I/O.
 //
 // tasks.json (version 2) is kodflow-hooks' file, a contract it shares with
-// the status line and lib/epics.jq; this module only reads it. An epic is
-// open as the status line counts it: a task left to do, or the agent's active
-// epic while it has no task yet; it stays listed 30 minutes after its last
-// task was done, so what was opened and closed in seconds is still seen. Tasks filed under no epic (epic 0) form one
-// more group, « Hors épopée », with no number (its id is 0): the pane's tab
-// already says « Tâches », so the group does not say it again.
+// lib/epics.jq and /recap; this module only reads it. The board is the main
+// agent's: an epic is open while it is not closed (`closed_at`, task_focus
+// close=true) and has a task left to do, or is the active epic while it has
+// no task yet; it stays listed 30 minutes after its last task was done, so
+// what was opened and closed in seconds is still seen. Epics come in the
+// order they were opened, the active one marked, never moved. The main
+// agent's tasks filed under no epic (epic 0) form one more group, « Hors
+// épopée », with no number (its id is 0): the pane's tab already says
+// « Tâches », so the group does not say it again.
+//
+// A subagent's own tasks are no epic of theirs: they hang under the task the
+// subagent was handed (its `workers`, tree.ts), and those of a task in a
+// closed epic are hidden with it. A subagent's task left open by an agent
+// that is no longer live is an orphan: counted, toasted when it was in
+// progress, never drawn. The predicates (`closed`, `idle`, `orphan`) are
+// the ones kodflow-hooks holds in tasks.ts and lib/epics.jq, against the
+// same fixture (tests/epic-predicates.ts, generated from kodflow-hooks').
 //
 // A task may also carry the tree's fields (kodflow-hooks writes them only
 // once set): `parent`, `blockedBy`, `ref`. A file without them is a flat
@@ -28,6 +39,10 @@ export const NO_EPIC_TITLE = "Hors épopée";
 export const KEEP_DONE_MS = 30 * 60_000;
 /** What `$.agent.list()` reports for an agent whose loop still stands. */
 export const LIVE = new Set(["running", "waiting", "idle"]);
+/** A loop whose standing could not be read: never silent, never stopped. */
+export const UNKNOWN = "unknown";
+/** An epic with nothing moving for this long is idle (seconds). */
+export const IDLE_AFTER = 24 * 3600;
 
 type Obj = Record<string, any>;
 const isObj = (v: unknown): v is Obj =>
@@ -58,6 +73,12 @@ function toTask(raw: Obj): HudTask {
   };
   if (raw.worker) task.worker = text(raw.worker);
   if (raw.worker_id) task.workerId = text(raw.worker_id);
+  if (Array.isArray(raw.workers)) {
+    const ids = [
+      ...new Set(raw.workers.map(text).filter((w: string) => w !== "")),
+    ] as string[];
+    if (ids.length) task.workers = ids;
+  }
   if (raw.assignee) task.assignee = text(raw.assignee);
   if (raw.description) task.description = text(raw.description);
   if (raw.parent) task.parent = text(raw.parent);
@@ -79,6 +100,78 @@ export function parseTasks(raw: unknown): HudTask[] {
 }
 
 /**
+ * Closed by task_focus(close=true): `closed_at` a finite number above 0.
+ * Anything else (absent, null, 0, a string, true, -1, 1e999) is open.
+ */
+export function closed(epic: unknown): boolean {
+  const c = isObj(epic) ? epic.closed_at : undefined;
+  return typeof c === "number" && Number.isFinite(c) && c > 0;
+}
+
+/**
+ * Idle: nothing touched the epic or its tasks for 24 h (`now` in seconds),
+ * no task of it in progress on a live worker (`live`: agent ids), and none
+ * of the person's waiting in it. Closed or not is the caller's to weigh.
+ */
+export function idle(
+  epic: Obj,
+  tasks: readonly unknown[],
+  now: number,
+  live: readonly string[],
+): boolean {
+  const agent = text(epic.agent) || MAIN;
+  const own = tasks.filter(
+    (t): t is Obj =>
+      isObj(t) &&
+      (text(t.agent) || MAIN) === agent &&
+      (Number.isInteger(t.epic) ? t.epic : 0) === epic.id,
+  );
+  const last = Math.max(num(epic.touched), ...own.map((t) => num(t.updated)));
+  if (now - last <= IDLE_AFTER) return false;
+  if (
+    own.some(
+      (t) => t.status === "in_progress" && live.includes(text(t.worker_id)),
+    )
+  )
+    return false;
+  return !own.some((t) => t.status === "waiting" && t.assignee === "human");
+}
+
+/**
+ * A subagent's task left open by an agent no longer live: `live` the agent
+ * ids `$.agent.list()` says stand (undefined when it could not be read:
+ * nothing is an orphan then).
+ */
+export function orphan(
+  task: { agent?: unknown; status?: unknown },
+  live: readonly string[] | undefined,
+): boolean {
+  const agent = text(task.agent) || MAIN;
+  if (!live || agent === MAIN) return false;
+  if (task.status === "completed" || task.status === "deleted") return false;
+  return !live.some((id) => id === agent || safe(id) === agent);
+}
+
+/**
+ * The task a worker's own tasks hang under: of the main agent's tasks that
+ * name it in `workers`, the one in progress, else the most recently updated.
+ */
+export function anchorOf(
+  tasks: readonly HudTask[],
+  worker: string,
+): HudTask | undefined {
+  const holding = tasks.filter(
+    (t) =>
+      t.agent === MAIN &&
+      (t.workers ?? []).some((w) => w === worker || safe(w) === worker),
+  );
+  return (
+    holding.find((t) => t.status === "in_progress") ??
+    [...holding].sort((a, b) => b.updated - a.updated)[0]
+  );
+}
+
+/**
  * Whether a group with nothing left to do is still shown: its last task was
  * done less than `KEEP_DONE_MS` ago. A completed task's `updated` (seconds)
  * is when it was done, kodflow-hooks stamping it on the status change. With
@@ -91,58 +184,96 @@ function justDone(tasks: readonly HudTask[], now: number | undefined): boolean {
 }
 
 /**
- * The board: the open epics, most recently touched first, then the tasks
- * filed under no epic while one of them is left to do. With `now` (ms), an
- * epic or the group under no epic whose last task was done less than 30
- * minutes ago is kept too, after the ones with work left, so a question
- * opened and closed in seconds is still seen.
+ * The board: the main agent's open epics in the order they were opened (the
+ * active one marked), then the tasks filed under no epic while one of them
+ * is left to do. With `now` (ms), an epic or the group under no epic whose
+ * last task was done less than 30 minutes ago is kept too, and an epic
+ * idle for 24 h is marked so. `live` (agent ids, undefined when unknown)
+ * marks the subagents' tasks whose agent no longer stands.
  */
-export function parseBoard(fileText: string | undefined, now?: number): HudBoard {
-  if (fileText === undefined) return { found: false, epics: [] };
+export function parseBoard(
+  fileText: string | undefined,
+  now?: number,
+  live?: readonly string[],
+): HudBoard {
+  if (fileText === undefined) return { found: false, epics: [], helpers: [] };
   let raw: unknown;
   try {
     raw = JSON.parse(fileText);
   } catch {
-    return { found: true, epics: [] };
+    return { found: true, epics: [], helpers: [] };
   }
   const tasks = parseTasks(raw);
   const data: Obj = isObj(raw) ? raw : {};
+  const rawTasks: unknown[] = Array.isArray(data.tasks) ? data.tasks : [];
   const active: Obj = isObj(data.active) ? data.active : {};
-  const open: HudEpic[] = [];
-  const kept: HudEpic[] = [];
+  const epics: HudEpic[] = [];
+  const shut = new Set<number>();
   for (const e of Array.isArray(data.epics) ? data.epics : []) {
     if (!isObj(e) || !Number.isInteger(e.id)) continue;
     const agent = text(e.agent) || MAIN;
+    if (agent !== MAIN) continue;
+    if (closed(e)) {
+      shut.add(e.id);
+      continue;
+    }
     const own = tasks.filter((t) => t.epic === e.id && t.agent === agent);
     const left = own.some((t) => t.status !== "completed");
-    const emptyActive = own.length === 0 && active[agent] === e.id;
-    const recent = !left && !emptyActive && justDone(own, now);
-    if (!left && !emptyActive && !recent) continue;
-    (recent ? kept : open).push({
+    const isActive = active[agent] === e.id;
+    const emptyActive = own.length === 0 && isActive;
+    if (!left && !emptyActive && !justDone(own, now)) continue;
+    const epic: HudEpic = {
       id: e.id,
       title: text(e.title),
       agent,
       created: num(e.created) || num(e.touched),
       touched: num(e.touched),
       tasks: own,
-    });
+    };
+    if (isActive) epic.active = true;
+    // Idle needs to know who stands: unknown liveness folds nothing
+    if (
+      now !== undefined &&
+      live !== undefined &&
+      left &&
+      idle(e, rawTasks, Math.floor(now / 1000), live)
+    )
+      epic.idle = true;
+    epics.push(epic);
   }
-  open.sort((a, b) => b.touched - a.touched);
-  kept.sort((a, b) => b.touched - a.touched);
-  const loose = tasks.filter((t) => t.epic === 0);
-  const looseLeft = loose.some((t) => t.status !== "completed");
-  if (looseLeft || justDone(loose, now)) {
-    const group: HudEpic = {
+  // In the order they were opened: a new epic goes last, nothing moves
+  epics.sort((a, b) => a.created - b.created || a.id - b.id);
+  const loose = tasks.filter((t) => t.epic === 0 && t.agent === MAIN);
+  if (loose.some((t) => t.status !== "completed") || justDone(loose, now))
+    epics.push({
       id: 0,
       title: NO_EPIC_TITLE,
       agent: MAIN,
       created: Math.min(...loose.map((t) => t.updated)),
       touched: 0,
       tasks: loose,
-    };
-    (looseLeft ? open : kept).push(group);
+    });
+  // A subagent's tasks, unless the task it was handed sits in a closed epic
+  const helpers: (HudTask & { stopped?: boolean })[] = [];
+  for (const t of tasks) {
+    if (t.agent === MAIN) continue;
+    const anchor = anchorOf(tasks, t.agent);
+    if (anchor && shut.has(anchor.epic)) continue;
+    helpers.push(orphan(t, live) ? { ...t, stopped: true } : t);
   }
-  return { found: true, epics: [...open, ...kept] };
+  return { found: true, epics, helpers };
+}
+
+/**
+ * What is shown and counted: the tasks of the board's epics, and the
+ * subagents' tasks that are not orphans (all of them when the liveness was
+ * not read). The CI, the tab's count and the toasts read this.
+ */
+export function visibleTasks(board: HudBoard): HudTask[] {
+  return [
+    ...board.epics.flatMap((e) => e.tasks),
+    ...(board.helpers ?? []).filter((t) => !t.stopped),
+  ];
 }
 
 /** What the board needs from the world to judge a task. */
@@ -153,6 +284,11 @@ export type Ctx = {
   activity: Readonly<Record<string, HudActivity>>;
   /** How long an in_progress task may stay without activity. */
   silentMs: number;
+  /**
+   * "unknown" when `$.agent.list()` could not be read: a subagent's loop is
+   * then neither silent nor stopped, its state "unknown".
+   */
+  liveness?: "unknown";
 };
 
 export type Verdict = {
@@ -192,9 +328,14 @@ export function judge(task: HudTask, ctx: Ctx): Verdict {
   const seen = activityOf(ctx.activity, loop)?.last ?? 0;
   const last = Math.max(updated, seen);
   let state = MAIN;
-  if (loop !== MAIN) state = findAgent(ctx.agents, loop)?.status ?? "absent";
+  if (loop !== MAIN)
+    state =
+      ctx.liveness === UNKNOWN
+        ? UNKNOWN
+        : (findAgent(ctx.agents, loop)?.status ?? "absent");
   const verdict: Verdict = { loop, state, last, silent: false };
-  if (task.status !== "in_progress") return verdict;
+  // Nobody can say whether that loop stands: no verdict on it
+  if (task.status !== "in_progress" || state === UNKNOWN) return verdict;
   // A worker that was named and is gone is the clearest case: nobody is on it
   if (loop !== MAIN && !LIVE.has(state)) {
     verdict.silent = true;

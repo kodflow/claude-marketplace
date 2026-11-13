@@ -203,9 +203,9 @@ test("the tab's label keeps one width; several hunts show the busiest and ×N", 
   expect(huntTab(one, true)).toBe("Chasse");
 });
 
-test("the bar: « Chasse » last, its counter from 64 cells, alone below, and nothing without a hunt", () => {
+test("the bar only while a hunt is listed: « Arbre », then « Chasse » and its counter from 26 cells", () => {
   const text = (w: number, hunt?: string) =>
-    tabsLines("tree", w, { blocks: 0, docs: 0, ...(hunt && { hunt }) })
+    tabsLines("tree", w, hunt ? { hunt } : {})
       .lines[1]!.map((c) =>
         (c.spans ?? [])
           .map((s) => s.text)
@@ -215,27 +215,14 @@ test("the bar: « Chasse » last, its counter from 64 cells, alone below, and no
       .join("")
       .replace(/\u2007/g, " ");
   const label = huntTab(readHunt(activeText(), () => STATUS_V1))!;
-  expect(text(88)).toBe(
-    "Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue",
-  );
   expect(text(88, label)).toMatch(
-    /^Arbre   Graphe   Refus \(0\)    Documents \(0\)    Chasse 7\/10 +↑↓ ⏎ tab$/,
+    /^Arbre   Chasse 7\/10 +↑↓ choisir · ⏎ plier · tab vue$/,
   );
   expect(text(88, label)).toHaveLength(88);
-  expect(text(60, label).trimEnd()).toBe(
-    "Arbre   Graphe   Refus (0)    Documents (0)    Chasse",
-  );
-  expect(text(40, label).trimEnd()).toBe(
-    "Arbre Graphe Refus Docs Chasse  ↑↓ ⏎ tab",
-  );
+  expect(text(24, label).trimEnd()).toBe("Arbre   Chasse  ↑↓ ⏎ tab");
   // too narrow even for « Chasse »: the tab key still reaches it
-  const t = tabsLines("tree", 26, { blocks: 0, docs: 0, hunt: label });
-  expect(t.tabs.map((x) => x.view)).toEqual([
-    "tree",
-    "graph",
-    "blocks",
-    "docs",
-  ]);
+  const t = tabsLines("tree", 10, { hunt: label });
+  expect(t.tabs.map((x) => x.view)).toEqual(["tree"]);
 });
 
 // --- in the engine ------------------------------------------------------------------------
@@ -277,13 +264,15 @@ const setHunt = (h: Host, over: Record<string, unknown>) => {
   h.files.set(STATUS, { text: statusText(over), mtimeMs: 1 });
 };
 
-test("no hunt: no « Chasse » tab, and tab goes round the four views", async ($, on) => {
+test("no hunt: no bar at all, and tab stays on the tree", async ($, on) => {
   const { h, clock } = host(on);
   writeTasks(h, [T("1", "in_progress")], 1);
   await start($, clock);
   const ui = await mount($, 88, 20);
-  expect((await lines(ui))[19]).not.toContain("Chasse");
-  for (let i = 0; i < 4; i++) await ui.key({ key: "tab" });
+  const shown = (await lines(ui)).join("\n");
+  expect(shown).not.toContain("Chasse");
+  expect(shown).not.toContain("Arbre");
+  await ui.key({ key: "tab" });
   expect((await lines(ui))[0]).toContain("SDK status-line");
 });
 
@@ -291,8 +280,8 @@ test("a hunt listed: « Chasse » last in the bar, tab reaches it, every line at
   await hunting($, on);
   const ui = await mount($, 88, 30);
   const bar = (await lines(ui))[29]!;
-  expect(bar).toMatch(/Documents \(0\)\s+Chasse 7\/10/);
-  for (let i = 0; i < 4; i++) await ui.key({ key: "tab" });
+  expect(bar).toMatch(/^Arbre   Chasse 7\/10/);
+  await ui.key({ key: "tab" });
   const tree = await ui.drawn({ in: "tree" });
   expect(widths(tree)).toEqual(Array(30).fill(88));
   const view = capture(tree);
@@ -324,7 +313,7 @@ test("a hunt listed: « Chasse » last in the bar, tab reaches it, every line at
 test("the digest: what came after the view was last left", async ($, on) => {
   const { h, clock } = await hunting($, on);
   const ui = await mount($, 88, 30);
-  await click(ui, 50, 29); // « Chasse »
+  await click(ui, 10, 29); // « Chasse »
   await click(ui, 1, 29); // back to « Arbre »: the view left at seq 412
   const events = [
     ...JSON.parse(STATUS_V1).events,
@@ -333,7 +322,7 @@ test("the digest: what came after the view was last left", async ($, on) => {
   setHunt(h, { beat: NOW - MIN, seq: 413, events });
   await clock.advance(3_000);
   await ui.redraw();
-  await click(ui, 50, 29);
+  await click(ui, 10, 29);
   const view = (await lines(ui)).join("\n");
   expect(view).toMatch(/nouveau +#413 intégration rejetée core #112 build/);
   expect(view).not.toContain("#380");
@@ -344,7 +333,7 @@ test("an unreadable status.json or an unknown version is said in the view", asyn
   h.files.set(STATUS, { text: STATUS_V99, mtimeMs: 1 });
   await clock.advance(3_000);
   const ui = await mount($, 88, 30);
-  await click(ui, 50, 29);
+  await click(ui, 10, 29);
   const view = (await lines(ui)).join("\n");
   expect(view).toMatch(/état +format v99 non lu, mettre à jour kodflow-hud/);
   expect(view).not.toContain("7/10");
@@ -365,14 +354,14 @@ test("a rewrite of the same size at the same time is seen: the text is compared,
 test("the hunt gone while shown: the tree, and tab no longer stops on « Chasse »", async ($, on) => {
   const { h, clock } = await hunting($, on);
   const ui = await mount($, 88, 30);
-  await click(ui, 50, 29);
+  await click(ui, 10, 29);
   expect((await lines(ui))[0]).toContain("Chasse");
   h.files.delete(ACTIVE);
   await clock.advance(3_000);
   await ui.redraw();
   expect((await lines(ui))[0]).toContain("SDK status-line");
   expect((await lines(ui))[29]).not.toContain("Chasse");
-  for (let i = 0; i < 4; i++) await ui.key({ key: "tab" });
+  await ui.key({ key: "tab" });
   expect((await lines(ui))[0]).toContain("SDK status-line");
 });
 
@@ -380,7 +369,7 @@ test("« figée » shown on an old beat, « orpheline probable » with « repren
   const old = NOW - ORPHAN_MS - MIN;
   const { seen } = await hunting($, on, { beat: old, busy: null });
   const ui = await mount($, 88, 30);
-  await click(ui, 50, 29);
+  await click(ui, 10, 29);
   const view = await lines(ui);
   expect(view[1]).toMatch(
     new RegExp(`^◆ ${SLUG} · chasse · orpheline probable +\\[reprendre\\]$`),
@@ -403,7 +392,7 @@ test("a hunt paused for hours is neither « figée » nor orphaned", async ($, o
     pause: { reason: "décision attendue", since: NOW - ORPHAN_MS * 2 },
   });
   const ui = await mount($, 88, 30);
-  await click(ui, 50, 29);
+  await click(ui, 10, 29);
   const view = (await lines(ui)).join("\n");
   expect(view).toContain(`● ${SLUG} · pause`);
   expect(view).toMatch(/pause +décision attendue depuis/);
@@ -416,7 +405,7 @@ test("a hunt paused for hours is neither « figée » nor orphaned", async ($, o
 test("notify_failed is said", async ($, on) => {
   await hunting($, on, { notify_failed: true });
   const ui = await mount($, 88, 30);
-  await click(ui, 50, 29);
+  await click(ui, 10, 29);
   expect((await lines(ui)).join("\n")).toMatch(
     /notification +en échec · le watchdog réessaie/,
   );

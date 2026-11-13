@@ -84,10 +84,6 @@ _fable_sd() {
     FABLE_SD=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$(printf '%s' "${FF_SID:-default}" | tr -cd 'A-Za-z0-9_-')
 }
 _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
-    local fa=main
-    [[ $INPUT =~ \"agent_type\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]] && fa=${BASH_REMATCH[1]}
-    . "${BASH_SOURCE[0]%/*}/lib/blocks.sh" 2>/dev/null \
-        && kf_block "$FABLE_SD" hook "${TOOL:-${fp_tool:-}}" "GATED MODEL REFUSED — $1 ($2)" fable "$fa"
     printf '═══════════════════════════════════════════════\n  ❌ %s\n═══════════════════════════════════════════════\n' "GATED MODEL REFUSED — $1 ($2)" >&2
     printf '  %s\n' "A gated model (kodflow-hooks/hooks/gated-models.txt) runs only after the user's yes, once per session." "$3" \
         "The user can also set KODFLOW_FABLE=allow." "[motif:fable]" >&2
@@ -153,9 +149,10 @@ _fable_skill() {
 # FAST PATH, no jq. The PreToolUse matcher is the catch-all so the triage gate
 # sees every call, and one jq start costs ~30 ms on a slow CPU: the tools this
 # script does not handle are decided with bash regexes alone. They leave at
-# once unless the triage gate applies, in which case the full path below
-# refuses them. A forge write from the main thread (delegation gate, above) is
-# the one other case that goes on to the full path.
+# once unless the triage gate applies (a tool off lib/read-tools.txt while a
+# message waits for its task), in which case the full path below refuses
+# them. A forge write from the main thread (delegation gate, above) is the
+# one other case that goes on to the full path.
 if [[ $INPUT =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PreToolUse\" ]] && [[ $INPUT =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
     fp_tool=${BASH_REMATCH[1]}
     case "$fp_tool" in
@@ -198,6 +195,8 @@ if [[ $INPUT =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"PreToolUse\" ]] &&
                 fp_sid=""
                 [[ $INPUT =~ \"session_id\":\ ?\"([^\"]*)\" ]] && fp_sid=${BASH_REMATCH[1]//[^A-Za-z0-9_-]/}
                 [ $fp_gate -eq 1 ] || [ -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/${fp_sid:-default}/triage-pending" ] || exit 0
+                # A tool on the read list passes the triage gate: nothing else to judge
+                if [ $fp_gate -eq 0 ] && . "${BASH_SOURCE[0]%/*}/lib/readlist.sh" 2>/dev/null && kf_read_tool "$fp_tool"; then exit 0; fi
             fi ;;
     esac
 fi
@@ -249,24 +248,7 @@ _log() {
     ) >/dev/null 2>&1 </dev/null &
 }
 
-# The refusal's line in blocks.jsonl (lib/blocks.sh): its title, and the
-# motif its last line carries, or the one its gate is known by.
-_block_log() {   # same arguments as _block
-    local t=$1 m="" a
-    for a in "$@"; do case "$a" in "[motif:"*"]") m=${a#"[motif:"}; m=${m%"]"} ;; esac; done
-    if [ -z "$m" ]; then
-        case "${ROOT_GUARD:-}:$t" in
-            deny:*) m=delegation ;; *:TRIAGE*) m=triage ;; *"KODFLOW TASK TOOLS"*) m=builtin-tasks ;;
-            *"protected path"*) m=protected-path ;; *) m=guard ;;
-        esac
-    fi
-    . "$LIB/blocks.sh" 2>/dev/null \
-        && kf_block "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID" hook "$TOOL" "$t" "$m" "${ATYPE:-${AID:-main}}" "" "" "$TUID"
-    return 0
-}
-
 _block() {   # $1 = title, rest = lines. Stderr on exit 2 is what Claude reads.
-    _block_log "$@"
     printf '═══════════════════════════════════════════════\n  ❌ %s\n═══════════════════════════════════════════════\n' "$1" >&2
     shift; printf '  %s\n' "$@" >&2
     _log
@@ -1431,7 +1413,7 @@ _ident_env() {
 # The kodflow task tools are the mod's (hooks/mod/register.ts): a call it
 # answers never reaches this script, and the mod tells each caller apart by
 # itself. The built-in task tools draw their own panel in the chat, a second
-# copy of the list the status line already shows: refused while the mod's
+# copy of the kodflow list: refused while the mod's
 # tools answer (lib/beat.sh), let through when they do not, since a session
 # without the mod has no other list.
 pre_builtin_tasks() {
@@ -1749,30 +1731,15 @@ post_agent() {
 # ============================================================================
 # PostToolUseFailure · any tool
 # ============================================================================
-# A refusal of auto mode (lib/blocks.sh, kind classifier): its reason, and
-# the permission rule that would have let the call through.
-_denied() {   # $1 the reason
-    local why=$1 rule
-    case "$why" in "["*"]") why=${why#"["}; why=${why%"]"} ;; esac
-    why=$(printf '%s' "$why" | head -n 1 | cut -c1-200)
-    . "$LIB/blocks.sh" 2>/dev/null || return 0
-    rule=$(printf '%s' "$INPUT" | kf_block_rule)
-    kf_block "$SDIR" classifier "$TOOL" "${why:-denied by auto mode}" "" "${ATYPE:-${AID:-main}}" "$rule" "" "$TUID"
-}
-
 # PermissionDenied: auto mode refused the call. Only fires in auto mode; a
-# denial the user types at a permission dialog reaches no hook.
+# denial the user types at a permission dialog reaches no hook. Logged.
 permission_denied() {
-    _denied "$REASON"
     _log
     exit 0
 }
 
 post_failure() {
     local advice=""
-    # Auto mode's refusal, should it arrive as a failure (the PermissionDenied
-    # event is the documented carrier; the same tool_use_id is one line)
-    case "$ERR" in *"denied by the Auto mode classifier"*|*"Auto mode could not evaluate"*) _denied "$ERR" ;; esac
     case "$ERR" in
         *"command not found"*|*"not found"*)      advice="Command not found: check the spelling, install the tool, or use another approach." ;;
         *"ermission denied"*)                      advice="Permission denied: check ownership and mode before retrying." ;;
@@ -1910,62 +1877,60 @@ pre_agent() {
 # ============================================================================
 # PreToolUse · triage gate
 # ============================================================================
-# The user wants every message filed in the task list BEFORE anything is done
-# about it, a question included. triage-pending holds one cause per line:
-# `prompt` (on-user.sh, each message) and `resume` (on-session.sh, a session
-# back with open tasks); an empty file is a prompt. Only the mod lifts it,
-# cause by cause, on a task call that succeeded and answers that cause
-# (calls.ts liftsTriage): task_create, task_assign_human or
-# task_update(description) for a prompt, task_update(status) for a resume.
-# task_list, task_epic and task_focus pass here without lifting anything.
-# Until then the main agent may only read and load tools — enough to
-# understand the request, not to act on it. Subagents are not gated: they
-# work for a task the main agent already filed. The gate holds only while
-# the mod beats: with the mod gone nothing could lift it, so a stale beat
-# lifts it and says why, once.
+# Work the user asks for is filed in the task list before anything is
+# written; a question answered by reading needs no task. triage-pending
+# holds one cause per line: `prompt <id>` (on-user.sh, each message) and
+# `resume` (on-session.sh, a session back with open tasks); an empty file is
+# a prompt. While it is there the main agent may use the read list
+# (lib/read-tools.txt: Read, Glob, Grep, LS, ToolSearch, AskUserQuestion,
+# WebFetch, WebSearch, the task tools, an exact list of forge reads) and
+# Bash, which keeps its own checks below; every other tool (Write, Edit,
+# MultiEdit, NotebookEdit, Agent, Skill, a forge write, a tool nobody
+# listed) is refused. Only the mod lifts it (register.ts settleTriage): a
+# task call that answers a cause settles that cause, and once a write was
+# tried (the mod's triage-wrote marker, written before this hook runs) the
+# first such call settles them all. Subagents are not gated: they work for a
+# task the main agent already filed. The gate holds only while the mod
+# beats: with the mod gone nothing could lift it, so a stale beat lifts it
+# and says why, once. KODFLOW_TRIAGE=off turns the gate off.
 SDIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID
 BEAT=2; . "$LIB/beat.sh" 2>/dev/null && { kf_beat "$SDIR"; BEAT=$?; }
-if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$SDIR/triage-pending" ]; then
-    case "$TOOL" in
-        mcp__*tasks__task_*|mcp__kodflow-hooks__task_*|Read|Glob|Grep|LS|ToolSearch|AskUserQuestion)
-            ;;
-        *)
-            if [ "$BEAT" != 0 ]; then
-                rm -f -- "$SDIR/triage-pending" 2>/dev/null
-                # A tool with checks of its own below goes on to them, and
-                # the next prompt says why (on-user.sh); any other leaves
-                # here, the one place it can carry the message.
-                case "$TOOL" in
-                    Bash|Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|mcp__github__*|mcp__gitlab__*|mcp__GitKraken__*) ;;
-                    *) jq -n -c --arg m "${KF_BEAT_LOST:-kodflow-hooks: the mods are unloaded: run /reload-plugins}" '{systemMessage:$m}' 2>/dev/null
-                       exit 0 ;;
-                esac
-            else
-                # The gesture each cause still pending waits for: one per
-                # message line (`prompt <id>`; an empty file is one message)
-                tg=() title="TRIAGE FIRST — settle the task list left open"
-                n=$(grep -cvxE '(resume)?' "$SDIR/triage-pending" 2>/dev/null); [ -s "$SDIR/triage-pending" ] || n=1
-                if [ "${n:-0}" -gt 1 ] 2>/dev/null; then
-                    title="TRIAGE FIRST — file these $n messages in the task list"
-                    tg+=("$n messages of the user have no task yet, and each needs its own gesture: context on a task → task_update(id, description=…), anything else → a new task (task_create). One task per message, a question included. The task calls alone, before acting:")
-                elif [ "${n:-0}" -eq 1 ] 2>/dev/null; then
-                    title="TRIAGE FIRST — file this message in the task list"
-                    tg+=("This message has no task yet: one task per message of the user, a question included. The task call alone, before acting:")
-                fi
-                if [ "${n:-0}" -ge 1 ] 2>/dev/null; then
-                    tg+=(
-                         "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)"
-                         "a question → task_create(epic=0), left pending, set completed once answered"
-                         "context on the task in progress → task_update(id, description=…) · rework of a completed task → task_create \"Rework #N: …\""
-                         "task_create always names its epic (epic=0 for none): there is no default.")
-                fi
-                grep -qx resume "$SDIR/triage-pending" 2>/dev/null \
-                    && tg+=("The session came back with open tasks: task_update(id, status=…) settles them — in_progress for the one you resume, completed, deleted or waiting for the others.")
-                _block "$title" "${tg[@]}" \
-                    "task_list, task_epic and task_focus do not lift this gate." \
-                    "Reading (Read, Grep, Glob) and ToolSearch stay allowed meanwhile."
-            fi ;;
-    esac
+if [ "$EV" = PreToolUse ] && [ -z "$AID" ] && [ -f "$SDIR/triage-pending" ] && [ "${KODFLOW_TRIAGE:-}" != off ] \
+   && [ "$TOOL" != Bash ] && ! { . "$LIB/readlist.sh" 2>/dev/null && kf_read_tool "$TOOL"; }; then
+    if [ "$BEAT" != 0 ]; then
+        rm -f -- "$SDIR/triage-pending" "$SDIR/triage-wrote" 2>/dev/null
+        # A tool with checks of its own below goes on to them, and the next
+        # prompt says why (on-user.sh); any other leaves here, the one place
+        # it can carry the message.
+        case "$TOOL" in
+            Write|Edit|MultiEdit|NotebookEdit|TaskCreate|TodoWrite|Agent|Task|mcp__github__*|mcp__gitlab__*|mcp__GitKraken__*) ;;
+            *) jq -n -c --arg m "${KF_BEAT_LOST:-kodflow-hooks: the mods are unloaded: run /reload-plugins}" '{systemMessage:$m}' 2>/dev/null
+               exit 0 ;;
+        esac
+    else
+        # What each cause still pending waits for: one per message line
+        # (`prompt <id>`; an empty file is one message)
+        tg=() title="TRIAGE FIRST — settle the task list left open"
+        n=$(grep -cvxE '(resume)?' "$SDIR/triage-pending" 2>/dev/null); [ -s "$SDIR/triage-pending" ] || n=1
+        if [ "${n:-0}" -gt 1 ] 2>/dev/null; then
+            title="TRIAGE FIRST — file the work of these $n messages before writing"
+            tg+=("This call writes, and $n messages of the user have no task yet. A question answered by reading needs none; work that writes needs one. One task call settles every message waiting:")
+        elif [ "${n:-0}" -eq 1 ] 2>/dev/null; then
+            title="TRIAGE FIRST — file this work before writing"
+            tg+=("This call writes, and the user's message has no task yet. A question answered by reading needs none; work that writes needs one. The task call first:")
+        fi
+        if [ "${n:-0}" -ge 1 ] 2>/dev/null; then
+            tg+=(
+                 "new work for an open epic → task_create(epic=id) · new subject → task_epic(title), then task_create(epic=its id)"
+                 "context on the task in progress → task_update(id, description=…) · rework of a completed task → task_create \"Rework #N: …\""
+                 "task_create always names its epic (epic=0 for none): there is no default.")
+        fi
+        grep -qx resume "$SDIR/triage-pending" 2>/dev/null \
+            && tg+=("The session came back with open tasks: task_update(id, status=…) settles them — in_progress for the one you resume, completed, deleted or waiting for the others.")
+        _block "$title" "${tg[@]}" \
+            "task_list, task_epic and task_focus do not lift this gate." \
+            "Reading (Read, Grep, Glob, WebFetch, WebSearch, forge reads), ToolSearch and Bash stay allowed meanwhile. KODFLOW_TRIAGE=off turns this gate off."
+    fi
 fi
 
 # Tools this script has nothing to do with leave at once, unlogged: the
