@@ -78,12 +78,12 @@ silent "Plan review inspection: python3 -m tarfile extract" "python3 -m tarfile 
 silent "a command word the reader cannot see is not reported" 'c=go; $c vet'
 
 echo "-- outside: advice, call goes on"
-outside "sed is outside the Go specialist's scope" "sed -n 1,5p go.mod" "sed"
-outside "a pipe's second command is read" "go list ./... | head -3" "head"
+outside "tar is outside the Go specialist's scope" "tar tf go.mod" "tar"
+outside "a pipe's second command is read" "go list ./... | xz -3" "xz"
 outside "git commit: a subform outside, named with its verb" "git commit -m x" "git commit"
 outside "gh pr create is not gh pr view" "gh pr create --fill" "gh pr"
 outside "nested bash -c is read" "bash -c 'curl -s https://example.org'" "curl"
-outside "several are named once each" "awk 1 go.mod; awk 2 go.mod; sed -n 1p x" ": awk, sed. Fine if the brief allowed it"
+outside "several are named once each" "awk 1 go.mod; awk 2 go.mod; tar tf x" ": awk, tar. Fine if the brief allowed it"
 call "make test && runcap go test"; out=$OUT
 a=$(advice "$out")
 check "every outside command is named" "$(has "$a" "make, runcap" && echo yes)" "$a"
@@ -95,23 +95,28 @@ check "journal line written with the commands" "$(tail -n 1 "$SD/scope.jsonl" 2>
 check "the journal does not keep the command line" "$(grep -c 'runcap go test' "$SD/scope.jsonl" 2>/dev/null | grep -qx 0 && echo yes)"
 
 echo "-- said once per agent and command"
-call "head -1 go.mod" kodflow-specialists:developer-specialist-go same1
-check "first time: said" "$(has "$(advice "$OUT")" ": head. Fine" && echo yes)" "$OUT"
-call "head -2 go.mod" kodflow-specialists:developer-specialist-go same1
+call "xz -1 go.mod" kodflow-specialists:developer-specialist-go same1
+check "first time: said" "$(has "$(advice "$OUT")" ": xz. Fine" && echo yes)" "$OUT"
+call "xz -2 go.mod" kodflow-specialists:developer-specialist-go same1
 check "second time, same agent: silent" "$([ "$RC" = 0 ] && [ -z "$(advice "$OUT")" ] && echo yes)" "$OUT"
-call "head -2 go.mod | tail -1" kodflow-specialists:developer-specialist-go same1
-check "a new command of the same agent: only it is said" "$(has "$(advice "$OUT")" ": tail. Fine" && echo yes)" "$OUT"
-call "head -1 go.mod" kodflow-specialists:developer-specialist-go other1
-check "another agent is told again" "$(has "$(advice "$OUT")" ": head. Fine" && echo yes)" "$OUT"
+call "xz -2 go.mod | zstd -1" kodflow-specialists:developer-specialist-go same1
+check "a new command of the same agent: only it is said" "$(has "$(advice "$OUT")" ": zstd. Fine" && echo yes)" "$OUT"
+call "xz -1 go.mod" kodflow-specialists:developer-specialist-go other1
+check "another agent is told again" "$(has "$(advice "$OUT")" ": xz. Fine" && echo yes)" "$OUT"
 check "the journal keeps every call" "$([ "$(grep -c '"agent_id":"same1"' "$SD/scope.jsonl")" = 3 ] && echo yes)"
-call "sed -n 's/x/github-secret/p' f" kodflow-specialists:developer-executor-correctness
-check "an argument is never copied into the advice" "$(has "$(advice "$OUT")" ": sed. Fine" && ! grep -q github-secret "$SD/scope.jsonl" && echo yes)" "$OUT"
+call "tar -C github-secret f" kodflow-specialists:developer-executor-correctness
+check "an argument is never copied into the advice" "$(has "$(advice "$OUT")" ": tar. Fine" && ! grep -q github-secret "$SD/scope.jsonl" && echo yes)" "$OUT"
 
 echo "-- an existing guard still wins and the advice rides with a notice"
 call "git push --force origin feat"
 check "a forced push is still refused (exit 2)" "$([ "$RC" = 2 ] && echo yes)" "rc=$RC"
-call "git log -1 && wc -l go.mod"
-check "a git line that passes the guards carries the advice" "$([ "$RC" = 0 ] && has "$(advice "$OUT")" ": wc. Fine" && echo yes)" "rc=$RC out=$OUT"
+call "git log -1 && od -c go.mod"
+check "a git line that passes the guards carries the advice" "$([ "$RC" = 0 ] && has "$(advice "$OUT")" ": od. Fine" && echo yes)" "rc=$RC out=$OUT"
+
+echo "-- Plan review mode: the local text readers"
+silent "Plan review inspection: cat" "cat go.mod"
+silent "Plan review inspection: sed -n" "sed -n 1,5p go.mod"
+outside "Plan review inspection: sed -i stays outside" "sed -i s/a/b/ go.mod" "sed"
 
 echo "-- scopes read from the definitions"
 outside "executor-correctness: grep is not in its scope" "grep -rn x ." "grep" kodflow-specialists:developer-executor-correctness
@@ -136,31 +141,31 @@ t0=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000'); call "$long"; t1=$(pe
 sp=$((t1-t0))
 check "a 272 kB heredoc from a specialist: rc 0, no advice" "$([ "$RC" = 0 ] && [ -z "$(advice "$OUT")" ] && echo yes)" "rc=$RC"
 check "within the general-purpose time (${sp} ms vs ${gp} ms)" "$([ "$sp" -le $((gp * 3 / 2 + 300)) ] && echo yes)"
-KF_SCOPE_MAX_CMD=100000000 call "sed -n 1p x # $(printf '%9000s' '')"
-check "the cap is the only reason: under a raised cap the same kind of line is read" "$(has "$(advice "$OUT")" ": sed. Fine" && echo yes)" "$OUT"
+KF_SCOPE_MAX_CMD=100000000 call "tar tf x # $(printf '%9000s' '')"
+check "the cap is the only reason: under a raised cap the same kind of line is read" "$(has "$(advice "$OUT")" ": tar. Fine" && echo yes)" "$OUT"
 
 echo "-- silence on every miss"
-silent "main thread (no agent_id)" "sed -n 1p x" kodflow-specialists:developer-specialist-go ""
-silent "a non-specialist subagent" "sed -n 1p x" general-purpose
-silent "a bare name is not trusted to be the plugin's" "sed -n 1p x" developer-specialist-go
-silent "an agent with no Command scope section" "sed -n 1p x" kodflow-specialists:data-specialist-postgres
-silent "an unknown specialist" "sed -n 1p x" kodflow-specialists:nosuch
-silent "a name that is not a file name" "sed -n 1p x" "kodflow-specialists:../x"
-KODFLOW_SCOPE=off silent "KODFLOW_SCOPE=off" "sed -n 1p x"
+silent "main thread (no agent_id)" "tar tf x" kodflow-specialists:developer-specialist-go ""
+silent "a non-specialist subagent" "tar tf x" general-purpose
+silent "a bare name is not trusted to be the plugin's" "tar tf x" developer-specialist-go
+silent "an agent with no Command scope section" "tar tf x" kodflow-specialists:data-specialist-postgres
+silent "an unknown specialist" "tar tf x" kodflow-specialists:nosuch
+silent "a name that is not a file name" "tar tf x" "kodflow-specialists:../x"
+KODFLOW_SCOPE=off silent "KODFLOW_SCOPE=off" "tar tf x"
 mkdir -p "$CFG/kodflow"; echo off > "$CFG/kodflow/scope-mode"
-silent "scope-mode file off" "sed -n 1p x"
+silent "scope-mode file off" "tar tf x"
 rm -f "$CFG/kodflow/scope-mode"
 printf '{not json' > "$CFG/plugins/installed_plugins.json"
-silent "unreadable installed_plugins.json" "sed -n 1p x"
+silent "unreadable installed_plugins.json" "tar tf x"
 printf '{"version":2,"plugins":{"kodflow-specialists@kodflow":[{"installPath":"%s"}]}}\n' "$T/broken" > "$CFG/plugins/installed_plugins.json"
 mkdir -p "$T/broken/agents"; printf '\000\001garbage' > "$T/broken/agents/developer-specialist-go.md"
-silent "a definition that is not markdown" "sed -n 1p x"
+silent "a definition that is not markdown" "tar tf x"
 chmod 000 "$T/broken/agents/developer-specialist-go.md"
-silent "an unreadable definition" "sed -n 1p x"
+silent "an unreadable definition" "tar tf x"
 chmod 644 "$T/broken/agents/developer-specialist-go.md"
 PATH_SAVE=$PATH
 mkdir -p "$T/nojq"; for b in bash sh cat tr date mkdir awk sed grep head printf; do p=$(command -v $b) && ln -sf "$p" "$T/nojq/$b"; done
-out=$(jq -c '.payload | .tool_input.command = "sed -n 1p x"' "$FX" | PATH=$T/nojq "$SH" "$S" 2>/dev/null); RC=$?
+out=$(jq -c '.payload | .tool_input.command = "tar tf x"' "$FX" | PATH=$T/nojq "$SH" "$S" 2>/dev/null); RC=$?
 PATH=$PATH_SAVE
 check "no jq: exit 0, nothing printed" "$([ "$RC" = 0 ] && [ -z "$out" ] && echo yes)" "rc=$RC out=$out"
 
