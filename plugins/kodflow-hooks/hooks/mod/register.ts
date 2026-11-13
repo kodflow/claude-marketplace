@@ -438,6 +438,8 @@ let readList: string[] | undefined;
 async function markWrite($: any, e: any): Promise<void> {
   if (!mainLoop(e.agentId) || e.tool === "Bash" || taskTool(e.tool)) return;
   if (await off($)) return;
+  // KODFLOW_TRIAGE=off: no gate, no reminder, nothing to mark
+  if (isOff(await $.env.get("KODFLOW_TRIAGE"))) return;
   if (!readList) {
     const text = await $.fs
       .read(`${$.plugin.root}/hooks/scripts/lib/read-tools.txt`)

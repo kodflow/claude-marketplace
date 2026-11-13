@@ -751,6 +751,14 @@ beat; run PreToolUse mcp__github__mark_all_notifications_read '{"tool_input":{}}
 expect_rc "a forge write ending in _read is gated (exact names only)" 2
 beat; run PreToolUse mcp__someone__do_thing '{"tool_input":{}}' on-tool.sh; expect_rc "a tool nobody listed is a write" 2
 beat; KODFLOW_TRIAGE=off write_file;                                  expect_rc "KODFLOW_TRIAGE=off lifts the gate" 0
+for tool in mcp__context7__resolve-library-id mcp__context7__query-docs ListMcpResourcesTool ReadMcpResourceTool ReadMcpResourceDirTool; do
+    beat; run PreToolUse "$tool" '{"tool_input":{}}' on-tool.sh; expect_rc "a question's read-only $tool stays allowed" 0
+done
+# The shell reader trims a name as the mod does (blanks, a CR) and never takes a bare `*`
+RL=$T/readlist; mkdir -p "$RL"; cp "$S/lib/readlist.sh" "$RL/"
+printf '  Read \r\n*\r\nmcp__context7__query-docs\r\n' > "$RL/read-tools.txt"
+got=$(bash -c '. "$1/readlist.sh"; for n in Read mcp__context7__query-docs Edit Write; do kf_read_tool "$n" && printf "%s " "$n"; done' _ "$RL")
+[ "$got" = "Read mcp__context7__query-docs " ] && ok "readlist.sh trims blanks and a CR, a bare * lists nothing" || bad "readlist trim" "$got"
 # A session back with open tasks: its own cause and gesture
 printf 'resume\n' > "$TP"; beat; write_file;                          expect_rc "a resume cause alone holds the gate" 2
 printf '%s' "$ERR" | grep -q 'settle the task list' && printf '%s' "$ERR" | grep -q 'task_update(id, status=' \
@@ -840,6 +848,18 @@ printf '%s' "$C" | grep -qF 'Épiques : active #2 SDK status-line 0/1, en cours 
     && ok "the epic state in French" || bad "fr epics" "$C"
 [ "${#C}" -lt 1000 ] && ok "with the epic state, French, under 1000 characters (${#C})" || bad "fr size state" "${#C}"
 rm -f "$T/home/.claude/settings.json" "$SD/tasks.json" "$SD/triage-pending"
+
+echo "== KODFLOW_TRIAGE=off · no triage end to end"
+mkdir -p "$SD"; rm -f "$SD/triage-pending"; beat
+OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"fais un truc"}' \
+    | KODFLOW_TRIAGE=off bash "$S/on-user.sh" 2>/dev/null)
+! printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // ""' | grep -q 'TRIAGE' && [ ! -f "$SD/triage-pending" ] \
+    && ok "off: no triage directive, no cause raised" || bad "triage off user" "$OUT"
+printf 'prompt\n' > "$SD/triage-pending"; : > "$SD/triage-wrote"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said" "$T/tmp/sp/turn-system"
+OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}' \
+    | KODFLOW_TRIAGE=off bash "$S/on-stop.sh" 2>/dev/null)
+! printf '%s' "$OUT" | grep -q 'with no task' && ok "off: no Stop reminder" || bad "triage off stop" "$OUT"
+rm -f "$SD/triage-pending" "$SD/triage-wrote" "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
 
 echo "== Stop · a message the turn never filed"
 SDS=$SD; mkdir -p "$SDS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/turn-system"
@@ -961,6 +981,13 @@ printf '\n# edited\n' >> "$CP/scripts/on-tool.sh"; start_copy
 printf '%s' "$OUT" | jq -e '(.systemMessage | test("scripts/on-tool.sh differs from its published fingerprint")) and (.hookSpecificOutput.additionalContext | test("on-tool.sh differs"))' >/dev/null 2>&1 \
     && ok "an edited on-tool.sh raises a visible warning" || bad "fingerprint edited" "$OUT"
 cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/on-tool.sh" "$CP/scripts/on-tool.sh"
+# The triage gate's read list and its reader, and the beat that arms it, are guards too
+for g in lib/read-tools.txt lib/readlist.sh lib/beat.sh; do
+    printf '\nEdit\n' >> "$CP/scripts/$g"; start_copy
+    printf '%s' "$OUT" | jq -e --arg g "scripts/$g differs" '.systemMessage | contains($g)' >/dev/null 2>&1 \
+        && ok "an edited $g raises a visible warning" || bad "fingerprint $g" "$OUT"
+    cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/$g" "$CP/scripts/$g"
+done
 MK=$CLAUDE_CONFIG_DIR/plugins/marketplaces/kodflow/plugins/kodflow-hooks/hooks; mkdir -p "$MK"
 cp "$CP/fingerprints.sha256" "$MK/"; start_copy
 { [ -z "$OUT" ] || printf '%s' "$OUT" | jq -e '.systemMessage // "" | test("marketplace") | not' >/dev/null 2>&1; } \

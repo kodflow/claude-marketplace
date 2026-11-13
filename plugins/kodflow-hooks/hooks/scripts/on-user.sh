@@ -93,7 +93,8 @@ UserPromptSubmit)
         # loses the other's; a lock not obtained in 2 s is written through.
         # Only while the task tools answer: a gate nothing can lift would
         # stop the session.
-        [ "$BEAT" = 0 ] && mkdir -p "$SDIR" 2>/dev/null && (
+        # KODFLOW_TRIAGE=off: no cause raised, no directive below.
+        [ "$BEAT" = 0 ] && [ "${KODFLOW_TRIAGE:-}" != off ] && mkdir -p "$SDIR" 2>/dev/null && (
             . "$LIB/lock.sh" 2>/dev/null && kf_lock "$SDIR/.triage.lock.d" 2
             printf 'prompt %s-%s-%s\n' "$(date +%s)" "$$" "$RANDOM" >> "$SDIR/triage-pending"
         ) 2>/dev/null
@@ -204,7 +205,7 @@ UserPromptSubmit)
     # Kept short: it rides on every prompt.
     # A system turn brought no message to sort: the state above is what it
     # needs, the directive would only send it triaging a notification.
-    [ -z "$SYSTURN" ] && [ "$BEAT" = 0 ] && ctx="${ctx:+$ctx$NL}$(kf_msg user.triage)"
+    [ -z "$SYSTURN" ] && [ "$BEAT" = 0 ] && [ "${KODFLOW_TRIAGE:-}" != off ] && ctx="${ctx:+$ctx$NL}$(kf_msg user.triage)"
     # Code in a repository is delegated to subagents (the PreToolUse gate of
     # on-tool.sh and the Stop rule enforce it); off with KODFLOW_ROOT=off.
     [ "${KODFLOW_ROOT:-}" != off ] && ctx="${ctx:+$ctx$NL}$(kf_msg user.root)"

@@ -2,9 +2,10 @@
 # they never write. Read by on-tool.sh (its fast path and its gate, through
 # readlist.sh) and by the mod (register.ts), so the three agree.
 #
-# One exact tool name per line. A line ending in `*` is a prefix; only the
-# two task-tool prefixes below are allowed one (tests/mod and test_hooks.sh
-# hold it). A tool absent from this list is a write: the gate refuses it
+# One exact tool name per line, surrounding blanks (a CR included) ignored.
+# A line ending in `*` is a prefix; only the two task-tool prefixes below are
+# allowed one (tests/mod and test_hooks.sh hold it), and a bare `*` is
+# ignored by both readers: it would list every tool. A tool absent from this list is a write: the gate refuses it
 # while a message waits for its task, and the mod notes the attempt
 # (triage-wrote). Bash is not here: the gate lets it through on its own
 # checks, and it marks nothing.
@@ -19,6 +20,11 @@ ToolSearch
 AskUserQuestion
 WebFetch
 WebSearch
+ListMcpResourcesTool
+ReadMcpResourceTool
+ReadMcpResourceDirTool
+mcp__context7__resolve-library-id
+mcp__context7__query-docs
 mcp__kodflow-hooks__task_*
 mcp__plugin_kodflow-hooks_tasks__task_*
 mcp__github__get_commit

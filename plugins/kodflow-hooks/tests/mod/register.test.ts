@@ -438,6 +438,16 @@ test("triage: a Skill an inner hook refuses, and a forge write ending in _read, 
   expect(h.files.has(WROTE)).toBe(true);
 });
 
+test("triage: KODFLOW_TRIAGE=off marks nothing", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off", KODFLOW_TRIAGE: "off" });
+  h.files.set("*/hooks/scripts/lib/read-tools.txt", READ_LIST);
+  on("tool.call", async () => plain());
+  await start($);
+  h.files.set(TP, "prompt\n");
+  await $.tool.call({ tool: "Edit", file_path: "/repo/a", old_string: "a", new_string: "b" } as any);
+  expect(h.files.has(WROTE)).toBe(false);
+});
+
 test("triage: a subagent's calls mark nothing", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
   h.files.set("*/hooks/scripts/lib/read-tools.txt", READ_LIST);

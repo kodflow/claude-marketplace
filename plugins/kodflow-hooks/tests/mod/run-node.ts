@@ -744,7 +744,8 @@ console.log("== triage: the read list (hooks/scripts/lib/read-tools.txt)");
     JSON.stringify(prefixes),
   );
   check(!list.some((l) => /[?[\]]/.test(l) || (l.includes("*") && !l.endsWith("*"))), "no other pattern");
-  for (const tool of ["Read", "Glob", "Grep", "LS", "ToolSearch", "AskUserQuestion", "WebFetch", "WebSearch", "mcp__github__get_me"])
+  for (const tool of ["Read", "Glob", "Grep", "LS", "ToolSearch", "AskUserQuestion", "WebFetch", "WebSearch", "mcp__github__get_me",
+    "mcp__context7__resolve-library-id", "mcp__context7__query-docs", "ListMcpResourcesTool", "ReadMcpResourceTool", "ReadMcpResourceDirTool"])
     check(isReadTool(list, tool), `${tool} reads`);
   for (const tool of ["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "Agent", "Skill", "mcp__github__mark_all_notifications_read", "mcp__github__create_pull_request", "mcp__x_tasks__task_create"])
     check(!isReadTool(list, tool), `${tool} is not on the read list`);

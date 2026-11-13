@@ -307,6 +307,11 @@ test("triage: the read list, the write mark, one gesture settling all", () => {
   // Exact names only: a forge write ending in _read is a write
   expect(isReadTool(list, "mcp__github__mark_all_notifications_read")).toBe(false);
   expect(isReadTool(parseReadList(undefined), "Read")).toBe(false);
+  // Blanks and a CR around a name go; a bare `*` lists nothing
+  const odd = parseReadList("  Read \r\n*\r\nmcp__context7__query-docs\r\n");
+  expect(odd).toEqual(["Read", "mcp__context7__query-docs"]);
+  expect(isReadTool(odd, "Edit")).toBe(false);
+  expect(isReadTool(parseReadList("*\n"), "Write")).toBe(false);
   expect(triesToWrite(list, "Edit", undefined)).toBe(true);
   expect(triesToWrite(list, "Skill", undefined)).toBe(true);
   expect(triesToWrite(list, "Bash", undefined)).toBe(false);

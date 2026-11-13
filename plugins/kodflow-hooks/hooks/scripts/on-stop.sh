@@ -192,7 +192,8 @@ fi
 # minutes old; a beat that never came means the gate was never raised, and
 # with the mod gone the next prompt lifts the gate (on-user.sh).
 tp=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID/triage-pending
-if [ -f "$tp" ] && [ -f "${tp%/*}/mod-beat" ]; then
+# KODFLOW_TRIAGE=off: no triage at all, so nothing to remind.
+if [ "${KODFLOW_TRIAGE:-}" != off ] && [ -f "$tp" ] && [ -f "${tp%/*}/mod-beat" ]; then
     if [ ! -f "$STATE/turn-system" ]; then
         # One line per message not filed yet (`prompt <id>`); an empty file is one
         n=$(grep -cvxE '(resume)?' "$tp" 2>/dev/null); [ -s "$tp" ] || n=1
