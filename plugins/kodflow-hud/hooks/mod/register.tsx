@@ -192,9 +192,6 @@ let modelsPath = "";
 let lastText: string | undefined;
 let lastCi = 0;
 let home: string | undefined;
-// A poll could not read the agents: the next one that can is the reference,
-// and what moved meanwhile is recorded without a toast
-let blind = false;
 // /hunt's files as the last poll read them, side by side: a poll that reads
 // the same text changes nothing (two whole rewrites in one tick can keep the
 // time and the size, never the text)
@@ -377,6 +374,10 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
     const list = await listAgents($);
     if (list.ok && !same(await read($, agentsAtom), list.agents))
       await update($, agentsAtom, () => list.agents);
+    // The last poll could not read the agents: this one, if it can, is the
+    // reference, and what moved meanwhile is recorded without a toast. Read
+    // from `$.state`, which outlives a reload of the module, before it moves
+    const blind = (await read($, livenessAtom)) === UNKNOWN;
     const standing = list.ok ? "" : UNKNOWN;
     if ((await read($, livenessAtom)) !== standing)
       await update($, livenessAtom, () => standing);
@@ -405,11 +406,10 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
 
     // The toasts need to know who stands: without the list, none is raised
     // nor recorded, and the next poll that reads it is the reference
-    if (!list.ok) blind = true;
     if (list.ok && board) {
       const ctx = ctxOf(now, list.agents, await read($, activityAtom), silentMs);
-      const baseline = (await read($, primedAtom)) !== session || blind;
-      blind = false;
+      let baseline = (await read($, primedAtom)) !== session;
+      baseline ||= blind;
       const toasted = await read($, toastedAtom);
       // What is shown, and the orphans of the epics not closed: a task left
       // in progress by a stopped subagent is said once, as stopped

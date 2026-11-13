@@ -201,6 +201,8 @@ test("an epic idle for 24 h is marked, one with a live worker on it is not", () 
     [1, true],
     [2, false],
   ]);
+  // Who stands unknown (the list not read): nothing is folded as idle
+  expect(parseBoard(f, NOW).epics.some((e) => e.idle)).toBe(false);
 });
 
 test("an in-progress task is silent when its worker stopped, or after the quiet time", () => {
