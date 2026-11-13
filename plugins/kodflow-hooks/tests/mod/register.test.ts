@@ -119,7 +119,7 @@ function host(on: any, env: Record<string, string>): Host {
       case "rmdir":
         return done(h.dirs.delete(argv[1]!) ? 0 : 1);
       case "rm":
-        h.files.delete(argv[2]!);
+        for (const path of argv.slice(1)) if (path !== "-f") h.files.delete(path);
         return done(0);
       case "mv": {
         const [from, to] =
@@ -379,6 +379,104 @@ test("one gesture per message: two prompts need two filing calls", async ($, on)
   // Under its own lock, released, nothing left beside it
   expect(h.dirs.has(`${DIR}/.triage.lock.d`)).toBe(false);
   expect([...h.files.keys()].filter((k) => k.endsWith(".tmp"))).toEqual([]);
+});
+
+// The read list as the shell and the mod read it, planted under the plugin root
+const READ_LIST =
+  "# list\nRead\nGlob\nGrep\nLS\nToolSearch\nAskUserQuestion\nWebFetch\nWebSearch\n" +
+  "mcp__kodflow-hooks__task_*\nmcp__plugin_kodflow-hooks_tasks__task_*\nmcp__github__get_me\n";
+const WROTE = `${DIR}/triage-wrote`;
+const plain = () => ({ result: { stdout: "", stderr: "", interrupted: false } }) as any;
+
+test("triage: a question that reads, or Bash alone, marks nothing", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  h.files.set("*/hooks/scripts/lib/read-tools.txt", READ_LIST);
+  on("tool.call", async () => plain());
+  await start($);
+  h.files.set(TP, "prompt\n");
+  for (const tool of ["Read", "Grep", "WebFetch", "WebSearch", "mcp__github__get_me"])
+    await $.tool.call({ tool, file_path: "/repo/x" } as any);
+  await $.tool.call({ tool: "Bash", command: "ls" } as any);
+  expect(h.files.has(WROTE)).toBe(false);
+  expect(h.files.get(TP)).toBe("prompt\n");
+});
+
+test("triage: a write tried by the main loop is marked before it runs, refused or not", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  h.files.set("*/hooks/scripts/lib/read-tools.txt", READ_LIST);
+  let seen: boolean | undefined;
+  // What stands beneath the mod's hooks (the shell's gate inside next)
+  // refuses the Edit: the mark is already there when it runs
+  on("tool.call", { tool: "Edit" }, async () => {
+    seen = h.files.has(WROTE);
+    return { deny: "TRIAGE FIRST" } as any;
+  });
+  on("tool.call", async () => plain());
+  await start($);
+  // No gate up: nothing to mark
+  await $.tool.call({ tool: "Edit", file_path: "/repo/a", old_string: "a", new_string: "b" } as any);
+  expect(h.files.has(WROTE)).toBe(false);
+  h.files.set(TP, "prompt\n");
+  const r: any = await $.tool.call({ tool: "Edit", file_path: "/repo/a", old_string: "a", new_string: "b" } as any);
+  expect(refusal(r)).toContain("TRIAGE FIRST");
+  expect(seen).toBe(true);
+  expect(h.files.has(WROTE)).toBe(true);
+});
+
+test("triage: a Skill an inner hook refuses, and a forge write ending in _read, are marked", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  h.files.set("*/hooks/scripts/lib/read-tools.txt", READ_LIST);
+  on("tool.call", { tool: "Skill" }, async () => ({ deny: "refused inside" }) as any);
+  on("tool.call", async () => plain());
+  await start($);
+  h.files.set(TP, "prompt\n");
+  const r: any = await $.tool.call({ tool: "Skill", skill: "x" } as any);
+  expect(refusal(r)).toContain("refused inside");
+  expect(h.files.has(WROTE)).toBe(true);
+  h.files.delete(WROTE);
+  await $.tool.call({ tool: "mcp__github__mark_all_notifications_read" } as any);
+  expect(h.files.has(WROTE)).toBe(true);
+});
+
+test("triage: a subagent's calls mark nothing", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  h.files.set("*/hooks/scripts/lib/read-tools.txt", READ_LIST);
+  on("tool.call", async () => plain());
+  await start($);
+  h.files.set(TP, "prompt\n");
+  await $.tool.call({ tool: "Bash", command: "ls", agentId: "a1" } as any);
+  await $.tool.call({ tool: "Edit", file_path: "/w/a", old_string: "a", new_string: "b", agentId: "a1" } as any);
+  expect(h.files.has(WROTE)).toBe(false);
+});
+
+test("triage: after a write was tried, the first task gesture settles every cause", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  h.files.set("*/hooks/scripts/lib/read-tools.txt", READ_LIST);
+  on("tool.call", async () => plain());
+  await start($);
+  h.files.set(TP, "prompt 1\nprompt 2\nresume\n");
+  await $.tool.call({ tool: "Write", file_path: "/repo/a", content: "x" } as any);
+  expect(h.files.has(WROTE)).toBe(true);
+  // Reading or steering the list settles nothing, mark or not
+  await $.tool.call({ tool: T("task_list") } as any);
+  expect(h.files.get(TP)).toBe("prompt 1\nprompt 2\nresume\n");
+  await $.tool.call({ tool: T("task_create"), subject: "Do it", epic: 0 } as any);
+  expect(h.files.has(TP)).toBe(false);
+  expect(h.files.has(WROTE)).toBe(false);
+  expect(h.dirs.has(`${DIR}/.triage.lock.d`)).toBe(false);
+});
+
+test("triage: an unreadable read list marks every tool but Bash, and is read again", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  on("tool.call", async () => plain());
+  await start($);
+  h.files.set(TP, "prompt\n");
+  await $.tool.call({ tool: "Read", file_path: "/repo/x" } as any);
+  expect(h.files.has(WROTE)).toBe(true);
+  h.files.delete(WROTE);
+  h.files.set("*/hooks/scripts/lib/read-tools.txt", READ_LIST);
+  await $.tool.call({ tool: "Read", file_path: "/repo/x" } as any);
+  expect(h.files.has(WROTE)).toBe(false);
 });
 
 test("a subagent's task call never touches the gate", async ($, on) => {
@@ -693,21 +791,6 @@ test("journal: a refusal of the mod is logged once, with no journal of refusals"
   const sent = h.stdins.map((t) => JSON.parse(t));
   expect(sent.filter((p) => p.reason === "guards:deny").length).toBe(1);
   expect(sent.filter((p) => "block" in p)).toEqual([]);
-});
-  on("tool.call", { tool: "Bash" }, async () => out("") as any);
-  await start($);
-  await $.tool.call({ tool: "Bash", command: "git commit -n -m x" } as any);
-  await $.tool.call({ tool: "Bash", command: "git status" } as any);
-  // journal() is fire-and-forget: let its process.run land
-  for (let i = 0; i < 50 && !h.stdins.some((t) => t.includes('"block"')); i++)
-    await new Promise((r) => setTimeout(r, 10));
-  const sent = h.stdins.map((t) => JSON.parse(t));
-  const denied = sent.filter((p) => p.reason === "guards:deny");
-  expect(denied.length).toBe(1);
-  expect(denied[0].block.motif).toBe("no-verify");
-  expect(denied[0].block.title).toContain("skipping git hooks");
-  expect(Object.keys(denied[0].block).sort()).toEqual(["motif", "title"]);
-  expect(sent.filter((p) => p.block && p.reason !== "guards:deny")).toEqual([]);
 });
 
 // The vendored rules' shape (hooks/patterns), in miniature: a plugin test

@@ -65,9 +65,12 @@ _continue() {
     open=$(jq -r -L "$LIB" --argjson ag "$ag" --argjson cut "$(( $(date +%s) - 43200 ))" '
         include "epics"; v2
         | def alive: type == "object" and .stopped == null and (.started // 0) >= $cut;
-          def settled($s): $s == null or $s == "completed" or $s == "deleted";
-        [.epics[] | select((.agent // "main") == "main") | .id] as $eps
-        | (reduce (.tasks[] | select((.agent // "main") == "main")) as $t ({}; .[$t.id | tostring] = $t.status)) as $st
+          def settled($s): $s == null or $s == "completed" or $s == "deleted";   # deleted: gone from the list
+        [.epics[] | select((.agent // "main") == "main" and (closed | not)) | .id] as $eps
+        | closed_ids as $shut
+        # A blocker in a closed epic is settled like a completed one
+        | (reduce (.tasks[] | select((.agent // "main") == "main")) as $t ({};
+              .[$t.id | tostring] = (if any($shut[]; . == ($t.epic // 0)) then "completed" else $t.status end))) as $st
         | .tasks[] | select((.agent // "main") == "main")
         | (.epic // 0) as $e | select($e != 0 and any($eps[]; . == $e))
         | select((.status == "pending"
@@ -127,23 +130,10 @@ ctx=""
 kf_msg_color 1
 _add() { [ -n "$1" ] && ctx="${ctx:+$ctx$NL}$1"; }
 
-# _say CAUSE STATE KEY [name=value...]: one line per cause, said once per
-# state; returns 0 when it said it. stop-said holds, per cause, the fingerprint of the state last
-# reported: the same state is not reported twice in a row, a changed one
-# is, and a cause that clears (STATE empty) drops its record, so the same
-# state coming back later is reported again.
-_say() {
-    local cause=$1 st=$2 f=$STATE/stop-said sig; shift 2
-    if [ -z "$st" ]; then
-        [ -f "$f" ] && { grep -v "^$cause	" "$f" > "$f.$$" 2>/dev/null; mv -f "$f.$$" "$f" 2>/dev/null; }
-        return 1
-    fi
-    sig=$(printf '%s' "$st" | cksum | cut -d' ' -f1)
-    grep -qxF "$cause	$sig" "$f" 2>/dev/null && return 1
-    { grep -v "^$cause	" "$f" 2>/dev/null; printf '%s\t%s\n' "$cause" "$sig"; } > "$f.$$" 2>/dev/null && mv -f "$f.$$" "$f" 2>/dev/null
-    _add "$(kf_msg "$@")"
-    return 0
-}
+# _say CAUSE STATE KEY [name=value...] (lib/say.sh): one line per cause,
+# said once per state, in $STATE/stop-said.
+_say() { return 1; }
+. "$LIB/say.sh" 2>/dev/null
 
 # This session's edits, from the tracker on-tool.sh fills. ktn-linter runs
 # at PostToolUse on the file just edited (lib/lint.sh), not here: a report at
@@ -190,11 +180,13 @@ if [ -n "$edited" ]; then
     [ -n "$due" ] && _add "$(kf_msg stop.claudemd dirs="$due")"
 fi
 
-# A message the turn never filed. triage-pending still there at the end of
-# the turn means no task call settled it (on-tool.sh; the mod lifts it cause
-# by cause): typically a question answered with no task, or a session resumed
-# and never reconciled. Not blocking, once per state of the file (a new
-# message is a new state). Not on a system turn (on-user.sh's turn-system):
+# A message the turn never filed, and work it tried to write regardless.
+# triage-pending still there at the end of the turn means no task call
+# settled it; a question answered by reading needs no task, so the reminder
+# comes only once the turn tried a tool off the read list (the mod writes
+# triage-wrote before the call runs, refused or not). A session resumed and
+# never reconciled is said either way. Not blocking, once per state of the
+# file (a new message is a new state). Not on a system turn (on-user.sh's turn-system):
 # it brought no message to file. The beat is not asked to be fresh: the mod
 # beats on prompts and tool calls only, so a turn spent answering leaves it
 # minutes old; a beat that never came means the gate was never raised, and
@@ -205,7 +197,8 @@ if [ -f "$tp" ] && [ -f "${tp%/*}/mod-beat" ]; then
         # One line per message not filed yet (`prompt <id>`); an empty file is one
         n=$(grep -cvxE '(resume)?' "$tp" 2>/dev/null); [ -s "$tp" ] || n=1
         st=$(grep -vx resume "$tp" 2>/dev/null); [ -n "$st" ] || st="one"
-        if [ "${n:-0}" -gt 1 ] 2>/dev/null; then _say triage "$st" stop.triage.many n="$n"
+        if [ ! -f "${tp%/*}/triage-wrote" ]; then _say triage ""
+        elif [ "${n:-0}" -gt 1 ] 2>/dev/null; then _say triage "$st" stop.triage.many n="$n"
         elif [ "${n:-0}" -eq 1 ] 2>/dev/null; then _say triage "$st" stop.triage.one
         else _say triage ""; fi
         if grep -qx resume "$tp" 2>/dev/null; then _say resume resume stop.resume; else _say resume ""; fi
@@ -248,7 +241,8 @@ if [ -s "$mcp_tasks" ]; then
           def minus($xs): [.[] | . as $t | select(any($xs[]; .id == $t.id) | not)];
         [$ag[] | select(alive)] as $alive
         | ([$alive[] | .epic // 0] | unique) as $cov
-        | [.tasks[] | select((.agent // "main") == "main")] as $main
+        | closed_ids as $shut
+        | [.tasks[] | select((.agent // "main") == "main") | (.epic // 0) as $e | select(any($shut[]; . == $e) | not)] as $main
         | [$main[] | select(.status == "in_progress")] as $ip
         | [$ip[] | select((.worker // "") != "" and (runs(.) | not))] as $stopped
         | [$ip[] | select((.worker // "") != "" and runs(.))] as $live
@@ -261,8 +255,7 @@ if [ -s "$mcp_tasks" ]; then
            then [$act[] | select(.status == "pending")] else [] end) as $idle
         | ([$main[] | select((.epic // 0) == 0 and .status == "pending")] | minus($idle)) as $loose
         | ["stopped", ($stopped | ids)], ["unattended", ($unatt | ids)],
-          ["overcount", ($over | ids), $nb, $w], ["idle", ($idle | ids)], ["loose", ($loose | ids)],
-          ($stopped[] | ["orphan", .id, (.subject // ""), .worker])
+          ["overcount", ($over | ids), $nb, $w], ["idle", ($idle | ids)], ["loose", ($loose | ids)]
         | map(tostring | gsub("[\u0000-\u001f]"; " ")) | join("\u001f")' "$mcp_tasks" 2>/dev/null)
 fi
 builtin=""

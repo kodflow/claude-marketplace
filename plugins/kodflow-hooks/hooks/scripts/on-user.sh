@@ -67,7 +67,7 @@ UserPromptSubmit)
     kf_lang "$PROJECT_DIR"
     msg=""
     case "$BEAT" in
-        1) msg=$(kf_msg user.beat_lost); msg=${msg:-$KF_BEAT_LOST}; rm -f -- "$SDIR/triage-pending" 2>/dev/null ;;
+        1) msg=$(kf_msg user.beat_lost); msg=${msg:-$KF_BEAT_LOST}; rm -f -- "$SDIR/triage-pending" "$SDIR/triage-wrote" 2>/dev/null ;;
         2) if [ "${KODFLOW_MOD:-}" != off ] && [ ! -f "$STATE/mod-absent-said" ]; then
                msg=$(kf_msg user.mod_absent)
                mkdir -p "$STATE" 2>/dev/null && : > "$STATE/mod-absent-said" 2>/dev/null
@@ -84,9 +84,9 @@ UserPromptSubmit)
         # counter starts over. A system turn is not the user back in control —
         # resetting there would let a notification/feedback loop run forever.
         rm -f -- "$STATE/stop-count" 2>/dev/null
-        # Every message is triaged into the task list before anything is done
-        # about it: on-tool.sh refuses acting tools until the mod settles this
-        # message (a task of its own, or context on the task in progress).
+        # Every message is a cause of the triage gate: on-tool.sh refuses the
+        # tools that write (off lib/read-tools.txt; Bash passes) until the mod
+        # settles it (a task of its own, or context on the task in progress).
         # One line per message, `prompt <id>`, so two messages sent before
         # the first is filed need two gestures. Appended under the lock the
         # mod takes to drop a line (register.ts settleTriage): neither write
@@ -128,8 +128,10 @@ UserPromptSubmit)
               [epic_rows("main")] as $rows
             | ($rows | map(select(.id == $a)) | .[0]) as $act
             | ($rows | map(select(.id != $a and .done < .total)) | sort_by(-.touched) | .[:5]) as $others
+            | closed_ids as $shut
             | ([.tasks[] | select((.agent // "main") == "main" and (.epic // 0) == 0 and .status != "completed")] | length) as $loose
-            | [.tasks[] | select((.agent // "main") == "main" and .assignee == "human" and .status != "completed")] as $human
+            | [.tasks[] | select((.agent // "main") == "main" and .assignee == "human" and .status != "completed")
+                        | (.epic // 0) as $e | select(any($shut[]; . == $e) | not)] as $human
             | if $act == null and ($others | length) == 0 and $loose == 0 and ($human | length) == 0 then empty else
                 [ (if $act then "\(t("user.epics.active")) #\($act.id) \($act.title) \($act.done)/\($act.total)"
                       + (if $act.current then ", \(t("user.epics.in_progress")) #\($act.current.id) \($act.current.subject)" else "" end)
@@ -139,6 +141,25 @@ UserPromptSubmit)
                   (if ($human | length) > 0 then t("user.epics.human") + ($human | map("#\(.id) \(.subject)") | join("; ")) + t("user.epics.human_tail") else empty end)
                 ] | t("user.epics") + join(" · ") end' "$tasks" 2>/dev/null)
         [ -n "$state" ] && ctx="${ctx:+$ctx$NL}$state"
+        # An open epic idle for 24 h (lib/epics.jq `idle`, live workers read
+        # from agents.json as on-stop.sh does): closing it is proposed once
+        # per idle period, the period known by the epic's last activity
+        # (lib/say.sh, in $STATE/user-said).
+        ag='{}'
+        [ -s "$SDIR/agents.json" ] && ag=$(jq -c '.agents // {} | if type == "object" then . else {} end' "$SDIR/agents.json" 2>/dev/null)
+        [[ $ag == \{* ]] || ag='{}'
+        idle=$(jq -r -L "$LIB" --argjson ag "$ag" --argjson now "$(date +%s)" 'include "epics"; v2
+            | .tasks as $tasks | live_ids($ag; $now) as $live | active("main") as $a
+            # open: not closed, and a task left to do or the active epic
+            | [.epics[] | select((.agent // "main") == "main" and (closed | not)) | .id as $id
+               | select($id == $a or any($tasks[] | objects; (.agent // "main") == "main" and (.epic // 0) == $id and .status != "completed"))
+               | select(idle($tasks; $now; $live))
+               | . as $e | "#\(.id) \(.title // "")\u001f\(.id):\([$e.touched, ($tasks[] | objects | select((.agent // "main") == "main" and (.epic // 0) == $e.id) | .updated)] | map(select(type == "number")) | max // 0)"]
+            | (map(split("\u001f")[0]) | join(", ")) + "\u001f" + (map(split("\u001f")[1]) | join(" "))' "$tasks" 2>/dev/null)
+        _add() { [ -n "$1" ] && ctx="${ctx:+$ctx$NL}$1"; }
+        _say() { return 1; }
+        . "$LIB/say.sh" 2>/dev/null
+        KF_SAY_FILE=$STATE/user-said _say idle "${idle#*$'\x1f'}" user.epics.idle epics="${idle%%$'\x1f'*}"
     fi
 
     # What the cleanup after a completed task or epic did, or left and why
@@ -176,10 +197,10 @@ UserPromptSubmit)
         [ -n "$notes" ] && ctx="${ctx:+$ctx$NL}$notes"
     fi
 
-    # Every message is sorted before any work, so a remark about the task in
+    # Work is filed before anything is written, so a remark about the task in
     # progress does not become a new task and a new subject does not become
-    # the tail of an unrelated epic; a question gets a task of its own, closed
-    # once answered. Given whenever the task tools answer.
+    # the tail of an unrelated epic; a question answered by reading needs no
+    # task. Given whenever the task tools answer.
     # Kept short: it rides on every prompt.
     # A system turn brought no message to sort: the state above is what it
     # needs, the directive would only send it triaging a notification.

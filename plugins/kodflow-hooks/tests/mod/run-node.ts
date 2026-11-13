@@ -26,7 +26,9 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { conformance } from "./conformance.ts";
 import { lock, mutate, unlock, type Port } from "../../hooks/mod/store.ts";
-import { plan } from "../../hooks/mod/tasks.ts";
+import { closed, idle, plan } from "../../hooks/mod/tasks.ts";
+import { isReadTool, parseReadList } from "../../hooks/mod/calls.ts";
+import { EPIC_PREDICATES_JSON } from "./epic-predicates.ts";
 import { goModuleOf } from "../../hooks/mod/lint.ts";
 import { decide, replay, type Row } from "./corpus.ts";
 import { forgeMcpJson } from "../../hooks/mod/guards.ts";
@@ -48,6 +50,7 @@ import { TIER_VECTORS_JSONL } from "./tier-vectors.ts";
 import {
   claim,
   closingOf,
+  closingOfEpic,
   note,
   worktreePaths,
 } from "../../hooks/mod/cleanup.ts";
@@ -528,15 +531,15 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
   let before = structuredClone(data);
   apply("task_update", "main", { id: "1", status: "completed" });
   check(
-    eq(closingOf(before, data, "#1"), { workers: ["agent-1"], epic: 1, epicClosed: false }),
+    eq(closingOf(before, data, "#1"), { workers: ["agent-1"], epic: 1, epicDone: false }),
     "a completed task names its worker, epic still open",
     JSON.stringify(closingOf(before, data, "#1")),
   );
   before = structuredClone(data);
   apply("task_update", "main", { id: "2", status: "completed" });
   check(
-    eq(closingOf(before, data, "2"), { workers: [], epic: 1, epicClosed: true }),
-    "the last task of an epic closes it",
+    eq(closingOf(before, data, "2"), { workers: ["agent-1"], epic: 1, epicDone: true }),
+    "the last task of an epic ends it, with every worker its tasks ever had",
     JSON.stringify(closingOf(before, data, "2")),
   );
   before = structuredClone(data);
@@ -552,14 +555,14 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
     await note(disk, dir, "agent-3", ["/w/.worktrees/r-d"]);
     const agents = JSON.stringify({ agents: { "agent-3": { type: "x", epic: 1 } } });
     check(
-      eq(await claim(disk, dir, { workers: ["agent-1"], epic: 1, epicClosed: false }, agents), [
+      eq(await claim(disk, dir, { workers: ["agent-1"], epic: 1, epicDone: false }, agents), [
         "/w/.worktrees/r-a",
         "/w/.worktrees/r-b",
       ]),
       "a task's worker: its worktrees, each once",
     );
     check(
-      eq(await claim(disk, dir, { workers: [], epic: 1, epicClosed: true }, agents), [
+      eq(await claim(disk, dir, { workers: [], epic: 1, epicDone: true }, agents), [
         "/w/.worktrees/r-a",
         "/w/.worktrees/r-b",
         "/w/.worktrees/r-d",
@@ -567,7 +570,7 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
       "an epic closed: the workers of its tasks and the subagents started on it, not the others",
     );
     check(
-      eq(await claim(disk, dir, { workers: [], epic: 2, epicClosed: false }, agents), []),
+      eq(await claim(disk, dir, { workers: [], epic: 2, epicDone: false }, agents), []),
       "no worker, epic open: nothing",
     );
 
@@ -592,7 +595,7 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
       { mode: 0o755 },
     );
     await note(disk, dir, "agent-9", worktreePaths(`cd ${wt} && git commit`, H));
-    const paths = await claim(disk, dir, { workers: ["agent-9"], epic: 3, epicClosed: false }, undefined);
+    const paths = await claim(disk, dir, { workers: ["agent-9"], epic: 3, epicDone: false }, undefined);
     const script = join(dirname(HERE), "..", "..", "hooks", "scripts", "cleanup.sh");
     await run("bash", [script, dir, ...paths], { env: { ...env, PATH: `${join(T, "bin")}:${process.env.PATH}` } });
     check(!existsSync(wt), "end to end: the worktree of a merged PR is removed");
@@ -700,6 +703,51 @@ console.log("== tier: the journal is appended, never rewritten");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+console.log("== epic predicates: the shared fixture (tests/fixtures/epic-predicates.json)");
+{
+  const here = dirname(HERE);
+  const text = readFileSync(join(here, "..", "fixtures", "epic-predicates.json"), "utf8");
+  check(text === EPIC_PREDICATES_JSON, "epic-predicates.ts carries the fixture byte for byte");
+  const fx = JSON.parse(text);
+  check(fx.data.epics.some((e: any) => e.closed_at === Infinity), "1e999 reaches the reader as written (Infinity, open)");
+  const ids = (pick: (e: any) => boolean) => JSON.stringify(fx.data.epics.filter(pick).map((e: any) => e.id));
+  check(ids((e) => closed(e)) === JSON.stringify(fx.expect.closed), "closed", ids((e) => closed(e)));
+  check(
+    ids((e) => idle(fx.data, e, fx.now, fx.live)) === JSON.stringify(fx.expect.idle),
+    "idle",
+    ids((e) => idle(fx.data, e, fx.now, fx.live)),
+  );
+  // An epic closed by task_focus: its workers handed to the cleanup
+  const before = { ...fx.data, epics: [{ id: 1, agent: "main", title: "E" }], tasks: [
+    { id: "1", agent: "main", epic: 1, status: "completed", workers: ["w1", "w2"] },
+    { id: "2", agent: "main", epic: 1, status: "pending", worker_id: "w3" },
+  ] };
+  const after = JSON.parse(JSON.stringify(before));
+  after.epics[0].closed_at = 5;
+  check(
+    JSON.stringify(closingOfEpic(before as any, after as any)) === JSON.stringify({ workers: ["w1", "w2", "w3"], epic: 1, epicDone: true }),
+    "a closure hands the union of its tasks' workers to the cleanup",
+  );
+  check(closingOfEpic(after as any, after as any) === undefined, "nothing newly closed, nothing handed");
+}
+
+console.log("== triage: the read list (hooks/scripts/lib/read-tools.txt)");
+{
+  const text = readFileSync(join(dirname(HERE), "..", "..", "hooks", "scripts", "lib", "read-tools.txt"), "utf8");
+  const list = parseReadList(text);
+  const prefixes = list.filter((l) => l.endsWith("*"));
+  check(
+    JSON.stringify(prefixes) === JSON.stringify(["mcp__kodflow-hooks__task_*", "mcp__plugin_kodflow-hooks_tasks__task_*"]),
+    "the only prefixes are the two task-tool prefixes",
+    JSON.stringify(prefixes),
+  );
+  check(!list.some((l) => /[?[\]]/.test(l) || (l.includes("*") && !l.endsWith("*"))), "no other pattern");
+  for (const tool of ["Read", "Glob", "Grep", "LS", "ToolSearch", "AskUserQuestion", "WebFetch", "WebSearch", "mcp__github__get_me"])
+    check(isReadTool(list, tool), `${tool} reads`);
+  for (const tool of ["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "Agent", "Skill", "mcp__github__mark_all_notifications_read", "mcp__github__create_pull_request", "mcp__x_tasks__task_create"])
+    check(!isReadTool(list, tool), `${tool} is not on the read list`);
 }
 
 console.log("== invariants over the hooks module");

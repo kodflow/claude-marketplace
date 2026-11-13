@@ -32,8 +32,15 @@
 // pass-through, with no marker written.
 //
 // Cleanup on close (cleanup.ts): the worktrees a subagent writes into are
-// noted; a task_update that completes a worker's task, or closes an epic,
-// hands them to hooks/scripts/cleanup.sh, started without waiting for it.
+// noted; a task_update that completes a worker's task or the last task of
+// an epic, and a task_focus(close=true), hand them to
+// hooks/scripts/cleanup.sh, started without waiting for it.
+//
+// Triage (calls.ts): the first tool.call hook, the outermost, notes a write
+// tried by the main loop while the gate is up (<session>/triage-wrote),
+// before the call runs, so a refusal, an error or a cancel counts; the
+// Stop reminder waits for that mark, and the first task call that settles
+// a cause after it settles them all.
 import type { Register } from "claude-code";
 import {
   TOOLS,
@@ -53,9 +60,12 @@ import {
   isOff,
   logPayload,
   mainLoop,
+  parseReadList,
   settleCauses,
+  settlesAny,
   taskTool,
   triageCauses,
+  triesToWrite,
 } from "./calls.ts";
 import {
   agentsFile,
@@ -66,6 +76,7 @@ import {
   safe,
   sessionDir,
   triageFile,
+  wroteFile,
 } from "./paths.ts";
 import {
   admit,
@@ -93,6 +104,7 @@ import {
   WRITING_TOOLS,
   claim,
   closingOf,
+  closingOfEpic,
   note,
   worktreePaths,
   type Closing,
@@ -255,14 +267,16 @@ async function serve(
   let closing: Closing | undefined;
   try {
     const step = plan(tool, agent, argsOf(e));
-    // The main agent completing a task: the list before the update is kept,
-    // since the update drops the task's worker link
+    // The main agent completing a task or closing an epic: the list before
+    // the change is kept, since the update drops the task's worker link
+    const closingEpic = tool === "task_focus" && agent === MAIN;
     const completing =
-      tool === "task_update" &&
-      agent === MAIN &&
-      argsOf(e).status === "completed";
+      (tool === "task_update" &&
+        agent === MAIN &&
+        argsOf(e).status === "completed") ||
+      closingEpic;
     let workers: ReturnType<typeof resolveWorkers> = [];
-    if (tool === "task_update") {
+    if (tool === "task_update" || tool === "task_focus") {
       const listed = await $.agent.list().catch(() => undefined);
       workers = resolveWorkers(
         listed,
@@ -274,7 +288,10 @@ async function serve(
       ? await mutate(io, dir, (data) => {
           const before = completing ? JSON.parse(JSON.stringify(data)) : undefined;
           const out = step.run(data, { now: nowSec(), workers });
-          if (before) closing = closingOf(before, data, argsOf(e).id);
+          if (before)
+            closing = closingEpic
+              ? closingOfEpic(before, data)
+              : closingOf(before, data, argsOf(e).id);
           return out;
         })
       : step.run(await load(io, dir, nowSec()), { now: nowSec(), workers });
@@ -284,7 +301,9 @@ async function serve(
       // Fail open: the store or the host failed, and a gate the task tools
       // cannot settle would stop the session
       if (mainLoop(e.agentId))
-        await io.run(["rm", "-f", triageFile(dir)]).catch(() => undefined);
+        await io
+          .run(["rm", "-f", triageFile(dir), wroteFile(dir)])
+          .catch(() => undefined);
       throw err;
     }
     answer = { deny: err.message };
@@ -367,7 +386,9 @@ async function noteWorktrees($: any, e: any): Promise<void> {
 }
 
 // Drop from triage-pending the causes this call settled: the file goes with
-// the last one, the others stay for their own gesture. Under the lock the
+// the last one, the others stay for their own gesture; once a write was
+// tried (triage-wrote), a call that settles any cause settles them all and
+// the mark goes with them. Under the lock the
 // shell takes to append a cause (on-user.sh, on-session.sh), so a message
 // that arrives meanwhile is never lost; replaced through a temporary file
 // and `mv`, so the gate never reads half a list. A lock not obtained in time
@@ -385,17 +406,19 @@ async function settleTriage(
   const seen = await io.read(file);
   if (seen === undefined) return;
   const before = triageCauses(seen);
-  if (settleCauses(before, tool, args, agentId).length === before.length) return;
+  const wrote = await io.read(wroteFile(dir));
+  const all = wrote !== undefined && settlesAny(tool, args, agentId);
+  if (!all && settleCauses(before, tool, args, agentId).length === before.length) return;
   const lockDir = `${dir}/.triage.lock.d`;
   const held = await lock(io, lockDir);
   try {
     const text = await io.read(file);
     if (text === undefined) return;
     const causes = triageCauses(text);
-    const left = settleCauses(causes, tool, args, agentId);
+    const left = all ? [] : settleCauses(causes, tool, args, agentId);
     if (left.length === causes.length) return;
     if (left.length === 0) {
-      await io.run(["rm", "-f", file]);
+      await io.run(["rm", "-f", file, wroteFile(dir)]);
       return;
     }
     const tmp = `${dir}/.triage.${unique()}.tmp`;
@@ -405,6 +428,28 @@ async function settleTriage(
   } finally {
     if (held) await unlock(io, lockDir);
   }
+}
+
+// The read list, as the shell reads it; read again after a failed read
+let readList: string[] | undefined;
+
+// A write tried by the main loop while the triage gate is up: mark it before
+// the call runs (on-stop.sh says the reminder only then). Fails open.
+async function markWrite($: any, e: any): Promise<void> {
+  if (!mainLoop(e.agentId) || e.tool === "Bash" || taskTool(e.tool)) return;
+  if (await off($)) return;
+  if (!readList) {
+    const text = await $.fs
+      .read(`${$.plugin.root}/hooks/scripts/lib/read-tools.txt`)
+      .catch(() => undefined);
+    if (text !== undefined) readList = parseReadList(text);
+  }
+  if (!triesToWrite(readList ?? [], e.tool, e.agentId)) return;
+  const cfg = await config($);
+  if (!cfg) return;
+  const dir = sessionDir(cfg, await $.session.id());
+  if (!(await $.fs.exists(triageFile(dir)).catch(() => false))) return;
+  await $.fs.write(wroteFile(dir), beatText(Date.now()));
 }
 
 // modwall, collision-guard and zsh-safe (machine-guards.ts) reach `$` through this
@@ -702,6 +747,56 @@ function noteTierSpawn($: any, e: any): void {
 }
 
 export const register: Register = (on) => {
+  // The one tool.call without a matcher, registered first so it is the
+  // outermost: the triage mark is written before any inner hook (tier,
+  // fable, the guards) or the shell's PreToolUse can refuse, fail or cancel
+  // the call
+  on("tool.call", async ($, e, next) => {
+    if (await off($)) return next(e);
+    await markWrite($, e).catch(() => undefined);
+    const tool = taskTool(e.tool);
+    // Before next: the shell's PreToolUse runs inside it and reads the beat
+    await beat($).catch(() => undefined);
+    if (tool) return serve($, tool, e);
+    if (e.agentId && WRITING_TOOLS.has(e.tool)) void noteWorktrees($, e);
+    // A forge tool writing an mcp.json: refused for every caller, as the
+    // shell does; doubled, so a failure lets the call on to the shell
+    if (/^mcp__(github|gitlab|GitKraken)__/.test(e.tool)) {
+      try {
+        const mj = await forgeMcpJson(
+          e.tool,
+          argsOf(e as any) ?? {},
+          await guardCtx($, e, async () => rules),
+        );
+        if (mj) {
+          journal($, e, "mcp-json", "deny");
+          return { deny: refusalText(mj) };
+        }
+      } catch (err) {
+        journal($, e, "mcp-json", "error", err);
+      }
+    }
+    const r: any = await next(e);
+    let out = r;
+    try {
+      secrets ??= secretValues($);
+      const veiled = veilResult(r, { envValues: await secrets, now: Date.now });
+      if (veiled !== r) journal($, e, "veil", "masked");
+      out = veiled;
+    } catch (err) {
+      journal($, e, "veil", "error", err);
+    }
+    if (isMcpTool(e.tool)) await probeMcp($, e.tool, out);
+    return out;
+  }).catch(($, e, next) => {
+    if (next.called) return next(e);
+    if (taskTool(e.tool))
+      return {
+        deny: `kodflow task tools failed: ${next.error.message ?? next.error.kind}`,
+      };
+    return next(e);
+  });
+
   on("session.start", async ($, e, next) => {
     if (!(await off($))) {
       await ensureTools($);
@@ -922,51 +1017,6 @@ export const register: Register = (on) => {
       return { ...r, permissionDecision: "deny", permissionDecisionReason: fableRefusal(String(e.to_model), `the check failed: ${String((err as Error)?.message ?? err)}`) };
     }
   }).catch(($, e, next) => next(e));
-
-  on("tool.call", async ($, e, next) => {
-    if (await off($)) return next(e);
-    const tool = taskTool(e.tool);
-    // Before next: the shell's PreToolUse runs inside it and reads the beat
-    await beat($).catch(() => undefined);
-    if (tool) return serve($, tool, e);
-    if (e.agentId && WRITING_TOOLS.has(e.tool)) void noteWorktrees($, e);
-    // A forge tool writing an mcp.json: refused for every caller, as the
-    // shell does; doubled, so a failure lets the call on to the shell
-    if (/^mcp__(github|gitlab|GitKraken)__/.test(e.tool)) {
-      try {
-        const mj = await forgeMcpJson(
-          e.tool,
-          argsOf(e as any) ?? {},
-          await guardCtx($, e, async () => rules),
-        );
-        if (mj) {
-          journal($, e, "mcp-json", "deny");
-          return { deny: refusalText(mj) };
-        }
-      } catch (err) {
-        journal($, e, "mcp-json", "error", err);
-      }
-    }
-    const r: any = await next(e);
-    let out = r;
-    try {
-      secrets ??= secretValues($);
-      const veiled = veilResult(r, { envValues: await secrets, now: Date.now });
-      if (veiled !== r) journal($, e, "veil", "masked");
-      out = veiled;
-    } catch (err) {
-      journal($, e, "veil", "error", err);
-    }
-    if (isMcpTool(e.tool)) await probeMcp($, e.tool, out);
-    return out;
-  }).catch(($, e, next) => {
-    if (next.called) return next(e);
-    if (taskTool(e.tool))
-      return {
-        deny: `kodflow task tools failed: ${next.error.message ?? next.error.kind}`,
-      };
-    return next(e);
-  });
 
   on("tool.call", { tool: "Bash" }, async ($, e, next) => {
     if (await off($)) return next(e);

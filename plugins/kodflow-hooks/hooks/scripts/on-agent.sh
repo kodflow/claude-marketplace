@@ -35,8 +35,8 @@ _log() {
 
 # Internal helper agents emit SubagentStop with no SubagentStart; a stop only
 # updates an agent already recorded, so they leave no phantom entry.
-# The running subagents of the session, for the status line and the task
-# view: <config>/kodflow/sessions/<session>/agents.json, next to the task list
+# The running subagents of the session, for the task tools, the Stop hook,
+# /recap and kodflow-hud: <config>/kodflow/sessions/<session>/agents.json, next to the task list
 # the task tools (the mod) keep. Start and stop can race, so every write holds the lock:
 # lib/lock.sh (mkdir), since flock(1) does not exist on macOS. The task tools
 # only reads agents.json, which is replaced whole, so it needs no lock here.
@@ -50,8 +50,8 @@ _agents() {   # $1 = start|stop
         . "$LIB/lock.sh" 2>/dev/null && kf_lock "$dir/.agents.lock.d" 2
         local f=$dir/agents.json cur='{"agents":{}}' epic=0
         [ -s "$f" ] && cur=$(cat "$f" 2>/dev/null)
-        # The epic the main agent is on when the subagent starts: the status
-        # line counts the subagent on that epic's pill. The task tools replace
+        # The epic the main agent is on when the subagent starts, which the
+        # cleanup of a closed epic reads (cleanup.ts claim). The task tools replace
         # tasks.json whole, so the read is consistent; anything unreadable is 0.
         if [ "$1" = start ] && [ -s "$dir/tasks.json" ]; then
             epic=$(jq -L "$LIB" 'include "epics"; v2 | active("main")' "$dir/tasks.json" 2>/dev/null)
@@ -59,7 +59,12 @@ _agents() {   # $1 = start|stop
         fi
         printf '%s' "$cur" | jq -c --arg id "$AID" --arg type "$AGENT" --arg ev "$1" --argjson now "$(date +%s)" --argjson epic "$epic" '
             .agents //= {} |
-            if $ev == "start" then .agents[$id] = {type:$type, started:$now, stopped:null, epic:$epic}
+            # A start merges into the entry: a resumed agent (SendMessage keeps
+            # its id) is running again, and keeps the epic it was first counted on
+            if $ev == "start" then
+              .agents[$id] = ((.agents[$id] | if type == "object" then . else {} end)
+                              + {type:$type, started:$now, stopped:null})
+              | .agents[$id].epic //= $epic
             elif .agents[$id] then .agents[$id].stopped = $now else . end' > "$f.tmp" 2>/dev/null && mv -f "$f.tmp" "$f"
     ) >/dev/null 2>&1 </dev/null
 }

@@ -1,0 +1,41 @@
+{
+ "_comment": "The epic predicates' shared cases (scripts/check-epic-predicates.sh): closed(epic), idle(epic, now, live), orphan(task, live). Read by lib/epics.jq's test, by tests/mod/run-node.ts, and through the generated epic-predicates.ts by the mod's and kodflow-hud's tests. Kept as text: 1e999 must reach every reader as written.",
+ "now": 1800000000,
+ "live": ["w-live"],
+ "data": {
+  "version": 2,
+  "next_id": 20,
+  "next_epic": 20,
+  "active": {"main": 1},
+  "epics": [
+   {"id": 1, "agent": "main", "title": "inf", "created": 1799990000, "touched": 1799990000, "closed_at": 1e999},
+   {"id": 2, "agent": "main", "title": "zero", "created": 1799990000, "touched": 1799990000, "closed_at": 0},
+   {"id": 3, "agent": "main", "title": "string", "created": 1799990000, "touched": 1799990000, "closed_at": "x"},
+   {"id": 4, "agent": "main", "title": "null", "created": 1799990000, "touched": 1799990000, "closed_at": null},
+   {"id": 5, "agent": "main", "title": "negative", "created": 1799990000, "touched": 1799990000, "closed_at": -1},
+   {"id": 6, "agent": "main", "title": "true", "created": 1799990000, "touched": 1799990000, "closed_at": true},
+   {"id": 7, "agent": "main", "title": "closed", "created": 1700000000, "touched": 1700000000, "closed_at": 1700000100},
+   {"id": 8, "agent": "main", "title": "quiet", "created": 1700000000, "touched": 1700000000},
+   {"id": 9, "agent": "main", "title": "task moved", "created": 1700000000, "touched": 1700000000},
+   {"id": 10, "agent": "main", "title": "live worker", "created": 1700000000, "touched": 1700000000},
+   {"id": 11, "agent": "main", "title": "dead worker", "created": 1700000000, "touched": 1700000000},
+   {"id": 12, "agent": "main", "title": "user waits", "created": 1700000000, "touched": 1700000000},
+   {"id": 13, "agent": "main", "title": "a day exactly", "created": 1700000000, "touched": 1799913600}
+  ],
+  "tasks": [
+   {"id": "1", "agent": "main", "epic": 9, "subject": "moved", "status": "pending", "created": 1700000000, "updated": 1799999000},
+   {"id": "2", "agent": "main", "epic": 10, "subject": "on live", "status": "in_progress", "worker": "impl", "worker_id": "w-live", "workers": ["w-live"], "created": 1700000000, "updated": 1700000000},
+   {"id": "3", "agent": "main", "epic": 11, "subject": "on dead", "status": "in_progress", "worker": "impl", "worker_id": "w-dead", "workers": ["w-dead"], "created": 1700000000, "updated": 1700000000},
+   {"id": "4", "agent": "main", "epic": 12, "subject": "say go", "status": "waiting", "assignee": "human", "created": 1700000000, "updated": 1700000000},
+   {"id": "5", "agent": "w-dead", "epic": 0, "subject": "dead helper", "status": "pending", "created": 1700000000, "updated": 1700000000},
+   {"id": "6", "agent": "w-live", "epic": 0, "subject": "live helper", "status": "in_progress", "created": 1700000000, "updated": 1700000000},
+   {"id": "7", "agent": "w-dead", "epic": 0, "subject": "dead done", "status": "completed", "created": 1700000000, "updated": 1700000000},
+   {"id": "8", "agent": "main", "epic": 0, "subject": "main loose", "status": "pending", "created": 1700000000, "updated": 1700000000}
+  ]
+ },
+ "expect": {
+  "closed": [7],
+  "idle": [7, 8, 11],
+  "orphans": ["5"]
+ }
+}

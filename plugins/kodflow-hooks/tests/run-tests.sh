@@ -5,7 +5,8 @@
 # agent feedback by test_agents.sh, the Go-project rule by test_gomod.sh, the
 # cleanup of a subagent's worktree on close by test_cleanup.sh, the commit
 # identity by test_identity.sh, the project's documents by test_docs.sh, the
-# Command scope advice by test_scope.sh, the mod by tests/mod: run-node.ts under node, the
+# Command scope advice by test_scope.sh, the epic predicates (jq) by
+# test_epic_predicates.sh, the mod by tests/mod: run-node.ts under node, the
 # *.test.ts files under `claude plugin test`).
 set -e
 cd "$(dirname "$0")"
@@ -29,5 +30,6 @@ bash test_tier.sh
 bash test_scope.sh
 bash test_tier_judge.sh
 bash test_tier_vectors.sh
+bash test_epic_predicates.sh
 bash test_coderabbit.sh
 python3 -I -m unittest discover -s coderabbit

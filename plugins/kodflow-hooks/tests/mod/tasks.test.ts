@@ -1,13 +1,16 @@
 // tasks.test.ts — the pure modules, under `claude plugin test`.
 import { test, expect } from "claude-code/testing";
 import { call, conformance } from "./conformance.ts";
+import { EPIC_PREDICATES_JSON } from "./epic-predicates.ts";
 import {
   FLOW_NOTE_AT,
   MAIN,
   MAX_REF,
   MAX_SUBJECT,
   TOOLS,
+  closed,
   codePoints,
+  idle,
   humanContext,
   humanOpen,
   parse,
@@ -25,16 +28,171 @@ import {
   argsOf,
   attributionText,
   isOff,
+  isReadTool,
   liftsTriage,
+  parseReadList,
   taskTool,
   settleCauses,
+  settlesAny,
   triageCauses,
+  triesToWrite,
 } from "../../hooks/mod/calls.ts";
 
 test("the port answers every call of the corpus as tasks.py did", () => {
-  const { calls, failures } = conformance();
+  const { calls, failures, stats } = conformance();
   expect(calls).toBeGreaterThan(150);
   expect(failures).toEqual([]);
+  // The amendments, counted: workers carried forward from 9 accepted
+  // worker= starts in 6 scenarios over 16 steps (26 states), the subagent
+  // refusals of 3 scenarios reworded, 1 scenario retired
+  expect(stats).toEqual({ accepted: 9, steps: 16, states: 26, scenarios: 6, subagent: 3, retired: 1 });
+});
+
+test("predicates: closed and idle hold the shared fixture", () => {
+  const fx = JSON.parse(EPIC_PREDICATES_JSON);
+  expect(fx.data.epics[0].closed_at).toBe(Infinity); // 1e999 kept as written
+  const ids = (pick: (e: any) => boolean) =>
+    fx.data.epics.filter(pick).map((e: any) => e.id);
+  expect(ids((e) => closed(e))).toEqual(fx.expect.closed);
+  expect(ids((e) => idle(fx.data, e, fx.now, fx.live))).toEqual(fx.expect.idle);
+  expect(closed(undefined)).toBe(false);
+});
+
+// One call through the port on an in-memory file, as conformance.ts plays them
+function scratch(workers: any[] = []) {
+  let file: string | undefined;
+  let now = 1800000000;
+  return {
+    run(tool: string, args: Record<string, unknown>, agent = MAIN) {
+      const got = call(file, tool as any, agent, args, now++, workers);
+      file = got.file;
+      return got.answer;
+    },
+    data: () => JSON.parse(file!),
+    workers,
+  };
+}
+
+test("lifecycle: close, what a closed epic refuses, reopen", () => {
+  const s = scratch([{ id: "w1", type: "impl", alive: true }]);
+  s.run("task_epic", { title: "Ship" });
+  s.run("task_create", { subject: "Build", epic: 1 });
+  s.run("task_create", { subject: "Later", epic: 1 });
+  expect(s.run("task_focus", { epic: "1", close: true, reopen: true }).text).toContain(
+    "close and reopen together",
+  );
+  s.run("task_update", { id: "1", status: "in_progress" });
+  const busy = s.run("task_focus", { epic: "1", close: true });
+  expect(busy.error).toBe(true);
+  expect(busy.text).toContain("in progress: #1 Build");
+  s.run("task_update", { id: "1", status: "completed" });
+  const shut = s.run("task_focus", { epic: "Ship", close: true });
+  expect(shut).toEqual({
+    error: false,
+    text: 'Epic #1 Ship closed (1/2): no task can be filed in it until task_focus(epic="1", reopen=true).',
+  });
+  const data = s.data();
+  expect(typeof data.epics[0].closed_at).toBe("number");
+  expect(data.active.main).toBeUndefined();
+  expect(s.run("task_focus", { epic: "1", close: true }).text).toBe("epic #1 Ship is already closed.");
+  expect(s.run("task_create", { subject: "x", epic: 1 }).text).toContain(
+    'epic #1 Ship is closed: reopen it first with task_focus(epic="1", reopen=true)',
+  );
+  expect(s.run("task_assign_human", { subject: "go", epic: 1 }).error).toBe(true);
+  expect(s.run("task_focus", { epic: "1" }).text).toContain("is closed: reopen it first");
+  expect(s.run("task_update", { id: "2", status: "in_progress" }).text).toContain(
+    "until then its tasks take only status completed or deleted",
+  );
+  expect(s.run("task_update", { id: "2", subject: "Renamed" }).error).toBe(true);
+  expect(s.run("task_update", { id: "2", status: "completed" }).error).toBe(false);
+  expect(s.run("task_list", {}).text).toBe("No tasks and no epic.");
+  expect(s.run("task_focus", { epic: "1", reopen: true }).text).toBe(
+    "Epic #1 Ship reopened and active (2/2): file its tasks with task_create(epic=1).",
+  );
+  expect(s.data().epics[0].closed_at).toBeUndefined();
+  expect(s.data().active.main).toBe(1);
+  expect(s.run("task_focus", { epic: "1", reopen: true }).error).toBe(true);
+  // Another agent's epic is not found
+  expect(s.run("task_focus", { epic: "1", close: true }, "a1").text).toContain("no epic 1");
+});
+
+test("lifecycle: a waiting user task and a live worker's own tasks hold the close", () => {
+  const s = scratch([{ id: "w1", type: "impl", alive: true }]);
+  s.run("task_epic", { title: "Ship" });
+  s.run("task_assign_human", { subject: "Say go", epic: 1 });
+  expect(s.run("task_focus", { epic: "1", close: true }).text).toContain("waiting on the user: #1 Say go");
+  s.run("task_update", { id: "1", status: "completed" });
+  s.run("task_create", { subject: "Build", epic: 1 });
+  s.run("task_update", { id: "2", status: "in_progress", worker: "impl" });
+  s.run("task_create", { subject: "Helper step", epic: 0 }, "w1");
+  s.run("task_update", { id: "2", status: "completed" });
+  const held = s.run("task_focus", { epic: "1", close: true });
+  expect(held.text).toContain("worker w1 still has #3 Helper step");
+  s.run("task_update", { id: "3", status: "completed" }, "w1");
+  expect(s.run("task_focus", { epic: "1", close: true }).error).toBe(false);
+  // A stopped worker holds nothing
+  const t = scratch([{ id: "w2", type: "impl", alive: true }]);
+  t.run("task_epic", { title: "Other" });
+  t.run("task_create", { subject: "Build", epic: 1 });
+  t.run("task_update", { id: "1", status: "in_progress", worker: "w2" });
+  t.run("task_create", { subject: "Left", epic: 0 }, "w2");
+  t.run("task_update", { id: "1", status: "pending" });
+  t.workers[0].alive = false;
+  expect(t.run("task_focus", { epic: "1", close: true }).error).toBe(false);
+});
+
+test("workers: every accepted worker= once, in order; a completed with worker= adds nothing", () => {
+  const s = scratch([
+    { id: "w1", type: "impl", alive: true },
+    { id: "w2", type: "rev", alive: true },
+  ]);
+  s.run("task_create", { subject: "Build", epic: 0 });
+  s.run("task_update", { id: "1", status: "in_progress", worker: "impl" });
+  s.run("task_update", { id: "1", status: "pending" });
+  s.run("task_update", { id: "1", status: "in_progress", worker: "rev" });
+  s.run("task_update", { id: "1", status: "pending" });
+  s.run("task_update", { id: "1", status: "in_progress", worker: "w1" });
+  expect(s.data().tasks[0].workers).toEqual(["w1", "w2"]);
+  s.run("task_update", { id: "1", status: "completed", worker: "w2" });
+  expect(s.data().tasks[0].workers).toEqual(["w1", "w2"]);
+  expect(s.data().tasks[0].worker_id).toBeUndefined();
+  // A refused start adds nothing
+  s.run("task_create", { subject: "Other", epic: 0 });
+  s.workers[1].alive = false;
+  expect(s.run("task_update", { id: "2", status: "in_progress", worker: "rev" }).error).toBe(true);
+  expect(s.data().tasks[1].workers).toBeUndefined();
+});
+
+test("subagents: task_epic refused, and refusals send them to epic=0", () => {
+  const s = scratch();
+  s.run("task_epic", { title: "Main work" });
+  const opened = s.run("task_epic", { title: "Mine" }, "a1");
+  expect(opened).toEqual({
+    error: true,
+    text: "task_epic is the main agent's: a subagent has no epic of its own and files its tasks with task_create(subject, epic=0).",
+  });
+  const create = s.run("task_create", { subject: "Step", epic: 1 }, "a1");
+  expect(create.text).toBe(
+    "no epic 1 for this agent; no epic is open. Epics are the main agent's: a subagent files its tasks with task_create(subject, epic=0).",
+  );
+  const focus = s.run("task_focus", { epic: "1" }, "a1");
+  expect(focus.text).toBe(
+    "no open epic 1; no epic is open. Epics are the main agent's: a subagent files its tasks with task_create(subject, epic=0).",
+  );
+  expect(s.run("task_create", { subject: "Step", epic: 0 }, "a1").error).toBe(false);
+});
+
+test("texts: no tool and no refusal promises the status line", () => {
+  for (const tool of TOOLS) {
+    const text = JSON.stringify(tool).replace(/SDK status-line/g, "");
+    expect(text).not.toMatch(/status line|status-line/);
+  }
+  const s = scratch();
+  expect(s.run("task_create", { subject: "x".repeat(31), epic: 0 }).text).not.toContain("status line");
+  expect(s.run("task_epic", { title: "x".repeat(21) }).text).not.toContain("status line");
+  // A question needs no task; work that writes does
+  expect(TOOLS[0]!.description).toContain("A question needs no task");
+  expect(TOOLS[0]!.description).not.toContain("a question included");
 });
 
 test("tools: tasks.py's five in its order, then task_assign_human; epic required, worker offered", () => {
@@ -136,6 +294,30 @@ test("paths: absolute only, safe ids", () => {
   expect(safe("")).toBe("default");
   expect(sessionDir("/c", "s/1")).toBe("/c/kodflow/sessions/s-1");
   expect(beatText(1791900000999)).toBe("1791900000");
+});
+
+test("triage: the read list, the write mark, one gesture settling all", () => {
+  const list = parseReadList(
+    "# comment\nRead\nWebFetch\nmcp__kodflow-hooks__task_*\nmcp__github__get_me\n\n",
+  );
+  expect(list).toEqual(["Read", "WebFetch", "mcp__kodflow-hooks__task_*", "mcp__github__get_me"]);
+  expect(isReadTool(list, "Read")).toBe(true);
+  expect(isReadTool(list, "mcp__kodflow-hooks__task_list")).toBe(true);
+  expect(isReadTool(list, "mcp__github__get_me")).toBe(true);
+  // Exact names only: a forge write ending in _read is a write
+  expect(isReadTool(list, "mcp__github__mark_all_notifications_read")).toBe(false);
+  expect(isReadTool(parseReadList(undefined), "Read")).toBe(false);
+  expect(triesToWrite(list, "Edit", undefined)).toBe(true);
+  expect(triesToWrite(list, "Skill", undefined)).toBe(true);
+  expect(triesToWrite(list, "Bash", undefined)).toBe(false);
+  expect(triesToWrite(list, "Read", undefined)).toBe(false);
+  expect(triesToWrite(list, "Edit", "a1")).toBe(false);
+  expect(settlesAny("task_create", {}, undefined)).toBe(true);
+  expect(settlesAny("task_update", { id: "1", status: "completed" }, undefined)).toBe(true);
+  expect(settlesAny("task_update", { id: "1", description: "d" }, undefined)).toBe(true);
+  expect(settlesAny("task_update", { id: "1" }, undefined)).toBe(false);
+  expect(settlesAny("task_list", {}, undefined)).toBe(false);
+  expect(settlesAny("task_create", {}, "a1")).toBe(false);
 });
 
 test("calls: tool names, envelope, attribution, switch, triage", () => {
