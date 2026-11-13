@@ -3,8 +3,13 @@
 // Tasks are grouped in epics, one per subject. An agent can have several epics
 // open at once; one of them is active (the one being worked on). Every task
 // names its epic when it is created — there is no default. The file format
-// (tasks.json, version 2) is a contract shared with the status line and the
-// shell hooks (lib/epics.jq), which read it directly.
+// (tasks.json, version 2) is a contract shared with the shell hooks
+// (lib/epics.jq), /recap and kodflow-hud, which read it directly.
+//
+// Two fields came later, both additive: an epic's `closed_at` (epoch seconds,
+// set by task_focus(close=true), cleared by a reopen; closed when it is a
+// finite number above 0), and a task's `workers`, the agent ids every
+// accepted worker= ever named, in order, never removed.
 //
 // This is a line-for-line port of the former mcp/tasks.py: same messages, same
 // order of validation, timestamps in seconds, lengths in code points. The
@@ -18,10 +23,12 @@
 //
 // The task tree came after it too (kodflow-hud draws it): three optional
 // fields a task carries only once set, so a file without them is read as
-// before and every reader that ignores them (the status line decodes named
-// fields, lib/epics.jq picks the ones it uses) reads version 2 unchanged:
+// before and every reader that ignores them (lib/epics.jq picks the ones it
+// uses) reads version 2 unchanged:
 // `parent`, the task it is a subtask of (three levels at most); `blockedBy`,
 // the tasks it waits on; `ref`, a short handle (T0, C6) the tree shows.
+
+import { safe } from "./paths.ts";
 
 /** A task title: the tree cuts it at 18 cells, the detail line shows it whole; tasks.py allowed 40. */
 export const MAX_SUBJECT = 30;
@@ -214,7 +221,7 @@ const checkSubject = (subject: unknown): string =>
     subject,
     "subject",
     MAX_SUBJECT,
-    "it is the title column of the task tree and is shown in full on the status line. " +
+    "it is the title column of the task tree. " +
       "Shorten it to an imperative title and move the detail to description.",
   );
 
@@ -249,11 +256,54 @@ const checkTitle = (title: unknown): string =>
     title,
     "title",
     MAX_TITLE,
-    "it is the label of a pill on the status line. Use a short noun phrase " +
+    "it is the label of the epic in the task tree. Use a short noun phrase " +
       '("SDK status-line", "api-gateway").',
   );
 
 // --- epics ---------------------------------------------------------------------
+
+/**
+ * Closed by task_focus(close=true): `closed_at` a finite number above 0.
+ * Anything else (absent, null, 0, a string, true, -1, 1e999) is open; the
+ * jq readers (lib/epics.jq `closed`) and kodflow-hud hold the same test,
+ * against the same fixture (tests/fixtures/epic-predicates.json).
+ */
+export function closed(epic: unknown): boolean {
+  const c = isObj(epic) ? epic.closed_at : undefined;
+  return typeof c === "number" && Number.isFinite(c) && c > 0;
+}
+
+/** An epic left this long without a touch or a task update is idle. */
+export const IDLE_AFTER = 24 * 3600;
+
+/**
+ * Idle: nothing touched it or its tasks for IDLE_AFTER, no task of it in
+ * progress on a live worker (`live`: agent ids), and no task of the user's
+ * waiting in it. Closed or not is the caller's to weigh.
+ */
+export function idle(
+  data: { tasks?: unknown },
+  epic: Obj,
+  now: number,
+  live: readonly string[],
+): boolean {
+  const agent = get(epic, "agent", MAIN);
+  const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(
+    (t: unknown): t is Obj =>
+      isObj(t) && get(t, "agent", MAIN) === agent && get(t, "epic", 0) === epic.id,
+  );
+  const num = (v: unknown): number =>
+    typeof v === "number" && Number.isFinite(v) ? v : 0;
+  const last = Math.max(num(epic.touched), ...tasks.map((t) => num(t.updated)));
+  if (now - last <= IDLE_AFTER) return false;
+  if (
+    tasks.some(
+      (t) => t.status === "in_progress" && live.includes(pyStr(or(t.worker_id, ""))),
+    )
+  )
+    return false;
+  return !tasks.some((t) => t.status === "waiting" && get(t, "assignee", "") === HUMAN);
+}
 
 const agentEpics = (data: Data, agent: string): Obj[] =>
   data.epics.filter((e) => get(e, "agent", MAIN) === agent);
@@ -265,7 +315,8 @@ function findEpic(data: Data, agent: string, epicId: unknown): Obj | undefined {
 /** The id of the agent's active epic, 0 when it has none. */
 function activeEpic(data: Data, agent: string): any {
   const epicId = get(data.active, agent, 0);
-  return findEpic(data, agent, epicId) ? epicId : 0;
+  const epic = findEpic(data, agent, epicId);
+  return epic && !closed(epic) ? epicId : 0;
 }
 
 const tasksOf = (data: Data, agent: string, epicId: unknown): Obj[] =>
@@ -282,8 +333,9 @@ function progress(
   return [tasks.filter((t) => t.status === "completed").length, tasks.length];
 }
 
-/** Open: a task not completed, or the active epic with no task yet. */
+/** Open: not closed, and a task not completed or the active epic with no task yet. */
 function isOpen(data: Data, agent: string, epic: Obj): boolean {
+  if (closed(epic)) return false;
   const [done, total] = progress(data, agent, epic.id);
   return done < total || (total === 0 && activeEpic(data, agent) === epic.id);
 }
@@ -320,6 +372,17 @@ function describeOpen(data: Data, agent: string): string {
 const EPIC_SYNTAX =
   "task_create(subject, epic=<id>) files the task in one of your epics; epic=0 files it outside " +
   "any epic; task_epic(title) opens a new epic first.";
+
+/** A subagent has no epic of its own: the main agent's list holds them. */
+const SUB_EPIC_SYNTAX =
+  "Epics are the main agent's: a subagent files its tasks with task_create(subject, epic=0).";
+
+const epicSyntax = (agent: string): string =>
+  agent === MAIN ? EPIC_SYNTAX : SUB_EPIC_SYNTAX;
+
+/** The way back into a closed epic, said by every refusal it causes. */
+const reopenFirst = (epic: Obj): string =>
+  `epic #${epic.id} ${epic.title} is closed: reopen it first with task_focus(epic="${epic.id}", reopen=true)`;
 
 // --- workers ---------------------------------------------------------------------
 
@@ -593,15 +656,17 @@ function taskCreate(agent: string, args: Obj): Step {
         strip(pyStr(wanted)) === ""
       ) {
         throw new TaskError(
-          `epic is required: name the epic this task belongs to; ${describeOpen(data, agent)}. ${EPIC_SYNTAX}`,
+          `epic is required: name the epic this task belongs to; ${describeOpen(data, agent)}. ${epicSyntax(agent)}`,
         );
       }
       const epicId = parseEpicId(wanted);
       if (epicId === null || (epicId !== 0 && !findEpic(data, agent, epicId))) {
         throw new TaskError(
-          `no epic ${pyStr(wanted)} for this agent; ${describeOpen(data, agent)}. ${EPIC_SYNTAX}`,
+          `no epic ${pyStr(wanted)} for this agent; ${describeOpen(data, agent)}. ${epicSyntax(agent)}`,
         );
       }
+      const into = epicId ? findEpic(data, agent, epicId) : undefined;
+      if (into && closed(into)) throw new TaskError(`${reopenFirst(into)}, or file the task in an open epic.`);
       const task = {
         id: String(data.next_id),
         agent,
@@ -685,6 +750,12 @@ function taskUpdate(agent: string, args: Obj): Step {
       if (idx < 0)
         throw new TaskError(`no task #${taskId} in this agent's list`);
       const task = data.tasks[idx]!;
+      // A closed epic's tasks may only be finished or dropped
+      const home = findEpic(data, agent, get(task, "epic", 0));
+      if (home && closed(home) && status !== "completed" && status !== "deleted")
+        throw new TaskError(
+          `${reopenFirst(home)}; until then its tasks take only status completed or deleted.`,
+        );
       touch(data, agent, get(task, "epic", 0), ctx.now);
       if (status === "deleted") {
         data.tasks.splice(idx, 1);
@@ -702,8 +773,8 @@ function taskUpdate(agent: string, args: Obj): Step {
           `#${taskId} is assigned to the user: it stays waiting until they answer, then completed (or deleted when it no longer applies).`,
         );
       }
-      // One task in progress per worker: an amber cell on the status
-      // line must mean someone is on it right now
+      // One task in progress per worker: a task shown in progress must
+      // mean someone is on it right now
       const starting =
         status === "in_progress" && task.status !== "in_progress";
       if (worker) {
@@ -712,6 +783,13 @@ function taskUpdate(agent: string, args: Obj): Step {
         // subagent from one left by a dead one.
         task.worker_id = claimWorker(ctx, data, agent, taskId, worker);
         task.worker = worker;
+        // Every worker the task was ever handed to, once each, in order:
+        // kodflow-hud hangs a subagent's own tasks under this one
+        const seen: string[] = Array.isArray(task.workers)
+          ? task.workers.filter((w: unknown): w is string => typeof w === "string")
+          : [];
+        if (!seen.includes(task.worker_id)) seen.push(task.worker_id);
+        task.workers = seen;
       } else if (starting) {
         const busy = data.tasks.filter(
           (t) =>
@@ -791,6 +869,12 @@ function taskList(agent: string): Step {
 }
 
 function taskEpic(agent: string, args: Obj): Step {
+  // Epics are the main agent's: a subagent's tasks hang under the task it
+  // was handed (workers), not under an epic of its own
+  if (agent !== MAIN)
+    throw new TaskError(
+      "task_epic is the main agent's: a subagent has no epic of its own and files its tasks with task_create(subject, epic=0).",
+    );
   const title = checkTitle(args.title);
   return {
     mutates: true,
@@ -824,25 +908,106 @@ function taskEpic(agent: string, args: Obj): Step {
   };
 }
 
+/** A flag given as true: true, "true" or 1. */
+const flag = (v: unknown): boolean => v === true || v === 1 || v === "true";
+
+/**
+ * The task that holds a worker in the agent's list: the one in progress
+ * that names it in `workers`, else the most recently updated one that does.
+ */
+export function anchorOf(tasks: readonly Obj[], workerId: string): Obj | undefined {
+  const holding = tasks.filter(
+    (t) => Array.isArray(t.workers) && t.workers.includes(workerId),
+  );
+  return (
+    holding.find((t) => t.status === "in_progress") ??
+    [...holding].sort((a, b) => (Number(b.updated) || 0) - (Number(a.updated) || 0))[0]
+  );
+}
+
+/** Why an epic cannot close yet: one clause per reason, the tasks named. */
+function closeBlockers(data: Data, agent: string, epic: Obj, ctx: Ctx): string[] {
+  const mine = data.tasks.filter((t) => get(t, "agent", MAIN) === agent);
+  const inEpic = mine.filter((t) => get(t, "epic", 0) === epic.id);
+  const name = (t: Obj) => `#${t.id} ${t.subject}`;
+  const why: string[] = [];
+  const running = inEpic.filter((t) => t.status === "in_progress");
+  if (running.length) why.push(`in progress: ${running.map(name).join(", ")}`);
+  const human = inEpic.filter((t) => isHuman(t) && t.status === "waiting");
+  if (human.length) why.push(`waiting on the user: ${human.map(name).join(", ")}`);
+  const helpers: string[] = [];
+  const ids = new Set<string>();
+  for (const t of inEpic)
+    for (const w of Array.isArray(t.workers) ? t.workers : [])
+      if (typeof w === "string") ids.add(w);
+  for (const w of ids) {
+    if (anchorOf(mine, w)?.epic !== epic.id) continue;
+    if (!ctx.workers.some((x) => x.id === w && x.alive)) continue;
+    const open = data.tasks.filter(
+      (t) => get(t, "agent", MAIN) === safe(w) && t.status !== "completed",
+    );
+    if (open.length)
+      helpers.push(`worker ${w} still has ${open.map(name).join(", ")}`);
+  }
+  if (helpers.length) why.push(helpers.join("; "));
+  return why;
+}
+
 function taskFocus(agent: string, args: Obj): Step {
   const wanted = strip(pyStr(or(args.epic, "")));
   if (!wanted)
     throw new TaskError("epic is required: an epic id or its exact title");
+  const close = flag(args.close);
+  const reopen = flag(args.reopen);
+  if (close && reopen)
+    throw new TaskError("close and reopen together: pass one of them, or neither to focus the epic");
+  const tail =
+    agent === MAIN ? "Open a new one with task_epic." : SUB_EPIC_SYNTAX;
   return {
     mutates: true,
     run(data, ctx) {
-      const epics = openEpics(data, agent);
       const epicId = parseEpicId(wanted);
+      if (close || reopen) {
+        // Any epic of this agent's, by id or exact title: another agent's is not found
+        const mine = agentEpics(data, agent);
+        let match = mine.filter((e) => e.id === epicId);
+        if (!match.length) match = mine.filter((e) => e.title === wanted);
+        const epic = match.find((e) => closed(e) === reopen) ?? match[0];
+        if (!epic)
+          throw new TaskError(`no epic ${wanted}; ${describeOpen(data, agent)}. ${tail}`);
+        if (reopen) {
+          if (!closed(epic))
+            throw new TaskError(`epic #${epic.id} ${epic.title} is not closed: task_focus(epic="${epic.id}") makes it active.`);
+          delete epic.closed_at;
+          data.active[agent] = epic.id;
+          epic.touched = ctx.now;
+          const [done, total] = progress(data, agent, epic.id);
+          return `Epic #${epic.id} ${epic.title} reopened and active (${done}/${total}): file its tasks with task_create(epic=${epic.id}).`;
+        }
+        if (closed(epic))
+          throw new TaskError(`epic #${epic.id} ${epic.title} is already closed.`);
+        const why = closeBlockers(data, agent, epic, ctx);
+        if (why.length)
+          throw new TaskError(
+            `cannot close epic #${epic.id} ${epic.title}: ${why.join("; ")}. Settle them first ` +
+              "(completed, deleted, or pending once nobody is on them; the user's tasks once they answered).",
+          );
+        epic.closed_at = ctx.now;
+        epic.touched = ctx.now;
+        if (get(data.active, agent, 0) === epic.id) delete data.active[agent];
+        const [done, total] = progress(data, agent, epic.id);
+        return `Epic #${epic.id} ${epic.title} closed (${done}/${total}): no task can be filed in it until task_focus(epic="${epic.id}", reopen=true).`;
+      }
+      const epics = openEpics(data, agent);
       let match = epics.filter((e) => e.id === epicId);
       if (!match.length) match = epics.filter((e) => e.title === wanted);
       if (!match.length) {
-        const closed = epicId !== null && findEpic(data, agent, epicId);
-        const why = closed
+        const found = epicId !== null ? findEpic(data, agent, epicId) : undefined;
+        if (found && closed(found)) throw new TaskError(`${reopenFirst(found)}.`);
+        const why = found
           ? `epic ${wanted} is completed`
           : `no open epic ${wanted}`;
-        throw new TaskError(
-          `${why}; ${describeOpen(data, agent)}. Open a new one with task_epic.`,
-        );
+        throw new TaskError(`${why}; ${describeOpen(data, agent)}. ${tail}`);
       }
       const epic = match[0]!;
       data.active[agent] = epic.id;
@@ -857,13 +1022,14 @@ function taskFocus(agent: string, args: Obj): Step {
 
 const isHuman = (t: Obj): boolean => get(t, "assignee", "") === HUMAN;
 
-/** The main agent's tasks assigned to the user and not yet answered. */
+/** The main agent's tasks assigned to the user and not yet answered, closed epics left out. */
 export function humanOpen(data: Data): Obj[] {
   return data.tasks.filter(
     (t) =>
       get(t, "agent", MAIN) === MAIN &&
       isHuman(t) &&
-      t.status !== "completed",
+      t.status !== "completed" &&
+      !closed(findEpic(data, MAIN, get(t, "epic", 0))),
   );
 }
 
@@ -886,6 +1052,8 @@ function taskAssignHuman(agent: string, args: Obj): Step {
           `epic is required: a task for the user belongs to the epic it unblocks; ${describeOpen(data, agent)}. task_epic(title) opens one first.`,
         );
       }
+      const home = findEpic(data, agent, epicId)!;
+      if (closed(home)) throw new TaskError(`${reopenFirst(home)}.`);
       const open = humanOpen(data);
       if (open.length >= MAX_HUMAN_OPEN) {
         throw new TaskError(
@@ -1060,9 +1228,9 @@ const TREE_PROPS: Obj = {
 
 const WORKFLOW =
   " Work is grouped in epics, one per subject; several can be open at once, one is active (the one being " +
-  "worked on) and every task names its epic explicitly. The user's status line shows every open epic live, so the list must say what is true at every " +
-  "moment: in_progress while you work on a task, waiting while it is blocked on the user, completed as soon " +
-  "as it is done and verified.";
+  "worked on) and every task names its epic explicitly. The list must say what is true at every moment: " +
+  "in_progress while you work on a task, waiting while it is blocked on the user, completed as soon as it " +
+  "is done and verified. An epic whose subject is finished is closed with task_focus(epic, close=true).";
 
 export const TOOLS: readonly {
   name: ToolName;
@@ -1072,8 +1240,8 @@ export const TOOLS: readonly {
   {
     name: "task_create",
     description:
-      "Add a task. Every message of the user gets one, a question included: file it before acting, and " +
-      "set it completed as soon as it is answered or done. epic is REQUIRED, there is no default: the id " +
+      "Add a task. A question needs no task; work that writes (an edit, a dispatch, a forge write) needs " +
+      "one: file it before acting, and set it completed as soon as it is done. epic is REQUIRED, there is no default: the id " +
       "of the epic the task belongs to (task_list, or the Epics line given with each prompt, lists them), " +
       "or 0 for a task outside any epic; open a new subject with task_epic first. task_focus the epic when " +
       'you start its work. A change to an already completed task is a new task "Rework #N: ..." in that ' +
@@ -1147,10 +1315,11 @@ export const TOOLS: readonly {
   {
     name: "task_epic",
     description:
-      "Open a new epic and make it active: a separate subject with its own task list and its own pill on " +
-      "the user's status line. Use it when the user brings a new subject, rather than appending its tasks " +
-      "to an unrelated epic; other open epics stay open. If an open epic already has this exact title it " +
-      'is focused instead. title: at most 20 characters, a short noun phrase ("SDK status-line").' +
+      "Open a new epic and make it active: a separate subject with its own task list. Use it when the user " +
+      "brings a new subject, rather than appending its tasks to an unrelated epic; other open epics stay " +
+      "open. If an open epic already has this exact title it is focused instead. title: at most 20 " +
+      'characters, a short noun phrase ("SDK status-line"). Main agent only: a subagent files its tasks ' +
+      "with epic=0." +
       WORKFLOW,
     inputSchema: {
       type: "object",
@@ -1167,9 +1336,11 @@ export const TOOLS: readonly {
   {
     name: "task_focus",
     description:
-      "Make an open epic the active one, by id or exact title, when the work turns back to it: the status " +
-      "line expands it. Completed epics cannot be focused; open a new one " +
-      "with task_epic." +
+      "Make an open epic the active one, by id or exact title, when the work turns back to it. Completed " +
+      "epics cannot be focused; open a new one with task_epic. close=true closes the epic once its subject " +
+      "is finished: refused while one of its tasks is in progress, one of the user's waits in it, or a " +
+      "running worker of it still has a task of its own; a closed epic takes no new task and its tasks " +
+      "take only completed or deleted. reopen=true reopens a closed epic and makes it active." +
       WORKFLOW,
     inputSchema: {
       type: "object",
@@ -1177,6 +1348,14 @@ export const TOOLS: readonly {
         epic: {
           type: "string",
           description: 'Epic id ("3" or "#3") or its exact title.',
+        },
+        close: {
+          type: "boolean",
+          description: "Close the epic instead of focusing it. Not with reopen.",
+        },
+        reopen: {
+          type: "boolean",
+          description: "Reopen a closed epic and make it active. Not with close.",
         },
       },
       required: ["epic"],
@@ -1194,8 +1373,8 @@ export const TOOLS: readonly {
     description:
       "Assign the user a task only they can do: a go or an approval, a Touch ID or a password typed on " +
       "their machine, a gesture on hardware you cannot reach. The task is filed waiting, marked as the " +
-      "user's, in the epic it unblocks (epic is required), and shows on their status line. Say in your " +
-      "reply what you need from them. Once they have answered, close it with task_update(status=completed); " +
+      "user's, in the epic it unblocks (epic is required). Say in your reply what you need from them: " +
+      "the reply is where they read it. Once they have answered, close it with task_update(status=completed); " +
       "it never goes in_progress. At most 5 open at once. Main agent only: a subagent says what it needs in " +
       "its answer.",
     inputSchema: {

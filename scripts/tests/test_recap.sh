@@ -83,6 +83,26 @@ check "a subagent without a task"          "null"                "$(q '.agents[]
 check "worktree branch and GitHub repo"    "feat/x acme/widgets" \
       "$(q '.agents[] | select(.id=="a-impl-1") | .worktrees[0] | "\(.branch) \(.repo)"')"
 
+# An epic closed with task_focus(close=true) (closed_at a finite number above
+# 0) is left out with its tasks, a blocker filed in it is settled, and so is a
+# deleted one; 1e999 is not a close.
+ccfg="$(mktemp -d)"; c="$ccfg/kodflow/sessions/sess-closed"; mkdir -p "$c"
+cat > "$c/tasks.json" <<'JSON'
+{"version":2,"active":{"main":1},
+ "epics":[{"id":1,"agent":"main","title":"Shut","touched":10,"closed_at":50},
+          {"id":2,"agent":"main","title":"Open","touched":20,"closed_at":1e999}],
+ "tasks":[{"id":"1","agent":"main","epic":1,"subject":"left","status":"pending"},
+          {"id":"2","agent":"main","epic":2,"subject":"after shut","status":"pending","blockedBy":["1"]},
+          {"id":"3","agent":"main","epic":2,"subject":"after drop","status":"pending","blockedBy":["4"]},
+          {"id":"4","agent":"main","epic":2,"subject":"dropped","status":"deleted"}]}
+JSON
+oc="$(CLAUDE_CONFIG_DIR="$ccfg" "$RUN" "$SRC" state sess-closed)"; rm -rf "$ccfg"
+check "a closed epic is left out"          "2"     "$(printf '%s' "$oc" | jq -r '[.epics[].id] | join(" ")')"
+check "nor is a closed epic active"        "false" "$(printf '%s' "$oc" | jq -r '.epics[0].active')"
+check "its tasks are left out"             "2 3"   "$(printf '%s' "$oc" | jq -r '[.tasks[].id] | join(" ")')"
+check "a blocker in a closed epic is settled" "" "$(printf '%s' "$oc" | jq -r '.tasks[] | select(.id=="2") | .waits_on | join(" ")')"
+check "a deleted blocker is settled"       ""      "$(printf '%s' "$oc" | jq -r '.tasks[] | select(.id=="3") | .waits_on | join(" ")')"
+
 # No session id, or one the engine did not substitute: the newest task list.
 check "literal \${CLAUDE_SESSION_ID} falls back" "sess-1" \
       "$(CLAUDE_CONFIG_DIR="$cfg" "$RUN" "$SRC" state '${CLAUDE_SESSION_ID}' | jq -r .session)"
