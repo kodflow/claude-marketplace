@@ -231,10 +231,12 @@ export function parseBoard(
       tasks: own,
     };
     if (isActive) epic.active = true;
+    // Idle needs to know who stands: unknown liveness folds nothing
     if (
       now !== undefined &&
+      live !== undefined &&
       left &&
-      idle(e, rawTasks, Math.floor(now / 1000), live ?? [])
+      idle(e, rawTasks, Math.floor(now / 1000), live)
     )
       epic.idle = true;
     epics.push(epic);

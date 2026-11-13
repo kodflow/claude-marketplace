@@ -575,6 +575,35 @@ test("$.agent.list() failing: no toast, no key written, the agents kept, nobody 
   expect(h.toasts).toEqual([]);
 });
 
+test("a reload after a failed poll: the outage read from $.state, its completions not toasted", async ($, on) => {
+  // What a failed poll leaves in $.state, as a fresh copy of the module
+  // finds it after a reload: its own variables start over, the state does
+  // not. The kit's state stands beneath this hook: it answers « unknown »
+  // for the liveness until the module writes it again
+  let reloaded = false;
+  on("state.get", async (_$: any, e: any, next: any) => {
+    const r = await next(e);
+    return reloaded && e.plugin === "kodflow-hud" && e.key === "liveness"
+      ? { ...r, value: { ...r.value, value: "unknown" } }
+      : r;
+  });
+  on("state.set", async (_$: any, e: any, next: any) => {
+    if (e.plugin === "kodflow-hud" && e.key === "liveness") reloaded = false;
+    return next(e);
+  });
+  const { h, clock } = host(on);
+  writeTasks(h, [T("1", "pending"), T("2", "pending")], 1);
+  await start($, clock);
+  reloaded = true;
+  writeTasks(h, [T("1", "completed"), T("2", "pending")], 2);
+  await clock.advance(3_000);
+  expect(h.toasts).toEqual([]);
+  // Back to normal: the next change is news again
+  writeTasks(h, [T("1", "completed"), T("2", "completed")], 3);
+  await clock.advance(3_000);
+  expect(h.toasts).toEqual(["#2 Task 2 : terminée"]);
+});
+
 test("the first poll after a session change cannot read the agents: the board shows, no toast, the next poll is the reference", async ($, on) => {
   let session = "sess-1";
   const { h, clock } = host(on, { session: () => session });
