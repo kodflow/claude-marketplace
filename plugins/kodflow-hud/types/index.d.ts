@@ -1,5 +1,5 @@
-// The values kodflow-hud keeps in `$.state` for the session: what its two
-// panes draw from. Every one is derived — the task board from tasks.json
+// The values kodflow-hud keeps in `$.state` for the session: what its pane
+// draws from. Every one is derived — the task board from tasks.json
 // (kodflow-hooks writes it, this mod only reads it), the agents from
 // `$.agent.list()`, the activity from the tool calls it watches — so none is a
 // second source of truth: a reload re-reads them all.
@@ -18,6 +18,12 @@ export type HudTask = {
   worker?: string;
   /** That worker's agent id, as `$.agent.list()` names it. */
   workerId?: string;
+  /**
+   * Every agent id the task was ever handed to (kodflow-hooks writes it on
+   * each accepted worker=, never removes one), in order: the subagents
+   * whose own tasks hang under this one.
+   */
+  workers?: string[];
   /** "human" for a task waiting on the person, when the field exists. */
   assignee?: string;
   /** Last change, in seconds (tasks.json's own unit). */
@@ -34,7 +40,11 @@ export type HudTask = {
   ref?: string;
 };
 
-/** An open epic: one with a task left to do, or the active one still empty. */
+/**
+ * An open epic of the main agent: not closed, with a task left to do, or
+ * the active one still empty, or one whose last task was done in the last
+ * 30 minutes. The tasks filed under no epic are one more, id 0.
+ */
 export type HudEpic = {
   id: number;
   title: string;
@@ -42,6 +52,10 @@ export type HudEpic = {
   /** Opened, in seconds. */
   created: number;
   touched: number;
+  /** The main agent's active epic. */
+  active?: boolean;
+  /** Nothing moved for 24 h and nobody on it: drawn on one line until opened. */
+  idle?: boolean;
   tasks: HudTask[];
 };
 
@@ -49,6 +63,12 @@ export type HudBoard = {
   /** Whether tasks.json exists for this session. */
   found: boolean;
   epics: HudEpic[];
+  /**
+   * The subagents' own tasks (agent not "main"), those anchored on a task
+   * of a closed epic left out; `stopped` on one whose agent is not live
+   * (counted, never drawn). Absent from an older board.
+   */
+  helpers?: (HudTask & { stopped?: boolean })[];
 };
 
 /** An agent of the session as `$.agent.list()` reports it. */
@@ -81,50 +101,9 @@ export type HudActivity = {
  */
 export type HudModel = { model?: string; effort?: string };
 
-/** Who worked a task while it was in progress, kept once it moves on. */
-export type HudSeen = { worker?: string; workerId?: string };
-
 export type HudCiState = "pass" | "fail" | "pending" | "none" | "error";
 
 export type HudCi = { state: HudCiState; at: number };
-
-/** One document of docs.json (kodflow-hooks' catalogue), as the view reads it. */
-export type HudDoc = {
-  id: string;
-  name: string;
-  /** Relative to the project's root; a folder ends with "/". */
-  path: string;
-  state: "ok" | "missing" | "ignored";
-  /** Why it is ignored, as the manifest says (may be empty). */
-  reason?: string;
-  /** What the document is for, one line. */
-  why?: string;
-};
-
-/** docs.json: `found` false when the session has none (outside git). */
-export type HudDocs = {
-  found: boolean;
-  /** The project's git root, absolute. */
-  root?: string;
-  /** The manifest's path under the root (docs/manifest.json). */
-  manifest?: string;
-  docs: HudDoc[];
-};
-
-/** One line of blocks.jsonl: a call or a run something refused. */
-export type HudBlock = {
-  ts: string;
-  /** `ts` in milliseconds since the epoch. */
-  at: number;
-  kind: "hook" | "classifier" | "permission" | "ci" | "agent";
-  summary: string;
-  tool?: string;
-  motif?: string;
-  agent?: string;
-  ref?: string;
-  /** The permission rule that would have allowed the call, settings.json's form. */
-  rule?: string;
-};
 
 /** One notable event of a hunt, as status.json keeps the last 20. */
 export type HudHuntEvent = { seq: number; kind: string; text: string };
@@ -200,8 +179,6 @@ declare module "claude-code" {
       ci: Record<string, HudCi>;
       /** By `<session>:<loop>` (loop "main" or a subagent's id): what it runs on. */
       models: Record<string, HudModel>;
-      /** By `<agent>:<task id>`: the worker last seen on the task. */
-      seen: Record<string, HudSeen>;
       /** `<session>:<task>:<state>` already toasted, so each is toasted once. */
       toasted: string[];
       /**
@@ -209,12 +186,10 @@ declare module "claude-code" {
        * so it is recorded as toasted without a toast.
        */
       primed: string;
+      /** "unknown" while `$.agent.list()` could not be read at the last poll. */
+      liveness: string;
       /** Advances every few seconds, so the elapsed times redraw. */
       tick: number;
-      /** docs.json of the session, for the « Documents » view. */
-      docs: HudDocs;
-      /** blocks.jsonl of the session, newest first, for the « Refus » view. */
-      blocks: HudBlock[];
       /** active.json and each hunt's status.json, for the « Chasse » view. */
       hunt: HudHunt;
       /** Per hunt, the last event toasted in this session. */

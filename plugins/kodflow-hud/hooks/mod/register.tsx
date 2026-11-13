@@ -1,16 +1,16 @@
 // register.tsx — kodflow-hud's function hooks: wiring only.
 //
-// One pane and a few toasts, beside the status line and never in its place
-// (the context segment, the epics' pills and the rest stay there):
-//   « Tâches »  the open epics of tasks.json as a tree (subtasks, what each
-//               task waits on, the critical path) or as a graph by state,
-//               who works each task, on what model, how long since it moved,
-//               the silent ones and the ones waiting on the person; the
-//               only pane, its tab counting the tasks left.
-//               Two more views in its bar: « Refus », what kodflow-hooks
-//               refused (blocks.jsonl), and « Documents », the project's
-//               documents (docs.json), panels.ts; a third, « Chasse », while
-//               /hunt lists a run (active.json, each status.json), hunt.ts.
+// One pane and a few toasts:
+//   « Tâches »  the main agent's open epics of tasks.json as a tree
+//               (subtasks, what each task waits on, the critical path), who
+//               works each task, on what model, how long since it moved, the
+//               silent ones and the ones waiting on the person; under a task
+//               handed to subagents, one line summing up their own tasks;
+//               the only pane, its tab counting the tasks left. A second
+//               view, « Chasse », and the bar with it, only while /hunt
+//               lists a run (active.json, each status.json), hunt.ts.
+// An epic closed with task_focus(close=true) is gone from the tree, the
+// count, the CI and the toasts, with the subagents' tasks hanging on it.
 // The subagents themselves are the engine's to show, under the prompt.
 // And a few words of each reply in colour (colors.ts): the transcript draws
 // `{{r:words}}` red, `{{o:…}}` orange, `{{v:…}}` green, `{{p:…}}` pink.
@@ -23,58 +23,51 @@
 // colour convention's system prompt section (off with KODFLOW_COLORS=off,
 // which also turns off the drawing). Every hook fails open.
 //
-// Three writes, each only on the person's own click or key in the pane
-// (`ui.message`, posted by the surface module and checked again here), never
-// on the model's word nor a hook's: a document ignored or brought back in
-// the project's docs/manifest.json; a permission rule, shown first and then
-// confirmed, added to the project's .claude/settings.local.json; the docs
-// prompt, or `/hunt --resume <slug>`, drafted in an EMPTY prompt box, never
-// sent.
+// When `$.agent.list()` cannot be read, nobody's standing is known: the
+// agents kept are left as they were, a subagent's task is neither silent
+// nor stopped (« unknown »), no task is an orphan, and no toast is raised
+// nor recorded; the next poll that reads the list is the reference.
+//
+// One write only, on the person's own click or key in the pane
+// (`ui.message`, posted by the surface module and checked again here): the
+// draft `/hunt --resume <slug>` in an EMPTY prompt box, never sent.
 //
 // /hunt's files are read on their own, after everything else of a poll and
 // inside their own try/catch: a hunt that cannot be read says « état
 // illisible » in its view, and the « Tâches » pane goes on as before.
 //
 // The logic lives in the pure modules beside this file (board.ts, tree.ts,
-// layout.tsx, models.ts, alerts.ts, ci.ts); the
-// « Tâches » pane's selection and folding live in its surface module,
-// client.tsx; what is here reads `$`.
+// layout.tsx, view.ts, models.ts, alerts.ts, ci.ts); the « Tâches » pane's
+// selection and folding live in its surface module, client.tsx; what is
+// here reads `$`.
 
 import { atom, read, update } from "claude-code";
 import type { Register } from "claude-code";
 import type {
   HudActivity,
   HudAgent,
-  HudBlock,
   HudBoard,
-  HudDoc,
-  HudDocs,
   HudCi,
   HudFault,
   HudHunt,
   HudHuntCursor,
   HudModel,
-  HudSeen,
-  HudTask,
 } from "../../types";
-import { MAIN, parseBoard, parseTasks, type Ctx } from "./board.ts";
+import {
+  LIVE,
+  MAIN,
+  UNKNOWN,
+  parseBoard,
+  visibleTasks,
+  type Ctx,
+} from "./board.ts";
 import { alertsFor, trimKeys } from "./alerts.ts";
 import { CI_EVERY_MS, ciState, prsToCheck } from "./ci.ts";
 import { configDir, sessionDir, tasksFile } from "./paths.ts";
 import { buildTree } from "./tree.ts";
 import { draw, initialUi } from "./layout.tsx";
 import { NO_FAULT, onFault, resting } from "./fault.ts";
-import { SETTINGS_LOCAL, viewScreen, type Extra } from "./panels.ts";
-import {
-  MODES,
-  NO_DOCS,
-  createPrompt,
-  manifestPath,
-  parseDocs,
-  toggleManifest,
-  type DocMode,
-} from "./docs.ts";
-import { addRule, parseBlocks, safeRule } from "./refusals.ts";
+import { viewScreen, type Extra } from "./view.ts";
 import {
   NO_HUNT,
   UNREADABLE,
@@ -102,7 +95,6 @@ import {
   merge,
   modelKey,
   parseModels,
-  seenFrom,
 } from "./models.ts";
 
 const boardAtom = atom(
@@ -110,6 +102,7 @@ const boardAtom = atom(
   {
     found: false,
     epics: [],
+    helpers: [],
   } as HudBoard,
 );
 const agentsAtom = atom(
@@ -132,18 +125,6 @@ const modelsAtom = atom(
   { plugin: "kodflow-hud", key: "models" } as const,
   {} as Record<string, HudModel>,
 );
-const seenAtom = atom(
-  { plugin: "kodflow-hud", key: "seen" } as const,
-  {} as Record<string, HudSeen>,
-);
-const docsAtom = atom(
-  { plugin: "kodflow-hud", key: "docs" } as const,
-  NO_DOCS as HudDocs,
-);
-const blocksAtom = atom(
-  { plugin: "kodflow-hud", key: "blocks" } as const,
-  [] as HudBlock[],
-);
 const huntAtom = atom(
   { plugin: "kodflow-hud", key: "hunt" } as const,
   NO_HUNT as HudHunt,
@@ -151,6 +132,11 @@ const huntAtom = atom(
 const huntCursorAtom = atom(
   { plugin: "kodflow-hud", key: "huntCursor" } as const,
   {} as HudHuntCursor,
+);
+/** "unknown" while the last poll could not read `$.agent.list()`, else "". */
+const livenessAtom = atom(
+  { plugin: "kodflow-hud", key: "liveness" } as const,
+  "",
 );
 const primedAtom = atom({ plugin: "kodflow-hud", key: "primed" } as const, "");
 const tickAtom = atom({ plugin: "kodflow-hud", key: "tick" } as const, 0);
@@ -176,12 +162,14 @@ export const AGENTS_PANE = "hud-agents";
 export const tabTitle = (name: string, n: number): string =>
   `${name} (${n})${"\u2007".repeat(Math.max(0, 2 - String(n).length))}`;
 
-/** « Tâches (2) »: the tasks left to do across the open epics. */
+/**
+ * « Tâches (2) »: the tasks left to do that the tree shows (board.ts
+ * visibleTasks: no closed epic, no orphan).
+ */
 export const tasksTitle = (board: HudBoard): string =>
   tabTitle(
     "Tâches",
-    board.epics.flatMap((e) => e.tasks).filter((t) => t.status !== "completed")
-      .length,
+    visibleTasks(board).filter((t) => t.status !== "completed").length,
   );
 
 /** How often tasks.json's time and the agents are looked at. */
@@ -199,14 +187,14 @@ let lastSession = "";
 let lastMtime: number | undefined = -1;
 let modelsMtime: number | undefined = -1;
 let modelsPath = "";
-let allTasks: HudTask[] = [];
 // tasks.json as last read: the board is judged again on every poll, since an
 // epic done 30 minutes ago leaves it without the file changing
 let lastText: string | undefined;
 let lastCi = 0;
-// docs.json and blocks.jsonl: re-read when their time or their size moves
-const seenStat: Record<string, string | undefined> = {};
 let home: string | undefined;
+// A poll could not read the agents: the next one that can is the reference,
+// and what moved meanwhile is recorded without a toast
+let blind = false;
 // /hunt's files as the last poll read them, side by side: a poll that reads
 // the same text changes nothing (two whole rewrites in one tick can keep the
 // time and the size, never the text)
@@ -283,26 +271,6 @@ function ctxOf(
 }
 
 /**
- * A file of the session's folder, when its time or its size moved: its text,
- * or null. The size too: a rewrite within the same millisecond keeps the time.
- */
-async function changed(
-  $: any,
-  path: string,
-): Promise<string | undefined | null> {
-  const stat = await $.fs.stat(path).then(
-    (s: { mtimeMs: number; size: number }) => `${s.mtimeMs}:${s.size}`,
-    () => undefined,
-  );
-  if (path in seenStat && seenStat[path] === stat) return null;
-  const text =
-    stat === undefined ? undefined : await $.fs.read(path).catch(() => null);
-  if (text === null) return null;
-  seenStat[path] = stat;
-  return text;
-}
-
-/**
  * /hunt's active.json, then the status.json of each hunt it lists: paths
  * from HOME and the slug made safe, the text compared with the last poll's.
  * Then the toasts past each hunt's cursor. Never the journal, never a scan.
@@ -338,78 +306,6 @@ async function huntFailed($: any): Promise<void> {
     await update($, huntAtom, () => hunt);
 }
 
-/** docs.json and blocks.jsonl, beside tasks.json, kodflow-hooks' too. */
-async function pollSide($: any, tasks: string): Promise<void> {
-  const dir = tasks.replace(/\/tasks\.json$/, "");
-  const docs = await changed($, `${dir}/docs.json`);
-  if (docs !== null) {
-    const parsed = parseDocs(docs);
-    if (!same(await read($, docsAtom), parsed))
-      await update($, docsAtom, () => parsed);
-  }
-  const blocks = await changed($, `${dir}/blocks.jsonl`);
-  if (blocks !== null) {
-    const parsed = parseBlocks(blocks);
-    if (!same(await read($, blocksAtom), parsed))
-      await update($, blocksAtom, () => parsed);
-  }
-}
-
-/**
- * Writes `text` to `path` whole or not at all: a file beside it, then `mv`
- * over it (a rename, atomic on one file system).
- */
-async function writeWhole($: any, path: string, text: string): Promise<void> {
-  const tmp = `${path}.kodflow-hud.tmp`;
-  await $.fs.write(tmp, text);
-  const r = await $.process.run(["mv", "-f", tmp, path], { timeoutMs: 5_000 });
-  if (r.exitCode !== 0) throw new Error(r.stderr || `mv: ${r.exitCode}`);
-}
-
-/** Whether a document's path is there: a folder needs one .md in it. */
-async function present($: any, root: string, path: string): Promise<boolean> {
-  const abs = `${root.replace(/\/+$/, "")}/${path}`;
-  if (!path.endsWith("/")) return $.fs.exists(abs).catch(() => false);
-  const list: any[] = await $.fs.list(abs).catch(() => []);
-  return list.some((f) => f.kind === "file" && /\.md$/i.test(f.name));
-}
-
-/** A document ignored or brought back, in the project's manifest. */
-async function setIgnored($: any, id: string, ignore: boolean): Promise<void> {
-  const docs = await read($, docsAtom);
-  const doc = docs.docs.find((d) => d.id === id);
-  const path = manifestPath(docs);
-  if (!doc || !path) {
-    $.ui.toast("kodflow-hud : pas de manifeste à réécrire pour ce document.");
-    return;
-  }
-  const before: string | undefined = await $.fs
-    .read(path)
-    .catch(() => undefined);
-  const after = toggleManifest(before, id, ignore);
-  if (after === undefined) {
-    $.ui.toast(
-      `kodflow-hud : ${docs.manifest ?? "docs/manifest.json"} n'est pas un objet JSON, laissé tel quel.`,
-    );
-    return;
-  }
-  await writeWhole($, path, after);
-  // kodflow-hooks recomputes docs.json on its own clock: the line changes now
-  const state: HudDoc["state"] = ignore
-    ? "ignored"
-    : (await present($, docs.root!, doc.path))
-      ? "ok"
-      : "missing";
-  await update($, docsAtom, (d) => ({
-    ...d,
-    docs: d.docs.map((x): HudDoc => {
-      if (x.id !== id) return x;
-      const { reason: _r, ...rest } = x;
-      return ignore ? { ...rest, state, reason: "" } : { ...rest, state };
-    }),
-  }));
-}
-
 /** A prompt in the prompt box, as a draft: only where the box is empty. */
 async function draft($: any, text: string): Promise<void> {
   const box = await $.prompt.read().catch(() => ({ text: "" }));
@@ -427,74 +323,47 @@ async function draft($: any, text: string): Promise<void> {
   );
 }
 
-/**
- * A rule the person confirmed, in the project's .claude/settings.local.json:
- * only one a refusal of this session carries, and only one `safeRule` lets
- * through.
- */
-async function allowRule($: any, rule: string): Promise<void> {
-  const blocks = await read($, blocksAtom);
-  if (!safeRule(rule) || !blocks.some((b) => b.rule === rule)) {
-    $.ui.toast(
-      "kodflow-hud : règle refusée (trop large, ou d'aucun refus de la session).",
-    );
-    return;
-  }
-  const root = await $.session.root();
-  const path = `${String(root).replace(/\/+$/, "")}/${SETTINGS_LOCAL}`;
-  const before: string | undefined = await $.fs
-    .read(path)
-    .catch(() => undefined);
-  const after = addRule(before, rule);
-  if (after === undefined) {
-    $.ui.toast(
-      `kodflow-hud : ${SETTINGS_LOCAL} n'est pas un objet JSON, laissé tel quel.`,
-    );
-    return;
-  }
-  if (after !== before) await writeWhole($, path, after);
-  $.ui.toast(`kodflow-hud : ${rule} autorisé dans ${SETTINGS_LOCAL}.`);
-}
-
 /** What the pane's surface module posted, checked as input from code. */
 async function onMessage($: any, data: unknown): Promise<void> {
   const d = data as Record<string, unknown> | null;
   if (!d || typeof d !== "object") return;
-  const ids = (await read($, docsAtom)).docs.map((x) => x.id);
-  if (d.op === "ignore" && typeof d.id === "string" && ids.includes(d.id))
-    return setIgnored($, d.id, d.ignore === true);
-  if (d.op === "create" && Array.isArray(d.ids)) {
-    const mode = (MODES as readonly unknown[]).includes(d.mode)
-      ? (d.mode as DocMode)
-      : "both";
-    const missing = new Set(
-      (await read($, docsAtom)).docs
-        .filter((x) => x.state === "missing")
-        .map((x) => x.id),
-    );
-    const asked = d.ids.filter(
-      (x): x is string => typeof x === "string" && missing.has(x),
-    );
-    if (asked.length !== d.ids.length || (!asked.length && !missing.size))
-      return;
-    return draft($, createPrompt(asked, mode));
-  }
   // « reprendre »: a hunt listed now, probably orphaned, its slug /hunt's shape
   if (d.op === "resume") {
     if (!canResume(await read($, huntAtom), d.slug, await $.clock.now()))
       return;
     return draft($, resumePrompt(d.slug as string));
   }
-  if (d.op === "allow" && typeof d.rule === "string")
-    return allowRule($, d.rule);
-  if (d.op === "copy" && typeof d.rule === "string") {
-    const r = await $.ui.copy({ text: d.rule });
-    $.ui.toast(
-      r.isCopied
-        ? `kodflow-hud : ${d.rule} copié (/permissions, Ajouter une règle).`
-        : `kodflow-hud : copie impossible, la règle est ${d.rule}.`,
-    );
+}
+
+/**
+ * `$.agent.list()` as the pane reads it: `ok` false when it failed. An
+ * entry carrying `teammateId` is a teammate whose standing this mod cannot
+ * judge: « unknown », never stopped. `live` the ids that stand, the unknown
+ * ones counted with them, so none of their tasks is an orphan.
+ */
+async function listAgents(
+  $: any,
+): Promise<{ ok: boolean; agents: HudAgent[]; live: string[] }> {
+  let listed: any[];
+  try {
+    listed = await $.agent.list();
+    if (!Array.isArray(listed)) throw new Error("no list");
+  } catch {
+    return { ok: false, agents: [], live: [] };
   }
+  const agents: HudAgent[] = listed.map((a: any) => ({
+    id: a.id,
+    // Its name, else the few words of its task: its type is its role,
+    // shown beside the name, so it does not stand in for one
+    label: a.name || a.description || a.type || a.id.slice(0, 8),
+    status: a.teammateId ? UNKNOWN : a.status,
+    ...(a.name && { name: String(a.name) }),
+    ...(a.type && { type: String(a.type) }),
+  }));
+  const live = agents
+    .filter((a) => LIVE.has(a.status) || a.status === UNKNOWN)
+    .map((a) => a.id);
+  return { ok: true, agents, live };
 }
 
 /** One look at the world: tasks.json, the agents, the TTLs, the toasts. */
@@ -504,64 +373,61 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
   try {
     const now = await $.clock.now();
     const session = await $.session.id();
+    // Who stands first: the board marks the orphans with it
+    const list = await listAgents($);
+    if (list.ok && !same(await read($, agentsAtom), list.agents))
+      await update($, agentsAtom, () => list.agents);
+    const standing = list.ok ? "" : UNKNOWN;
+    if ((await read($, livenessAtom)) !== standing)
+      await update($, livenessAtom, () => standing);
     const path = await tasksPath($, session);
+    let board: HudBoard | undefined;
     if (path) {
       const mtime = await $.fs.stat(path).then(
         (s: { mtimeMs: number }) => s.mtimeMs,
         () => undefined,
       );
       if (session !== lastSession || mtime !== lastMtime) {
-        const text =
+        lastText =
           mtime === undefined
             ? undefined
             : await $.fs.read(path).catch(() => undefined);
-        let raw: unknown = undefined;
-        try {
-          raw = text === undefined ? undefined : JSON.parse(text);
-        } catch {
-          raw = undefined;
-        }
-        allTasks = parseTasks(raw);
-        lastText = text;
-        const seen = seenFrom(allTasks, await read($, seenAtom), session);
-        if (seen) await update($, seenAtom, () => seen);
         lastSession = session;
         lastMtime = mtime;
       }
-      const board = parseBoard(lastText, now);
+      // Without the list nobody is an orphan: the board is what the file says
+      board = parseBoard(lastText, now, list.ok ? list.live : undefined);
       if (!same(await read($, boardAtom), board))
-        await update($, boardAtom, () => board);
+        await update($, boardAtom, () => board!);
       await pollModels($, path);
-      await pollSide($, path);
     }
-    const listed = await $.agent.list().catch(() => []);
-    const agents: HudAgent[] = listed.map((a: any) => ({
-      id: a.id,
-      // Its name, else the few words of its task: its type is its role,
-      // shown beside the name, so it does not stand in for one
-      label: a.name || a.description || a.type || a.id.slice(0, 8),
-      status: a.status,
-      ...(a.name && { name: String(a.name) }),
-      ...(a.type && { type: String(a.type) }),
-    }));
-    if (!same(await read($, agentsAtom), agents))
-      await update($, agentsAtom, () => agents);
     await syncPanes($).catch(() => undefined);
 
-    const ctx = ctxOf(now, agents, await read($, activityAtom), silentMs);
-    const baseline = (await read($, primedAtom)) !== session;
-    const toasted = await read($, toastedAtom);
-    const { alerts, keys } = alertsFor(
-      session,
-      allTasks,
-      ctx,
-      new Set(toasted),
-      baseline,
-    );
-    if (keys.length)
-      await update($, toastedAtom, (k) => trimKeys([...k, ...keys]));
-    if (baseline) await update($, primedAtom, () => session);
-    for (const a of alerts) $.ui.toast(a.text);
+    // The toasts need to know who stands: without the list, none is raised
+    // nor recorded, and the next poll that reads it is the reference
+    if (!list.ok) blind = true;
+    if (list.ok && board) {
+      const ctx = ctxOf(now, list.agents, await read($, activityAtom), silentMs);
+      const baseline = (await read($, primedAtom)) !== session || blind;
+      blind = false;
+      const toasted = await read($, toastedAtom);
+      // What is shown, and the orphans of the epics not closed: a task left
+      // in progress by a stopped subagent is said once, as stopped
+      const told = [...visibleTasks(board)];
+      for (const h of board.helpers ?? [])
+        if (h.stopped && !told.includes(h)) told.push(h);
+      const { alerts, keys } = alertsFor(
+        session,
+        told,
+        ctx,
+        new Set(toasted),
+        baseline,
+      );
+      if (keys.length)
+        await update($, toastedAtom, (k) => trimKeys([...k, ...keys]));
+      if (baseline) await update($, primedAtom, () => session);
+      for (const a of alerts) $.ui.toast(a.text);
+    }
 
     const tick = Math.floor(now / TICK_MS);
     if ((await read($, tickAtom)) !== tick)
@@ -586,7 +452,7 @@ async function checkCi($: any): Promise<void> {
   if (checking) return;
   checking = true;
   try {
-    const prs = prsToCheck((await read($, boardAtom)).epics);
+    const prs = prsToCheck(visibleTasks(await read($, boardAtom)));
     for (const pr of prs) {
       const r = await $.process
         .run(["gh", "pr", "checks", pr], { timeoutMs: 20_000 })
@@ -615,7 +481,7 @@ async function syncPanes($: any): Promise<void> {
   if (syncing) return;
   syncing = true;
   try {
-    const panes: any[] = await $.ui.panes().catch(() => []);
+    const panes: readonly any[] = await $.ui.panes().catch(() => []);
     if (!Array.isArray(panes)) return;
     const title = tasksTitle(await read($, boardAtom));
     const tasks = panes.find((p) => p.id === TASKS_PANE);
@@ -679,7 +545,7 @@ export const register: Register = (on, options) => {
     // below that it waits, and /hud seats it at any width. « Tâches » is the
     // only pane, so the first tab and the one shown. An Agents tab an older
     // version left up is closed: a close shows the pane left, never a new one
-    const up: any[] = await $.ui.panes().catch(() => []);
+    const up: readonly any[] = await $.ui.panes().catch(() => []);
     const has = (id: string) =>
       Array.isArray(up) && up.some((p) => p.id === id);
     if (has(AGENTS_PANE))
@@ -753,30 +619,32 @@ export const register: Register = (on, options) => {
     async ($, e) => {
       const els: any = $.ui.resolve(e);
       await read($, tickAtom);
-      const [board, agents, activity, ciMap, models, seen] = await Promise.all([
+      const [board, agents, activity, ciMap, models] = await Promise.all([
         read($, boardAtom),
         read($, agentsAtom),
         read($, activityAtom),
         read($, ciAtom),
         read($, modelsAtom),
-        read($, seenAtom),
       ]);
+      const ctx = ctxOf(await $.clock.now(), agents, activity, settings.silentMs);
+      // The last poll could not read the agents: nobody's standing is known
+      if ((await read($, livenessAtom)) === UNKNOWN) ctx.liveness = UNKNOWN;
       const model = buildTree({
         board,
-        ctx: ctxOf(await $.clock.now(), agents, activity, settings.silentMs),
+        ctx,
         ci: ciMap,
         models,
-        seen,
         session: await $.session.id(),
       });
       const width = e.props.bodyColumns;
       const rows = e.props.scroll.bodyRows;
       const extra: Extra = {
-        docs: await read($, docsAtom),
-        blocks: await read($, blocksAtom),
         now: await $.clock.now(),
         hunt: await read($, huntAtom),
       };
+      // Tests only: the fault seam (view.ts), inert in a session
+      if ((await $.env.get("KODFLOW_HUD_FAULT_PROBE")) === "1")
+        extra.faultProbe = true;
       // Where the surface runs modules (terminal, desktop) the tree takes
       // keys and clicks; elsewhere it is drawn still, at its first state
       // (the table may name Client where the surface then drops it), and so
@@ -819,11 +687,11 @@ export const register: Register = (on, options) => {
     return r;
   });
 
-  // A click or a key in the pane: the only road to the writes and drafts
+  // A click or a key in the pane: the only road to the draft
   on("ui.message", async ($, e, next) => {
     if (e.requestId === TASKS_PANE && e.module.endsWith("client.tsx"))
       await onMessage($, e.data).catch(() =>
-        $.ui.toast("kodflow-hud : l'écriture a échoué, rien n'a changé."),
+        $.ui.toast("kodflow-hud : le brouillon n'a pas pu être posé."),
       );
     return next(e);
   }).catch(($, e, next) => next(e));

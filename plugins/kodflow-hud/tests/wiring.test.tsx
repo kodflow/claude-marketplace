@@ -3,11 +3,10 @@
 // agents, commands, toasts) and the clock moved by the test.
 import { test, expect } from "claude-code/testing";
 
-import { NOW, PANE, PR, SEC, T, host, start, writeTasks } from "./host.ts";
+import { NOW, PANE, PR, SEC, T, TASKS, host, start, writeTasks } from "./host.ts";
 import { capture, widths } from "./capture.ts";
 import { colorOf } from "../hooks/mod/who.ts";
 import { tasksTitle } from "../hooks/mod/register.tsx";
-import { BLOCKS } from "./fixtures.ts";
 import { STATUS_TORN, STATUS_V1 } from "./hunt-fixtures.ts";
 
 // Hundreds of polls on the mocked clock: past the kit's 5 s on a slow machine
@@ -284,7 +283,6 @@ test("an epic whose last task was just done stays 20 minutes, in the tree, then 
   };
   const first = await drawn();
   expect(first).toContain("◆ #2     SDK status-line");
-  console.log(first);
   expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (0)\u2007" }]);
   await clock.advance(20 * 60_000);
   expect(await drawn()).toContain("◆ #2     SDK status-line");
@@ -347,7 +345,7 @@ test("a corrupt status.json says « état illisible » in « Chasse », and the 
     props: PANE(88, 20),
   });
   expect(capture(await ui.drawn({ in: "tree" }))).toContain("Task 3");
-  await ui.pointer({ type: "down", x: 50, y: 19, button: "left" });
+  await ui.pointer({ type: "down", x: 10, y: 19, button: "left" });
   expect(capture(await ui.drawn({ in: "tree" }))).toMatch(
     /état +état illisible/,
   );
@@ -414,15 +412,282 @@ test("KODFLOW_HUD_HUNT=off: no « Chasse », no toast", async ($, on) => {
   expect(h.toasts).toEqual([]);
 });
 
-test("blocks.jsonl rewritten within the same millisecond is read again: the size moved", async ($, on) => {
+// --- the epics' lifecycle, the subagents' own tasks, who stands ------------------
+
+const mountTree = async ($: any, w = 100, rows = 30) =>
+  $.ui.mount({
+    plugin: "kodflow-hud",
+    surface: "terminal",
+    component: "Pane",
+    requestId: "hud-tasks",
+    props: PANE(w, rows),
+  });
+const shownText = async ($: any, w = 100, rows = 30) => {
+  const ui = await mountTree($, w, rows);
+  const text = capture(await ui.drawn({ in: "tree" }));
+  await ui.unmount();
+  return text;
+};
+/** A subagent's own task, filed under no epic as kodflow-hooks keeps it. */
+const S = (id: string, agent: string, status: string, over: object = {}) => ({
+  ...T(id, status, over),
+  agent,
+  epic: 0,
+});
+const writeFile = (h: any, file: object, mtimeMs: number) =>
+  h.files.set(TASKS, { text: JSON.stringify(file), mtimeMs });
+
+const epicsFile = (tasks: object[], epics?: object[]) => ({
+  version: 2,
+  active: { main: 2 },
+  epics: epics ?? [
+    { id: 2, agent: "main", title: "SDK status-line", created: SEC, touched: SEC },
+  ],
+  tasks,
+});
+
+test("a subagent's tasks hang on the task it was handed: one summary line, no row of their own", async ($, on) => {
   const { h, clock } = host(on);
-  writeTasks(h, [T("1", "in_progress")], 1);
-  const line = (summary: string) =>
-    `${JSON.stringify({ ts: new Date(NOW).toISOString(), kind: "hook", tool: "Bash", summary })}\n`;
-  h.files.set(BLOCKS, { text: line("a"), mtimeMs: 5 });
+  h.agents = [{ id: "a1", type: "general-purpose", name: "impl", status: "running" }];
+  writeFile(
+    h,
+    epicsFile([
+      T("1", "in_progress", { worker: "impl", worker_id: "a1", workers: ["a1"] }),
+      S("7", "a1", "in_progress", { subject: "Wire probe" }),
+      S("8", "a1", "completed", { subject: "Read spec" }),
+    ]),
+    1,
+  );
   await start($, clock);
-  expect((await barOf($))[19]).toContain("Refus (1)");
-  h.files.set(BLOCKS, { text: line("a") + line("b"), mtimeMs: 5 });
+  const text = await shownText($);
+  expect(text).toContain("↳ sous-agents : 2 tâches (1 faite) · en cours #7 Wire probe");
+  expect(text).not.toContain("Read spec");
+  // Counted in the tab with the main tasks, never as an epic of their own
+  expect(h.panes[0]!.title).toBe("Tâches (2) ");
+  expect(text).not.toContain("Sous-agents");
+});
+
+test("an orphan: one toast, no row; the summary counts it stopped", async ($, on) => {
+  const { h, clock } = host(on);
+  h.agents = [{ id: "a1", type: "general-purpose", status: "running" }];
+  writeFile(
+    h,
+    epicsFile([
+      T("1", "in_progress", { worker_id: "a1", workers: ["a2", "a1"] }),
+      S("7", "a1", "pending", { subject: "Next step" }),
+    ]),
+    1,
+  );
+  await start($, clock);
+  expect(h.toasts).toEqual([]);
+  // a2 left a task in progress, and is no longer listed
+  writeFile(
+    h,
+    epicsFile([
+      T("1", "in_progress", { worker_id: "a1", workers: ["a2", "a1"] }),
+      S("7", "a1", "pending", { subject: "Next step" }),
+      S("9", "a2", "in_progress", { subject: "Left behind" }),
+    ]),
+    2,
+  );
   await clock.advance(3_000);
-  expect((await barOf($))[19]).toContain("Refus (2)");
+  expect(h.toasts).toEqual(["#9 Left behind : silencieuse, son worker est arrêté"]);
+  await clock.advance(30_000);
+  expect(h.toasts).toHaveLength(1);
+  const text = await shownText($);
+  expect(text).not.toContain("Left behind");
+  expect(text).toContain("1 arrêtée");
+  expect(h.panes[0]!.title).toBe("Tâches (2) ");
+});
+
+test("no task names the subagent: its tasks form « Sous-agents », which counts the stopped ones", async ($, on) => {
+  const { h, clock } = host(on);
+  h.agents = [{ id: "a1", type: "Explore", status: "running" }];
+  writeFile(
+    h,
+    epicsFile([
+      T("1", "pending"),
+      S("7", "a1", "in_progress", { subject: "Looking around" }),
+      S("8", "a3", "pending", { subject: "Lost one" }),
+    ]),
+    1,
+  );
+  await start($, clock);
+  const text = await shownText($);
+  expect(text).toMatch(/Sous-agents.*1 arrêtée/);
+  expect(text).toContain("Looking around");
+  expect(text).not.toContain("Lost one");
+});
+
+test("the anchor done while its helper still runs: the summary stays under it", async ($, on) => {
+  const { h, clock } = host(on);
+  h.agents = [{ id: "a1", type: "general-purpose", status: "running" }];
+  writeFile(
+    h,
+    epicsFile([
+      T("1", "completed", { workers: ["a1"] }),
+      T("2", "pending"),
+      S("7", "a1", "in_progress", { subject: "Still going" }),
+    ]),
+    1,
+  );
+  await start($, clock);
+  const lines = (await shownText($)).split("\n");
+  const at = lines.findIndex((l) => l.includes("Task 1"));
+  expect(lines[at + 1]).toContain("↳ sous-agents : 1 tâche · en cours #7 Still going");
+});
+
+test("$.agent.list() failing: no toast, no key written, the agents kept, nobody stopped", async ($, on) => {
+  const { h, clock } = host(on, { env: { KODFLOW_HUD_TRACE: "/tmp/hud-trace.json" } });
+  h.agents = [{ id: "a1", type: "general-purpose", name: "impl", status: "running" }];
+  writeFile(
+    h,
+    epicsFile([
+      T("1", "in_progress", { worker: "impl", worker_id: "a1", workers: ["a1"] }),
+      T("2", "pending"),
+      S("7", "a1", "in_progress", { subject: "Helper work" }),
+    ]),
+    1,
+  );
+  await start($, clock);
+  h.agentsFail = true;
+  writeFile(
+    h,
+    epicsFile([
+      T("1", "in_progress", { worker: "impl", worker_id: "a1", workers: ["a1"] }),
+      T("2", "completed"),
+      S("7", "a1", "in_progress", { subject: "Helper work" }),
+    ]),
+    2,
+  );
+  await clock.advance(30 * 60_000);
+  expect(h.toasts).toEqual([]);
+  const text = await shownText($);
+  // The worker is still named from the list kept, and is not « figé »
+  expect(text).toContain("↳ impl");
+  expect(text).toContain("état inconnu");
+  await $.session.end({ reason: "other" } as any);
+  const trace = JSON.parse(h.files.get("/tmp/hud-trace.json")!.text);
+  expect(trace.agents.map((a: any) => a.id)).toEqual(["a1"]);
+  // The list back: that poll is the reference, what ended meanwhile is not toasted
+  h.agentsFail = false;
+  await clock.advance(3_000);
+  expect(h.toasts).toEqual([]);
+});
+
+test("the first poll after a session change cannot read the agents: the board shows, no toast, the next poll is the reference", async ($, on) => {
+  let session = "sess-1";
+  const { h, clock } = host(on, { session: () => session });
+  writeTasks(h, [T("1", "in_progress")], 1);
+  await start($, clock);
+  session = "sess-2";
+  h.agentsFail = true;
+  h.files.set("/cfg/kodflow/sessions/sess-2/tasks.json", {
+    text: JSON.stringify(epicsFile([T("1", "completed"), T("2", "pending")])),
+    mtimeMs: 1,
+  });
+  await clock.advance(3_000);
+  expect(h.toasts).toEqual([]);
+  expect(await shownText($)).toContain("Task 2");
+  h.agentsFail = false;
+  await clock.advance(3_000);
+  // The baseline of the new session: what stood is recorded, not toasted
+  expect(h.toasts).toEqual([]);
+});
+
+test("a closed epic: no row, no toast, no CI, no count", async ($, on) => {
+  const { h, clock } = host(on);
+  writeFile(
+    h,
+    epicsFile(
+      [T("1", "pending"), T("3", "pending", { epic: 4, description: PR })],
+      [
+        { id: 2, agent: "main", title: "SDK status-line", created: SEC, touched: SEC },
+        { id: 4, agent: "main", title: "Shut", created: SEC, touched: SEC, closed_at: SEC },
+      ],
+    ),
+    1,
+  );
+  await start($, clock);
+  writeFile(
+    h,
+    epicsFile(
+      [T("1", "pending"), T("3", "completed", { epic: 4, description: PR })],
+      [
+        { id: 2, agent: "main", title: "SDK status-line", created: SEC, touched: SEC },
+        { id: 4, agent: "main", title: "Shut", created: SEC, touched: SEC, closed_at: SEC },
+      ],
+    ),
+    2,
+  );
+  await clock.advance(6 * 60_000);
+  expect(h.toasts).toEqual([]);
+  expect(h.runs).toEqual([]);
+  expect(h.panes[0]!.title).toBe("Tâches (1) ");
+  expect(await shownText($)).not.toContain("Shut");
+});
+
+test("an idle epic is one line; ⏎ or a click opens it", async ($, on) => {
+  const { h, clock } = host(on);
+  const old = SEC - 2 * 86_400;
+  writeFile(
+    h,
+    epicsFile(
+      [
+        T("1", "pending", { updated: old }),
+        T("2", "pending", { epic: 5, subject: "Fresh" }),
+      ],
+      [
+        { id: 2, agent: "main", title: "SDK status-line", created: old, touched: old },
+        { id: 5, agent: "main", title: "Today", created: SEC, touched: SEC },
+      ],
+    ),
+    1,
+  );
+  await start($, clock);
+  const ui = await mountTree($);
+  let text = capture(await ui.drawn({ in: "tree" }));
+  expect(text).toMatch(/◆ #2 +SDK status-line +0\/1 · actif · inactive ▸/);
+  expect(text).not.toContain("Task 1");
+  const y = text.split("\n").findIndex((l) => l.includes("inactive ▸"));
+  await ui.pointer({ type: "down", x: 12, y, button: "left" });
+  text = capture(await ui.drawn({ in: "tree" }));
+  expect(text).toContain("inactive ▾");
+  expect(text).toContain("Task 1");
+  await ui.key({ key: "return", in: "tree" });
+  expect(capture(await ui.drawn({ in: "tree" }))).not.toContain("Task 1");
+});
+
+test("a selection the tree no longer shows moves to the active epic's first task", async ($, on) => {
+  const { h, clock } = host(on);
+  const epics = (closedAt?: number) => [
+    { id: 2, agent: "main", title: "SDK status-line", created: SEC, touched: SEC },
+    { id: 4, agent: "main", title: "Other", created: SEC + 1, touched: SEC, ...(closedAt && { closed_at: closedAt }) },
+  ];
+  writeFile(h, epicsFile([T("1", "pending"), T("3", "pending", { epic: 4, subject: "Elsewhere" })], epics()), 1);
+  await start($, clock);
+  const ui = await mountTree($);
+  const lines = capture(await ui.drawn({ in: "tree" })).split("\n");
+  await ui.pointer({ type: "down", x: 12, y: lines.findIndex((l) => l.includes("Elsewhere")), button: "left" });
+  expect(capture(await ui.drawn({ in: "tree" }))).toMatch(/▶ #3 +Elsewhere +prête/);
+  writeFile(h, epicsFile([T("1", "pending"), T("3", "pending", { epic: 4, subject: "Elsewhere" })], epics(SEC)), 2);
+  await clock.advance(3_000);
+  await ui.redraw();
+  const now = capture(await ui.drawn({ in: "tree" }));
+  expect(now).not.toContain("Elsewhere");
+  // The detail line speaks of the active epic's first task
+  expect(now).toMatch(/▶ #1  Task 1/);
+});
+
+test("an empty board drawn once, then the full one: the first task is chosen", async ($, on) => {
+  const { h, clock } = host(on);
+  await start($, clock);
+  const ui = await mountTree($);
+  expect(await ui.find({ in: "tree", text: /Aucune liste de tâches/ })).toBeDefined();
+  await ui.key({ key: "down", in: "tree" });
+  writeTasks(h, [T("1", "in_progress"), T("2", "pending")], 1);
+  await clock.advance(3_000);
+  await ui.redraw();
+  const text = capture(await ui.drawn({ in: "tree" }));
+  expect(text).toMatch(/● #1  Task 1/);
 });

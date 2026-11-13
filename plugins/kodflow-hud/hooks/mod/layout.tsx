@@ -1,5 +1,5 @@
-// layout.tsx — the « Tâches » pane's two views, laid out cell by cell.
-// Pure: no `$`. The surface module (client.tsx) draws them with its own
+// layout.tsx — the « Tâches » pane's tree, laid out cell by cell.
+// Pure: no `$`. The surface module (client.tsx) draws it with its own
 // elements and keeps the selection; a surface with no `Client` gets the same
 // screen, still, from the hooks module.
 //
@@ -18,18 +18,16 @@
 // colour, « ↳ name · role » in the subagent's own (who.ts), « toi », « prête ».
 // Narrower, the links go first (under 88), then the model (under 76), then
 // the agent (under 64); the tree and the age stay. On 20 rows: title,
-// headers, the epic, 11 tasks, a rule, the critical path, two lines of
-// detail on the selection and the two lines of the views' bar. Shorter, the
-// finished branches fold into « ✓ fait (n) », first under the epic, then
-// the detail drops to one line, then to none, then the list scrolls with the
-// selection.
+// headers, the epic, 11 tasks, a rule, the critical path and two lines of
+// detail on the selection. Shorter, the finished branches fold into « ✓ fait
+// (n) », first under the epic, then the detail drops to one line, then to
+// none, then the list scrolls with the selection.
 //
-// R4, the graph: three columns of 26 (FAIT · PRÊT, EN COURS · ATTENTE,
-// BLOQUÉ) and two gutters of 5, each top-level task on two rows (its title,
-// then its agent and age). A gutter routes its links on a vertical with
-// ┬ ┐ ┤ ┼ ┘ └ junctions, links sharing no lane on stretches of their own; a
-// link that skips the middle column crosses it on a lane of its own, as a
-// solid line, so no two lines ever cross.
+// Epics stand in the order they were opened, the active one marked « actif »
+// in place. One idle for 24 h is a single line, « ▸ », that ⏎ or a click
+// opens (`Ui.idle`). Under a task handed to subagents, one read-only line
+// sums up their own tasks (tree.ts `helpers`). The views' bar (« Arbre »,
+// « Chasse ») is drawn only while a hunt is listed.
 
 import type { NodeState, TreeEpic, TreeModel, TreeNode } from "./tree.ts";
 import {
@@ -72,7 +70,7 @@ export type Screen = {
   /** The line of the views' bar, and where each view's name sits. */
   tabsLine: number;
   tabs: { x: number; w: number; view: View }[];
-  /** What a click on a line does beyond choosing it (« Refus », « Documents »). */
+  /** What a click on a line does beyond choosing it (« reprendre » in « Chasse »). */
   buttons?: { y: number; x: number; w: number; act: Act }[];
   /** The tasks ↑ and ↓ walk, in the order shown. */
   order: string[];
@@ -80,31 +78,24 @@ export type Screen = {
   list: { top: number; rows: number };
 };
 
-export type View = "tree" | "graph" | "blocks" | "docs" | "hunt";
+export type View = "tree" | "hunt";
 /** « Chasse » last, and only while a hunt is listed (`BarCounts.hunt`). */
-export const VIEWS: readonly View[] = ["tree", "graph", "blocks", "docs", "hunt"];
+export const VIEWS: readonly View[] = ["tree", "hunt"];
 
 /**
- * The counts the views' bar shows beside « Refus » and « Documents », and
  * « Chasse »'s label (hunt.ts, one width) when a hunt is listed: no hunt, no
- * tab.
+ * bar at all.
  */
-export type BarCounts = { blocks: number; docs: number; hunt?: string };
-const NO_COUNTS: BarCounts = { blocks: 0, docs: 0 };
+export type BarCounts = { hunt?: string };
+const NO_COUNTS: BarCounts = {};
 
-/**
- * A button of the « Refus » and « Documents » views. `allow`, `copy`,
- * `create` and `ignore` go to the hooks module (`surface.post`); `pick`,
- * `cancel` and `mode` stay in the surface module's state.
- */
-export type Act =
-  | { op: "allow" | "copy"; rule: string }
-  | { op: "pick"; rule: string }
-  | { op: "cancel" }
-  | { op: "create"; ids: string[] }
-  | { op: "mode"; mode: "ask" | "context" | "both" }
-  | { op: "ignore"; id: string; ignore: boolean }
-  | { op: "resume"; slug: string };
+/** A button of the « Chasse » view, posted to the hooks module. */
+export type Act = { op: "resume"; slug: string };
+
+/** The selection key of an idle epic's line: never a task id. */
+export const idleKey = (epic: number): string => `epic:${epic}`;
+export const epicOfKey = (key: string | undefined): number | undefined =>
+  key?.startsWith("epic:") ? Number(key.slice(5)) : undefined;
 
 /**
  * What the person moved: kept by the surface module, across redraws. `pin`
@@ -117,13 +108,7 @@ export type Ui = {
   sel?: string;
   open: string[];
   pin?: { id: string; y: number };
-  /** « Refus »: the refusal chosen, and the rule shown for confirmation. */
-  bsel?: string;
-  pick?: string;
-  /** « Documents »: the document chosen, and the mode « Créer » drafts. */
-  dsel?: string;
-  mode?: "ask" | "context" | "both";
-  /** The line the chosen refusal or document stays on, as `pin`. */
+  /** The line the chosen line of « Chasse » stays on, as `pin`. */
   ppin?: { id: string; y: number };
   /** « Chasse »: the line chosen, and each hunt's last seq when the view
    * was opened before this time (`hsince`) and this time (`hlast`): the
@@ -131,6 +116,8 @@ export type Ui = {
   hsel?: string;
   hsince?: Record<string, number>;
   hlast?: Record<string, number>;
+  /** The idle epics the person opened. */
+  idle?: number[];
 };
 
 export const FULL = { links: 88, model: 76, agent: 64 } as const;
@@ -163,16 +150,11 @@ export const GLYPH: Record<
 
 const HINTS: Record<View, string> = {
   tree: "↑↓ choisir · ⏎ plier · tab vue",
-  graph: "↑↓ choisir · ⏎ plier · tab vue",
-  blocks: "↑↓ choisir · ⏎ règle · tab vue",
-  docs: "⏎ ignorer · c créer · m mode · tab",
   hunt: "↑↓ choisir · ⏎ reprendre · tab vue",
 };
 const HINT_SHORT = "↑↓ ⏎ tab";
-// The bar with « Chasse »: the long names and « Chasse » (46 + 3 + 6), then
-// its counter too (46 + 3 + 15)
-const HUNT_WIDE = 55;
-const HUNT_FULL = 64;
+// « Arbre », then « Chasse » with its counter from this width, alone below
+const HUNT_FULL = 26;
 
 // --- cells ------------------------------------------------------------------------
 
@@ -269,7 +251,7 @@ const findNode = (model: TreeModel, id: string | undefined) => {
  */
 export function initialUi(model: TreeModel): Ui {
   for (const epic of model.epics)
-    for (const top of epic.nodes) {
+    for (const top of epic.idle ? [] : epic.nodes) {
       if (top.state !== "run") continue;
       const open: string[] = [];
       for (let n: TreeNode | undefined = top; n?.kids.length;) {
@@ -278,11 +260,73 @@ export function initialUi(model: TreeModel): Ui {
       }
       return { view: "tree", sel: top.id, open };
     }
-  const tops = model.epics.flatMap((e) => e.nodes);
+  const tops = model.epics.flatMap((e) => (e.idle ? [] : e.nodes));
   const first = tops.find((n) => n.state !== "done") ?? tops[0];
-  return first
-    ? { view: "tree", sel: first.id, open: [] }
+  if (first) return { view: "tree", sel: first.id, open: [] };
+  const sleeping = model.epics.find((e) => e.idle);
+  return sleeping
+    ? { view: "tree", sel: idleKey(sleeping.id), open: [] }
     : { view: "tree", open: [] };
+}
+
+/** Whether `sel` is a line the tree shows now: a task, or an idle epic's line. */
+function shown(model: TreeModel, ui: Ui, sel: string): boolean {
+  const epic = epicOfKey(sel);
+  if (epic !== undefined)
+    return model.epics.some((e) => e.id === epic && e.idle);
+  const hit = findNode(model, sel);
+  return !!hit && (!hit.epic.idle || (ui.idle ?? []).includes(hit.epic.id));
+}
+
+const VIEW_SET: ReadonlySet<string> = new Set(VIEWS);
+
+/**
+ * What the surface kept, made safe to draw: a view this version does not
+ * have is the tree, fields of an older version are left aside, a selection
+ * the tree no longer shows (its epic closed, its task gone) moves to the
+ * first task of the active epic, else the tree's first. Nothing is written
+ * back: only what the person changes is kept.
+ */
+export function normalise(model: TreeModel, raw: unknown): Ui {
+  if (!raw || typeof raw !== "object") return initialUi(model);
+  const u = raw as Record<string, any>;
+  const strings = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  const ui: Ui = {
+    view: VIEW_SET.has(u.view) ? u.view : "tree",
+    open: strings(u.open),
+  };
+  if (typeof u.sel === "string") ui.sel = u.sel;
+  const pinOk = (p: any) =>
+    p && typeof p.id === "string" && Number.isInteger(p.y);
+  if (pinOk(u.pin)) ui.pin = { id: u.pin.id, y: u.pin.y };
+  if (pinOk(u.ppin)) ui.ppin = { id: u.ppin.id, y: u.ppin.y };
+  if (typeof u.hsel === "string") ui.hsel = u.hsel;
+  for (const k of ["hsince", "hlast"] as const)
+    if (u[k] && typeof u[k] === "object") ui[k] = u[k];
+  if (Array.isArray(u.idle))
+    ui.idle = u.idle.filter((x: unknown): x is number => Number.isInteger(x));
+  return repair(model, ui);
+}
+
+/** A selection the tree does not show moved to the active epic's first task. */
+export function repair(model: TreeModel, ui: Ui): Ui {
+  if (ui.sel !== undefined && shown(model, ui, ui.sel)) return ui;
+  const active = model.epics.find((e) => e.active && !e.idle);
+  const first = active?.nodes[0]?.id ?? initialUi(model).sel;
+  const { pin: _pin, sel: _sel, ...rest } = ui;
+  return first === undefined ? rest : { ...rest, sel: first };
+}
+
+/** ⏎ or a click on an idle epic's line: it opens, or closes again. */
+export function toggleIdle(ui: Ui, epic: number): Ui {
+  const open = ui.idle ?? [];
+  return {
+    ...ui,
+    idle: open.includes(epic)
+      ? open.filter((e) => e !== epic)
+      : [...open, epic],
+  };
 }
 
 /**
@@ -473,6 +517,31 @@ function taskLine(
   return out;
 }
 
+/**
+ * The read-only line under a task handed to subagents: how many tasks of
+ * their own, how many done, the one under way, those a stopped agent left.
+ * Not a row of the tree: no depth, no count, no critical path.
+ */
+function helpersLine(v: Visible, cols: Cols, width: number): Cell[] {
+  const h = v.node.helpers!;
+  const indent = W.level * (v.depth + 1);
+  const parts: Span[] = [
+    dim("↳ sous-agents : "),
+    span(`${h.total} tâche${h.total > 1 ? "s" : ""}`),
+    dim(h.done ? ` (${h.done} faite${h.done > 1 ? "s" : ""})` : ""),
+  ];
+  if (h.current) parts.push(dim(" · en cours "), span(h.current, { color: AMBER }));
+  if (h.stopped)
+    parts.push(dim(" · "), span(`${h.stopped} arrêtée${h.stopped > 1 ? "s" : ""}`, { color: RED }));
+  if (h.unknown) parts.push(dim(" · état inconnu"));
+  const used = W.margin + Math.min(indent, cols.tree);
+  return [
+    cell(W.margin),
+    cell(Math.min(indent, cols.tree)),
+    cell(Math.max(0, width - used), parts),
+  ];
+}
+
 function headerLine(cols: Cols): Cell[] {
   const hd = (t: string) => [dim(t)];
   const out: Cell[] = [cell(W.margin), cell(cols.tree, hd("TÂCHE"))];
@@ -490,21 +559,36 @@ const progress = (epic: TreeEpic): Span =>
     : dim(`${epic.done}/${epic.total}`);
 
 /**
- * An epic's line: ◆, its number and title, its progress right after the
- * title, its age. The agent and model columns stay empty: they speak of the
- * tasks. The tasks filed under no epic sit under a quiet « Hors épopée »,
- * with no number, no progress and no age.
+ * An epic's line: ◆, its number and title, « actif » on the main agent's
+ * active one, its progress right after, its age. The agent and model
+ * columns stay empty: they speak of the tasks. The tasks filed under no
+ * epic sit under a quiet « Hors épopée », with no number, no progress and
+ * no age; the subagents' tasks no task names under « Sous-agents », with
+ * how many their stopped agents left. An idle epic folded is « ▸ » and
+ * « inactive », its tasks out of view until it is opened.
  */
-function epicLine(epic: TreeEpic, cols: Cols): Cell[] {
+function epicLine(
+  epic: TreeEpic,
+  cols: Cols,
+  folded = false,
+  selected = false,
+): Cell[] {
   // The title runs over the agent and model columns, empty on this line
   const span2 =
     cols.tree +
     (cols.agent ? W.gap + W.agent : 0) +
     (cols.model ? W.gap + W.model : 0);
   const titleW = Math.max(0, span2 - W.glyph - W.ref);
-  const loose = epic.id === 0;
+  const loose = epic.id <= 0;
   const count = loose ? undefined : progress(epic);
-  const countW = count ? cells(count.text) + 2 : 0;
+  const tags: Span[] = [];
+  if (epic.active) tags.push(dim(" · "), span("actif", { color: MAUVE }));
+  if (epic.idle)
+    tags.push(dim(" · "), span(folded ? "inactive ▸" : "inactive ▾", { dim: true }));
+  if (epic.stopped)
+    tags.push(dim(" · "), span(`${epic.stopped} arrêtée${epic.stopped > 1 ? "s" : ""}`, { color: RED }));
+  const tail: Span[] = [...(count ? [dim("  "), count] : []), ...tags];
+  const countW = cells(tail.map((s) => s.text).join(""));
   const nameW = Math.max(
     0,
     Math.min(cells(epic.title), titleW - (titleW > countW + 4 ? countW : 0)),
@@ -519,12 +603,16 @@ function epicLine(epic: TreeEpic, cols: Cols): Cell[] {
       ),
       cell(nameW, [
         loose
-          ? dim(epic.title)
-          : span(epic.title, { color: MAUVE, bold: true }),
+          ? span(epic.title, { dim: true, ...(selected && { underline: true }) })
+          : span(epic.title, {
+              color: MAUVE,
+              bold: true,
+              ...(selected && { underline: true }),
+            }),
       ]),
       cell(
         Math.max(0, titleW - nameW),
-        count && titleW - nameW >= countW ? [dim("  "), count] : [],
+        titleW - nameW >= countW ? tail : count ? [dim("  "), count] : [],
       ),
     ]),
   ];
@@ -681,14 +769,9 @@ function detailLines(
 }
 
 /**
- * The views' bar: « Arbre », « Graphe », « Refus (n) », « Documents (n) »,
- * each count of one width up to 99 (a figure space after a single digit) so
- * no name moves from under the pointer when a count does; the hint of the
- * view shown on the right, where it fits. Narrower than 46 cells the counts
- * go and « Documents » is « Docs ». « Chasse » comes last, only while a hunt
- * is listed, its label of one width (hunt.ts); the bar then needs 9 more
- * cells for the long names and 18 for its counter, else it is « Chasse »
- * alone, and a bar too narrow even for that leaves it to the tab key.
+ * The views' bar, drawn only while a hunt is listed: « Arbre », then
+ * « Chasse » with its label of one width (hunt.ts) where it fits, else
+ * « Chasse » alone; the hint of the view shown on the right, where it fits.
  */
 export function tabsLines(
   view: View,
@@ -697,27 +780,10 @@ export function tabsLines(
 ): { lines: Cell[][]; tabs: Screen["tabs"] } {
   const on = (v: View): Omit<Span, "text"> =>
     v === view ? { color: MAUVE, bold: true, underline: true } : { dim: true };
-  const n = (k: number) => {
-    const c = Math.min(99, Math.max(0, k));
-    return ` (${c})${"\u2007".repeat(Math.max(0, 2 - String(c).length))}`;
-  };
-  const hunt = counts.hunt;
-  const wide = width >= (hunt ? HUNT_WIDE : 46);
-  const names: [View, string][] = wide
-    ? [
-        ["tree", "Arbre"],
-        ["graph", "Graphe"],
-        ["blocks", `Refus${n(counts.blocks)}`],
-        ["docs", `Documents${n(counts.docs)}`],
-      ]
-    : [
-        ["tree", "Arbre"],
-        ["graph", "Graphe"],
-        ["blocks", "Refus"],
-        ["docs", "Docs"],
-      ];
-  if (hunt) names.push(["hunt", width >= HUNT_FULL ? hunt : "Chasse"]);
-  const sep = wide ? 3 : 1;
+  const names: [View, string][] = [["tree", "Arbre"]];
+  if (counts.hunt)
+    names.push(["hunt", width >= HUNT_FULL ? counts.hunt : "Chasse"]);
+  const sep = 3;
   const line: Cell[] = [];
   const tabs: Screen["tabs"] = [];
   let x = 0;
@@ -728,7 +794,7 @@ export function tabsLines(
       line.push(cell(sep));
       x += sep;
     }
-    line.push(cell(w, [span(label, on(v))]));
+    line.push(cell(Math.min(w, Math.max(0, width - x)), [span(label, on(v))]));
     tabs.push({ x, w, view: v });
     x += w;
   });
@@ -759,7 +825,13 @@ export function treeScreen(
   const bodyOf = (foldDone: boolean): Body[] => {
     const out: Body[] = [];
     for (const e of model.epics) {
-      out.push({ line: epicLine(e, cols) });
+      const folded = !!e.idle && !(ui.idle ?? []).includes(e.id);
+      const key = e.idle ? idleKey(e.id) : undefined;
+      out.push({
+        line: epicLine(e, cols, folded, key !== undefined && key === ui.sel),
+        ...(key !== undefined && { id: key, selectable: key }),
+      });
+      if (folded) continue;
       const finished = foldDone
         ? e.nodes.filter((n) => n.state === "done" && n.id !== sel?.top.id)
         : [];
@@ -775,6 +847,7 @@ export function treeScreen(
           id,
           selectable: id,
         });
+        if (v.node.helpers) out.push({ line: helpersLine(v, cols, width) });
       }
     }
     return out;
@@ -784,7 +857,7 @@ export function treeScreen(
   // the bar, the path and the headers give way, and the list scrolls
   const fitFor = (length: number) => {
     let detail = 2;
-    let bar = 2;
+    let bar = counts.hunt ? 2 : 0;
     let foot = 2; // the rule and the critical path
     let header = 1;
     let title = 1;
@@ -816,7 +889,7 @@ export function treeScreen(
   };
   const whole = bodyOf(false);
   const folded = bodyOf(true);
-  const roomAtFirst = rows - 1 - 1 - 2 - 2 - 2;
+  const roomAtFirst = rows - 1 - 1 - 2 - 2 - (counts.hunt ? 2 : 0);
   let body = whole.length > roomAtFirst ? folded : whole;
   // A pinned task keeps its line: with the finished branches folded or
   // not, whichever keeps it there
@@ -866,364 +939,6 @@ export function treeScreen(
   };
 }
 
-// --- R4 -----------------------------------------------------------------------------------
-
-const COLUMN: Record<NodeState, 0 | 1 | 2> = {
-  done: 0,
-  ready: 0,
-  run: 1,
-  you: 1,
-  wait: 1,
-  blocked: 2,
-  todo: 2,
-};
-
-export type Lanes = {
-  /** Lane of each top-level task, by id, and its column. */
-  at: Map<string, { col: 0 | 1 | 2; lane: number }>;
-  count: number;
-  /** The edges drawn: left column to a column on its right. */
-  edges: [string, string][];
-};
-
-/**
- * Lanes for the graph's top-level tasks. The middle column takes the first
- * lanes; on the left, the tasks feeding only the middle come first, those
- * feeding the right one after every lane the middle uses (so their line
- * crosses the middle on a free lane), the ones that also feed the middle
- * before those that do not; on the right, each task at its sources'
- * middle lane, or the next one free.
- */
-export function lanesOf(epic: TreeEpic): Lanes {
-  const col = new Map(epic.nodes.map((n) => [n.id, COLUMN[n.state]]));
-  const edges = epic.edges.filter(
-    ([a, b]) => (col.get(a) ?? 0) < (col.get(b) ?? 0),
-  );
-  const at = new Map<string, { col: 0 | 1 | 2; lane: number }>();
-  const inCol = (c: number) => epic.nodes.filter((n) => col.get(n.id) === c);
-  const mid = inCol(1);
-  mid.forEach((n, lane) => at.set(n.id, { col: 1, lane }));
-  const to = (id: string, c: number) =>
-    edges.some(([a, b]) => a === id && col.get(b) === c);
-  const left = inCol(0);
-  const feedsMid = left.filter((n) => !to(n.id, 2));
-  const firstTarget = (id: string) =>
-    Math.min(
-      ...edges
-        .filter(([a]) => a === id)
-        .map(([, b]) => at.get(b)?.lane ?? Infinity),
-      Infinity,
-    );
-  feedsMid.sort((a, b) => firstTarget(a.id) - firstTarget(b.id));
-  feedsMid.forEach((n, lane) => at.set(n.id, { col: 0, lane }));
-  const skips = left.filter((n) => to(n.id, 2));
-  skips.sort((a, b) => Number(to(b.id, 1)) - Number(to(a.id, 1)));
-  const base = Math.max(feedsMid.length, mid.length);
-  skips.forEach((n, i) => at.set(n.id, { col: 0, lane: base + i }));
-  const taken = new Set<number>();
-  for (const n of inCol(2)) {
-    const sources = edges
-      .filter(([, b]) => b === n.id)
-      .map(([a]) => at.get(a)?.lane ?? 0);
-    // At its sources' middle lane, so its line splits them evenly
-    sources.sort((x, y) => x - y);
-    let lane = sources.length ? sources[Math.floor(sources.length / 2)]! : 0;
-    while (taken.has(lane)) lane++;
-    taken.add(lane);
-    at.set(n.id, { col: 2, lane });
-  }
-  let count = 0;
-  for (const v of at.values()) count = Math.max(count, v.lane + 1);
-  return { at, count, edges };
-}
-
-/** The junction for a row of a gutter's vertical. */
-function junction(
-  left: boolean,
-  right: boolean,
-  up: boolean,
-  down: boolean,
-): string {
-  const key = `${+left}${+right}${+up}${+down}`;
-  const table: Record<string, string> = {
-    "1111": "┼",
-    "1101": "┬",
-    "1110": "┴",
-    "1001": "┐",
-    "1010": "┘",
-    "0101": "┌",
-    "0110": "└",
-    "1011": "┤",
-    "0111": "├",
-    "1100": "─",
-    "0011": "│",
-    "1000": "─",
-    "0100": "─",
-  };
-  return table[key] ?? "";
-}
-
-type Gutter = { cells: Cell[][] };
-
-/**
- * The vertical spans of a gutter: the lanes its links join, grouped so that
- * links sharing no lane get a span each; spans that would overlap are one
- * (they share the vertical, which is a merge, never a crossing).
- */
-function spans(links: readonly [number, number][]): [number, number][] {
-  let out: [number, number][] = links.map(([a, b]) => [
-    Math.min(a, b),
-    Math.max(a, b),
-  ]);
-  out.sort((x, y) => x[0] - y[0]);
-  const merged: [number, number][] = [];
-  for (const s of out) {
-    const last = merged[merged.length - 1];
-    if (last && s[0] <= last[1]) last[1] = Math.max(last[1], s[1]);
-    else merged.push([s[0], s[1]]);
-  }
-  return merged;
-}
-
-/**
- * One gutter's cells, two per lane: entries from the left (a task feeding the
- * next column, or a line crossing the middle), exits to the right (a task
- * fed), each group of links on its own stretch of the vertical.
- */
-function gutter(
-  lanes: number,
-  links: readonly [number, number][],
-  passes: Set<number>,
-): Gutter {
-  const enters = new Set(links.map(([a]) => a));
-  const exits = new Set(links.map(([, b]) => b));
-  const stretches = spans(links);
-  const within = (lane: number) =>
-    stretches.find(([t, b]) => lane >= t && lane <= b);
-  const out: Cell[][] = [];
-  for (let lane = 0; lane < lanes; lane++) {
-    const l = enters.has(lane);
-    const r = exits.has(lane);
-    const p = passes.has(lane);
-    const span = within(lane);
-    const up = !!span && lane > span[0];
-    const down = !!span && lane < span[1];
-    // A line crossing on to the next column leaves the junction to the right
-    const j =
-      l || r ? junction(l, r || p, up, down) : p ? "─" : up && down ? "│" : "";
-    const tail = r ? "─▶" : p ? "───" : "";
-    out.push([
-      cell(1, l || p ? [dim("─")] : []),
-      cell(1, j ? [dim(j)] : []),
-      cell(3, tail ? [dim(tail)] : []),
-    ]);
-    out.push([cell(1), cell(1, down ? [dim("│")] : []), cell(3)]);
-  }
-  return { cells: out };
-}
-
-function graphNode(n: TreeNode, w: number, fills: boolean): Cell[][] {
-  const g = GLYPH[n.state];
-  const strong = n.state === "run";
-  const idW = 6;
-  const titleW = Math.min(
-    cells(fit(n.title, Math.max(0, w - W.glyph - idW))),
-    Math.max(0, w - W.glyph - idW),
-  );
-  const fillW = Math.max(0, w - W.glyph - idW - titleW);
-  const first: Cell[] = [
-    cell(W.glyph, [
-      span(g.glyph, g.color ? { color: g.color } : { dim: true }),
-    ]),
-    cell(idW, [span(n.label, strong ? { bold: true } : {})]),
-    cell(titleW, [span(n.title, strong ? { bold: true } : {})]),
-  ];
-  if (fillW)
-    first.push(
-      cell(fillW, fills && fillW > 1 ? [dim(` ${"─".repeat(fillW - 1)}`)] : []),
-    );
-  const meta: Span[] =
-    n.state === "ready"
-      ? [span("prête", { color: TEAL }), dim(" · personne dessus")]
-      : n.state === "you"
-        ? [
-            span("attend toi", { color: YOU }),
-            ...(n.age ? [dim(" · "), span(n.age, { color: YOU })] : []),
-          ]
-        : n.state === "blocked"
-          ? [
-              span(
-                n.links.startsWith("⇠")
-                  ? `attend ${n.links.slice(2)}`
-                  : "bloquée",
-                { color: RED },
-              ),
-            ]
-          : [
-              ...(n.agent
-                ? [
-                    span(n.agent, {
-                      ...(n.agentColor && { color: n.agentColor }),
-                      ...(n.state === "done" && { dim: true }),
-                    }),
-                  ]
-                : []),
-              // The model only where the age still fits after it
-              ...(n.model &&
-              n.state === "done" &&
-              cells(`${n.agent} · ${n.model} · ${n.age}`) <= w - W.gap
-                ? [dim(` · ${n.model}`)]
-                : []),
-              ...(n.age
-                ? [
-                    dim(n.agent ? " · " : ""),
-                    span(
-                      n.age,
-                      n.state === "run" ? { color: AMBER } : { dim: true },
-                    ),
-                  ]
-                : []),
-            ];
-  return [
-    [row(w, first)],
-    [row(w, [cell(W.gap), cell(Math.max(0, w - W.gap), meta)])],
-  ];
-}
-
-/** The graph view, `width` cells by `rows` lines. */
-export function graphScreen(
-  model: TreeModel,
-  ui: Ui,
-  width: number,
-  rows: number,
-  counts: BarCounts = NO_COUNTS,
-): Screen {
-  const sel = findNode(model, ui.sel);
-  const epic = sel?.epic ?? model.epics[0];
-  const colW = width >= FULL.links ? 26 : Math.floor((width - 10) / 3);
-  // Under 40 cells a node no longer holds its glyph, its ref and a title
-  const fits = colW >= 10;
-  const lines: Cell[][] = [];
-  const push = (l: Cell[]) => lines.push(l);
-  push(titleLine(model, epic, width));
-  push(
-    fits
-      ? [
-          cell(colW, [dim("FAIT · PRÊT")]),
-          cell(5),
-          cell(colW, [dim("EN COURS · ATTENTE")]),
-          cell(5),
-          cell(colW, [dim("BLOQUÉ")]),
-        ]
-      : [cell(width, [dim("le graphe veut 40 colonnes")])],
-  );
-  const footer = 6; // rule, three lines, the bar's two
-  const room = Math.max(0, rows - 2 - footer);
-  if (epic && fits) {
-    const { at, count, edges } = lanesOf(epic);
-    const byLane: (TreeNode | undefined)[][] = [[], [], []];
-    for (const n of epic.nodes) {
-      const p = at.get(n.id)!;
-      byLane[p.col]![p.lane] = n;
-    }
-    const colOf = (id: string) => at.get(id)?.col;
-    const laneOf = (id: string) => at.get(id)!.lane;
-    const lanePair = ([a, b]: [string, string]): [number, number] => [
-      laneOf(a),
-      laneOf(b),
-    ];
-    const links0 = edges
-      .filter(([a, b]) => colOf(a) === 0 && colOf(b) === 1)
-      .map(lanePair);
-    // A link from the left column to the right one crosses the middle on its
-    // source's lane, and joins the second gutter there
-    const links1 = edges.filter(([, b]) => colOf(b) === 2).map(lanePair);
-    const skipping = new Set(
-      edges
-        .filter(([a, b]) => colOf(a) === 0 && colOf(b) === 2)
-        .map(([a]) => laneOf(a)),
-    );
-    const g0 = gutter(count, links0, skipping);
-    const g1 = gutter(count, links1, new Set());
-    const fills = (id: string) => edges.some(([a]) => a === id);
-    const lanesShown = Math.min(count, Math.floor(room / 2));
-    for (let lane = 0; lane < lanesShown; lane++) {
-      const parts = [0, 1, 2].map((c) => {
-        const n = byLane[c]![lane];
-        if (n) return graphNode(n, colW, fills(n.id));
-        // A line crossing the middle column on a free lane
-        if (c === 1 && skipping.has(lane))
-          return [[cell(colW, [dim("─".repeat(colW))])], [cell(colW)]];
-        return [[cell(colW)], [cell(colW)]];
-      });
-      for (const r of [0, 1])
-        push([
-          ...parts[0]![r]!,
-          row(5, g0.cells[lane * 2 + r]!),
-          ...parts[1]![r]!,
-          row(5, g1.cells[lane * 2 + r]!),
-          ...parts[2]![r]!,
-        ]);
-    }
-    if (count > lanesShown && lines.length > 2) {
-      lines.pop();
-      push([
-        cell(width, [dim(`… ${count - lanesShown + 1} couloir(s) de plus`)]),
-      ]);
-    }
-  }
-  while (lines.length < 2 + room) push([cell(width)]);
-  push(rule(width, "┄"));
-  // Footer: next action and who waits on you, the path, the deliverable
-  const next: Span[] = [dim("prochaine action  ")];
-  if (epic?.next)
-    next.push(
-      span(`▶ ${epic.next.label}`, { color: TEAL }),
-      dim(" prête, personne dessus"),
-    );
-  else next.push(dim("rien de prêt"));
-  const you: Span[] = epic?.you
-    ? [
-        dim("t'attend  "),
-        span(`◇ ${epic.you.label}`, { color: YOU }),
-        dim(epic.you.age ? ` · ${epic.you.age}` : ""),
-      ]
-    : [];
-  const youW = Math.min(
-    cells(you.map((s) => s.text).join("")),
-    Math.max(0, width - 30),
-  );
-  const first: Cell[] = [cell(width - youW - (youW ? 2 : 0), next)];
-  if (youW) first.push(cell(2), cell(youW, you));
-  push(first);
-  push([
-    cell(19, [span("┃ ", { color: MAUVE }), dim("chemin critique  ")]),
-    cell(Math.max(0, width - 19), chainSpans(epic)),
-  ]);
-  const goal: Span[] = [dim("livrable  ")];
-  if (epic?.goal) {
-    const g = GLYPH[epic.goal.state];
-    goal.push(
-      span(`${g.glyph} `, g.color ? { color: g.color } : { dim: true }),
-      span(`${epic.goal.label} ${epic.goal.title}`),
-      dim(` · ${epic.goal.note}`),
-    );
-  } else goal.push(dim("aucun"));
-  push([cell(width, goal)]);
-  const t = tabsLines("graph", width, counts);
-  push(t.lines[0]!);
-  const tabsLine = lines.length;
-  push(t.lines[1]!);
-  return {
-    lines: lines.slice(0, Math.max(rows, 0)),
-    rowIds: lines.map(() => undefined),
-    tabsLine: tabsLine < rows ? tabsLine : -1,
-    tabs: t.tabs,
-    order: [],
-    list: { top: 0, rows: 0 },
-  };
-}
-
 /** The view the person chose, or the message when there is no tree. */
 export function screenOf(
   model: TreeModel,
@@ -1235,9 +950,7 @@ export function screenOf(
   if (!model.found)
     return "Aucune liste de tâches pour cette session (kodflow-hooks la tient).";
   if (!model.epics.length) return "Aucune épopée ouverte.";
-  return ui.view === "graph"
-    ? graphScreen(model, ui, width, rows, counts)
-    : treeScreen(model, ui, width, rows, counts);
+  return treeScreen(model, ui, width, rows, counts);
 }
 
 // --- drawing --------------------------------------------------------------------------------

@@ -1,32 +1,35 @@
 # kodflow-hud
 
 An optional heads-up display beside the status line. One pane and a few
-toasts, nothing else: the status line keeps the context gauge, the epics'
-pills and everything it already draws, and this mod shows only what it does
-not.
+toasts, nothing else: the status line keeps what it draws, and this mod
+shows the task list it does not.
 
-- **Tâches** — the open epics (« épopées ») of the session's task list as a
-  tree (R12): subtasks under their task, for each one who works it (« ◉
-  principal » or « ↳ name · role » in that subagent's own colour), the
+- **Tâches** — the main agent's open epics (« épopées ») of the session's
+  task list as a tree (R12), in the order they were opened, the active one
+  marked « actif »: subtasks under their task, for each one who works it
+  (« ◉ principal » or « ↳ name · role » in that subagent's own colour), the
   model and effort it runs on, how long since it moved, what it waits on or
   unblocks, the critical path in the margin, and the tasks waiting on the
-  person. Tab turns it into a graph by state (R4). The tab counts the tasks
-  left to do: « Tâches (2) ». It is the mod's only pane, so always its
-  first tab and the one shown.
-- **Refus** and **Documents** — two more views in the bar under the tree
-  (see [Refus](#refus) and [Documents](#documents)): what kodflow-hooks
-  refused in the session, and the project's documents (present, missing,
-  ignored). « Refus (n) » counts the refusals of the last hour,
-  « Documents (n) » the documents missing.
-- **Chasse** — a last view, only while `/hunt` lists a run (see
-  [Chasse](#chasse)): each hunt's state, counter, pass, heavy queue, tip,
-  Codex, pending decisions and what happened since the view was last left;
-  « Chasse 7/10 » counts the busiest hunt's open issues against its cap.
+  person. An epic closed with kodflow-hooks' `task_focus(close=true)` is
+  gone, with everything hanging on it; one idle for 24 h is a single line
+  until opened. A subagent's own tasks are no rows of the tree: one line
+  under the task it was handed sums them up. The tab counts the tasks left
+  to do: « Tâches (2) ». It is the mod's only pane, so always its first tab
+  and the one shown.
+- **Chasse** — a second view, only while `/hunt` lists a run (see
+  [Chasse](#chasse)), and with it the views' bar: each hunt's state,
+  counter, pass, heavy queue, tip, Codex, pending decisions and what
+  happened since the view was last left; « Chasse 7/10 » counts the busiest
+  hunt's open issues against its cap. No hunt, no bar.
 - **Toasts** — a task done, a task blocked (`waiting`), a task gone silent:
   at most one per task and per state.
 - **Coloured words** — a few words of a reply drawn in colour in the
   transcript, never a whole paragraph and never an emoji (see
   [Coloured words](#coloured-words)).
+
+Update it with kodflow-hooks: an older kodflow-hud reads no `closed_at` and
+keeps showing the epics kodflow-hooks closed, and no `workers`, so a
+subagent's tasks stand as epics of their own.
 
 It is a mod: a hooks module (`hooks/mod/register.tsx`) the engine loads from
 `hooks/hooks.json` → `modules`. It needs **Claude Code 2.1.293 or later**
@@ -84,8 +87,8 @@ any width.
 
 ## What it looks like
 
-Captures in text of the drawn tree, read back by the tests at the pane's
-minimum: 90 columns with its frame (88 of body) by 20 rows. Colour is the
+Captures in text of the drawn tree, read back by the tests: 90 columns with
+its frame (88 of body) by 18 rows, no hunt listed, so no views' bar. Colour is the
 text's alone, and always one of the theme's own colours, which the engine
 shades for a light or a dark theme: `merged` (purple) the epic and the
 critical path, `warning` (amber) the task under way, `success` (green) done,
@@ -100,7 +103,7 @@ paints a background, so a transparent terminal shows through.
 ```
 ─ #1 Routage model/effort ──────────────────────────────────────────────────────────────
   TÂCHE                           AGENT                   MODÈLE         ÂGE  LIENS
-  ◆ #1     Routage model/effort  7/15                                 1 h 52
+  ◆ #1     Routage model/effort  7/15 · actif                         1 h 52
   ├▸ ✓ T0     Événements réels    ◉ principal             opus           2 h  ⇢ C6 C7
   ├▸ ✓ C1–C5  Policy et routage   ◉ principal             opus        1 h 20  ⇢ C9
 ┃ ├▾ ● C6     Porte Fable         ↳ mkt-routi… · general  opus·xhigh  12 min  ⇢ C9
@@ -116,33 +119,6 @@ paints a background, so a transparent terminal shows through.
 ┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10      bloqué par toi (C7)
 ● C6  Porte Fable   mkt-routing-pr · general-purpose · opus·xhigh · 12 min · ⇢ C9 · figé
   Le mod juge, il ne réécrit jamais e.model
-────────────────────────────────────────────────────────────────────────────────────────
-Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue
-```
-
-**R4, the graph** (tab, or a click on « Graphe »):
-
-```
-─ #1 Routage model/effort ──────────────────────────────────────────────────────────────
-FAIT · PRÊT                    EN COURS · ATTENTE             BLOQUÉ
-✓ T0    Événements réels ──┬─▶ ● C6    Porte Fable ───────┐
-  principal · opus · 2 h   │     mkt-routing-pr · 12 min  │
-                           └─▶ ◇ C7    Feedback agents ───┤
-                                 attend toi · 6 min       │
-✓ C1–C5 Policy et routage ────────────────────────────────┼─▶ ⊘ C9    CI et PR
-  principal · 1 h 20                                      │     attend C6 C7 C8
-▶ C8    Spécialistes ×5 ──────────────────────────────────┘
-  prête · personne dessus
-
-
-
-
-┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-prochaine action  ▶ C8 prête, personne dessus                     t'attend  ◇ C7 · 6 min
-┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10
-livrable  ⊘ C9 CI et PR · attend C6 C7 C8
-────────────────────────────────────────────────────────────────────────────────────────
-Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue
 ```
 
 ### The tree, column by column
@@ -162,9 +138,26 @@ nothing is lined up with spaces and a long title never shifts a column.
 | links | 10 | `⇠ C6 C7 C8` what it waits on, else `⇢ C9` what it unblocks, then `+n` |
 
 An epic's line carries no agent and no model: its title runs over those
-columns, followed by its progress, `7/15` (green once every task is done).
-The tasks filed under no epic sit under a quiet `◌ Hors épopée`, with no
-number, no progress and no age. The section's title never repeats the tab's
+columns, followed by its progress, `7/15` (green once every task is done),
+`· actif` on the main agent's active epic (marked, never moved: the epics
+stand in the order they were opened), and `· inactive ▸` on one idle for
+24 h (nothing touched, no task updated, nobody live on it, nothing waiting
+on the person): that epic is its one line until ⏎ or a click opens it
+(`▾`), and closes it again. The tasks filed under no epic sit under a quiet
+`◌ Hors épopée`, with no number, no progress and no age, and only the main
+agent's.
+
+A subagent's own tasks (kodflow-hooks files them under no epic, in its own
+list) hang on the task it was handed: the main agent's task whose `workers`
+names it, the one in progress, else the most recently updated. Under that
+task one read-only line sums them up, outside the depth, the counts and the
+critical path: `↳ sous-agents : 3 tâches (1 faite) · en cours #12 Fix ·
+1 arrêtée`. « arrêtée » counts the tasks left open by a subagent that no
+longer stands (an orphan): counted there, toasted once when it was in
+progress, never drawn. A subagent no task names gets the group
+`◌ Sous-agents`, its live tasks as rows, its stopped ones counted on the
+group's line. When `$.agent.list()` could not be read, the line says
+`état inconnu` and nobody is an orphan. The section's title never repeats the tab's
 name: the epic when one is open (`#1 Routage model/effort`), else how many
 (`2 épopées ouvertes`), then the tasks under no epic (`1 tâche hors
 épopée`).
@@ -178,15 +171,15 @@ down to the epic's final tasks; every task on a chain of that length gets the
 margin, the footer names the chains and the task that waits on the person
 (« bloqué par toi » when it is on the path).
 
-Rows, at 20: the title, the headers, the epic (done/total, its age), 11
-tasks, a rule, the critical path, two lines on the selection (its glyph,
+Rows, at 18: the title, the headers, the epic (done/total, its age), 11
+tasks, a rule, the critical path and two lines on the selection (its glyph,
 ref, title, agent and role, model, age, links, CI, « figé » when silent,
-then its description) and the views' bar. One top-level task is open at a
-time.
+then its description); while a hunt is listed, the views' bar takes two
+more. One top-level task is open at a time.
 
 Narrower than 88 cells of body the links go, then the model under 76, then
 the agent under 64: below that, the tree and the age. Fewer
-than 20 rows, the finished top-level branches fold into « ✓ fait (n) »
+than 18 rows, the finished top-level branches fold into « ✓ fait (n) »
 first, then the detail drops to one line, then to none, then the list
 scrolls with the selection. The fold sits first under its epic, where the
 finished work mostly stood, the open tasks below it in their order, and
@@ -198,37 +191,29 @@ only the last row of the epic turns `└─`:
 ┃ └─ ● F7     F7 observateur e…    8 min
 ```
 
-### The graph
-
-Three columns of 26 — FAIT · PRÊT, EN COURS · ATTENTE, BLOQUÉ — and two
-gutters of 5; each top-level task on two rows, its title then its agent and
-age. A gutter joins its links on a vertical (`┬ ┐ ┤ ┼ ┘ └`), links that
-share no lane on stretches of their own; a task feeding the right-hand column
-directly runs on a lane the middle one leaves free, as a solid line, so no
-two lines cross. Links within a column, or
-leftwards, are not drawn (the tree shows them). The footer gives the next
-action (a ready task, on the path first), what waits on the person, the
-critical path and the deliverable (the epic's final task, and what it waits
-on). Narrower than 88 cells the three columns share what is left; under 40 a
-node no longer holds its glyph, ref and title, and the graph says so in place
-of its lanes.
-
 ### Keys and mouse
 
 | Key or click | Effect |
 |--------------|--------|
-| `↑` `↓` | choose a task |
-| `⏎` (or space) | fold or unfold it; opening a top-level task folds the other |
-| `tab` | the next view: Arbre, Graphe, Refus, Documents, Chasse (only while a hunt is listed), then Arbre again |
+| `↑` `↓` | choose a task, or an idle epic's line |
+| `⏎` (or space) | fold or unfold it; opening a top-level task folds the other; on an idle epic, open or close it |
+| `tab` | « Chasse » and back, only while a hunt is listed |
 | click on a task | choose it; on a task with subtasks, or a second click, fold it |
-| click on « Arbre » / « Graphe » / « Refus » / « Documents » / « Chasse » | that view |
+| click on an idle epic | open or close it |
+| click on « Arbre » / « Chasse » | that view |
 
 The tree is a `Client` region (`hooks/mod/client.tsx`, a surface module):
 the engine hands it keys once a click has given it the focus (Escape gives
 the focus back) and every pointer event over it, in cells
 (`ClientSurface.onKey`, `ClientSurface.onPointer` in the engine's
-`claude-code` typings). The selection, the open branches and the view live
-in that instance's state, across redraws. The terminal and the desktop draw
+`claude-code` typings). The selection, the open branches, the idle epics
+opened and the view live in that instance's state, across redraws. What it
+kept is normalised before every drawing (`normalise`, `layout.tsx`): a view
+of an older version (« Graphe », « Refus », « Documents ») is the tree, the
+fields only those views used are left aside, and a selection the tree no
+longer shows (its epic closed, its task gone) moves to the active epic's
+first task. Nothing is written back for it: only what the person changes is
+kept. The terminal and the desktop draw
 a `Client`; VS Code and the mobile app do not, and get the same tree drawn
 still, at its first state.
 
@@ -238,7 +223,9 @@ failed `Client` is never drawn again unasked. The hooks module hears the
 fault (`ui.fault`) and draws a new instance under a new key, back on the
 tree at its first state (`hooks/mod/fault.ts`). Past three faults within a
 minute the pane rests drawn still for five minutes, then the `Client` is
-tried again, so a fault that would recur cannot loop.
+tried again, so a fault that would recur cannot loop. The tests raise a
+real fault through an inert seam: with `KODFLOW_HUD_FAULT_PROBE=1` only,
+the key `!` makes the `Client` draw past the engine's 100,000 characters.
 
 A click never moves the row it hit. The task chosen is pinned to the line
 it was clicked on (`Ui.pin`, `hooks/mod/layout.tsx`): the next screen
@@ -248,69 +235,6 @@ one above. ↑ ↓ pin the task on its line too, so the list moves only when
 the selection leaves it, by one line. Before this, the list re-centred on
 the task chosen and opening a branch closed the one above it: the row moved
 from under the pointer, and a second click landed on another task.
-
-### Refus
-
-What kodflow-hooks refused in this session, read from `blocks.jsonl` (the
-session's folder, beside `tasks.json`; one JSON line a blocking, 500 kept),
-newest first: the time, the kind (`hook`, `classifier`, `permission`, `ci`,
-`agent`), the tool, the summary and, when kodflow-hooks could deduce it, the
-permission rule that would have allowed the call. Above the list, what has
-piled up: the count of each kind in the last hour and since the session
-began, and the reason seen most often (a hook's motif, else the summary).
-The count in the bar is the last hour's.
-
-The unlock. A click on a refusal that carries a rule (or `⏎` on it) shows
-that exact rule on the confirmation line, and where it would go:
-
-```
-Autoriser  Bash(git push:*)  dans .claude/settings.local.json ?
-[ajouter]  [copier]  [annuler]   a · c · n
-```
-
-Only « ajouter » (or `a`) writes: the rule joins `permissions.allow` of the
-project's `.claude/settings.local.json` (the session's root), every other
-key kept, written whole (a file beside it, then `mv`) or not at all, never
-over a file that is not a JSON object. « copier » puts the rule on the
-clipboard for `/permissions`; « annuler » closes the line. Why this road:
-
-- The engine gives a mod no way to add a permission rule (`$.settings` is
-  read only) nor to open `/permissions` on a given rule: `$.command.run`
-  would open the dialog, where the rule is still picked by hand, which is
-  what the button is meant to spare.
-- Only the person's own click or key reaches the write: the surface module
-  posts it (`ui.message`), and no tool, no hook and nothing the model says
-  goes that way. The hooks module checks it again: the rule must be one a
-  refusal of this session carries, in settings.json's shape, one line, at
-  most 200 characters, and never one that hands over a whole shell or every
-  write (`Bash`, `Edit`, `Write`, `Bash(*)`, `Edit(**)`...).
-- `settings.local.json` is the narrowest place a rule can live: this
-  project, this machine, not committed. A broader one is still the
-  person's to add with `/permissions`.
-
-A refusal with no rule (a classifier's, a CI run's) shows its detail and its
-link, nothing to add.
-
-### Documents
-
-The project's documents as kodflow-hooks computes them (`docs.json`, the
-session's folder): one line each, `●` green present, `●` red missing, `○`
-grey ignored (with the manifest's reason), and its path. The count in the
-bar is the missing ones.
-
-- A click on a line (or `⏎`) ignores the document, or brings it back: the
-  project's `docs/manifest.json` (at the git root, the path docs.json names)
-  is rewritten whole, its unknown keys kept, the documents in the
-  catalogue's order, two spaces, a final newline; never over a file that is
-  not a JSON object. The line changes at once, without waiting for
-  kodflow-hooks to recompute docs.json.
-- « [créer] » on a missing line (or `c`), « Créer les manquants » (or `t`)
-  put the docs prompt in the prompt box as a DRAFT, never sent:
-  `/kodflow-workflow:docs trd,flow --mode both`, with no id for every
-  missing one. The mode is chosen on the same line, `ask`, `context` or
-  `both` (the default; `m` turns it). A box that already holds a draft is
-  never overwritten: a toast says so. The draft is posed by `$.prompt.fill`;
-  Escape gives the keyboard back to the prompt, ⏎ sends it.
 
 ### Chasse
 
@@ -325,8 +249,9 @@ result.
 
 The tab is there only while `active.json` lists a hunt, always last, and of
 one width whatever the figures: « Chasse 7/10 », the busiest hunt's open
-issues against its cap, « ×2 » with two hunts; under 64 cells of bar it is
+issues against its cap, « ×2 » with two hunts; under 26 cells of bar it is
 « Chasse » alone, and a bar too narrow even for that leaves it to `tab`.
+The bar itself, « Arbre » and « Chasse », is drawn only then.
 `tab` does not stop on it while no hunt is listed, and a view left on it
 when the hunt ends shows the tree.
 
@@ -391,8 +316,10 @@ its pane holds the keyboard, and 2.1.309 shows a pane already up only on
 
 | Shown | Source |
 |-------|--------|
-| epics and tasks | `<config>/kodflow/sessions/<session>/tasks.json` (version 2, kodflow-hooks' file), re-read whenever its modification time moves, looked at every 3 s and right after a `task_*` call |
-| worker, its state | the task's `worker` / `worker_id`, matched against `$.agent.list()`; kept once the task moves on (tasks.json drops it) |
+| epics and tasks | `<config>/kodflow/sessions/<session>/tasks.json` (version 2, kodflow-hooks' file), re-read whenever its modification time moves, looked at every 3 s and right after a `task_*` call; the main agent's epics whose `closed_at` is not a finite number above 0 |
+| worker, its state | the task's `worker` / `worker_id`, else the last of its `workers` once it moved on, matched against `$.agent.list()`; an entry carrying `teammateId`, or a list that could not be read, is « unknown », never silent or stopped |
+| a subagent's tasks | its own list in tasks.json, hung on the task whose `workers` names it; orphans (their agent not listed as running, waiting or idle) counted and toasted, not drawn |
+| idle | 24 h since the epic's `touched` and its tasks' `updated`, no task in progress on a live worker, none of the person's waiting (the predicate kodflow-hooks holds, same fixture) |
 | subtasks, links, ref | the task's `parent`, `blockedBy`, `ref` (kodflow-hooks' `task_create` / `task_update`) |
 | ready, blocked, critical path | derived from those links, nothing typed |
 | model · effort | a subagent's: the Agent call's `effort` and its result's `resolvedModel`, the model `agent.spawn` resolved, and kodflow-hooks' `agent-models.tsv` (its PostToolUse record); the main loop's: `$.session.model()`, no effort (none is said to a mod). A loop no source names has an empty cell, never a guess |
@@ -400,7 +327,6 @@ its pane holds the keyboard, and 2.1.309 shows a pane already up only on
 | silent | in progress, and its loop stopped, gone from the list, or quiet for `silentMinutes` |
 | `toi` | tasks with `assignee: "human"`, when tasks.json carries the field |
 | CI | `gh pr checks <url>` for the GitHub pull request URLs an open task cites, every 5 minutes at most |
-| refusals, documents | `blocks.jsonl` and `docs.json` beside tasks.json, re-read whenever their modification time or their size moves |
 | « Chasse » | `$HOME/.local/state/hunt/active.json`, then each listed hunt's `<slug>/status.json` (/hunt's, format v1), re-read every poll and compared as text; never its journal |
 
 Nothing is a second source of truth: the pane draws from `$.state`, which
@@ -416,11 +342,10 @@ again.
 - Add anything else to what the model reads: no tool, no `context`; one
   system prompt section, the colour convention, and none with
   `KODFLOW_COLORS=off`. `/hud` answers one short line, as any command does.
-- Scan the disk. No `find`; `fs.list` only on a document's folder the
-  person just brought back, to see whether it holds a `.md`. Two processes:
-  `gh pr checks`, only for cited pull requests, and `mv`, which ends a whole
-  write of a file the person asked to change (`docs/manifest.json`,
-  `.claude/settings.local.json`). Nothing for « Chasse »: two reads.
+- Scan the disk. No `find`, no `fs.list`. One process: `gh pr checks`, only
+  for cited pull requests. Nothing for « Chasse »: two reads.
+- Write a file. The only thing it ever puts anywhere is a draft in an empty
+  prompt box (« reprendre »), never sent.
 
 ## Coloured words
 
@@ -549,14 +474,19 @@ paragraphs and runs (code blocks, inline code, bold, unknown marks), the
 `kodflow-hud:colors` section last and `session`, absent with
 `KODFLOW_COLORS=off`, under `-p` and `--bare`, and a marked reply drawn on
 the terminal through the engine, the markup gone, the code block left to
-the engine's markdown. `tests/pure.test.ts` holds the pure modules (board, silence, toasts,
-CI). `tests/tree.test.tsx` draws the « Tâches » pane through
+the engine's markdown. `tests/pure.test.ts` holds the pure modules (board,
+silence, toasts, CI): the predicates `closed`, `idle` and `orphan` against
+kodflow-hooks' fixture (`tests/epic-predicates.ts`, generated by
+`scripts/check-epic-predicates.sh`, 1e999 kept as written), a closed epic
+gone with its helpers, the stopped helpers marked, liveness unknown never
+silent. `tests/tree.test.tsx` draws the « Tâches » pane through
 the engine and reads it back as text (`tests/capture.ts`, which cuts every
-Box to its width as the terminal lays it out): both views at 90 by 20, line
+Box to its width as the terminal lays it out): the tree at 90 by 18, line
 for line, every line 88 cells and no background; the columns dropping at 86,
-70 and 58; the folds, then the detail, under 20 rows; ↑ ↓ ⏎ tab and clicks on
-a task and on the views' bar, through the `Client`'s own key and pointer
-listeners; a second click at the same place on the same task, in a pane
+70 and 58; the folds, then the detail, under 18 rows; ↑ ↓ ⏎ and clicks on
+a task, through the `Client`'s own key and pointer listeners; a state an
+older version kept (`{view: "graph"}`) normalised; a 200 by 70 pane well
+under the engine's limit; a second click at the same place on the same task, in a pane
 that scrolls and in one that does not, and ↑ ↓ moving the list by one line
 only once the selection leaves it; the same tree on the surfaces with no `Client`; the derived
 states, the critical path, the cells (model·effort, links, ages, wide
@@ -566,7 +496,13 @@ memory and a mocked clock: « Tâches » alone at start and shown, the title
 keeping one width, panes mounted at several widths on the terminal and
 desktop surfaces, each loop in its colour, results returned untouched and
 each loop's last call dated, refused calls not recorded, toasts once per
-task and state, CI at most every five minutes. The host (`tests/host.ts`)
+task and state, CI at most every five minutes; a subagent's tasks on their
+anchor's line, the anchor done while its helper runs, the group with no
+anchor, an orphan toasted once and never drawn, `$.agent.list()` failing
+(no toast, no key written, the agents kept, the next readable poll the
+reference) and failing at the first poll of a new session, a closed epic
+with no toast, no CI and no count, an idle epic opened by a click, a
+selection its epic's closing hid, an empty board then a full one. The host (`tests/host.ts`)
 keeps the engine's rules for the tab shown: a retitle never moves it, a new
 pane takes it unless a pane holds the keyboard, `focus` is granted only
 while no pane holds it. `tests/front.test.tsx` holds « Tâches » the only
@@ -584,7 +520,8 @@ shown or hidden at each width, a rewrite of the same size seen, the digest,
 the hunt gone while shown, « reprendre » drafted and never for a slug not
 listed. `tests/wiring.test.tsx` also holds a corrupt status.json leaving
 « Tâches » updating, the toasts through the engine, the option and
-`KODFLOW_HUD_HUNT=off`, and blocks.jsonl re-read when only its size moved.
+and `KODFLOW_HUD_HUNT=off`. `tests/fault.test.tsx` fails the `Client` for
+real through the inert seam and checks it born again, then resting.
 `tests/reported.test.tsx` draws the reported case: one epic and one loose
 task, the main loop alone (the word « Tâches » only on the tab), then three
 subagents (a general-purpose one, a specialist, one of unknown type, one

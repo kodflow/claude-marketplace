@@ -1,12 +1,12 @@
 // fault.test.tsx — the « Tâches » Client failing: born again under a new key,
 // resting drawn still when it fails too often, and back after the rest.
 //
-// A fault the kit raises for real: the « Refus » view of hundreds of
-// refusals on a tall pane draws a tree past the engine's 100,000 characters,
-// which unmounts the instance. A new one starts on the tree view, which fits.
+// A fault the kit raises for real, through the module's inert seam
+// (KODFLOW_HUD_FAULT_PROBE=1, the key « ! »): the Client draws past the
+// engine's 100,000 characters, which unmounts the instance. A new one starts
+// on the tree, which fits.
 import { test, expect } from "claude-code/testing";
-import { NOW, PANE, T, host, start, writeTasks } from "./host.ts";
-import { BLOCKS, iso } from "./fixtures.ts";
+import { PANE, T, host, start, writeTasks } from "./host.ts";
 import {
   FAULT_WINDOW_MS,
   NO_FAULT,
@@ -27,34 +27,22 @@ const clientKey = (n: any): string | undefined => {
 };
 
 async function seeded($: any, on: any) {
-  const { h, clock } = host(on);
+  const { h, clock } = host(on, { env: { KODFLOW_HUD_FAULT_PROBE: "1" } });
   writeTasks(h, [T("1", "in_progress"), T("2", "pending")], 1);
-  const many = Array.from({ length: 400 }, (_, i) =>
-    JSON.stringify({
-      ts: iso(NOW - (400 - i) * 5_000),
-      kind: "permission",
-      tool: "Bash",
-      summary: `git push refusé, essai ${i} sur une branche au nom assez long`,
-      agent: "main",
-      rule: "Bash(git push:*)",
-    }),
-  );
-  h.files.set(BLOCKS, { text: `${many.join("\n")}\n`, mtimeMs: 1 });
   await start($, clock);
   const ui = await $.ui.mount({
     plugin: "kodflow-hud",
     surface: "terminal",
     component: "Pane",
     requestId: "hud-tasks",
-    props: PANE(300, 400),
+    props: PANE(88, 20),
   });
   return { h, clock, ui };
 }
 
-/** Tab over to « Refus » in the Client keyed `key`: that view fails it. */
+/** The seam's key in the Client keyed `key`: its next drawing fails it. */
 const fail = async (ui: any, key: string) => {
-  await ui.key({ key: "tab", in: key });
-  await ui.key({ key: "tab", in: key }).catch(() => undefined);
+  await ui.key({ key: "!", in: key }).catch(() => undefined);
 };
 
 test("a Client that fails is born again under a new key, on the tree", async ($, on) => {

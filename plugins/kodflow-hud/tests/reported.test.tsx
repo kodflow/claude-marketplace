@@ -114,14 +114,14 @@ async function seeded($: any, on: any, withSubs: boolean) {
 const TASKS_MAIN_ONLY = [
   "─ 1 épopée ouverte · 1 tâche hors épopée ───────────────────────────────────────────────",
   "  TÂCHE                           AGENT                   MODÈLE         ÂGE  LIENS",
-  "  ◆ #1     Recette kodflow  0/1                                        1 min",
+  "  ◆ #1     Recette kodflow  0/1 · actif                                1 min",
   "  └─ ◇ #1     Jouer la recette    ◉ principal             opus         1 min",
   "  ◌        Hors épopée",
   "  └─ ▶ #3     Onglet agents       prête",
   "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
   "┃ chemin critique  aucun lien",
-  "────────────────────────────────────────────────────────────────────────────────────────",
-  "Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue",
+  "◇ #1  Jouer la recette   principal · opus · 1 min",
+  "  Aucune description",
 ].join("\n");
 
 test("the reported case, the main loop alone: « Tâches » the only tab, no word said three times", async ($, on) => {
@@ -141,7 +141,7 @@ test("the reported case, the main loop alone: « Tâches » the only tab, no wor
 const TASKS_WITH_SUBS = [
   "─ 1 épopée ouverte · 1 tâche hors épopée ───────────────────────────────────────────────",
   "  TÂCHE                           AGENT                   MODÈLE         ÂGE  LIENS",
-  "  ◆ #1     Recette kodflow  0/2                                       12 min",
+  "  ◆ #1     Recette kodflow  0/2 · actif                               12 min",
   "  ├─ ◇ #1     Jouer la recette    ◉ principal             opus        12 min",
   "  └─ ● #2     Rendu des agents    ↳ hud-agents · general                15 s",
   "  ◌        Hors épopée",

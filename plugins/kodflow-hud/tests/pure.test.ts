@@ -2,12 +2,17 @@
 import { test, expect } from "claude-code/testing";
 import {
   ago,
+  closed,
+  idle,
   judge,
+  orphan,
   parseBoard,
   parseTasks,
   prsOf,
+  visibleTasks,
   type Ctx,
 } from "../hooks/mod/board.ts";
+import { EPIC_PREDICATES_JSON } from "./epic-predicates.ts";
 import { alertsFor } from "../hooks/mod/alerts.ts";
 import { ciState, prsToCheck } from "../hooks/mod/ci.ts";
 
@@ -90,24 +95,112 @@ const ctx = (over: Partial<Ctx> = {}): Ctx => ({
   ...over,
 });
 
-test("the board keeps the open epics, the active empty one, and the loose tasks", () => {
+test("the board keeps the open epics in the order they were opened, the active one marked, and the loose tasks", () => {
   const b = parseBoard(file());
   expect(b.found).toBe(true);
   expect(b.epics.map((e) => [e.id, e.title, e.tasks.length])).toEqual([
-    [3, "Empty", 0],
     [2, "SDK", 3],
+    [3, "Empty", 0],
     [0, "Hors épopée", 1],
   ]);
-  expect(b.epics[1]!.tasks[1]!.prs).toEqual([
+  expect(b.epics.map((e) => !!e.active)).toEqual([false, true, false]);
+  expect(b.epics[0]!.tasks[1]!.prs).toEqual([
     "https://github.com/kodflow/claude-marketplace/pull/42",
   ]);
-  expect(b.epics[1]!.tasks[2]!.assignee).toBe("human");
+  expect(b.epics[0]!.tasks[2]!.assignee).toBe("human");
 });
 
 test("no file, or a broken one, is an empty board that says which", () => {
-  expect(parseBoard(undefined)).toEqual({ found: false, epics: [] });
-  expect(parseBoard("{nope")).toEqual({ found: true, epics: [] });
+  expect(parseBoard(undefined)).toEqual({ found: false, epics: [], helpers: [] });
+  expect(parseBoard("{nope")).toEqual({ found: true, epics: [], helpers: [] });
   expect(parseTasks(null)).toEqual([]);
+});
+
+test("predicates: closed, idle and orphan hold kodflow-hooks' fixture", () => {
+  const fx = JSON.parse(EPIC_PREDICATES_JSON);
+  expect(fx.data.epics[0].closed_at).toBe(Infinity); // 1e999, open
+  const ids = (pick: (e: any) => boolean) =>
+    fx.data.epics.filter(pick).map((e: any) => e.id);
+  expect(ids((e) => closed(e))).toEqual(fx.expect.closed);
+  expect(ids((e) => idle(e, fx.data.tasks, fx.now, fx.live))).toEqual(fx.expect.idle);
+  expect(
+    fx.data.tasks.filter((t: any) => orphan(t, fx.live)).map((t: any) => t.id),
+  ).toEqual(fx.expect.orphans);
+  // Liveness unknown: nobody is an orphan
+  expect(fx.data.tasks.filter((t: any) => orphan(t, undefined))).toEqual([]);
+});
+
+/** A main task handed to two subagents, one live, one stopped, and a closed epic. */
+const helpersFile = () =>
+  JSON.stringify({
+    version: 2,
+    active: { main: 1 },
+    epics: [
+      { id: 1, agent: "main", title: "Open", created: SEC - 10, touched: SEC },
+      { id: 2, agent: "main", title: "Shut", created: SEC - 20, touched: SEC, closed_at: SEC - 5 },
+      { id: 3, agent: "main", title: "Older", created: SEC - 30, touched: SEC },
+      { id: 9, agent: "w-live", title: "Sub epic", created: SEC, touched: SEC },
+    ],
+    tasks: [
+      { id: "1", agent: "main", epic: 1, subject: "Build", status: "in_progress", worker: "impl", worker_id: "w-live", workers: ["w-dead", "w-live", "w-live"], updated: SEC },
+      { id: "2", agent: "main", epic: 2, subject: "Old", status: "completed", workers: ["w-gone"], updated: SEC - 6,
+        description: "https://github.com/a/b/pull/7" },
+      { id: "3", agent: "main", epic: 3, subject: "Next", status: "pending", updated: SEC },
+      { id: "4", agent: "w-live", epic: 0, subject: "Step one", status: "in_progress", updated: SEC },
+      { id: "5", agent: "w-dead", epic: 0, subject: "Left over", status: "in_progress", updated: SEC },
+      { id: "6", agent: "w-gone", epic: 0, subject: "Hidden", status: "pending", updated: SEC,
+        description: "https://github.com/a/b/pull/8" },
+      { id: "7", agent: "w-free", epic: 0, subject: "Nobody's", status: "pending", updated: SEC },
+    ],
+  });
+
+test("a closed epic is gone with its helpers; the subagents' tasks are helpers, the stopped ones marked", () => {
+  const b = parseBoard(helpersFile(), NOW, ["w-live", "w-free"]);
+  // Main epics only, by created, the closed one and the subagent's epic gone
+  expect(b.epics.map((e) => e.id)).toEqual([3, 1]);
+  expect(b.epics[1]!.tasks[0]!.workers).toEqual(["w-dead", "w-live"]);
+  expect(b.helpers!.map((h) => [h.id, !!h.stopped])).toEqual([
+    ["4", false],
+    ["5", true],
+    ["7", false],
+  ]);
+  // Shown and counted: no closed epic, no orphan; CI from those only
+  expect(visibleTasks(b).map((t) => t.id)).toEqual(["3", "1", "4", "7"]);
+  expect(prsToCheck(visibleTasks(b))).toEqual([]);
+  // The list not read: nobody is an orphan
+  expect(parseBoard(helpersFile(), NOW).helpers!.some((h) => h.stopped)).toBe(false);
+});
+
+test("liveness unknown: a subagent's task is neither silent nor stopped", () => {
+  const task = parseTasks(JSON.parse(file()))[2]!;
+  const gone = ctx({ agents: [], now: NOW + 3600_000 });
+  expect(judge(task, gone).silent).toBe(true);
+  expect(judge(task, { ...gone, liveness: "unknown" })).toEqual(
+    expect.objectContaining({ state: "unknown", silent: false }),
+  );
+  // A teammate the list cannot judge is « unknown » too
+  const mate = ctx({ agents: [{ id: "a1", label: "hud", status: "unknown" }], now: NOW + 3600_000 });
+  expect(judge(task, mate)).toEqual(expect.objectContaining({ state: "unknown", silent: false }));
+});
+
+test("an epic idle for 24 h is marked, one with a live worker on it is not", () => {
+  const f = JSON.stringify({
+    version: 2,
+    active: {},
+    epics: [
+      { id: 1, agent: "main", title: "Quiet", created: SEC - 200_000, touched: SEC - 100_000 },
+      { id: 2, agent: "main", title: "Held", created: SEC - 200_000, touched: SEC - 100_000 },
+    ],
+    tasks: [
+      { id: "1", agent: "main", epic: 1, subject: "a", status: "pending", updated: SEC - 100_000 },
+      { id: "2", agent: "main", epic: 2, subject: "b", status: "in_progress", worker_id: "w1", updated: SEC - 100_000 },
+    ],
+  });
+  const b = parseBoard(f, NOW, ["w1"]);
+  expect(b.epics.map((e) => [e.id, !!e.idle])).toEqual([
+    [1, true],
+    [2, false],
+  ]);
 });
 
 test("an in-progress task is silent when its worker stopped, or after the quiet time", () => {
@@ -195,7 +288,7 @@ test("ages in the fewest cells", () => {
 
 test("CI: cited pull requests of open tasks only, and gh's exit codes read", () => {
   const b = parseBoard(file());
-  expect(prsToCheck(b.epics)).toEqual([
+  expect(prsToCheck(visibleTasks(b))).toEqual([
     "https://github.com/kodflow/claude-marketplace/pull/42",
   ]);
   expect(
@@ -235,14 +328,14 @@ const doneFile = (tasks: object[]) =>
     tasks,
   });
 
-test("an epic with nothing left stays 30 minutes after its last task was done, after the epics with work", () => {
+test("an epic with nothing left stays 30 minutes after its last task was done, in its place", () => {
   const f = doneFile([
     { ...done("1", 1, 0), status: "pending" },
     done("2", 2, 20),
     done("3", 2, 40),
     done("4", 3, 31),
   ]);
-  // 20 minutes: kept, behind the open epic though it was touched later
+  // 20 minutes: kept, in the order the epics were opened
   expect(parseBoard(f, NOW).epics.map((e) => e.id)).toEqual([1, 2]);
   // The last task of the epic decides, not the first
   expect(parseBoard(f, NOW).epics[1]!.tasks).toHaveLength(2);
@@ -262,11 +355,11 @@ test("the group under no epic is kept the same 30 minutes, last, work left or no
   expect(kept.epics[1]!.title).toBe("Hors épopée");
   expect(parseBoard(f).epics).toEqual([]);
   expect(parseBoard(f, NOW + 29 * MINS * 1000).epics.map((e) => e.id)).toEqual([]);
-  // With work left it is where it was: after the open epics, before the kept ones
+  // Last, work left or not
   const g = doneFile([
     done("1", 2, 5),
     { ...done("2", 0, 1), status: "pending" },
     { ...done("3", 1, 0), status: "pending" },
   ]);
-  expect(parseBoard(g, NOW).epics.map((e) => e.id)).toEqual([1, 0, 2]);
+  expect(parseBoard(g, NOW).epics.map((e) => e.id)).toEqual([1, 2, 0]);
 });
