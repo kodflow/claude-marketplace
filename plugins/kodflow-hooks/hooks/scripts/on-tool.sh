@@ -1413,7 +1413,7 @@ _ident_env() {
 # The kodflow task tools are the mod's (hooks/mod/register.ts): a call it
 # answers never reaches this script, and the mod tells each caller apart by
 # itself. The built-in task tools draw their own panel in the chat, a second
-# copy of the list the status line already shows: refused while the mod's
+# copy of the kodflow list: refused while the mod's
 # tools answer (lib/beat.sh), let through when they do not, since a session
 # without the mod has no other list.
 pre_builtin_tasks() {
