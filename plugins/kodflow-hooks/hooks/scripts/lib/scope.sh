@@ -88,12 +88,31 @@ kf_scope_families() {
                 print "F\t" f
             }
         }
+        # The inspection bullet opens with the local text readers, single words
+        # (`cat`, `grep`) or forms (`sed -n`), then forbids forms in a
+        # parenthesis (never `sed -i`): the readers count as they are, the
+        # parenthesis counts for nothing, and what follows needs two words.
+        function review_line(line,   k, rd, rest, par) {
+            k = index(line, "They are the local text readers ")
+            if (k == 0) { spans(line, 3); return }
+            rd = substr(line, k)
+            rest = rd
+            par = index(rd, "(never")
+            if (par > 0) {
+                rest = substr(rd, par)
+                rd = substr(rd, 1, par - 1)
+                if (match(rest, /\)/)) rest = substr(rest, RSTART + 1)
+                else rest = ""
+            } else rest = ""
+            spans(rd, 2)
+            spans(rest, 3)
+        }
         /^```/ { fence = !fence; next }
         fence { next }
         /^## / { sec = $0; sub(/[ \t]+$/, "", sec); next }
         sec == "## Command scope" && /^- `[a-z]/ && !/^- `Bash\(/ { lead(substr($0, 3)); next }
         sec == "## Command scope" { spans($0, 1) }
-        sec == "## Plan review mode" && /^- In Plan review mode only, if this agent has Bash:/ { review = 1; spans($0, 3) }
+        sec == "## Plan review mode" && /^- In Plan review mode only, if this agent has Bash:/ { review = 1; review_line($0) }
         NR > 5000 { exit }
         END { print "H\t" (has ? 1 : 0); print "R\t" (review ? 1 : 0) }
     ' "$1" 2>/dev/null) || return 1
