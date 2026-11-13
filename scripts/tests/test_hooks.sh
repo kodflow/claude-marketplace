@@ -588,6 +588,14 @@ jq -e '.agents | has("ghost") | not' "$AG" >/dev/null 2>&1 \
 run SubagentStop "" '{"agent_id":"a2","stop_hook_active":true}' on-agent.sh
 jq -e '.agents.a2.stopped == null' "$AG" >/dev/null 2>&1 && ok "a subagent continued by a stop hook is still running" || bad "active stop" "$(cat "$AG")"
 jq -e '.agents.a1.epic == 0' "$AG" >/dev/null 2>&1 && ok "no tasks.json: the subagent is recorded on epic 0" || bad "agent epic 0" "$(cat "$AG")"
+# A resumed agent (SendMessage keeps its id): its entry is merged, running
+# again, the epic it was first counted on and any other field kept
+jq '.agents.a1.note = "kept"' "$AG" > "$AG.t" && mv -f "$AG.t" "$AG"
+printf '%s' '{"version":2,"active":{"main":9},"epics":[{"id":9,"agent":"main","title":"E"}],"tasks":[]}' > "${AG%/*}/tasks.json"
+run SubagentStart "" '{"agent_id":"a1","agent_type":"Explore"}' on-agent.sh
+jq -e '.agents.a1.stopped == null and .agents.a1.epic == 0 and .agents.a1.note == "kept" and .agents.a1.type == "Explore"' "$AG" >/dev/null 2>&1 \
+    && ok "a start merges into the entry: stopped reset, first epic and other fields kept" || bad "agent merge" "$(cat "$AG")"
+rm -f "${AG%/*}/tasks.json"
 printf '%s' '{"version":2,"active":{"main":4},"epics":[{"id":4,"agent":"main","title":"E"}],"tasks":[]}' > "${AG%/*}/tasks.json"
 run SubagentStart "" '{"agent_id":"a3","agent_type":"Explore"}' on-agent.sh
 jq -e '.agents.a3.epic == 4' "$AG" >/dev/null 2>&1 && ok "SubagentStart records the main agent's active epic" || bad "agent epic" "$(cat "$AG")"
@@ -596,6 +604,15 @@ run SubagentStart "" '{"agent_id":"a4","agent_type":"Explore"}' on-agent.sh
 jq -e '.agents.a4.epic == 0' "$AG" >/dev/null 2>&1 && [ "$RC" -eq 0 ] \
     && ok "a malformed tasks.json records epic 0 and fails open" || bad "agent epic malformed" "$(cat "$AG")"
 rm -rf "$T/home/.claude/kodflow"
+
+echo "== The model-facing texts promise nothing of the status line"
+# The status line shows no epic and no task any more: the task tools, the
+# hooks' messages, /recap's skill and the hooks' README say nothing of it
+# (« SDK status-line » is an example epic title, not the status line)
+P=$ROOT/plugins/kodflow-hooks
+hits=$(grep -n -i 'status line\|status-line' "$P/hooks/mod/tasks.ts" "$P/hooks/messages.json" "$P/README.md" \
+    "$P/../kodflow-workflow/skills/recap/SKILL.md" 2>/dev/null | grep -v 'SDK status-line')
+[ -z "$hits" ] && ok "no status-line promise in tasks.ts, messages.json, recap SKILL.md, the hooks' README" || bad "status-line text" "$hits"
 
 echo "== UserPromptSubmit · triage and epic state"
 ctx_of() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
