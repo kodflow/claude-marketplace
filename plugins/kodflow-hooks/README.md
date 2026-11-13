@@ -1154,17 +1154,35 @@ from `mcp/tasks.py` before it was removed (38 scenarios, 184 calls: the 26
 tests of its suite, the worker cases, the order of validation, code points,
 `task_list` writing nothing, the agent id made path-safe, a worker judged by its id alone): each step keeps the
 file before, the call, the answer and the file after, and the port must match
-every one (`conformance.ts`, run by `claude plugin test` and by node). One
-change since is deliberate, the 30-character subject: the corpus is replayed
-amended for it (its long subjects shortened, its limits and refusal text
-moved, every other byte as recorded), and `task_create` and `task_update`,
-whose text changed, must still take every argument tasks.py gave them, as
-it gave them. `tests/mod/tasks.test.ts` holds the tree: parent, depth,
-cycles, blockers, refs, a deletion's links, the file left at version 2.
+every one (`conformance.ts`, run by `claude plugin test` and by node). The
+changes since are deliberate, and the corpus is replayed amended for them,
+every other byte as recorded: the 30-character subject (its long subjects
+shortened, its limits moved); the subject and title refusals reworded to
+name the task tree (5 scenarios); a subagent's refusals sending it to
+`epic=0` rather than `task_epic` (3 scenarios), the scenario where a
+subagent opened epics of its own retired (1) and its refusal tested apart;
+and `workers` carried forward (`amendState`: from the first `worker=`
+accepted in a scenario, the field in the state after that step and before
+and after every later one, ids in the order accepted — 9 accepted starts,
+16 steps, 26 states, 6 scenarios; the counts are asserted). `task_create`,
+`task_update`, `task_epic` and `task_focus`, whose text or arguments moved,
+must still take every argument tasks.py gave them, as it gave them.
+`tests/mod/tasks.test.ts` holds the tree (parent, depth, cycles, blockers,
+refs, a deletion's links, the file left at version 2), the epic lifecycle
+(close and its refusals, a closed epic's refusals, reopen), `workers`
+(deduplicated, a `completed` with `worker=` adding nothing), the subagents'
+refusals, the read list, and the predicates against the shared fixture
+(`tests/fixtures/epic-predicates.json`, through the generated
+`tests/mod/epic-predicates.ts`; `test_epic_predicates.sh` reads it with jq).
 `tests/mod/register.test.ts` runs the wiring in the engine's own test kit,
 with the host in memory: registration, the temporary file and `mv` under the
 lock, refusals as `{ deny }`, the cap read from `$.agent.list()`, the beat
-written before the call goes on, `KODFLOW_MOD=off`, the attribution text.
+written before the call goes on, `KODFLOW_MOD=off`, the attribution text,
+and the triage mark: a question that reads and Bash alone mark nothing, an
+Edit refused beneath the mod is marked before it runs, a Skill an inner hook
+refuses and `mark_all_notifications_read` are marked, a subagent never is,
+the first task gesture after a mark settles every cause, an unreadable read
+list marks every tool but Bash and is read again.
 `run-node.ts` runs the store on a real disk, a stale lock, and six processes
 writing one `tasks.json` at once (every task kept, ids unique); then the
 bash-guard corpus against the mod's guards in a real repository (every Bash
