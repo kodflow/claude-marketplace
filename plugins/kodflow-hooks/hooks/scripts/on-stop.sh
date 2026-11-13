@@ -278,13 +278,7 @@ for c in stopped unattended overcount idle loose; do
     IFS=$'\x1f' read -r _ ids n w <<<"$line"
     if [ "$c" = unattended ]; then [ "$root_on" = 1 ] || continue
     else [ "$tasks_on" = 1 ] || continue; fi
-    _say "$c" "$ids" "stop.$c" ids="$ids" n="$n" w="$w" || continue
-    # Said: one line per orphaned task in the journal of refusals (kind agent)
-    if [ "$c" = stopped ] && . "$LIB/blocks.sh" 2>/dev/null; then
-        printf '%s\n' "$causes" | grep "^orphan"$'\x1f' | while IFS=$'\x1f' read -r _ id subj worker; do
-            kf_block "${mcp_tasks%/*}" agent "" "$worker arrêté, tâche #$id en cours ($subj)" "" "$worker"
-        done
-    fi
+    _say "$c" "$ids" "stop.$c" ids="$ids" n="$n" w="$w"
 done
 [ "$tasks_on" = 1 ] && _say builtin "$builtin" stop.builtin ids="$builtin"
 

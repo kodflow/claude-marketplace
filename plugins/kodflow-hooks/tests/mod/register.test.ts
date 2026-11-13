@@ -682,8 +682,18 @@ test("guards: the mod refuses what the shell refuses, with its motif", async ($,
   expect(reached).toBe(0);
 });
 
-test("blocks: a refusal of the mod hands its motif and title to on-mod.sh", async ($, on) => {
+test("journal: a refusal of the mod is logged once, with no journal of refusals", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG, KODFLOW_ROOT: "off" });
+  on("tool.call", { tool: "Bash" }, async () => out("") as any);
+  await start($);
+  await $.tool.call({ tool: "Bash", command: "git commit -n -m x" } as any);
+  // journal() is fire-and-forget: let its process.run land
+  for (let i = 0; i < 50 && !h.stdins.some((t) => t.includes("guards:deny")); i++)
+    await new Promise((r) => setTimeout(r, 10));
+  const sent = h.stdins.map((t) => JSON.parse(t));
+  expect(sent.filter((p) => p.reason === "guards:deny").length).toBe(1);
+  expect(sent.filter((p) => "block" in p)).toEqual([]);
+});
   on("tool.call", { tool: "Bash" }, async () => out("") as any);
   await start($);
   await $.tool.call({ tool: "Bash", command: "git commit -n -m x" } as any);

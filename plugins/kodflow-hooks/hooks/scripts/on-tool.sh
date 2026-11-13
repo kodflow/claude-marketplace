@@ -84,10 +84,6 @@ _fable_sd() {
     FABLE_SD=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$(printf '%s' "${FF_SID:-default}" | tr -cd 'A-Za-z0-9_-')
 }
 _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
-    local fa=main
-    [[ $INPUT =~ \"agent_type\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]] && fa=${BASH_REMATCH[1]}
-    . "${BASH_SOURCE[0]%/*}/lib/blocks.sh" 2>/dev/null \
-        && kf_block "$FABLE_SD" hook "${TOOL:-${fp_tool:-}}" "GATED MODEL REFUSED — $1 ($2)" fable "$fa"
     printf '═══════════════════════════════════════════════\n  ❌ %s\n═══════════════════════════════════════════════\n' "GATED MODEL REFUSED — $1 ($2)" >&2
     printf '  %s\n' "A gated model (kodflow-hooks/hooks/gated-models.txt) runs only after the user's yes, once per session." "$3" \
         "The user can also set KODFLOW_FABLE=allow." "[motif:fable]" >&2
@@ -249,24 +245,7 @@ _log() {
     ) >/dev/null 2>&1 </dev/null &
 }
 
-# The refusal's line in blocks.jsonl (lib/blocks.sh): its title, and the
-# motif its last line carries, or the one its gate is known by.
-_block_log() {   # same arguments as _block
-    local t=$1 m="" a
-    for a in "$@"; do case "$a" in "[motif:"*"]") m=${a#"[motif:"}; m=${m%"]"} ;; esac; done
-    if [ -z "$m" ]; then
-        case "${ROOT_GUARD:-}:$t" in
-            deny:*) m=delegation ;; *:TRIAGE*) m=triage ;; *"KODFLOW TASK TOOLS"*) m=builtin-tasks ;;
-            *"protected path"*) m=protected-path ;; *) m=guard ;;
-        esac
-    fi
-    . "$LIB/blocks.sh" 2>/dev/null \
-        && kf_block "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/sessions/$SID" hook "$TOOL" "$t" "$m" "${ATYPE:-${AID:-main}}" "" "" "$TUID"
-    return 0
-}
-
 _block() {   # $1 = title, rest = lines. Stderr on exit 2 is what Claude reads.
-    _block_log "$@"
     printf '═══════════════════════════════════════════════\n  ❌ %s\n═══════════════════════════════════════════════\n' "$1" >&2
     shift; printf '  %s\n' "$@" >&2
     _log
@@ -1749,30 +1728,15 @@ post_agent() {
 # ============================================================================
 # PostToolUseFailure · any tool
 # ============================================================================
-# A refusal of auto mode (lib/blocks.sh, kind classifier): its reason, and
-# the permission rule that would have let the call through.
-_denied() {   # $1 the reason
-    local why=$1 rule
-    case "$why" in "["*"]") why=${why#"["}; why=${why%"]"} ;; esac
-    why=$(printf '%s' "$why" | head -n 1 | cut -c1-200)
-    . "$LIB/blocks.sh" 2>/dev/null || return 0
-    rule=$(printf '%s' "$INPUT" | kf_block_rule)
-    kf_block "$SDIR" classifier "$TOOL" "${why:-denied by auto mode}" "" "${ATYPE:-${AID:-main}}" "$rule" "" "$TUID"
-}
-
 # PermissionDenied: auto mode refused the call. Only fires in auto mode; a
-# denial the user types at a permission dialog reaches no hook.
+# denial the user types at a permission dialog reaches no hook. Logged.
 permission_denied() {
-    _denied "$REASON"
     _log
     exit 0
 }
 
 post_failure() {
     local advice=""
-    # Auto mode's refusal, should it arrive as a failure (the PermissionDenied
-    # event is the documented carrier; the same tool_use_id is one line)
-    case "$ERR" in *"denied by the Auto mode classifier"*|*"Auto mode could not evaluate"*) _denied "$ERR" ;; esac
     case "$ERR" in
         *"command not found"*|*"not found"*)      advice="Command not found: check the spelling, install the tool, or use another approach." ;;
         *"ermission denied"*)                      advice="Permission denied: check ownership and mode before retrying." ;;
