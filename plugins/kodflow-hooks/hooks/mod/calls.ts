@@ -123,7 +123,8 @@ export function parseReadList(text: string | undefined): string[] {
   return text
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("#"));
+    // A bare `*` would list every tool: never a prefix (readlist.sh agrees)
+    .filter((l) => l && l !== "*" && !l.startsWith("#"));
 }
 
 /** Whether a tool is on the read list: by its exact name, or under a `*` prefix. */
