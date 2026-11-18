@@ -487,6 +487,7 @@ test("an orphan: one toast, no row; the summary counts it stopped", async ($, on
       T("1", "in_progress", { worker_id: "a1", workers: ["a2", "a1"] }),
       S("7", "a1", "pending", { subject: "Next step" }),
       S("9", "a2", "in_progress", { subject: "Left behind" }),
+      S("10", "a2", "waiting", { subject: "Hidden wait" }),
     ]),
     2,
   );
@@ -496,7 +497,8 @@ test("an orphan: one toast, no row; the summary counts it stopped", async ($, on
   expect(h.toasts).toHaveLength(1);
   const text = await shownText($);
   expect(text).not.toContain("Left behind");
-  expect(text).toContain("1 arrêtée");
+  expect(text).not.toContain("Hidden wait");
+  expect(text).toContain("2 arrêtées");
   expect(h.panes[0]!.title).toBe("Tâches (2) ");
 });
 
@@ -515,6 +517,7 @@ test("no task names the subagent: its tasks form « Sous-agents », which counts
   await start($, clock);
   const text = await shownText($);
   expect(text).toMatch(/Sous-agents.*1 arrêtée/);
+  expect(text.split("\n")[0]).toMatch(/^─ #2 SDK status-line ─/);
   expect(text).toContain("Looking around");
   expect(text).not.toContain("Lost one");
 });
@@ -674,6 +677,9 @@ test("an idle epic is one line; ⏎ or a click opens it", async ($, on) => {
     1,
   );
   await start($, clock);
+  const narrow = await shownText($, 58);
+  expect(narrow).toMatch(/▸ #2 +SDK status-line/);
+  expect(narrow).not.toContain("Task 1");
   const ui = await mountTree($);
   let text = capture(await ui.drawn({ in: "tree" }));
   expect(text).toMatch(/◆ #2 +SDK status-line +0\/1 · actif · inactive ▸/);
