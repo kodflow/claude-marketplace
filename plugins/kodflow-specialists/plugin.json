@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-specialists",
-  "version": "0.0.0-rab7b54582d82",
+  "version": "0.0.0-r848708fe89b6",
   "description": "Language, platform, security, and concern-specific agents.",
   "author": {
     "name": "kodflow",

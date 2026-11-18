@@ -18,7 +18,9 @@ Codex uses the checkout's native marketplace when the client supports plugin
 installation. Custom roles are installed through Codex's agent directory. Use
 `./scripts/install.sh --legacy` to select the versioned flat Codex installation.
 For an isolated canary pinned to a Git SHA, see
-[`docs/marketplace/install.md`](docs/marketplace/install.md).
+[`docs/marketplace/install.md`](docs/marketplace/install.md). The five
+release profiles and their acceptance checks are documented in
+[`docs/marketplace/publish.md`](docs/marketplace/publish.md).
 
 `--check` reports what it would do and writes nothing. Re-running is safe.
 
@@ -120,6 +122,8 @@ uv sync --project scripts --frozen
 uv run --project scripts python scripts/pluginctl.py validate --all --mode publisher-strict
 uv run --project scripts python scripts/pluginctl.py build --targets all --check
 uv run --project scripts python scripts/pluginctl.py compat --targets all --fail-required-loss
+uv run --project scripts python scripts/pluginctl.py roles --check
+uv run --project scripts python scripts/pluginctl.py workflows --check
 ```
 
 ## What a session pays to have this installed

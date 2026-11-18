@@ -23,9 +23,13 @@ hosts = [name for name in ("claude", "codex") if shutil.which(name)]
 if required and len(hosts) != 2:
     sys.exit("Required loaders missing: " + ", ".join(sorted({"claude", "codex"} - set(hosts))))
 
-def call(host, home, args):
+def profile_env(host, home):
     env = dict(os.environ, HOME=str(home))
     env["CLAUDE_CONFIG_DIR" if host == "claude" else "CODEX_HOME"] = str(home / "config")
+    return env
+
+def call(host, home, args):
+    env = profile_env(host, home)
     output = subprocess.check_output([host, "plugin", *args, "--json"], env=env, text=True)
     return json.loads(output.splitlines()[-1] if host == "claude" else output)
 
@@ -50,6 +54,18 @@ with tempfile.TemporaryDirectory(prefix="kodflow-load-") as directory:
                    for path in installed if (path / "skills/search/SKILL.md").is_file()):
             sys.exit(f"{host}: installed skill differs from this checkout")
         print(f"{host}: {plugin_id} loaded with the checked-out search skill")
+        if host == "codex":
+            names = [f"developer-executor-{kind}" for kind in ("correctness", "security", "quality")]
+            agents = home / "config/agents"
+            agents.mkdir(exist_ok=True)
+            for name in names:
+                shutil.copyfile(repo / f"codex/agents/{name}.toml", agents / f"{name}.toml")
+            prompt = subprocess.check_output(
+                ["codex", "debug", "prompt-input"], env=profile_env(host, home), cwd=home, text=True,
+            )
+            if not all(name in prompt for name in names):
+                sys.exit("Codex: the three staged custom roles were not discovered")
+            print("Codex: discovered the three staged custom roles")
 if not hosts:
     print("SKIP: no installed host CLI; use --require-both in CI")
 PY

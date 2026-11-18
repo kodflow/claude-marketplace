@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-ktn",
-  "version": "0.0.0-r63dc720ad436",
+  "version": "0.0.0-r364931dc5d03",
   "description": "Claude heads-up display for ktn-linter findings.",
   "author": {
     "name": "kodflow",

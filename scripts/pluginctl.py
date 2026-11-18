@@ -18,7 +18,9 @@ from pluginlib.adapters import (
 )
 from pluginlib.inventory import build_inventory, canonical_json
 from pluginlib.model import Catalog, PluginPackage, TARGETS
+from pluginlib.roles import build_role_artifacts, compile_roles
 from pluginlib.validate import MODES, validate_catalog, validate_plugin
+from pluginlib.workflows import compile_projections
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -185,6 +187,25 @@ def command_inventory(args: argparse.Namespace) -> int:
     return int(not _check_or_write(path, rendered, bool(args.check)))
 
 
+def command_roles(args: argparse.Namespace) -> int:
+    outputs = compile_roles(ROOT, SCHEMAS)
+    okay = all([
+        _check_or_write(ROOT / path, data, args.check)
+        for path, data in sorted(outputs.items())
+    ])
+    if not args.check:
+        for path, data in build_role_artifacts(ROOT, SCHEMAS).items():
+            _atomic_write(ROOT / "dist/roles" / path, data)
+    return int(not okay)
+
+
+def command_workflows(args: argparse.Namespace) -> int:
+    return int(not all([
+        _check_or_write(ROOT / path, data, args.check)
+        for path, data in sorted(compile_projections(ROOT).items())
+    ]))
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser()
     commands = root.add_subparsers(dest="command", required=True)
@@ -208,6 +229,12 @@ def parser() -> argparse.ArgumentParser:
     inventory_mode.add_argument("--check", type=Path)
     inventory_mode.add_argument("--write", type=Path)
     inventory.set_defaults(function=command_inventory)
+    roles = commands.add_parser("roles", help="compile and verify neutral role projections")
+    roles.add_argument("--check", action="store_true")
+    roles.set_defaults(function=command_roles)
+    workflows = commands.add_parser("workflows", help="compile and verify host delegation instructions")
+    workflows.add_argument("--check", action="store_true")
+    workflows.set_defaults(function=command_workflows)
     return root
 
 

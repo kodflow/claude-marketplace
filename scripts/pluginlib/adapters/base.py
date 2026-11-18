@@ -14,7 +14,7 @@ SUPPORT: dict[str, dict[str, tuple[str, str, str]]] = {
         "hooks": ("equivalent", "native", "claude-hook-load"),
         "mods": ("equivalent", "native", "claude-mod-load"),
         "shell-integration": ("equivalent", "native", "claude-session-hook"),
-        "multi-agent": ("equivalent", "native", "claude-subagent-dispatch"),
+        "multi-agent": ("advisory-loss", "generated", ""),
     },
     "openai": {
         "skills": ("equivalent", "native", "codex-skill-load"),
@@ -22,7 +22,7 @@ SUPPORT: dict[str, dict[str, tuple[str, str, str]]] = {
         "hooks": ("absent", "none", ""),
         "mods": ("absent", "none", ""),
         "shell-integration": ("advisory-loss", "generated", ""),
-        "multi-agent": ("equivalent", "native", "codex-subagent-dispatch"),
+        "multi-agent": ("advisory-loss", "generated", ""),
     },
     "perplexity": {
         "skills": ("equivalent", "native", "perplexity-zip-validation"),
@@ -30,7 +30,7 @@ SUPPORT: dict[str, dict[str, tuple[str, str, str]]] = {
         "hooks": ("absent", "none", ""),
         "mods": ("absent", "none", ""),
         "shell-integration": ("absent", "none", ""),
-        "multi-agent": ("absent", "none", ""),
+        "multi-agent": ("advisory-loss", "generated", ""),
     },
 }
 
@@ -44,6 +44,10 @@ def compatibility_report(package: PluginPackage, target: str) -> dict[str, Any]:
     compatible = enabled
     for name, policy in sorted(package.capabilities.items()):
         status, origin, verifier = SUPPORT[target].get(name, ("absent", "none", ""))
+        if name == "multi-agent" and not any(
+            (package.root / "io.github.kodflow/projections/workflows").glob(f"*-{target}.md")
+        ):
+            status, origin, verifier = "absent", "none", ""
         if status == "equivalent":
             reason = f"verified by {verifier}"
         elif status == "advisory-loss":

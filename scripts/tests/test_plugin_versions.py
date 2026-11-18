@@ -22,6 +22,9 @@ class PluginVersionTests(unittest.TestCase):
             (plugin / "plugin.json").write_text(json.dumps(portable))
             (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps(legacy))
             (plugin / "source.txt").write_text("one\n")
+            projection = plugin / "io.github.kodflow/projections/workflows/example.md"
+            projection.parent.mkdir(parents=True)
+            projection.write_text("first rendering\n")
             subprocess.run(["git", "init", "-q", str(fixture)], check=True)
             subprocess.run(["git", "-C", str(fixture), "add", "."], check=True)
             subprocess.run([str(SCRIPT), "--root", str(fixture)], check=True)
@@ -29,6 +32,17 @@ class PluginVersionTests(unittest.TestCase):
             for _ in range(2):
                 subprocess.run([str(SCRIPT), "--root", str(fixture), "--check"], check=True)
             self.assertEqual(first, json.loads((plugin / ".claude-plugin" / "plugin.json").read_text())["version"])
+            projection.write_text("new rendering\n")
+            subprocess.run([str(SCRIPT), "--root", str(fixture), "--check"], check=True)
+            legacy["description"] = "New legacy metadata"
+            (plugin / ".claude-plugin/plugin.json").write_text(json.dumps(legacy))
+            self.assertNotEqual(0, subprocess.run(
+                [str(SCRIPT), "--root", str(fixture), "--check"],
+                capture_output=True, check=False,
+            ).returncode)
+            subprocess.run([str(SCRIPT), "--root", str(fixture)], check=True)
+            metadata_version = json.loads((plugin / "plugin.json").read_text())["version"]
+            self.assertNotEqual(first, metadata_version)
             (plugin / "source.txt").write_text("two\n")
             subprocess.run([str(SCRIPT), "--root", str(fixture)], check=True)
-            self.assertNotEqual(first, json.loads((plugin / "plugin.json").read_text())["version"])
+            self.assertNotEqual(metadata_version, json.loads((plugin / "plugin.json").read_text())["version"])

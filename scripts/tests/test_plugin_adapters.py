@@ -2,12 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 import copy
+from io import BytesIO
 import json
 import unittest
+from unittest.mock import patch
+from zipfile import ZIP_DEFLATED, ZipFile
 
 from jsonschema import Draft202012Validator
 
-from pluginlib.adapters import build_archive, compatibility_report, render_openai_marketplace, validate_archive
+from pluginlib.adapters import (
+    build_archive, compatibility_report, render_claude_marketplace,
+    render_openai_marketplace, validate_archive,
+)
 from pluginlib.model import Catalog
 
 
@@ -45,6 +51,12 @@ class PluginAdapterTests(unittest.TestCase):
         self.assertNotIn("kodflow-gamedev", names)
         self.assertNotIn("kodflow-specialists", names)
 
+    def test_claude_sources_inherit_the_marketplace_revision(self) -> None:
+        entries = render_claude_marketplace(self.catalog)["plugins"]
+        self.assertTrue(entries)
+        for entry in entries:
+            self.assertEqual(f"./plugins/{entry['name']}", entry["source"])
+
     def test_perplexity_archives_are_deterministic_and_within_limits(self) -> None:
         count = 0
         for package in self.catalog.packages():
@@ -55,6 +67,24 @@ class PluginAdapterTests(unittest.TestCase):
             self.assertEqual(first, build_archive(package))
             self.assertEqual([], validate_archive(first))
         self.assertEqual(4, count)
+
+    def test_perplexity_limits_uncompressed_bytes(self) -> None:
+        buffer = BytesIO()
+        with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+            archive.writestr("plugin.json", '{"name":"fixture"}')
+            archive.writestr("skills/fixture/SKILL.md", "a" * 4096)
+        with patch("pluginlib.adapters.perplexity.MAX_BYTES", 1024):
+            self.assertLess(len(buffer.getvalue()), 1024)
+            self.assertTrue(any("uncompressed" in error for error in validate_archive(buffer.getvalue())))
+
+    def test_perplexity_rejects_a_connector_the_importer_would_skip(self) -> None:
+        buffer = BytesIO()
+        with ZipFile(buffer, "w") as archive:
+            archive.writestr("plugin.json", '{"name":"fixture"}')
+            archive.writestr("mcp.json", json.dumps({"mcpServers": {
+                "example": {"type": "http", "url": "https://example.com/${CONNECTOR}"},
+            }}))
+        self.assertEqual(["MCP server 'example' needs a resolved HTTPS URL"], validate_archive(buffer.getvalue()))
 
     def test_equivalent_report_requires_a_nonempty_verifier(self) -> None:
         package = self.catalog.packages()[0]

@@ -2,7 +2,7 @@
 #
 # The mod is a plugin of this marketplace, never an artefact of ktn-linter: no
 # Go tag, no Go release waits on it, and nothing here can redden one. A
-# consumer gets it by commit (git-subdir, the default) or pins one of these
+# consumer gets it at the marketplace commit or pins one of these
 # tags in its own settings ("ref": "kodflow-ktn/v0.1.0").
 #
 # The gate is the pinned lane itself: the tag's commit passes `make mod-check`

@@ -1,6 +1,6 @@
 {
   "name": "kodflow-specialists",
-  "version": "0.0.0-rab7b54582d82",
+  "version": "0.0.0-r848708fe89b6",
   "description": "Language, platform and concern specialists that routing dispatches to. Each verifies an API, a default, a limit or a deprecation against documentation before asserting it, returns what it consulted and what it could not confirm, and tries to break its own finding before reporting it.",
   "author": {
     "name": "kodflow",

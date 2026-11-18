@@ -1,14 +1,14 @@
 # Universal marketplace compatibility
 
 `scripts/pluginctl.py` derives every result from the root `plugin.json` files.
-The table below summarizes phase 3; the JSON reports emitted by `compat
---write` are the machine-readable form.
+The JSON reports emitted by `compat --write` describe the package
+projections. The installer and release profiles also carry host companions.
 
 | Capability | Claude | OpenAI Codex | Perplexity |
 |---|---|---|---|
 | Skills | native | native plugin load | native ZIP import |
-| Agents | native Markdown agents | legacy flat TOML export; not yet packaged | absent |
-| Multi-agent dispatch | native | native | absent |
+| Agents | Generated native Markdown agents | Generated TOMLs staged into the user agent directory | Separate advisory role-skill ZIPs |
+| Workflow delegation | Claude Teams and subagent instructions | Codex collaboration instructions | Advisory Computer instructions with capability preflight |
 | Hooks | native | absent | absent |
 | Mods / HUD | native | absent | absent |
 | Shell integration | native hook | portable guidance only | absent |
@@ -21,16 +21,16 @@ The statuses are not scores:
 - `absent` means no adapter exists.
 
 Optional loss is reported but does not block a build. Required loss blocks an
-enabled projection. Consequently hook/mod-only packages are Claude-only in
-phase 3, while compatible skill-only packages can be imported by all three
-hosts. Specialist and GameDev agents are Claude-only through the new marketplace in
-phase 3. Shell is also withheld from the new Codex marketplace until its
-package can be staged without Claude's SessionStart hook. The existing flat
-Codex exports remain supported during the canary, but are not misrepresented
-as package-level equivalents; portable roles arrive in phase 4.
+enabled projection. Hook/mod-only packages use the Claude profile. Codex
+discovers custom roles through its own agent directory, which the native
+installer stages separately. GameDev activation remains project-scoped.
+The Perplexity role skills provide guidance without subagent identity or sandbox
+guarantees. Generated workflow instructions do not establish native dispatch
+equivalence on their own. The runtime uses a separate provider contract.
 
-Perplexity's real import UI remains an explicit release gate because it cannot
-be exercised headlessly. Phase 3 proves the documented ZIP shape and limits.
+The ZIP verifier checks package shape and limits. Perplexity import acceptance
+also requires checking the expected skills and connectors in Computer. See
+[Prepare a marketplace canary](publish.md).
 
 ## Commands
 

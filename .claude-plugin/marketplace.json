@@ -14,11 +14,7 @@
       "category": "workflow",
       "description": "Tracked research, planning, delivery, and handoff workflows.",
       "name": "kodflow-workflow",
-      "source": {
-        "path": "plugins/kodflow-workflow",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-workflow"
     },
     {
       "author": {
@@ -27,11 +23,7 @@
       "category": "review",
       "description": "Evidence-bound review, debugging, linting, and architectural decisions.",
       "name": "kodflow-review",
-      "source": {
-        "path": "plugins/kodflow-review",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-review"
     },
     {
       "author": {
@@ -40,11 +32,7 @@
       "category": "devops",
       "description": "Infrastructure work, environment health, usage, and template updates.",
       "name": "kodflow-devops",
-      "source": {
-        "path": "plugins/kodflow-devops",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-devops"
     },
     {
       "author": {
@@ -53,11 +41,7 @@
       "category": "devops",
       "description": "Shell integration, session selection, and local housekeeping.",
       "name": "kodflow-shell",
-      "source": {
-        "path": "plugins/kodflow-shell",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-shell"
     },
     {
       "author": {
@@ -66,11 +50,7 @@
       "category": "agents",
       "description": "Language, platform, security, and concern-specific agents.",
       "name": "kodflow-specialists",
-      "source": {
-        "path": "plugins/kodflow-specialists",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-specialists"
     },
     {
       "author": {
@@ -79,11 +59,7 @@
       "category": "hooks",
       "description": "Claude lifecycle hooks, guards, context loading, and structured logging.",
       "name": "kodflow-hooks",
-      "source": {
-        "path": "plugins/kodflow-hooks",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-hooks"
     },
     {
       "author": {
@@ -92,11 +68,7 @@
       "category": "hooks",
       "description": "Claude task, refusal, document, and hunt heads-up display.",
       "name": "kodflow-hud",
-      "source": {
-        "path": "plugins/kodflow-hud",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-hud"
     },
     {
       "author": {
@@ -105,11 +77,7 @@
       "category": "hooks",
       "description": "Claude heads-up display for ktn-linter findings.",
       "name": "kodflow-ktn",
-      "source": {
-        "path": "plugins/kodflow-ktn",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-ktn"
     },
     {
       "author": {
@@ -118,11 +86,7 @@
       "category": "agents",
       "description": "Sourced combat animation, rig, reference, and asset workflows.",
       "name": "kodflow-gamedev",
-      "source": {
-        "path": "plugins/kodflow-gamedev",
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git"
-      }
+      "source": "./plugins/kodflow-gamedev"
     }
   ]
 }

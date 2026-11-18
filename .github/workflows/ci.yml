@@ -40,7 +40,11 @@ jobs:
           mk = json.loads((root/".claude-plugin/marketplace.json").read_text())
           bad = []
           for p in mk["plugins"]:
-              sub = root / p["source"]["path"]
+              source = p["source"]
+              if not isinstance(source, str) or not source.startswith("./"):
+                  bad.append(f"{p['name']}: source must resolve inside the marketplace checkout")
+                  continue
+              sub = root / source
               if not (sub/".claude-plugin"/"plugin.json").exists():
                   bad.append(f"{p['name']}: no plugin.json at {sub}")
               else:
@@ -63,8 +67,17 @@ jobs:
           uv run --project scripts python scripts/pluginctl.py validate --all --mode publisher-strict
           uv run --project scripts python scripts/pluginctl.py build --targets all --check
           uv run --project scripts python scripts/pluginctl.py compat --targets all --fail-required-loss >/dev/null
+          uv run --project scripts python scripts/pluginctl.py roles --check
+          uv run --project scripts python scripts/pluginctl.py workflows --check
           python3 scripts/plugin-inventory.py --check docs/marketplace/inventory.json
           python3 scripts/stamp-versions.py --check
+          bash scripts/tests/test_install.sh
+
+      - name: The multi-provider runtime works offline
+        run: |
+          uv lock --project runtime --check
+          uv run --project runtime --locked pytest runtime/tests
+          uv run --project runtime --locked kodflow-agents doctor --offline
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
@@ -507,7 +520,7 @@ jobs:
   # oldest version kodflow/ktn-linter#774 measured, above the engine the job
   # above pins: it gets an engine of its own, pinned and bumped by hand.
   # Nothing here can redden ktn-linter's release: this repository publishes
-  # the plugin, by commit (git-subdir) and by its own kodflow-ktn/v* tags
+  # the plugin, by marketplace commit and by its own kodflow-ktn/v* tags
   # (kodflow-ktn-release.yml), and ktn-linter does not depend on it. The
   # latest engine is mod-latest.yml's, scheduled and advisory (#788).
   mod-ktn:

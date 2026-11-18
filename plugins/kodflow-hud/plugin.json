@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-hud",
-  "version": "0.0.0-rc7b83192ea7c",
+  "version": "0.0.0-r9531152fdeb8",
   "description": "Claude task, refusal, document, and hunt heads-up display.",
   "author": {
     "name": "kodflow",

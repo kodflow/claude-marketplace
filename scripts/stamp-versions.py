@@ -45,12 +45,26 @@ def _canonical_bytes(path: Path, relative: str) -> bytes:
     return data
 
 
+def _generated(root: Path, relative: str) -> bool:
+    path = Path(relative)
+    if any(part in EXCLUDED_PARTS for part in path.parts) and relative not in MANIFESTS:
+        return True
+    if path.parts[:2] == ("io.github.kodflow", "projections"):
+        return True
+    return (
+        len(path.parts) == 2
+        and path.parts[0] == "agents"
+        and path.suffix == ".md"
+        and (root / "io.github.kodflow" / "roles" / path.stem / "role.yaml").is_file()
+    )
+
+
 def compute(root: Path, plugin: str) -> str:
     digest = hashlib.sha256()
     prefix = f"plugins/{plugin}/"
     for repository_path in _tracked_and_untracked(root, plugin):
         relative = repository_path.removeprefix(prefix)
-        if any(part in EXCLUDED_PARTS for part in Path(relative).parts):
+        if _generated(root / prefix, relative):
             continue
         path = root / repository_path
         if not path.is_file():

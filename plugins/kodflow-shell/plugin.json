@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-shell",
-  "version": "0.0.0-rf8c80f5cd3ca",
+  "version": "0.0.0-rfb6a226383fc",
   "description": "Shell integration, session selection, and local housekeeping.",
   "author": {
     "name": "kodflow",

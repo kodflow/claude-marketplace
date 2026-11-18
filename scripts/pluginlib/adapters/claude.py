@@ -18,11 +18,8 @@ def render_marketplace(catalog: Catalog) -> dict[str, Any]:
             "description": entry["description"],
             "author": {"name": catalog.data["owner"]["name"]},
             "category": entry["category"],
-            "source": {
-                "source": "git-subdir",
-                "url": catalog.data["repository"],
-                "path": entry["path"],
-            },
+            # Relative sources inherit the marketplace checkout and its pin.
+            "source": f"./{entry['path']}",
         })
     return {
         "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
