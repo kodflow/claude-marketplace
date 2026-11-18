@@ -79,6 +79,13 @@ function toTask(raw: Obj): HudTask {
     ] as string[];
     if (ids.length) task.workers = ids;
   }
+  if (isObj(raw.worker_assignment_order)) {
+    task.workerAssignmentOrder = Object.fromEntries(
+      Object.entries(raw.worker_assignment_order).filter(
+        ([, order]) => Number.isSafeInteger(order) && order > 0,
+      ),
+    );
+  }
   if (raw.assignee) task.assignee = text(raw.assignee);
   if (raw.description) task.description = text(raw.description);
   if (raw.parent) task.parent = text(raw.parent);
@@ -153,8 +160,8 @@ export function orphan(
 }
 
 /**
- * Attach a worker's tasks to its current main-agent assignment, falling
- * back to the most recently updated historical assignment.
+ * Attach a worker's tasks to its current main-agent assignment. Use
+ * assignment order for history and the last edit for legacy records.
  */
 export function anchorOf(
   tasks: readonly HudTask[],
@@ -163,9 +170,12 @@ export function anchorOf(
   const matches = (id: string) => id === worker || safe(id) === worker;
   const mine = tasks.filter((t) => t.agent === MAIN);
   const holding = mine.filter((t) => (t.workers ?? []).some(matches));
+  const order = (t: HudTask) => Math.max(
+    0, ...(t.workers ?? []).filter(matches).map((id) => t.workerAssignmentOrder?.[id] ?? 0),
+  );
   return (
     mine.find((t) => t.status === "in_progress" && t.workerId && matches(t.workerId)) ??
-    [...holding].sort((a, b) => b.updated - a.updated)[0]
+    holding.sort((a, b) => order(b) - order(a) || b.updated - a.updated)[0]
   );
 }
 

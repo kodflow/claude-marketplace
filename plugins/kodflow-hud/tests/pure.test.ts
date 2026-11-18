@@ -2,6 +2,7 @@
 import { test, expect } from "claude-code/testing";
 import {
   ago,
+  anchorOf,
   closed,
   idle,
   judge,
@@ -183,6 +184,16 @@ test("liveness unknown: a subagent's task is neither silent nor stopped", () => 
   // A teammate the list cannot judge is « unknown » too
   const mate = ctx({ agents: [{ id: "a1", label: "hud", status: "unknown" }], now: NOW + 3600_000 });
   expect(judge(task, mate)).toEqual(expect.objectContaining({ state: "unknown", silent: false }));
+});
+
+test("a task edit does not supersede a newer assignment in the HUD", () => {
+  const tasks = parseTasks({ tasks: [
+    { id: "1", workers: ["w1"], worker_assignment_order: { w1: 1 }, updated: 30 },
+    { id: "2", workers: ["w1"], worker_assignment_order: { w1: 2 }, updated: 20 },
+    { id: "3", workers: ["w1"], updated: 40 },
+  ] });
+  expect(anchorOf(tasks, "w1")?.id).toBe("2");
+  expect(anchorOf(tasks.slice(2), "w1")?.id).toBe("3");
 });
 
 test("an epic idle for 24 h is marked, one with a live worker on it is not", () => {

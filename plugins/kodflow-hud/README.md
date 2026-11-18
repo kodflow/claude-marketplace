@@ -148,8 +148,9 @@ on the person): that epic is its one line until ⏎ or a click opens it
 agent's.
 
 A subagent's own tasks (kodflow-hooks files them under no epic, in its own
-list) hang on the task it was handed: the main agent's task whose `workers`
-names it, the one in progress, else the most recently updated. Under that
+list) hang on its current assignment from the main agent, or its latest
+historical assignment. For older tasks without an assignment order, the
+last task edit breaks the tie. Under that
 task one read-only line sums them up, outside the depth, the counts and the
 critical path: `↳ sous-agents : 3 tâches (1 faite) · en cours #12 Fix ·
 1 arrêtée`. « arrêtée » counts the tasks left open by a subagent that no
