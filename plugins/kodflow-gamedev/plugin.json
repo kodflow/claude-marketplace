@@ -1,0 +1,50 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kodflow-gamedev",
+  "version": "0.0.0-rd34114c4cde3",
+  "description": "Sourced combat animation, rig, reference, and asset workflows.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "repository": "https://github.com/kodflow/claude-marketplace.git",
+  "license": "MIT",
+  "keywords": [
+    "game-development",
+    "animation",
+    "rigging"
+  ],
+  "extensions": {
+    "io.github.kodflow": {
+      "schemaVersion": 1,
+      "installByDefault": false,
+      "scope": "project",
+      "dependencies": [
+        {
+          "plugin": "kodflow-specialists",
+          "required": false
+        }
+      ],
+      "capabilities": {
+        "skills": "required",
+        "agents": "optional",
+        "hooks": "optional"
+      },
+      "targets": {
+        "claude": {
+          "enabled": true,
+          "profile": "native"
+        },
+        "openai": {
+          "enabled": true,
+          "profile": "generated"
+        },
+        "perplexity": {
+          "enabled": true,
+          "profile": "portable"
+        }
+      }
+    }
+  }
+}

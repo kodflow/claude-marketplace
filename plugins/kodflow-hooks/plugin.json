@@ -1,0 +1,43 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kodflow-hooks",
+  "version": "0.0.0-re534016145c7",
+  "description": "Claude lifecycle hooks, guards, context loading, and structured logging.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "repository": "https://github.com/kodflow/claude-marketplace.git",
+  "license": "MIT",
+  "keywords": [
+    "hooks",
+    "guards",
+    "lifecycle"
+  ],
+  "extensions": {
+    "io.github.kodflow": {
+      "schemaVersion": 1,
+      "installByDefault": true,
+      "scope": "user",
+      "dependencies": [],
+      "capabilities": {
+        "hooks": "required"
+      },
+      "targets": {
+        "claude": {
+          "enabled": true,
+          "profile": "native"
+        },
+        "openai": {
+          "enabled": false,
+          "profile": "disabled"
+        },
+        "perplexity": {
+          "enabled": false,
+          "profile": "disabled"
+        }
+      }
+    }
+  }
+}

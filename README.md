@@ -3,6 +3,12 @@
 An opinionated agent configuration for **Claude Code** and **Codex**, installed
 from one place instead of copied by hand.
 
+The repository also exposes an [Agent Plugins 1.0](https://agent-plugins.org/)
+portable core. One logical catalog generates the Claude marketplace, the Codex
+local marketplace, and importable Perplexity ZIP files. Host-only mechanics are
+reported explicitly instead of silently disappearing during projection; see
+[`docs/marketplace/compatibility.md`](docs/marketplace/compatibility.md).
+
 ```bash
 git clone https://github.com/kodflow/claude-marketplace
 cd claude-marketplace && ./scripts/install.sh
@@ -96,6 +102,17 @@ agent told to use a tool that is not there simply fails.
 
 Re-run the generator after changing anything under `plugins/`; CI checks the
 result parses and that no private detail survived.
+
+During the portable-core canary, that flat export remains available. New hosts
+load the root `plugin.json` files through `.agents/plugins/marketplace.json`.
+The universal gates are:
+
+```bash
+uv sync --project scripts --frozen
+uv run --project scripts python scripts/pluginctl.py validate --all --mode publisher-strict
+uv run --project scripts python scripts/pluginctl.py build --targets all --check
+uv run --project scripts python scripts/pluginctl.py compat --targets all --fail-required-loss
+```
 
 ## What a session pays to have this installed
 

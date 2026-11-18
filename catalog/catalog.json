@@ -1,0 +1,22 @@
+{
+  "$schema": "../schemas/kodflow-catalog-v1.schema.json",
+  "schemaVersion": 1,
+  "name": "kodflow",
+  "description": "Portable Kodflow agent plugins with verified projections for Claude, OpenAI Codex, and Perplexity.",
+  "repository": "https://github.com/kodflow/claude-marketplace.git",
+  "owner": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "plugins": [
+    {"name": "kodflow-workflow", "path": "plugins/kodflow-workflow", "description": "Tracked research, planning, delivery, and handoff workflows.", "category": "workflow"},
+    {"name": "kodflow-review", "path": "plugins/kodflow-review", "description": "Evidence-bound review, debugging, linting, and architectural decisions.", "category": "review"},
+    {"name": "kodflow-devops", "path": "plugins/kodflow-devops", "description": "Infrastructure work, environment health, usage, and template updates.", "category": "devops"},
+    {"name": "kodflow-shell", "path": "plugins/kodflow-shell", "description": "Shell integration, session selection, and local housekeeping.", "category": "devops"},
+    {"name": "kodflow-specialists", "path": "plugins/kodflow-specialists", "description": "Language, platform, security, and concern-specific agents.", "category": "agents"},
+    {"name": "kodflow-hooks", "path": "plugins/kodflow-hooks", "description": "Claude lifecycle hooks, guards, context loading, and structured logging.", "category": "hooks"},
+    {"name": "kodflow-hud", "path": "plugins/kodflow-hud", "description": "Claude task, refusal, document, and hunt heads-up display.", "category": "hooks"},
+    {"name": "kodflow-ktn", "path": "plugins/kodflow-ktn", "description": "Claude heads-up display for ktn-linter findings.", "category": "hooks"},
+    {"name": "kodflow-gamedev", "path": "plugins/kodflow-gamedev", "description": "Sourced combat animation, rig, reference, and asset workflows.", "category": "agents"}
+  ]
+}

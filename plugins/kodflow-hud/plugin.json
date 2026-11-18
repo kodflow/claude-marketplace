@@ -1,0 +1,50 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kodflow-hud",
+  "version": "0.0.0-rc7b83192ea7c",
+  "description": "Claude task, refusal, document, and hunt heads-up display.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "repository": "https://github.com/kodflow/claude-marketplace.git",
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "hud",
+    "tasks"
+  ],
+  "extensions": {
+    "io.github.kodflow": {
+      "schemaVersion": 1,
+      "installByDefault": true,
+      "scope": "user",
+      "dependencies": [
+        {
+          "plugin": "kodflow-hooks",
+          "required": true
+        }
+      ],
+      "capabilities": {
+        "hooks": "required",
+        "mods": "required"
+      },
+      "targets": {
+        "claude": {
+          "enabled": true,
+          "profile": "native",
+          "minimumVersion": "2.1.293"
+        },
+        "openai": {
+          "enabled": false,
+          "profile": "disabled"
+        },
+        "perplexity": {
+          "enabled": false,
+          "profile": "disabled"
+        }
+      }
+    }
+  }
+}

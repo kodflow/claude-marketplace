@@ -54,6 +54,18 @@ jobs:
           pip install --quiet pyyaml
           python3 scripts/validate-frontmatter.py .
 
+      - name: The portable marketplace contracts hold
+        run: |
+          pip install --quiet uv==0.13.9
+          uv sync --project scripts --frozen
+          uv run --project scripts python scripts/tests/run_plugin_tests.py
+          uv run --project scripts python scripts/pluginctl.py validate --all --mode publisher-strict
+          uv run --project scripts python scripts/pluginctl.py build --targets all --check
+          uv run --project scripts python scripts/pluginctl.py compat --targets all --fail-required-loss >/dev/null
+          python3 scripts/plugin-inventory.py --check docs/marketplace/inventory.json
+          python3 scripts/stamp-versions.py --check
+          bash scripts/tests/smoke-plugin-load.sh
+
       # The mod lanes' wiring (kodflow/ktn-linter#788), read from the
       # workflows as YAML: every GATES target run by a blocking job here,
       # every `make` target a workflow runs declared, the ADVISORY latest lane

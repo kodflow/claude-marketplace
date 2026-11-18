@@ -1,0 +1,45 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kodflow-ktn",
+  "version": "0.0.0-r63dc720ad436",
+  "description": "Claude heads-up display for ktn-linter findings.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "repository": "https://github.com/kodflow/claude-marketplace.git",
+  "license": "MIT",
+  "keywords": [
+    "claude",
+    "ktn-linter",
+    "hud"
+  ],
+  "extensions": {
+    "io.github.kodflow": {
+      "schemaVersion": 1,
+      "installByDefault": true,
+      "scope": "user",
+      "dependencies": [],
+      "capabilities": {
+        "hooks": "required",
+        "mods": "required"
+      },
+      "targets": {
+        "claude": {
+          "enabled": true,
+          "profile": "native",
+          "minimumVersion": "2.1.299"
+        },
+        "openai": {
+          "enabled": false,
+          "profile": "disabled"
+        },
+        "perplexity": {
+          "enabled": false,
+          "profile": "disabled"
+        }
+      }
+    }
+  }
+}

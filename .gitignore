@@ -3,6 +3,8 @@
 node_modules/
 __pycache__/
 *.pyc
+.venv/
+dist/
 
 # Agent exhaust: session logs, plans, caches. Configuration is source and is
 # tracked; what a session happened to write is not. These appeared here because

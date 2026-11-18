@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kodflow/claude-marketplace/schemas/kodflow-extension-v1.schema.json",
+  "title": "Kodflow Agent Plugin extension",
+  "type": "object",
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "installByDefault": { "type": "boolean" },
+    "scope": { "enum": ["user", "project"] },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "plugin": { "type": "string", "minLength": 1 },
+          "required": { "type": "boolean" }
+        },
+        "required": ["plugin", "required"],
+        "additionalProperties": false
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9.-]*$" },
+      "additionalProperties": { "enum": ["required", "optional"] }
+    },
+    "targets": {
+      "type": "object",
+      "propertyNames": { "enum": ["claude", "openai", "perplexity"] },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "profile": { "type": "string", "minLength": 1 },
+          "minimumVersion": { "type": "string" }
+        },
+        "required": ["enabled", "profile"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schemaVersion", "installByDefault", "scope", "dependencies", "capabilities", "targets"],
+  "additionalProperties": false
+}

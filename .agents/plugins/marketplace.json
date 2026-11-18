@@ -1,0 +1,65 @@
+{
+  "name": "kodflow",
+  "plugins": [
+    {
+      "category": "workflow",
+      "name": "kodflow-workflow",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/kodflow-workflow",
+        "source": "local"
+      }
+    },
+    {
+      "category": "review",
+      "name": "kodflow-review",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/kodflow-review",
+        "source": "local"
+      }
+    },
+    {
+      "category": "devops",
+      "name": "kodflow-devops",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/kodflow-devops",
+        "source": "local"
+      }
+    },
+    {
+      "category": "devops",
+      "name": "kodflow-shell",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/kodflow-shell",
+        "source": "local"
+      }
+    },
+    {
+      "category": "agents",
+      "name": "kodflow-gamedev",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/kodflow-gamedev",
+        "source": "local"
+      }
+    }
+  ]
+}
