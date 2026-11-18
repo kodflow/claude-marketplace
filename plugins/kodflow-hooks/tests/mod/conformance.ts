@@ -10,9 +10,8 @@
 // - a subagent has no epic of its own (AMEND per step: the refusals a
 //   subagent reads send it to epic=0, not to task_epic; the scenario where
 //   one opened its own epics is retired, its refusal tested apart);
-// - a task keeps `workers`, every agent id an accepted worker= named
-//   (amendState: from the first acceptance in a scenario, the field is in
-//   the state after that step and before and after every later one);
+// - a task keeps the ids and assignment order of its accepted workers
+//   (amendState carries the fields forward from the first acceptance);
 // - task_epic and task_focus describe the epic lifecycle (close, reopen)
 //   and task_create and task_update the tree: the four keep every argument
 //   tasks.py gave them (CHANGED).
@@ -129,7 +128,7 @@ function amendSubagent(step: any): boolean {
 export type Amended = {
   /** worker= starts accepted, each adding its id to a task's workers */
   accepted: number;
-  /** steps whose recorded state gained `workers` */
+  /** steps whose recorded state gained worker history */
   steps: number;
   /** states (before or after) that gained it */
   states: number;
@@ -141,24 +140,24 @@ export type Amended = {
 };
 
 /**
- * Carry `workers` forward through one scenario: from the first accepted
- * worker= start, every task it named holds the ids, in order of acceptance,
- * in the after of that step and the before and after of every later one.
+ * Carry worker history forward through one scenario so the replay compares
+ * each write against the recorded state with the additive fields applied.
  */
 function amendState(scenario: any, stats: Amended): void {
-  const held = new Map<string, string[]>();
+  const held = new Map<string, Map<string, number>>();
   const key = (session: string, agent: unknown, id: unknown) =>
     `${session}\t${String(agent ?? MAIN)}\t${String(id)}`;
-  // The state with `workers` set on every task held, or undefined when none is
+  // Leave comparisons untouched when the recorded file gains no history.
   const inject = (session: string, state: unknown): unknown => {
     if (state === null || (typeof state !== "string" && typeof state !== "object")) return undefined;
     const parsed: any = typeof state === "string" ? loose(state) : state;
     if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.tasks)) return undefined;
     let changed = false;
     for (const t of parsed.tasks) {
-      const ids = held.get(key(session, t?.agent ?? MAIN, t?.id));
-      if (ids) {
-        t.workers = [...ids];
+      const orders = held.get(key(session, t?.agent ?? MAIN, t?.id));
+      if (orders) {
+        t.workers = [...orders.keys()];
+        t.worker_assignment_order = Object.fromEntries(orders);
         changed = true;
       }
     }
@@ -190,9 +189,13 @@ function amendState(scenario: any, stats: Amended): void {
       );
       if (task?.worker_id) {
         const k = key(step.session, agent, id);
-        const ids = held.get(k) ?? [];
-        if (!ids.includes(task.worker_id)) ids.push(task.worker_id);
-        held.set(k, ids);
+        const orders = held.get(k) ?? new Map<string, number>();
+        const prior = typeof step.before === "string" ? loose(step.before) : step.before;
+        const last = Math.max(0, ...(prior?.tasks ?? []).map(
+          (t: any) => t.worker_assignment_order?.[task.worker_id] ?? 0,
+        ));
+        orders.set(task.worker_id, last + 1);
+        held.set(k, orders);
         stats.accepted++;
         touched = true;
       }

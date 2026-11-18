@@ -835,7 +835,10 @@ export function treeScreen(
       });
       if (folded) continue;
       const finished = foldDone
-        ? e.nodes.filter((n) => n.state === "done" && n.id !== sel?.top.id)
+        ? e.nodes.filter((n) =>
+            n.state === "done" && n.id !== sel?.top.id &&
+            !(n.helpers && n.helpers.total > n.helpers.done),
+          )
         : [];
       // The rest drawn as siblings of their own: the corners say where each
       // one really stands once the finished ones have left the list

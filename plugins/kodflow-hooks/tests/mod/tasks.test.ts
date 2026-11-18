@@ -155,6 +155,8 @@ test("a reassigned main task does not hide a live worker's newer epic", () => {
   s.run("task_update", { id: "2", status: "in_progress", worker: "w1" });
   s.run("task_update", { id: "2", status: "pending" });
   s.run("task_create", { subject: "Helper step", epic: 0 }, "w1");
+  s.run("task_update", { id: "1", description: "Unrelated edit" });
+  expect(s.data().tasks[1].worker_assignment_order.w1).toBe(2);
   expect(s.run("task_focus", { epic: "2", close: true }).text).toContain(
     "worker w1 still has #3 Helper step",
   );

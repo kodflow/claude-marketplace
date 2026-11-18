@@ -24,6 +24,7 @@ export type HudTask = {
    * whose own tasks hang under this one.
    */
   workers?: string[];
+  workerAssignmentOrder?: Record<string, number>;
   /** "human" for a task waiting on the person, when the field exists. */
   assignee?: string;
   /** Last change, in seconds (tasks.json's own unit). */

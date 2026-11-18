@@ -772,8 +772,8 @@ files, proven by a corpus recorded from it (Tests, below).
   and, when it was the active one, leaves the agent with none. It is refused
   while a task of the epic is `in_progress`, while one of the user's tasks
   waits in it, or while a running worker anchored on one of its tasks (the
-  task's `workers`; a worker named by several tasks is anchored on the one
-  in progress, else the most recently updated) still has a task of its own
+  task's `workers`; a worker is anchored on its current assignment or,
+  failing that, its last assignment) still has a task of its own
   not completed; the refusal names them. `close` and `reopen` together are
   refused. A closed epic takes no new task (`task_create`,
   `task_assign_human`), cannot be focused, and its tasks take only
@@ -819,7 +819,9 @@ files, proven by a corpus recorded from it (Tests, below).
   and dropped when it leaves `in_progress`; the agent id is also added once
   to the task's `workers`, which keeps every worker the task was ever handed
   to in the order they were accepted and never loses one (a `completed` with
-  `worker=` adds nothing); without `worker`, the headcount
+  `worker=` adds nothing). `worker_assignment_order` records the order of
+  each worker's assignments across tasks. For history without this field,
+  the last task edit is the fallback. Without `worker`, the headcount
   above applies as before. Every refusal lists the running subagents (type,
   id, for how long) and, for each task in progress, its worker and whether it
   runs, or "no worker linked", then says how to unblock (how long each has
@@ -898,8 +900,8 @@ files, proven by a corpus recorded from it (Tests, below).
   limit and where the detail goes (`description`). A subject written longer
   before the limit stays as written: it is never rewritten, the tree cuts it.
 - **Format version.** The tree's fields, an epic's `closed_at` and a task's
-  `workers` keep the file at version 2: every field is additive, no status
-  was added, `upgrade()` keeps the fields it does not know, and every reader
+  `workers` and `worker_assignment_order` are additive fields in version 2.
+  `upgrade()` keeps the fields it does not know, and every reader
   (`lib/epics.jq`, /recap, kodflow-hud) picks the fields it uses. A file
   without them is unchanged. A kodflow-hud older than this plugin still
   shows closed epics: update kodflow-hooks and kodflow-hud together.
@@ -1161,9 +1163,9 @@ shortened, its limits moved); the subject and title refusals reworded to
 name the task tree (5 scenarios); a subagent's refusals sending it to
 `epic=0` rather than `task_epic` (3 scenarios), the scenario where a
 subagent opened epics of its own retired (1) and its refusal tested apart;
-and `workers` carried forward (`amendState`: from the first `worker=`
-accepted in a scenario, the field in the state after that step and before
-and after every later one, ids in the order accepted — 9 accepted starts,
+and worker history carried forward (`amendState`: from the first `worker=`
+accepted in a scenario, the fields in the state after that step and before
+and after every later one — 9 accepted starts,
 16 steps, 26 states, 6 scenarios; the counts are asserted). `task_create`,
 `task_update`, `task_epic` and `task_focus`, whose text or arguments moved,
 must still take every argument tasks.py gave them, as it gave them.

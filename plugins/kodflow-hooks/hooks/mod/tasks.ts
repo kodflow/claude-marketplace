@@ -790,6 +790,15 @@ function taskUpdate(agent: string, args: Obj): Step {
           : [];
         if (!seen.includes(task.worker_id)) seen.push(task.worker_id);
         task.workers = seen;
+        // An order per worker distinguishes reassignments within one clock tick.
+        const last = data.tasks.reduce(
+          (order, t) => Math.max(order, assignmentOrder(t, task.worker_id)),
+          0,
+        );
+        task.worker_assignment_order = {
+          ...task.worker_assignment_order,
+          [task.worker_id]: last + 1,
+        };
       } else if (starting) {
         const busy = data.tasks.filter(
           (t) =>
@@ -911,9 +920,14 @@ function taskEpic(agent: string, args: Obj): Step {
 /** A flag given as true: true, "true" or 1. */
 const flag = (v: unknown): boolean => v === true || v === 1 || v === "true";
 
+function assignmentOrder(task: Obj, workerId: string): number {
+  const order = task.worker_assignment_order?.[workerId];
+  return Number.isSafeInteger(order) && order > 0 ? order : 0;
+}
+
 /**
- * Prefer a task the worker is currently doing, then its most recently
- * updated historical assignment.
+ * Prefer current ownership, then assignment order. For old records,
+ * compare their last edit because their assignment order is unavailable.
  */
 export function anchorOf(tasks: readonly Obj[], workerId: string): Obj | undefined {
   const holding = tasks.filter(
@@ -921,7 +935,10 @@ export function anchorOf(tasks: readonly Obj[], workerId: string): Obj | undefin
   );
   return (
     tasks.find((t) => t.status === "in_progress" && t.worker_id === workerId) ??
-    [...holding].sort((a, b) => (Number(b.updated) || 0) - (Number(a.updated) || 0))[0]
+    holding.sort((a, b) =>
+      assignmentOrder(b, workerId) - assignmentOrder(a, workerId) ||
+      (Number(b.updated) || 0) - (Number(a.updated) || 0),
+    )[0]
   );
 }
 

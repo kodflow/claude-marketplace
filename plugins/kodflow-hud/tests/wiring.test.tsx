@@ -530,6 +530,7 @@ test("the anchor done while its helper still runs: the summary stays under it", 
     epicsFile([
       T("1", "completed", { workers: ["a1"] }),
       T("2", "pending"),
+      T("3", "completed"),
       S("7", "a1", "in_progress", { subject: "Still going" }),
     ]),
     1,
@@ -538,6 +539,9 @@ test("the anchor done while its helper still runs: the summary stays under it", 
   const lines = (await shownText($)).split("\n");
   const at = lines.findIndex((l) => l.includes("Task 1"));
   expect(lines[at + 1]).toContain("↳ sous-agents : 1 tâche · en cours #7 Still going");
+  const narrow = await shownText($, 100, 10);
+  expect(narrow).toContain("fait (1)");
+  expect(narrow).toContain("↳ sous-agents : 1 tâche · en cours #7 Still going");
 });
 
 test("$.agent.list() failing: no toast, no key written, the agents kept, nobody stopped", async ($, on) => {
