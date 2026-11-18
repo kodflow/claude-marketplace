@@ -92,18 +92,20 @@ def _publish(outputs: dict[Path, bytes]) -> None:
                 mode = stat.S_IMODE(path.stat().st_mode)
                 old.chmod(mode)
                 staged[path].chmod(mode)
-        replaced = []
+        attempted = []
         try:
             for path, source in staged.items():
+                attempted.append(path)
                 os.replace(source, path)
-                replaced.append(path)
         except (OSError, KeyboardInterrupt) as error:
             failures = []
-            for path in reversed(replaced):
+            for path in reversed(attempted):
+                if staged[path].exists():
+                    continue  # Replacement did not consume the staged file.
                 backup = previous[path]
                 try:
                     if backup is None:
-                        path.unlink()
+                        path.unlink(missing_ok=True)
                     else:
                         os.replace(backup, path)
                 except OSError as rollback_error:
