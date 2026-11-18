@@ -593,10 +593,12 @@ function epicLine(
     0,
     Math.min(cells(epic.title), titleW - (titleW > countW + 4 ? countW : 0)),
   );
+  const fitsTail = titleW - nameW >= countW;
+  const glyph = epic.idle && !fitsTail ? (folded ? "▸" : "▾") : "◆";
   const out: Cell[] = [
     cell(W.margin),
     row(span2, [
-      cell(W.glyph, [loose ? dim("◌") : span("◆", { color: MAUVE })]),
+      cell(W.glyph, [loose ? dim("◌") : span(glyph, { color: MAUVE })]),
       cell(
         W.ref,
         loose ? [] : [span(`#${epic.id}`, { color: MAUVE, bold: true })],
@@ -612,7 +614,7 @@ function epicLine(
       ]),
       cell(
         Math.max(0, titleW - nameW),
-        titleW - nameW >= countW ? tail : count ? [dim("  "), count] : [],
+        fitsTail ? tail : count ? [dim("  "), count] : [],
       ),
     ]),
   ];
@@ -648,12 +650,12 @@ export function sectionTitle(
   model: TreeModel,
   epic: TreeEpic | undefined,
 ): string {
-  const real = model.epics.filter((e) => e.id !== 0);
+  const real = model.epics.filter((e) => e.id > 0);
   const loose = model.epics.find((e) => e.id === 0);
   const left = loose ? loose.total - loose.done : 0;
   const parts: string[] = [];
   if (real.length === 1 && !left) {
-    const one = epic && epic.id !== 0 ? epic : real[0]!;
+    const one = epic && epic.id > 0 ? epic : real[0]!;
     parts.push(`#${one.id} ${one.title}`);
   } else if (real.length)
     parts.push(plural(real.length, "épopée ouverte", "épopées ouvertes"));

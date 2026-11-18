@@ -141,6 +141,25 @@ test("lifecycle: a waiting user task and a live worker's own tasks hold the clos
   expect(t.run("task_focus", { epic: "1", close: true }).error).toBe(false);
 });
 
+test("a reassigned main task does not hide a live worker's newer epic", () => {
+  const s = scratch([
+    { id: "w1", type: "impl", alive: true },
+    { id: "w2", type: "rev", alive: true },
+  ]);
+  s.run("task_epic", { title: "First" });
+  s.run("task_create", { subject: "Build", epic: 1 });
+  s.run("task_update", { id: "1", status: "in_progress", worker: "w1" });
+  s.run("task_update", { id: "1", status: "in_progress", worker: "w2" });
+  s.run("task_epic", { title: "Second" });
+  s.run("task_create", { subject: "Follow-up", epic: 2 });
+  s.run("task_update", { id: "2", status: "in_progress", worker: "w1" });
+  s.run("task_update", { id: "2", status: "pending" });
+  s.run("task_create", { subject: "Helper step", epic: 0 }, "w1");
+  expect(s.run("task_focus", { epic: "2", close: true }).text).toContain(
+    "worker w1 still has #3 Helper step",
+  );
+});
+
 test("workers: every accepted worker= once, in order; a completed with worker= adds nothing", () => {
   const s = scratch([
     { id: "w1", type: "impl", alive: true },

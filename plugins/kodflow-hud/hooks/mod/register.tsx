@@ -415,7 +415,7 @@ async function poll($: any, silentMs: number, ci: boolean): Promise<void> {
       // in progress by a stopped subagent is said once, as stopped
       const told = [...visibleTasks(board)];
       for (const h of board.helpers ?? [])
-        if (h.stopped && !told.includes(h)) told.push(h);
+        if (h.stopped && h.status === "in_progress" && !told.includes(h)) told.push(h);
       const { alerts, keys } = alertsFor(
         session,
         told,

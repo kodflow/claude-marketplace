@@ -153,20 +153,18 @@ export function orphan(
 }
 
 /**
- * The task a worker's own tasks hang under: of the main agent's tasks that
- * name it in `workers`, the one in progress, else the most recently updated.
+ * Attach a worker's tasks to its current main-agent assignment, falling
+ * back to the most recently updated historical assignment.
  */
 export function anchorOf(
   tasks: readonly HudTask[],
   worker: string,
 ): HudTask | undefined {
-  const holding = tasks.filter(
-    (t) =>
-      t.agent === MAIN &&
-      (t.workers ?? []).some((w) => w === worker || safe(w) === worker),
-  );
+  const matches = (id: string) => id === worker || safe(id) === worker;
+  const mine = tasks.filter((t) => t.agent === MAIN);
+  const holding = mine.filter((t) => (t.workers ?? []).some(matches));
   return (
-    holding.find((t) => t.status === "in_progress") ??
+    mine.find((t) => t.status === "in_progress" && t.workerId && matches(t.workerId)) ??
     [...holding].sort((a, b) => b.updated - a.updated)[0]
   );
 }

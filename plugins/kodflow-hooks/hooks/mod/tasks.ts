@@ -912,15 +912,15 @@ function taskEpic(agent: string, args: Obj): Step {
 const flag = (v: unknown): boolean => v === true || v === 1 || v === "true";
 
 /**
- * The task that holds a worker in the agent's list: the one in progress
- * that names it in `workers`, else the most recently updated one that does.
+ * Prefer a task the worker is currently doing, then its most recently
+ * updated historical assignment.
  */
 export function anchorOf(tasks: readonly Obj[], workerId: string): Obj | undefined {
   const holding = tasks.filter(
     (t) => Array.isArray(t.workers) && t.workers.includes(workerId),
   );
   return (
-    holding.find((t) => t.status === "in_progress") ??
+    tasks.find((t) => t.status === "in_progress" && t.worker_id === workerId) ??
     [...holding].sort((a, b) => (Number(b.updated) || 0) - (Number(a.updated) || 0))[0]
   );
 }
