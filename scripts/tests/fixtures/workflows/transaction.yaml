@@ -1,0 +1,42 @@
+apiVersion: io.github.kodflow/workflow/v1
+id: transaction
+description: Exercise gated write attempts and compensation using a local test double.
+inputSchema:
+  type: object
+tasks:
+  - id: first-write
+    role: test-role
+    instructions: Perform the first test write.
+    access: write
+    ownedPaths: [out]
+    approval: true
+    retries: 1
+    timeout: 5
+    idempotencyKey: first
+    artifacts: [out/first]
+    compensation: Undo the first test write.
+    inputSchema: {type: object}
+    outputSchema:
+      type: object
+      required: [marker]
+  - id: second-write
+    role: test-role
+    instructions: Perform the second test write.
+    access: write
+    ownedPaths: [out/second]
+    compensation: Undo the second test write.
+    inputSchema: {type: object}
+    outputSchema: {type: object}
+  - id: check
+    role: test-role
+    instructions: Verify both test writes.
+    needs: [first-write, second-write]
+    with:
+      prior:
+        $from: /dependencies/first-write/marker
+      input:
+        $from: /inputs/key
+    inputSchema:
+      type: object
+      required: [prior, input]
+    outputSchema: {type: object}

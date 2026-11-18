@@ -1,0 +1,99 @@
+apiVersion: io.github.kodflow/workflow/v1
+id: search
+description: Research a topic using three independent read-only investigations, verified sources, and a single context report.
+inputSchema:
+  type: object
+  required: [query]
+  properties:
+    query: {type: string, minLength: 1}
+  additionalProperties: false
+requiredCapabilities: [parallel-delegation, structured-output, web.official-docs]
+tasks:
+  - id: local-evidence
+    role: developer-executor-design
+    access: read
+    timeout: 180
+    retries: 1
+    instructions: >-
+      Check project context and documentation available to this session.
+      Record factual claims, source paths, dates and gaps. Treat unverified or stale
+      sources as leads. Do not edit the knowledge base or repository.
+    inputSchema: &task_input
+      type: object
+      required: [inputs, dependencies]
+    outputSchema: &source_evidence
+      type: object
+      required: [claims]
+      properties:
+        claims:
+          type: array
+          items:
+            type: object
+            required: [claim, source, checked]
+            properties:
+              claim: {type: string, minLength: 1}
+              source: {type: string, minLength: 1}
+              checked: {type: boolean}
+  - id: primary-sources
+    role: developer-executor-design
+    access: read
+    timeout: 240
+    retries: 1
+    instructions: >-
+      Investigate the query using authoritative primary sources. Record source URLs,
+      release or protocol versions and checked facts. Preserve source provenance
+      and keep unsupported interpretations separate from verified claims.
+    inputSchema: *task_input
+    outputSchema: *source_evidence
+  - id: corroboration
+    role: developer-executor-correctness
+    access: read
+    timeout: 240
+    retries: 1
+    instructions: >-
+      Independently verify the query's likely assumptions against primary sources.
+      Focus on boundary conditions, disagreements, and platform or version drift.
+      Return each claim with its evidence and whether the source was checked.
+    inputSchema: *task_input
+    outputSchema: *source_evidence
+  - id: validate-sources
+    role: developer-executor-correctness
+    needs: [local-evidence, primary-sources, corroboration]
+    access: read
+    timeout: 180
+    instructions: >-
+      Cross-check the three results. Deduplicate by claim and source, reject
+      unsupported evidence, resolve conflicting versions or mark the conflict
+      explicitly, and retain only verified claims. Report unresolved gaps.
+    inputSchema: *task_input
+    outputSchema:
+      type: object
+      required: [claims, gaps]
+      properties:
+        claims:
+          type: array
+          items:
+            type: object
+            required: [claim, source, checked]
+            properties:
+              claim: {type: string, minLength: 1}
+              source: {type: string, minLength: 1}
+              checked: {const: true}
+        gaps:
+          type: array
+          items: {type: string}
+  - id: synthesize
+    role: developer-orchestrator
+    needs: [validate-sources]
+    access: read
+    timeout: 180
+    instructions: >-
+      Produce the existing /search Markdown context from verified claims. Separate
+      assumptions and unresolved gaps, keep version and source attribution, and
+      return the report to the operator for placement. Do not write local files.
+    inputSchema: *task_input
+    outputSchema:
+      type: object
+      required: [report]
+      properties:
+        report: {type: string, minLength: 1}

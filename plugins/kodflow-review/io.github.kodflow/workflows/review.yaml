@@ -1,0 +1,108 @@
+apiVersion: io.github.kodflow/workflow/v1
+id: review
+description: Coordinate specialist review of a local code change and preserve the existing evidence-bound review report.
+inputSchema:
+  type: object
+  required: [repository, base, head]
+  properties:
+    repository: {type: string, minLength: 1}
+    base: {type: string, minLength: 1}
+    head: {type: string, minLength: 1}
+  additionalProperties: false
+requiredCapabilities: [parallel-delegation, structured-output, local-verifier, repository.read]
+tasks:
+  - id: correctness
+    role: developer-executor-correctness
+    access: read
+    timeout: 300
+    retries: 1
+    instructions: >-
+      Review the selected diff for correctness and regression risk. Cite source
+      locations and concrete failure conditions using the existing /review
+      evidence rules. Do not modify code or publish comments.
+    inputSchema: &task_input
+      type: object
+      required: [inputs, dependencies]
+    outputSchema: &specialist_findings
+      type: object
+      required: [findings]
+      properties:
+        findings:
+          type: array
+          items:
+            type: object
+            required: [path, line, summary, evidence, severity, confidence]
+            properties:
+              path: {type: string, minLength: 1}
+              line: {type: integer, minimum: 1}
+              summary: {type: string, minLength: 1}
+              evidence: {type: string, minLength: 1}
+              severity: {type: string, minLength: 1}
+              confidence: {type: string, minLength: 1}
+  - id: defensive-security
+    role: developer-executor-security
+    access: read
+    timeout: 300
+    retries: 1
+    instructions: >-
+      Perform a defensive source review of the diff for broken trust boundaries,
+      unsafe defaults, secret exposure and permission regressions. Return source
+      locations, impact, and remediation. Do not attempt exploitation or
+      reproduction of a vulnerability. Do not change files or publish comments.
+    inputSchema: *task_input
+    outputSchema: *specialist_findings
+  - id: quality
+    role: developer-executor-quality
+    access: read
+    timeout: 240
+    retries: 1
+    instructions: >-
+      Review maintainability, API consistency, and missing tests on the selected
+      diff. Return concrete findings with source locations and evidence. Do not
+      modify the repository or publish comments.
+    inputSchema: *task_input
+    outputSchema: *specialist_findings
+  - id: consolidate
+    role: developer-orchestrator
+    needs: [correctness, defensive-security, quality]
+    access: read
+    timeout: 180
+    instructions: >-
+      Merge duplicate findings that identify the same cause and source location.
+      Preserve the strongest evidence, severity and confidence and keep
+      unverified findings in the existing Needs Verification tier. Preserve
+      the existing coverage manifest and deterministic tier inputs to /review.
+    inputSchema: *task_input
+    outputSchema:
+      type: object
+      required: [findings, coverageManifest]
+      properties:
+        findings: {type: array, items: {type: object}}
+        coverageManifest: {type: object}
+  - id: verify-and-report
+    role: developer-executor-correctness
+    needs: [consolidate]
+    access: read
+    timeout: 180
+    instructions: >-
+      Run the repository's review-verify-manifest.sh against the requested
+      diff and coverage manifest. Treat a missing verifier, failed verification,
+      or incomplete coverage as inconclusive. Render the existing /review
+      report using skills/review/output.md and synthesis.md: walkthrough,
+      verdict, findings by severity and confidence, Needs Verification,
+      deterministic tier table from captured output, and verifier result.
+      Return the report locally without posting any message.
+    inputSchema: *task_input
+    outputSchema:
+      type: object
+      required: [report, verdict, verified]
+      properties:
+        report: {type: string, minLength: 1}
+        verdict: {enum: [0, 1, 2, 3, 4, 5, INCONCLUSIVE]}
+        verified: {type: boolean}
+      if:
+        properties:
+          verified: {const: false}
+      then:
+        properties:
+          verdict: {const: INCONCLUSIVE}
