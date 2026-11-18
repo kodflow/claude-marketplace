@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-gamedev",
-  "version": "0.0.0-rd34114c4cde3",
+  "version": "0.0.0-rce91a1c8f05d",
   "description": "Sourced combat animation, rig, reference, and asset workflows.",
   "author": {
     "name": "kodflow",
@@ -28,7 +28,7 @@
       ],
       "capabilities": {
         "skills": "required",
-        "agents": "optional",
+        "agents": "required",
         "hooks": "optional"
       },
       "targets": {
@@ -37,12 +37,12 @@
           "profile": "native"
         },
         "openai": {
-          "enabled": true,
-          "profile": "generated"
+          "enabled": false,
+          "profile": "requires-portable-roles"
         },
         "perplexity": {
-          "enabled": true,
-          "profile": "portable"
+          "enabled": false,
+          "profile": "requires-portable-roles"
         }
       }
     }

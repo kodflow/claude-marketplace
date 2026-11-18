@@ -103,9 +103,11 @@ agent told to use a tool that is not there simply fails.
 Re-run the generator after changing anything under `plugins/`; CI checks the
 result parses and that no private detail survived.
 
-During the portable-core canary, that flat export remains available. New hosts
-load the root `plugin.json` files through `.agents/plugins/marketplace.json`.
-The universal gates are:
+During the portable-core canary, that flat export remains available. Claude
+loads `.claude-plugin/marketplace.json`, Codex discovers local packages through
+`.agents/plugins/marketplace.json`, and Perplexity imports the generated
+`dist/perplexity/*.zip` archives. Every package also keeps its portable root
+`plugin.json`. The universal gates are:
 
 ```bash
 uv sync --project scripts --frozen

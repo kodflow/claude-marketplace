@@ -23,3 +23,14 @@ Pre-implementation specialist review added five requirements: a locked Python
 tool environment, cycle-free version derivation, distinct publisher and loader
 validation modes, verifier-backed compatibility states, and real loader smoke
 tests for available hosts.
+
+### 2026-11-18 — CodeRabbit review
+
+The first PR review tightened failure boundaries and removed two false
+compatibility claims. GameDev now requires its agents and remains Claude-only;
+Shell is withheld from the new Codex marketplace until a hook-free package can
+be staged. Validator fixtures now cover invalid MCP envelopes and sibling
+servers, HTTPS/loopback URL rules, PLUGIN_DATA escapes, command forms, symlink
+loops, Agent Skills names, UTF-8 metadata, invalid catalog manifests, and the
+semantic verifier-ID contract. The official vendored schemas remain unchanged;
+the Python-specific final-newline check is an additional semantic validation.

@@ -58,6 +58,13 @@ def _atomic_write(path: Path, data: bytes) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
+def _display_path(path: Path) -> str:
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def _print_issues(issues: list) -> None:
     for issue in issues:
         print(f"{issue.severity}: {issue.code}: {issue.path}: {issue.message}")
@@ -66,7 +73,16 @@ def _print_issues(issues: list) -> None:
 def command_validate(args: argparse.Namespace) -> int:
     catalog = _catalog()
     issues = validate_catalog(catalog, SCHEMAS)
-    packages = catalog.packages() if args.all else []
+    packages = []
+    if args.all:
+        for entry in catalog.plugins:
+            if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+                continue
+            try:
+                packages.append(PluginPackage.load(catalog.root / entry["path"]))
+            except (OSError, ValueError, json.JSONDecodeError):
+                # validate_catalog already records the path-specific diagnostic.
+                continue
     packages.extend(PluginPackage.load(path.resolve()) for path in args.paths)
     if args.fixtures:
         packages.extend(
@@ -111,12 +127,12 @@ def command_compat(args: argparse.Namespace) -> int:
 def _check_or_write(path: Path, data: bytes, check: bool) -> bool:
     if check:
         if not path.is_file() or path.read_bytes() != data:
-            print(f"stale projection: {path.relative_to(ROOT)}")
+            print(f"stale projection: {_display_path(path)}")
             return False
-        print(f"current projection: {path.relative_to(ROOT)}")
+        print(f"current projection: {_display_path(path)}")
         return True
     _atomic_write(path, data)
-    print(f"wrote projection: {path.relative_to(ROOT)}")
+    print(f"wrote projection: {_display_path(path)}")
     return True
 
 

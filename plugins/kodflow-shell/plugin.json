@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-shell",
-  "version": "0.0.0-r0aca37f5a791",
+  "version": "0.0.0-rf8c80f5cd3ca",
   "description": "Shell integration, session selection, and local housekeeping.",
   "author": {
     "name": "kodflow",
@@ -32,8 +32,8 @@
           "profile": "native"
         },
         "openai": {
-          "enabled": true,
-          "profile": "generated"
+          "enabled": false,
+          "profile": "requires-hook-free-staging"
         },
         "perplexity": {
           "enabled": true,

@@ -22,11 +22,12 @@ The statuses are not scores:
 
 Optional loss is reported but does not block a build. Required loss blocks an
 enabled projection. Consequently hook/mod-only packages are Claude-only in
-phase 3, while skill packages can be imported by all three hosts and the
-specialist agents are Claude-only through the new marketplace in phase 3. The
-existing flat Codex export remains supported during the canary, but is not
-misrepresented as a package-level equivalent; portable roles arrive in phase
-4.
+phase 3, while compatible skill-only packages can be imported by all three
+hosts. Specialist and GameDev agents are Claude-only through the new marketplace in
+phase 3. Shell is also withheld from the new Codex marketplace until its
+package can be staged without Claude's SessionStart hook. The existing flat
+Codex exports remain supported during the canary, but are not misrepresented
+as package-level equivalents; portable roles arrive in phase 4.
 
 Perplexity's real import UI remains an explicit release gate because it cannot
 be exercised headlessly. Phase 3 proves the documented ZIP shape and limits.

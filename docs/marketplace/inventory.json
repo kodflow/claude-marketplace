@@ -225,7 +225,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-gamedev/.claude-plugin/plugin.json",
-          "sha256": "692e13eaf08254ac627126edae0bb8b042bed9a7e4a39527ba0f8d6062e86d66"
+          "sha256": "42a4d1794efae1511838e51be6d98e94fbce10e151b67701561459f25e3fa393"
         },
         {
           "class": "support",
@@ -320,7 +320,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-gamedev/plugin.json",
-          "sha256": "51b139cb67550ec8c7ceae4e7fc2c89f8e81a929f934526f574f4e30f8c101ee"
+          "sha256": "a2b374203915826d20d0f38df60defa6ea23ad7f7091e528402222bb51fdbcba"
         },
         {
           "class": "support",
@@ -2025,7 +2025,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-shell/.claude-plugin/plugin.json",
-          "sha256": "943b4890b5d1599d02432a7a0709f684e2a2a5cbbda6e524ec32a1bb71db9ebc"
+          "sha256": "764f760fd680b0a413553215cab506081d88b123f9c6027d189d9e057ec73034"
         },
         {
           "class": "support",
@@ -2075,7 +2075,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-shell/plugin.json",
-          "sha256": "015291737a78983b12a3d831dcbe3cbfd5578b41122f181cf365dcc4682df35a"
+          "sha256": "8a8df774583962084883210f42aad0ca08272b886c6f90fff08ebc5a661bf969"
         },
         {
           "class": "support",

@@ -42,7 +42,10 @@ class PluginPackage:
     @classmethod
     def load(cls, root: Path) -> "PluginPackage":
         manifest_path = root / "plugin.json"
-        return cls(root=root, manifest=json.loads(manifest_path.read_text()))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            raise ValueError(f"{manifest_path} must contain an object")
+        return cls(root=root, manifest=manifest)
 
     @property
     def name(self) -> str:
@@ -91,7 +94,10 @@ class Catalog:
 
     @classmethod
     def load(cls, path: Path) -> "Catalog":
-        return cls(root=path.parent.parent, data=json.loads(path.read_text()))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"{path} must contain an object")
+        return cls(root=path.parent.parent, data=data)
 
     @property
     def plugins(self) -> list[dict[str, Any]]:
