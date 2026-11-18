@@ -13,8 +13,48 @@ capabilities:
   - repository.write
   - shell.execute
 modelClass: verify
-inputSchema: ./input.schema.json
-outputSchema: ./output.schema.json
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-executor-security task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-executor-security result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  oneOf:
+  - type: object
+    required:
+    - agent
+    - issues
+    - commendations
+    - metrics
+    properties:
+      agent:
+        type: string
+        minLength: 1
+      issues:
+        type: array
+        items:
+          type: object
+      commendations:
+        type: array
+        items:
+          type: string
+      metrics:
+        type: object
+      summary:
+        type: string
+      agent_feedback:
+        type: string
+  - type: string
+    minLength: 1
 sideEffects: none
 claude:
   tools: Read, Glob, Grep, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs,

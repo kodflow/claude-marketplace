@@ -10,8 +10,8 @@
     "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "description": { "type": "string", "minLength": 1 },
     "instructions": { "$ref": "#/$defs/path" },
-    "inputSchema": { "$ref": "#/$defs/path" },
-    "outputSchema": { "$ref": "#/$defs/path" },
+    "inputSchema": { "$ref": "#/$defs/contract" },
+    "outputSchema": { "$ref": "#/$defs/contract" },
     "capabilities": {
       "type": "object",
       "required": ["required", "optional"],
@@ -39,6 +39,7 @@
   },
   "$defs": {
     "path": { "type": "string", "pattern": "^\\./[^\\\\\\r\\n]+$" },
+    "contract": { "oneOf": [{ "type": "object" }, { "$ref": "#/$defs/path" }] },
     "capabilities": {
       "type": "array",
       "uniqueItems": true,

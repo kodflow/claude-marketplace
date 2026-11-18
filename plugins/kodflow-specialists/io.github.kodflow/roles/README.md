@@ -1,7 +1,9 @@
 # Specialist roles
 
-Each role directory contains one portable declaration, instructions and local
-JSON Schema contracts. The role's model class is abstract. The Claude overlay
+Each role directory contains instructions and a portable declaration with its
+input and output JSON Schema contracts. The loader also supports contracts
+referenced through files in the role directory. The role's model class is
+abstract. The Claude overlay
 keeps its tool list and native model settings. Edit the declaration and its
 instructions here, then run `pluginctl roles` from the repository root to
 refresh the generated Claude and Codex agent files.

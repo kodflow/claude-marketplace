@@ -110,11 +110,33 @@ class RoleCompilerTests(unittest.TestCase):
                 load_roles(package, SCHEMAS)
             instructions.unlink()
             instructions.write_text("# Role\n", encoding="utf-8")
+            descriptor = role / "role.yaml"
+            data = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
+            data["outputSchema"] = {"$dynamicRef": "https://example.invalid/external.json"}
+            descriptor.write_text(yaml.safe_dump(data), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "stay in its document"):
+                load_roles(package, SCHEMAS)
+            data["outputSchema"] = "./output.schema.json"
+            descriptor.write_text(yaml.safe_dump(data), encoding="utf-8")
             (role / "output.schema.json").write_text(
                 '{"$ref": "https://example.invalid/external.json"}', encoding="utf-8",
             )
             with self.assertRaisesRegex(ValueError, "stay in its document"):
                 load_roles(package, SCHEMAS)
+
+    def test_inline_and_referenced_role_contracts_are_equivalent(self):
+        with TemporaryDirectory() as temp:
+            package = Path(temp) / "example"
+            role = package / "io.github.kodflow/roles" / PILOT
+            shutil.copytree(SPECIALISTS / "io.github.kodflow/roles" / PILOT, role)
+            (inline,) = load_roles(package, SCHEMAS)
+            descriptor = role / "role.yaml"
+            data = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
+            for field, file in (("inputSchema", "input.schema.json"), ("outputSchema", "output.schema.json")):
+                (role / file).write_text(json.dumps(data[field]), encoding="utf-8")
+                data[field] = f"./{file}"
+            descriptor.write_text(yaml.safe_dump(data), encoding="utf-8")
+            self.assertEqual([inline], load_roles(package, SCHEMAS))
 
     def test_refuse_role_directory_mismatch_and_conflicting_capabilities(self):
         with TemporaryDirectory() as temp:

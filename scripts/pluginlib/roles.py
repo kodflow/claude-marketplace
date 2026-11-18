@@ -111,6 +111,8 @@ def _check_schema_refs(value: object) -> None:
     """Keep validation and task execution independent of remote schema retrieval."""
     if isinstance(value, dict):
         for key, child in value.items():
+            if not isinstance(key, str):
+                raise ValueError("role schema object keys must be strings")
             if key in {"$ref", "$dynamicRef"} and (
                 not isinstance(child, str) or not child.startswith("#")
             ):
@@ -121,16 +123,26 @@ def _check_schema_refs(value: object) -> None:
             _check_schema_refs(child)
 
 
-def _contract(root: Path, value: str) -> dict:
-    path = _role_file(root, value)
-    document = json.loads(path.read_text(encoding="utf-8"))
+def _contract(root: Path, value: str | dict, location: str) -> dict:
+    if isinstance(value, str):
+        path = _role_file(root, value)
+        document = json.loads(path.read_text(encoding="utf-8"))
+        location = str(path)
+    else:
+        document = value
     if not isinstance(document, dict):
-        raise ValueError(f"{path} must contain a JSON Schema object")
+        raise ValueError(f"{location} must contain a JSON Schema object")
+    if not isinstance(value, str):
+        # YAML can represent recursive aliases and values outside the JSON model.
+        try:
+            json.dumps(document, allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{location} must be JSON-compatible: {error}") from error
     _check_schema_refs(document)
     try:
         Draft202012Validator.check_schema(document)
     except SchemaError as error:
-        raise ValueError(f"{path}: {error.message}") from error
+        raise ValueError(f"{location}: {error.message}") from error
     return document
 
 
@@ -167,8 +179,8 @@ def load_roles(package_root: Path, schemas: Path) -> list[Role]:
             package=root.name, id=role_id, description=data["description"],
             instructions=instructions, required=required, optional=optional,
             model_class=data["modelClass"], codex_effort=data.get("codexEffort"),
-            input_schema=_contract(role_root, data["inputSchema"]),
-            output_schema=_contract(role_root, data["outputSchema"]),
+            input_schema=_contract(role_root, data["inputSchema"], f"{source} inputSchema"),
+            output_schema=_contract(role_root, data["outputSchema"], f"{source} outputSchema"),
             side_effects=data["sideEffects"], claude=data["claude"],
         ))
     return roles

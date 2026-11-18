@@ -12,8 +12,25 @@ capabilities:
   - web.official-docs
   - shell.execute
 modelClass: standard
-inputSchema: ./input.schema.json
-outputSchema: ./output.schema.json
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: devops-specialist-security task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: devops-specialist-security result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
 sideEffects: none
 claude:
   tools: Read, Glob, Grep, SendMessage, TaskUpdate, Bash, WebFetch, mcp__context7__*

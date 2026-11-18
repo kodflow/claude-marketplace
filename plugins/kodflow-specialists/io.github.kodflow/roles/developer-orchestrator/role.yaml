@@ -13,8 +13,25 @@ capabilities:
   - agents.delegate
   - forge.access
 modelClass: deep
-inputSchema: ./input.schema.json
-outputSchema: ./output.schema.json
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-orchestrator task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-orchestrator result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
 sideEffects: external
 claude:
   tools: Read, Glob, Grep, Task, TaskCreate, TaskUpdate, TaskList, Bash, WebFetch, mcp__github__pull_request_read,
