@@ -1,4 +1,4 @@
-// tree.test.tsx — the « Tâches » pane's tree and graph, drawn by the engine
+// tree.test.tsx — the « Tâches » pane's tree, drawn by the engine
 // through the plugin, read back as the terminal lays them out (capture.ts).
 import { test, expect } from "claude-code/testing";
 import { CFG, SEC, host, start, tasksJson, PANE, TASKS } from "./host.ts";
@@ -15,12 +15,12 @@ import { AGENT_PALETTE, colorOf, roleOf } from "../hooks/mod/who.ts";
 import { parseBoard, type Ctx } from "../hooks/mod/board.ts";
 import { cells, fit } from "../hooks/mod/width.ts";
 import {
-  graphScreen,
   initialUi,
+  normalise,
   treeScreen,
   type Cell,
 } from "../hooks/mod/layout.tsx";
-import { keepSession, seenFrom } from "../hooks/mod/models.ts";
+import { keepSession } from "../hooks/mod/models.ts";
 
 const cellText = (line: Cell[]): string =>
   line.map((c) => (c.spans ?? []).map((s) => s.text).join("")).join("");
@@ -152,12 +152,13 @@ async function seeded($: any, on: any, tasks = MAQUETTE) {
   return { h, clock };
 }
 
-// What the pane draws at its minimum, 90 columns with the frame (88 of body)
-// by 20 rows: every column a Box of its width, so each line is 88 cells
+// What the pane draws at 90 columns with the frame (88 of body) by 18 rows,
+// no hunt listed so no views' bar: every column a Box of its width, so each
+// line is 88 cells
 const R12 = [
   "─ #1 Routage model/effort ──────────────────────────────────────────────────────────────",
   "  TÂCHE                           AGENT                   MODÈLE         ÂGE  LIENS",
-  "  ◆ #1     Routage model/effort  7/15                                 1 h 52",
+  "  ◆ #1     Routage model/effort  7/15 · actif                         1 h 52",
   "  ├▸ ✓ T0     Événements réels    ◉ principal             opus           2 h  ⇢ C6 C7",
   "  ├▸ ✓ C1–C5  Policy et routage   ◉ principal             opus        1 h 20  ⇢ C9",
   "┃ ├▾ ● C6     Porte Fable         ↳ mkt-routi… · general  opus·xhigh  12 min  ⇢ C9",
@@ -173,68 +174,18 @@ const R12 = [
   "┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10      bloqué par toi (C7)",
   "● C6  Porte Fable   mkt-routing-pr · general-purpose · opus·xhigh · 12 min · ⇢ C9 · figé",
   "  Le mod juge, il ne réécrit jamais e.model",
-  "────────────────────────────────────────────────────────────────────────────────────────",
-  "Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue",
-].join("\n");
-
-const R4 = [
-  "─ #1 Routage model/effort ──────────────────────────────────────────────────────────────",
-  "FAIT · PRÊT                    EN COURS · ATTENTE             BLOQUÉ",
-  "✓ T0    Événements réels ──┬─▶ ● C6    Porte Fable ───────┐",
-  "  principal · opus · 2 h   │     mkt-routing-pr · 12 min  │",
-  "                           └─▶ ◇ C7    Feedback agents ───┤",
-  "                                 attend toi · 6 min       │",
-  "✓ C1–C5 Policy et routage ────────────────────────────────┼─▶ ⊘ C9    CI et PR",
-  "  principal · 1 h 20                                      │     attend C6 C7 C8",
-  "▶ C8    Spécialistes ×5 ──────────────────────────────────┘",
-  "  prête · personne dessus",
-  "",
-  "",
-  "",
-  "",
-  "┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄",
-  "prochaine action  ▶ C8 prête, personne dessus                     t'attend  ◇ C7 · 6 min",
-  "┃ chemin critique  C6 → C9  ·  C7 → C9  ·  C8 → C9  ·  #8 → #10",
-  "livrable  ⊘ C9 CI et PR · attend C6 C7 C8",
-  "────────────────────────────────────────────────────────────────────────────────────────",
-  "Arbre   Graphe   Refus (0)    Documents (0)               ↑↓ choisir · ⏎ plier · tab vue",
 ].join("\n");
 
 const drawnIn = async (ui: any) => ui.drawn({ in: "tree" });
 
-test("R12 at 90 by 20: the tree, column by column, as the maquette lays it out", async ($, on) => {
+test("R12 at 90 by 18: the tree, column by column, as the maquette lays it out", async ($, on) => {
   await seeded($, on);
-  const ui = await mount($, 88, 20);
+  const ui = await mount($, 88, 18);
   const tree = await drawnIn(ui);
   expect(capture(tree)).toBe(R12);
-  expect(widths(tree)).toEqual(Array(20).fill(88));
+  expect(widths(tree)).toEqual(Array(18).fill(88));
   // No cell paints a background: the colour is the text's alone
   expect(JSON.stringify(tree)).not.toContain("backgroundColor");
-});
-
-test("R4 at 90 by 20: the graph by state, junctions and no crossing", async ($, on) => {
-  await seeded($, on);
-  const ui = await mount($, 88, 20);
-  await ui.key({ key: "tab" });
-  const graph = await drawnIn(ui);
-  expect(capture(graph)).toBe(R4);
-  expect(widths(graph)).toEqual(Array(20).fill(88));
-  expect(JSON.stringify(graph)).not.toContain("backgroundColor");
-  // tab goes on to « Refus », « Documents », then back to the tree; a click
-  // on « Arbre » is the tree too
-  await ui.key({ key: "tab" });
-  expect(
-    await ui.find({ in: "tree", text: /Aucun refus dans cette session/ }),
-  ).toBeTruthy();
-  await ui.key({ key: "tab" });
-  expect(await ui.find({ in: "tree", text: /Pas de docs\.json/ })).toBeTruthy();
-  await ui.key({ key: "tab" });
-  expect(capture(await drawnIn(ui))).toBe(R12);
-  await ui.key({ key: "tab" });
-  await ui.pointer({ type: "down", x: 2, y: 19, button: "left" });
-  expect(capture(await drawnIn(ui))).toBe(R12);
-  await ui.pointer({ type: "down", x: 9, y: 19, button: "left" });
-  expect(capture(await drawnIn(ui))).toBe(R4);
 });
 
 const header = (text: string) => text.split("\n")[1];
@@ -259,7 +210,7 @@ test("narrower: the links go first, then the model, then the agent; under 64 the
   expect(sixty.split("\n")[5]).toBe("┃ ├▾ ● C6     Porte Fable         12 min");
 });
 
-test("shorter than 20 rows: the finished branches fold, then the detail drops to one line, then none", async ($, on) => {
+test("shorter than 18 rows: the finished branches fold, then the detail drops to one line, then none", async ($, on) => {
   await seeded($, on);
   const at = async (rows: number) => {
     const ui = await mount($, 88, rows);
@@ -268,25 +219,25 @@ test("shorter than 20 rows: the finished branches fold, then the detail drops to
     expect(text.split("\n")).toHaveLength(rows);
     return text;
   };
-  const r19 = await at(19);
-  expect(r19).toContain("  ├─ ✓ fait (2)");
-  expect(r19).not.toContain("Événements réels");
-  expect(r19).toContain("  Le mod juge, il ne réécrit jamais e.model");
-  const r18 = await at(18);
-  expect(r18).toContain("● C6  Porte Fable");
-  expect(r18).not.toContain("Le mod juge");
   const r17 = await at(17);
-  expect(r17).not.toContain("● C6  Porte Fable");
-  expect(r17).toContain("┃ └─ ⊘ C9     CI et PR");
+  expect(r17).toContain("  ├─ ✓ fait (2)");
+  expect(r17).not.toContain("Événements réels");
+  expect(r17).toContain("  Le mod juge, il ne réécrit jamais e.model");
+  const r16 = await at(16);
+  expect(r16).toContain("● C6  Porte Fable");
+  expect(r16).not.toContain("Le mod juge");
+  const r15 = await at(15);
+  expect(r15).not.toContain("● C6  Porte Fable");
+  expect(r15).toContain("┃ └─ ⊘ C9     CI et PR");
   // Shorter still, the list scrolls with the selection
-  const r12 = await at(12);
-  expect(r12).toContain("┃ ├▾ ● C6     Porte Fable");
-  expect(r12).toContain("chemin critique");
+  const r10 = await at(10);
+  expect(r10).toContain("┃ ├▾ ● C6     Porte Fable");
+  expect(r10).toContain("chemin critique");
 });
 
 test("keys: ↑↓ choose, ⏎ folds, one top-level branch open at a time; a click chooses and folds", async ($, on) => {
   await seeded($, on);
-  const ui = await mount($, 88, 20);
+  const ui = await mount($, 88, 18);
   const line = async (n: number) => capture(await drawnIn(ui)).split("\n")[n];
   // C6 starts selected and open: ⏎ folds it
   await ui.key({ key: "return" });
@@ -322,7 +273,7 @@ test("a click never moves the row it hit: the next click at the same place is on
   const lines = async (ui: any) => capture(await drawnIn(ui)).split("\n");
   // A short pane, where the list scrolls: fold C6, then C8 (line 6) opens
   // where it stands, and a second click there folds it again
-  const short = await mount($, 88, 12);
+  const short = await mount($, 88, 10);
   await click(short, 4);
   expect((await lines(short))[6]).toContain("▶ C8     Spécialistes ×5");
   await click(short, 6);
@@ -336,7 +287,7 @@ test("a click never moves the row it hit: the next click at the same place is on
   await short.unmount();
   // A full pane: C8 (line 12) opens below the open C6 and stays on line 12;
   // folding it again leaves it there too
-  const full = await mount($, 88, 20);
+  const full = await mount($, 88, 18);
   expect((await lines(full))[12]).toContain("├▸ ▶ C8     Spécialistes ×5");
   await click(full, 12);
   text = await lines(full);
@@ -350,7 +301,7 @@ test("a click never moves the row it hit: the next click at the same place is on
 
 test("↑↓ scroll the list only as far as the selection needs", async ($, on) => {
   await seeded($, on);
-  const ui = await mount($, 88, 12);
+  const ui = await mount($, 88, 10);
   const lines = async () => capture(await drawnIn(ui)).split("\n");
   // C6 starts selected, open, on line 4; ↓ walks its subtasks without
   // moving the list until the selection reaches its last line
@@ -371,11 +322,11 @@ test("↑↓ scroll the list only as far as the selection needs", async ($, on) 
 test("a surface with no Client draws the same tree, still", async ($, on) => {
   await seeded($, on);
   for (const surface of ["vscode", "mobile"] as const) {
-    const ui = await mount($, 88, 20, surface);
+    const ui = await mount($, 88, 18, surface);
     expect(capture(await ui.drawn())).toBe(R12);
     await ui.unmount();
   }
-  const desk = await mount($, 88, 20, "desktop");
+  const desk = await mount($, 88, 18, "desktop");
   expect(capture(await drawnIn(desk))).toBe(R12);
 });
 
@@ -394,7 +345,6 @@ const treeOf = (tasks: object[]) =>
     ctx,
     ci: {},
     models: {},
-    seen: {},
     session: "s",
   }).epics[0]!;
 
@@ -547,95 +497,28 @@ test("the model column comes from what the session said, never a guess", async (
   expect(capture(await drawnIn(ui)).split("\n")[3]).toContain("sonnet·med");
 });
 
-test("R4: links that share no lane get their own stretch; one crossing a column is a solid line", async ($, on) => {
-  await seeded($, on, [
-    task("1", "Base", "completed", { ref: "T0" }),
-    task("2", "Work", "in_progress", { ref: "C6", blockedBy: ["1"] }),
-    task("5", "Other", "waiting", { ref: "C7" }),
-    task("3", "Ship", "pending", { ref: "C9", blockedBy: ["1", "2"] }),
-    task("4", "Prep", "pending", { ref: "P1" }),
-    task("6", "Late", "pending", { ref: "C10", blockedBy: ["4"] }),
-  ]);
-  const ui = await mount($, 88, 20);
-  await ui.key({ key: "tab" });
-  const lines = capture(await drawnIn(ui)).split("\n");
-  expect(lines.slice(1, 10)).toEqual([
-    "FAIT · PRÊT                    EN COURS · ATTENTE             BLOQUÉ",
-    "                           ┌─▶ ● C6    Work ──────────────┐",
-    "                           │     principal · 0 s          │",
-    "                           │   ◇ C7    Other              │",
-    "                           │     principal · 0 s          │",
-    "✓ T0    Base ──────────────┴──────────────────────────────┴─▶ ⊘ C9    Ship",
-    "  principal · opus · 0 s                                        attend C6",
-    "▶ P1    Prep ───────────────────────────────────────────────▶ ⊘ C10   Late",
-    "  prête · personne dessus                                       attend P1",
-  ]);
-  expect(lines.join("\n")).not.toContain("┼");
-});
-
 test("every line of a screen adds up to its width, the fold line of a narrow pane too", () => {
   const model = buildTree({
     board: parseBoard(tasksJson(MAQUETTE, EPIC)),
     ctx,
     ci: {},
     models: {},
-    seen: {},
     session: "s",
   });
   for (const [w, r] of [
-    [88, 20],
-    [58, 19],
+    [88, 18],
+    [58, 17],
     [40, 8],
     [30, 6],
   ] as const) {
     const screen = treeScreen(model, initialUi(model), w, r);
     expect(
       screen.lines.some((l) => l.length === 2 && cellText(l).includes("fait")),
-    ).toBe(r < 20);
+    ).toBe(r < 18);
     // Never wider than the body: a row whose columns dropped is shorter
-    const graph = graphScreen(model, initialUi(model), w, r);
-    for (const line of [...screen.lines, ...graph.lines])
+    for (const line of screen.lines)
       expect(line.reduce((n, c) => n + c.w, 0)).toBeLessThanOrEqual(w);
   }
-});
-
-test("the worker seen on a task is the session's: ids start over, the old ones go", () => {
-  const t = (id: string, status: string, over: object = {}) =>
-    ({
-      id,
-      subject: "x",
-      status,
-      epic: 1,
-      agent: "main",
-      updated: 1,
-      prs: [],
-      ...over,
-    }) as any;
-  const a = seenFrom(
-    [t("3", "in_progress", { worker: "hud", workerId: "a1" })],
-    {},
-    "A",
-  )!;
-  expect(a).toEqual({ "A:main:3": { worker: "hud", workerId: "a1" } });
-  // Session B: its #3 never had that worker, and A's entries are dropped
-  const b = seenFrom([t("3", "completed")], a, "B")!;
-  expect(b).toEqual({});
-  expect(seenFrom([t("3", "completed")], b, "B")).toBeUndefined();
-  const tree = buildTree({
-    board: parseBoard(
-      tasksJson(
-        [task("3", "Done", "completed"), task("4", "Next", "pending")],
-        EPIC,
-      ),
-    ),
-    ctx,
-    ci: {},
-    models: {},
-    seen: a,
-    session: "B",
-  });
-  expect(tree.epics[0]!.nodes[0]!.agent).toBe("principal");
-  expect(tree.epics[0]!.nodes[0]!.agentKind).toBe("main");
 });
 
 test("the models are the session's: another session's entry for the loop is not shown, nor kept", () => {
@@ -648,7 +531,6 @@ test("the models are the session's: another session's entry for the loop is not 
       ctx,
       ci: {},
       models: { "A:a1": { model: "claude-opus-5-5", effort: "high" } },
-      seen: {},
       session,
     }).epics[0]!.nodes[0]!.model;
   expect(at("A")).toBe("opus·high");
@@ -778,10 +660,10 @@ const LONGER = [
   task("3", "A".repeat(18), "pending", { ref: "C2" }),
 ];
 
-test("a title of 30 characters is cut at 18 cells in the tree and in the graph, whole on the selected line (R12, 90x20)", async ($, on) => {
+test("a title of 30 characters is cut at 18 cells in the tree, whole on the selected line (R12, 90x18)", async ($, on) => {
   expect([...LONG]).toHaveLength(30);
   await seeded($, on, LONGER);
-  const ui = await mount($, 88, 20);
+  const ui = await mount($, 88, 18);
   const text = capture(await drawnIn(ui));
   const rows = text.split("\n");
   // Cut with « … » in the 18 cells of the column, the neighbours aligned
@@ -797,12 +679,7 @@ test("a title of 30 characters is cut at 18 cells in the tree and in the graph, 
   );
   // The detail line of the selection carries the whole title
   expect(rows[16]).toContain(`● C1  ${LONG}`);
-  expect(widths(await drawnIn(ui))).toEqual(Array(20).fill(88));
-  // The graph cuts it too, in its own 18
-  await ui.key({ key: "tab" });
-  const graph = capture(await drawnIn(ui));
-  expect(graph).toContain("● C1    Réécrire la gesti…");
-  expect(graph).not.toContain(LONG);
+  expect(widths(await drawnIn(ui))).toEqual(Array(18).fill(88));
 });
 
 test("the finished branches fold above the open ones, and only the last row turns « └─ »", () => {
@@ -820,7 +697,6 @@ test("the finished branches fold above the open ones, and only the last row turn
       ctx,
       ci: {},
       models: {},
-      seen: {},
       session: "s",
     });
   const model = modelOf(many);
@@ -888,7 +764,7 @@ test("a 200 by 70 pane on 3 epics of 25 tasks draws, its tree well under the eng
         task(
           top,
           `Tâche ${top} de l'épopée ${e}`,
-          (["pending", "in_progress", "completed", "waiting"] as const)[t % 4],
+          (["pending", "in_progress", "completed", "waiting"] as const)[t % 4]!,
           {
             epic: e,
             ...(t % 3 && { blockedBy: [String(id - 5)] }),
@@ -930,8 +806,31 @@ test("a 200 by 70 pane on 3 epics of 25 tasks draws, its tree well under the eng
   expect(capture(tree)).toContain("Épopée 3");
   expect(widths(tree)).toEqual(Array(70).fill(200));
   expect(JSON.stringify(tree).length).toBeLessThan(50_000);
-  await ui.key({ key: "tab" });
-  const graph = await drawnIn(ui);
-  expect(widths(graph)).toEqual(Array(70).fill(200));
-  expect(JSON.stringify(graph).length).toBeLessThan(50_000);
+});
+
+test("a state an older version kept: its view, its fields and a selection not shown are normalised", () => {
+  const model = buildTree({
+    board: parseBoard(tasksJson(MAQUETTE, EPIC)),
+    ctx,
+    ci: {},
+    models: {},
+    session: "s",
+  });
+  const ui = normalise(model, {
+    view: "graph",
+    sel: "999",
+    pin: { id: "999", y: 4 },
+    open: ["6", 7],
+    bsel: "x",
+    pick: "Bash(ls:*)",
+    dsel: "prd",
+    mode: "ask",
+  });
+  expect(ui.view).toBe("tree");
+  expect(Object.keys(ui).sort()).toEqual(["open", "sel", "view"]);
+  expect(ui.open).toEqual(["6"]);
+  // The selection moved to a task the tree shows: the active epic's first
+  expect(ui.sel).toBe(model.epics[0]!.nodes[0]!.id);
+  // Nothing kept: the tree's own first state
+  expect(normalise(model, undefined)).toEqual(initialUi(model));
 });

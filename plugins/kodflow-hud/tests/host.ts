@@ -13,7 +13,15 @@ export const PR = "https://github.com/kodflow/claude-marketplace/pull/42";
 export type Host = {
   files: Map<string, { text: string; mtimeMs: number }>;
   dirs: Set<string>;
-  agents: { id: string; type: string; name?: string; status: string }[];
+  agents: {
+    id: string;
+    type: string;
+    name?: string;
+    status: string;
+    teammateId?: string;
+  }[];
+  /** `$.agent.list()` refuses: the pane cannot tell who stands. */
+  agentsFail?: boolean;
   toasts: string[];
   opened: string[];
   /** Every open, with the title it carried, in order. */
@@ -107,7 +115,9 @@ export function host(
     h.toasts.push(e.text);
     return { value: undefined };
   });
-  on("agent.list", async () => ({ value: h.agents }));
+  on("agent.list", async () =>
+    h.agentsFail ? { deny: "agent list unavailable" } : { value: h.agents },
+  );
   on("fs.exists", async (_$: any, e: any) => ({
     value: h.dirs.has(e.path) || h.files.has(e.path),
   }));

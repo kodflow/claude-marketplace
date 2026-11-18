@@ -10,8 +10,9 @@
 //
 // When the main agent completes a task that was linked to a worker
 // (task_update worker=...), that worker's worktrees are candidates; when the
-// completion closes the task's epic, so are those of every worker of the
-// epic and every subagent started on it (agents.json's `epic`). The
+// epic is done — its last task completed, or the epic closed with
+// task_focus(close=true) — so are those of every worker of the epic (each
+// task's `workers`) and every subagent started on it (agents.json's `epic`). The
 // candidates go to hooks/scripts/cleanup.sh, which removes nothing unless
 // the PR is merged at the very commit the branch holds, the worktree is
 // clean, and it is neither the main worktree nor the default branch.
@@ -61,8 +62,8 @@ export function worktreePaths(
   return out;
 }
 
-/** What one completion closes: the workers to clean after, and the epic. */
-export type Closing = { workers: string[]; epic: number; epicClosed: boolean };
+/** What one completion or closure ends: the workers to clean after, and the epic. */
+export type Closing = { workers: string[]; epic: number; epicDone: boolean };
 
 type Obj = Record<string, any>;
 const ofMain = (t: Obj): boolean => (t.agent ?? MAIN) === MAIN;
@@ -89,15 +90,44 @@ export function closingOf(
   const epic = epicOf(now);
   const inEpic = (d: Data) =>
     d.tasks.filter((t) => ofMain(t) && epicOf(t) === epic);
-  const epicClosed =
+  const epicDone =
     epic > 0 && inEpic(after).every((t) => t.status === "completed");
   const workers: string[] = [];
   const add = (w: unknown) => {
     if (typeof w === "string" && w && !workers.includes(w)) workers.push(w);
   };
   add(was.worker_id);
-  if (epicClosed) for (const t of inEpic(before)) add(t.worker_id);
-  return { workers, epic, epicClosed };
+  if (epicDone)
+    for (const t of inEpic(before)) {
+      add(t.worker_id);
+      for (const w of Array.isArray(t.workers) ? t.workers : []) add(w);
+    }
+  return { workers, epic, epicDone };
+}
+
+const isClosed = (e: Obj | undefined): boolean =>
+  !!e && typeof e.closed_at === "number" && Number.isFinite(e.closed_at) && e.closed_at > 0;
+
+/**
+ * Compare the list before and after a main-agent task_focus(close=true):
+ * the epic that went from open to closed, with the union of its tasks'
+ * `workers`. Undefined when no epic was closed.
+ */
+export function closingOfEpic(before: Data, after: Data): Closing | undefined {
+  const ofMainEpic = (e: Obj) => (e.agent ?? MAIN) === MAIN;
+  const shut = after.epics.find(
+    (e) =>
+      ofMainEpic(e) &&
+      isClosed(e) &&
+      !isClosed(before.epics.find((b) => b.id === e.id && ofMainEpic(b))),
+  );
+  if (!shut) return undefined;
+  const workers: string[] = [];
+  for (const t of after.tasks)
+    if (ofMain(t) && epicOf(t) === shut.id)
+      for (const w of Array.isArray(t.workers) ? t.workers : [t.worker_id])
+        if (typeof w === "string" && w && !workers.includes(w)) workers.push(w);
+  return { workers, epic: shut.id, epicDone: true };
 }
 
 type Registry = { agents: Record<string, { paths: string[]; epic?: number }> };
@@ -176,7 +206,7 @@ export async function claim(
   agentsJson: string | undefined,
 ): Promise<string[]> {
   let started: string[] = [];
-  if (closing.epicClosed) {
+  if (closing.epicDone) {
     try {
       const agents = JSON.parse(agentsJson ?? "").agents ?? {};
       started = Object.entries<any>(agents)
@@ -196,7 +226,7 @@ export async function claim(
         changed = true;
       }
     }
-    if (closing.epicClosed) {
+    if (closing.epicDone) {
       for (const [id, e] of Object.entries(reg.agents))
         if (e.epic === closing.epic) ids.push(id);
       ids.push(...started);

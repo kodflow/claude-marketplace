@@ -62,8 +62,9 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/recap/scripts/recap.sh state 
 
 One JSON document, read from `<config>/kodflow/sessions/<session>/`
 (`tasks.json`, `agents.json`, `worktrees.json`, where `<config>` is
-`CLAUDE_CONFIG_DIR` or `~/.claude`). It holds the main agent's tasks, the
-ones the status line shows; a subagent's own list is its business.
+`CLAUDE_CONFIG_DIR` or `~/.claude`). It holds the main agent's tasks, closed
+epics (`task_focus(close=true)`) and their tasks left out; a subagent's own
+list is its business.
 
 | Key | Holds |
 |-----|-------|

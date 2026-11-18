@@ -99,7 +99,8 @@ SessionStart)
         open=$(jq -r -L "$LIB" -f "$LIB/review.jq" "$tasks_file" 2>/dev/null)
         if [ -n "$open" ]; then
             # Under the lock the mod takes to drop a line (on-user.sh)
-            (
+            # KODFLOW_TRIAGE=off: the review is said, no cause raised
+            [ "${KODFLOW_TRIAGE:-}" != off ] && (
                 . "$LIB/lock.sh" 2>/dev/null && kf_lock "$sdir/.triage.lock.d" 2
                 grep -qx resume "$sdir/triage-pending" 2>/dev/null || printf 'resume\n' >> "$sdir/triage-pending"
             ) 2>/dev/null

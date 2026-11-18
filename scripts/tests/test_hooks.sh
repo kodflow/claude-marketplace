@@ -588,6 +588,14 @@ jq -e '.agents | has("ghost") | not' "$AG" >/dev/null 2>&1 \
 run SubagentStop "" '{"agent_id":"a2","stop_hook_active":true}' on-agent.sh
 jq -e '.agents.a2.stopped == null' "$AG" >/dev/null 2>&1 && ok "a subagent continued by a stop hook is still running" || bad "active stop" "$(cat "$AG")"
 jq -e '.agents.a1.epic == 0' "$AG" >/dev/null 2>&1 && ok "no tasks.json: the subagent is recorded on epic 0" || bad "agent epic 0" "$(cat "$AG")"
+# A resumed agent (SendMessage keeps its id): its entry is merged, running
+# again, the epic it was first counted on and any other field kept
+jq '.agents.a1.note = "kept"' "$AG" > "$AG.t" && mv -f "$AG.t" "$AG"
+printf '%s' '{"version":2,"active":{"main":9},"epics":[{"id":9,"agent":"main","title":"E"}],"tasks":[]}' > "${AG%/*}/tasks.json"
+run SubagentStart "" '{"agent_id":"a1","agent_type":"Explore"}' on-agent.sh
+jq -e '.agents.a1.stopped == null and .agents.a1.epic == 0 and .agents.a1.note == "kept" and .agents.a1.type == "Explore"' "$AG" >/dev/null 2>&1 \
+    && ok "a start merges into the entry: stopped reset, first epic and other fields kept" || bad "agent merge" "$(cat "$AG")"
+rm -f "${AG%/*}/tasks.json"
 printf '%s' '{"version":2,"active":{"main":4},"epics":[{"id":4,"agent":"main","title":"E"}],"tasks":[]}' > "${AG%/*}/tasks.json"
 run SubagentStart "" '{"agent_id":"a3","agent_type":"Explore"}' on-agent.sh
 jq -e '.agents.a3.epic == 4' "$AG" >/dev/null 2>&1 && ok "SubagentStart records the main agent's active epic" || bad "agent epic" "$(cat "$AG")"
@@ -597,18 +605,32 @@ jq -e '.agents.a4.epic == 0' "$AG" >/dev/null 2>&1 && [ "$RC" -eq 0 ] \
     && ok "a malformed tasks.json records epic 0 and fails open" || bad "agent epic malformed" "$(cat "$AG")"
 rm -rf "$T/home/.claude/kodflow"
 
+echo "== The model-facing texts promise nothing of the status line"
+# The status line shows no epic and no task any more: the task tools, the
+# hooks' messages, /recap's skill and the hooks' README say nothing of it
+# (« SDK status-line » is an example epic title, not the status line)
+P=$ROOT/plugins/kodflow-hooks
+hits=$(grep -n -i 'status line\|status-line' "$P/hooks/mod/tasks.ts" "$P/hooks/messages.json" "$P/README.md" \
+    "$P/../kodflow-workflow/skills/recap/SKILL.md" 2>/dev/null | grep -v 'SDK status-line')
+[ -z "$hits" ] && ok "no status-line promise in tasks.ts, messages.json, recap SKILL.md, the hooks' README" || bad "status-line text" "$hits"
+
 echo "== UserPromptSubmit · triage and epic state"
 ctx_of() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
 sys_of() { printf '%s' "$OUT" | jq -r '.systemMessage // empty' 2>/dev/null; }
 beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
-printf '%s' "$C" | grep -q 'TRIAGE this message' && ok "the triage directive is injected with no tasks.json" || bad "triage" "$OUT"
+printf '%s' "$C" | grep -q 'TRIAGE: work that writes' && ok "the triage directive is injected with no tasks.json" || bad "triage" "$OUT"
+printf '%s' "$C" | grep -q 'a question answered by reading needs none' && ! printf '%s' "$C" | grep -q 'question included\|question: task_create' \
+    && ok "the directive asks no task of a question" || bad "question directive" "$C"
 printf '%s' "$C" | grep -q 'Epics:' && bad "no state without tasks.json" "$C" || ok "no epic state without tasks.json"
 printf '%s' "$C" | grep -q 'task_create always names its epic' && printf '%s' "$C" | grep -q '0 for none, no default' \
     && ok "the directive says the epic is mandatory, 0 for none" || bad "epic mandatory" "$C"
 [ "${#C}" -lt 900 ] && ok "the injected context stays under 900 characters (${#C})" || bad "context size" "${#C}"
 [ -z "$(sys_of)" ] && ok "a beating mod: no system message" || bad "beat message" "$OUT"
 MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"; beat
+# Epics touched now (their recorded order kept): an epic idle for 24 h adds
+# a line of its own, tested apart below
+fresh() { jq -c --argjson n "$(date +%s)" '.epics |= map(if (.touched | type) == "number" then .touched += $n else . end)' "$1" > "$1.f" && mv -f "$1.f" "$1"; }
 printf '%s' '{"version":2,"active":{"main":2},
   "epics":[{"id":1,"agent":"main","title":"api-gateway","touched":5},{"id":2,"agent":"main","title":"SDK status-line","touched":9},
            {"id":3,"agent":"main","title":"Finished","touched":9},{"id":7,"agent":"a1","title":"Sub epic","touched":9}],
@@ -617,6 +639,7 @@ printf '%s' '{"version":2,"active":{"main":2},
            {"id":"3","agent":"main","epic":2,"subject":"Freeze renders","status":"in_progress"},
            {"id":"4","agent":"main","epic":3,"subject":"Old","status":"completed"},
            {"id":"5","agent":"main","epic":0,"subject":"Loose","status":"pending"}]}' > "$MS/tasks.json"
+fresh "$MS/tasks.json"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -qF 'Epics: active #2 SDK status-line 1/2, in progress #3 Freeze renders · other open: #1 api-gateway 0/1 · no epic: 1 open task(s)' \
@@ -631,10 +654,40 @@ printf '%s' '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","t
   "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Check backups","status":"in_progress"},
            {"id":"2","agent":"main","epic":1,"subject":"Give the go","status":"waiting","assignee":"human"},
            {"id":"3","agent":"main","epic":1,"subject":"Touch ID","status":"completed","assignee":"human"}]}' > "$MS/tasks.json"
+fresh "$MS/tasks.json"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -qF 'Epics: active #1 NAS 1/3, in progress #1 Check backups · waiting on the user: #2 Give the go (task_update completed once answered)' \
     && ok "the user's open tasks ride the epic state, answered ones do not" || bad "human state" "$C"
+# A closed epic (closed_at a finite number above 0) is left out with its
+# user tasks; 1e999 is not a close
+now_s=$(date +%s)
+printf '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"Shut","touched":%s,"closed_at":5},
+  {"id":2,"agent":"main","title":"Kept","touched":%s,"closed_at":1e999}],
+  "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Left","status":"pending"},{"id":"2","agent":"main","epic":1,"subject":"Old go","status":"waiting","assignee":"human"},
+  {"id":"3","agent":"main","epic":2,"subject":"Go on","status":"pending"}]}' "$now_s" "$now_s" > "$MS/tasks.json"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+C=$(ctx_of)
+printf '%s' "$C" | grep -qF 'Epics: none active · other open: #2 Kept 0/1' && ! printf '%s' "$C" | grep -q 'Shut\|Old go' \
+    && ok "a closed epic, its tasks and the user's tasks in it are left out" || bad "closed epic state" "$C"
+# Idle for 24 h: closing is proposed once per idle period
+old=$((now_s - 90000))
+printf '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"Stale","touched":%s},{"id":2,"agent":"main","title":"Busy","touched":%s}],
+  "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Left","status":"pending","updated":%s},
+           {"id":"2","agent":"main","epic":2,"subject":"On it","status":"in_progress","worker_id":"a-live","updated":%s}]}' \
+    "$old" "$old" "$old" "$old" > "$MS/tasks.json"
+printf '{"agents":{"a-live":{"type":"impl","started":%s,"stopped":null}}}' "$now_s" > "$MS/agents.json"
+rm -f "$T/tmp/sp/user-said"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+C=$(ctx_of)
+printf '%s' "$C" | grep -qF 'Idle for 24 h: #1 Stale. Close?' && ! printf '%s' "$C" | grep -q '#2 Busy\. Close' \
+    && ok "an epic idle for 24 h is offered for closing, one with a live worker on it is not" || bad "idle proposal" "$C"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+ctx_of | grep -q 'Idle for 24 h' && bad "idle twice" "$(ctx_of)" || ok "the proposal is made once per idle period"
+jq -c --argjson n "$((now_s - 89000))" '.epics[0].touched = $n' "$MS/tasks.json" > "$MS/t" && mv -f "$MS/t" "$MS/tasks.json"
+run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+ctx_of | grep -qF 'Idle for 24 h: #1 Stale' && ok "a new idle period is proposed again" || bad "idle again" "$(ctx_of)"
+rm -f "$MS/agents.json" "$T/tmp/sp/user-said"
 printf '{"tasks":[' > "$MS/tasks.json"
 run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] && ctx_of | grep -q TRIAGE && ! ctx_of | grep -q 'Epics:' \
@@ -667,15 +720,16 @@ run UserPromptSubmit "" '{"prompt":"fais un truc"}' on-user.sh
 beat; run UserPromptSubmit "" '{"prompt":"et aussi"}' on-user.sh
 [ "$(grep -c '^prompt ' "$TP" 2>/dev/null)" = 2 ] && [ "$(sort -u "$TP" | wc -l | tr -d ' ')" = 2 ] \
     && ok "a second message before the first is filed adds its own line" || bad "two prompts" "$(cat "$TP")"
-beat; bash_cmd 'ls';                                                  expect_rc "two messages unfiled: acting is refused" 2
-printf '%s' "$ERR" | grep -q 'file these 2 messages' && printf '%s' "$ERR" | grep -q 'each needs its own gesture' \
-    && printf '%s' "$ERR" | grep -q 'task_update(id, description=…)' && ok "the refusal counts the messages and names both gestures" || bad "two messages text" "$ERR"
+write_file() { run PreToolUse Write "$(jq -n -c --arg f "$T/repo/x.txt" '{tool_input:{file_path:$f,content:"y"}}')" on-tool.sh; }
+beat; write_file;                                                     expect_rc "two messages unfiled: a write is refused" 2
+printf '%s' "$ERR" | grep -q 'these 2 messages' && printf '%s' "$ERR" | grep -q 'One task call settles every message waiting' \
+    && printf '%s' "$ERR" | grep -q 'task_update(id, description=…)' && ok "the refusal counts the messages and says one call settles them" || bad "two messages text" "$ERR"
 # The mod dropped the first line (one task_create): one message left
 sed -i.bak 1d "$TP" && rm -f "$TP.bak"
-beat; bash_cmd 'ls';                                                  expect_rc "acting before triage is refused" 2
-printf '%s' "$ERR" | grep -q 'TRIAGE FIRST — file this message' && ok "the refusal says to triage first" || bad "triage message" "$ERR"
-printf '%s' "$ERR" | grep -q 'a question → task_create(epic=0)' && printf '%s' "$ERR" | grep -q 'do not lift this gate' \
-    && ! printf '%s' "$ERR" | grep -q 'acknowledges' && ok "a question is filed with task_create(epic=0); task_list does not lift" || bad "question text" "$ERR"
+beat; write_file;                                                     expect_rc "writing before triage is refused" 2
+printf '%s' "$ERR" | grep -q 'TRIAGE FIRST — file this work before writing' && ok "the refusal says to file the work first" || bad "triage message" "$ERR"
+printf '%s' "$ERR" | grep -q 'A question answered by reading needs none' && printf '%s' "$ERR" | grep -q 'do not lift this gate' \
+    && ! printf '%s' "$ERR" | grep -q 'question included\|a question → task_create' && ok "a question needs no task; task_list does not lift" || bad "question text" "$ERR"
 printf '%s' "$ERR" | grep -q 'status=' && bad "prompt only: no resume line" "$ERR" || ok "a prompt alone names no resume gesture"
 # The task tools pass the gate without lifting it: only the mod lifts it,
 # on a call that files the message (calls.ts liftsTriage)
@@ -683,33 +737,49 @@ for t in task_list task_epic task_focus task_create; do
     beat; run PreToolUse "mcp__kodflow-hooks__$t" '{"tool_input":{}}' on-tool.sh
     [ "$RC" -eq 0 ] && [ -f "$TP" ] && ok "a PreToolUse $t passes and leaves the gate" || bad "task tool $t" "rc=$RC tp=$(cat "$TP" 2>/dev/null || echo gone)"
 done
-beat; bash_cmd 'ls';                                                  expect_rc "after task_list, acting is still refused" 2
+beat; write_file;                                                     expect_rc "after task_list, writing is still refused" 2
+# The read list (lib/read-tools.txt) and Bash pass; a question never blocks
 run PreToolUse Read '{"tool_input":{"file_path":"/etc/hostname"}}' on-tool.sh; expect_rc "reading stays allowed" 0
 run PreToolUse ToolSearch '{"tool_input":{"query":"x"}}' on-tool.sh;        expect_rc "loading tools stays allowed" 0
+run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh;         expect_rc "a web search stays allowed" 0
+run PreToolUse WebFetch '{"tool_input":{"url":"https://example.com"}}' on-tool.sh; expect_rc "a web fetch stays allowed" 0
+run PreToolUse mcp__github__get_me '{"tool_input":{}}' on-tool.sh;          expect_rc "a forge read on the list stays allowed" 0
+beat; bash_cmd 'ls';                                                  expect_rc "Bash stays allowed" 0
 run PreToolUse Bash '{"tool_input":{"command":"ls"},"agent_id":"a1"}' on-tool.sh; expect_rc "a subagent is not gated" 0
-beat; run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh;   expect_rc "a tool this script ignores is gated too" 2
+beat; run PreToolUse Skill '{"tool_input":{"skill":"x"}}' on-tool.sh;      expect_rc "a tool off the list is gated (Skill)" 2
+beat; run PreToolUse mcp__github__mark_all_notifications_read '{"tool_input":{}}' on-tool.sh
+expect_rc "a forge write ending in _read is gated (exact names only)" 2
+beat; run PreToolUse mcp__someone__do_thing '{"tool_input":{}}' on-tool.sh; expect_rc "a tool nobody listed is a write" 2
+beat; KODFLOW_TRIAGE=off write_file;                                  expect_rc "KODFLOW_TRIAGE=off lifts the gate" 0
+for tool in mcp__context7__resolve-library-id mcp__context7__query-docs ListMcpResourcesTool ReadMcpResourceTool ReadMcpResourceDirTool; do
+    beat; run PreToolUse "$tool" '{"tool_input":{}}' on-tool.sh; expect_rc "a question's read-only $tool stays allowed" 0
+done
+# The shell reader trims a name as the mod does (blanks, a CR) and never takes a bare `*`
+RL=$T/readlist; mkdir -p "$RL"; cp "$S/lib/readlist.sh" "$RL/"
+printf '  Read \r\n*\r\nmcp__context7__query-docs\r\n' > "$RL/read-tools.txt"
+got=$(bash -c '. "$1/readlist.sh"; for n in Read mcp__context7__query-docs Edit Write; do kf_read_tool "$n" && printf "%s " "$n"; done' _ "$RL")
+[ "$got" = "Read mcp__context7__query-docs " ] && ok "readlist.sh trims blanks and a CR, a bare * lists nothing" || bad "readlist trim" "$got"
 # A session back with open tasks: its own cause and gesture
-printf 'resume\n' > "$TP"; beat; bash_cmd 'ls';                       expect_rc "a resume cause alone holds the gate" 2
+printf 'resume\n' > "$TP"; beat; write_file;                          expect_rc "a resume cause alone holds the gate" 2
 printf '%s' "$ERR" | grep -q 'settle the task list' && printf '%s' "$ERR" | grep -q 'task_update(id, status=' \
-    && ! printf '%s' "$ERR" | grep -q 'file this message' && ok "resume: the refusal names task_update(status)" || bad "resume text" "$ERR"
-printf 'prompt\nresume\n' > "$TP"; beat; bash_cmd 'ls'
-printf '%s' "$ERR" | grep -q 'file this message' && printf '%s' "$ERR" | grep -q 'status=' \
+    && ! printf '%s' "$ERR" | grep -q 'file this work' && ok "resume: the refusal names task_update(status)" || bad "resume text" "$ERR"
+printf 'prompt\nresume\n' > "$TP"; beat; write_file
+printf '%s' "$ERR" | grep -q 'file this work' && printf '%s' "$ERR" | grep -q 'status=' \
     && ok "both causes: both gestures named" || bad "both causes" "$ERR"
-: > "$TP"; beat; bash_cmd 'ls'
-printf '%s' "$ERR" | grep -q 'file this message' && ok "an empty flag (the format before causes) is a prompt" || bad "empty flag" "$ERR"
+: > "$TP"; beat; write_file
+printf '%s' "$ERR" | grep -q 'file this work' && ok "an empty flag (the format before causes) is a prompt" || bad "empty flag" "$ERR"
 # The mod removes the file with its last cause (register.ts settleTriage)
 rm -f "$TP"
-bash_cmd 'ls';                                                        expect_rc "acting after triage is allowed" 0
-run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh
+write_file;                                                           expect_rc "writing after triage is allowed" 0
+run PreToolUse Skill '{"tool_input":{"skill":"x"}}' on-tool.sh
 [ "$RC" -eq 0 ] && [ -z "$OUT" ] && ok "tools this script ignores leave at once" || bad "fast exit" "rc=$RC out=$OUT"
 # The mod unloaded mid-session: nothing can lower the flag any more
-: > "$TP"; stale
-run PreToolUse WebSearch '{"tool_input":{"query":"x"}}' on-tool.sh
-[ "$RC" -eq 0 ] && [ ! -f "$TP" ] && printf '%s' "$OUT" | jq -e '.systemMessage | test("/reload-plugins")' >/dev/null 2>&1 \
-    && ok "a stale beat lifts the gate and says /reload-plugins" || bad "stale gate" "rc=$RC out=$OUT"
-: > "$TP"; stale; bash_cmd 'git commit --no-verify -m "feat: x"'
-expect_rc "a stale beat lifts the gate, the git guard still runs" 2
-[ ! -f "$TP" ] && ok "the gate was lifted on the way" || bad "stale gate bash" "flag still there"
+: > "$TP"; : > "$SD/triage-wrote"; stale
+run PreToolUse Skill '{"tool_input":{"skill":"x"}}' on-tool.sh
+[ "$RC" -eq 0 ] && [ ! -f "$TP" ] && [ ! -f "$SD/triage-wrote" ] && printf '%s' "$OUT" | jq -e '.systemMessage | test("/reload-plugins")' >/dev/null 2>&1 \
+    && ok "a stale beat lifts the gate, its mark too, and says /reload-plugins" || bad "stale gate" "rc=$RC out=$OUT"
+: > "$TP"; stale; run PreToolUse Write "$(jq -n -c '{tool_input:{file_path:"/etc/x",content:"y"}}')" on-tool.sh
+[ ! -f "$TP" ] && ok "a stale beat lifts the gate on the way to a write's own checks" || bad "stale gate write" "flag still there rc=$RC"
 rm -rf "$T/home/.claude/kodflow"
 
 echo "== UserPromptSubmit · turns the user did not type"
@@ -763,7 +833,7 @@ echo "== UserPromptSubmit · the directive in the user's language"
 printf '{"language":"Français"}' > "$T/home/.claude/settings.json"
 beat; run UserPromptSubmit "" '{"prompt":"salut"}' on-user.sh
 C=$(ctx_of)
-printf '%s' "$C" | grep -q "TRIER ce message" && printf '%s' "$C" | grep -q 'Branche : feat/test' \
+printf '%s' "$C" | grep -q "TRI : un travail qui écrit" && printf '%s' "$C" | grep -q 'Branche : feat/test' \
     && ok "French setting: the directive and the branch are in French" || bad "fr directive" "$C"
 printf '%s' "$C" | grep -qF $'\e[' && bad "fr escape" "$C" || ok "no colour where the screen shows nothing"
 [ "${#C}" -lt 900 ] && ok "the French context stays under 900 characters (${#C})" || bad "fr size" "${#C}"
@@ -772,11 +842,24 @@ mkdir -p "$SD"; beat; printf '%s' '{"version":2,"active":{"main":2},
   "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Fix daemon","status":"pending"},
            {"id":"3","agent":"main","epic":2,"subject":"Freeze golden renders now","status":"in_progress"},
            {"id":"5","agent":"main","epic":0,"subject":"Loose","status":"pending"}]}' > "$SD/tasks.json"
+jq -c --argjson n "$(date +%s)" '.epics |= map(.touched += $n)' "$SD/tasks.json" > "$SD/t" && mv -f "$SD/t" "$SD/tasks.json"
 run UserPromptSubmit "" '{"prompt":"salut"}' on-user.sh; C=$(ctx_of)
 printf '%s' "$C" | grep -qF 'Épiques : active #2 SDK status-line 0/1, en cours #3 Freeze golden renders now · autres ouvertes : #1 api-gateway 0/1 · sans épique : 1 tâche(s) ouverte(s)' \
     && ok "the epic state in French" || bad "fr epics" "$C"
 [ "${#C}" -lt 1000 ] && ok "with the epic state, French, under 1000 characters (${#C})" || bad "fr size state" "${#C}"
 rm -f "$T/home/.claude/settings.json" "$SD/tasks.json" "$SD/triage-pending"
+
+echo "== KODFLOW_TRIAGE=off · no triage end to end"
+mkdir -p "$SD"; rm -f "$SD/triage-pending"; beat
+OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"fais un truc"}' \
+    | KODFLOW_TRIAGE=off bash "$S/on-user.sh" 2>/dev/null)
+! printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // ""' | grep -q 'TRIAGE' && [ ! -f "$SD/triage-pending" ] \
+    && ok "off: no triage directive, no cause raised" || bad "triage off user" "$OUT"
+printf 'prompt\n' > "$SD/triage-pending"; : > "$SD/triage-wrote"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said" "$T/tmp/sp/turn-system"
+OUT=$(jq -n -c --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:"sess-1",hook_event_name:"Stop",cwd:$cwd,scratchpad_dir:$sp,stop_hook_active:false}' \
+    | KODFLOW_TRIAGE=off bash "$S/on-stop.sh" 2>/dev/null)
+! printf '%s' "$OUT" | grep -q 'with no task' && ok "off: no Stop reminder" || bad "triage off stop" "$OUT"
+rm -f "$SD/triage-pending" "$SD/triage-wrote" "$T/tmp/sp/stop-count" "$T/tmp/sp/stop-said"
 
 echo "== Stop · a message the turn never filed"
 SDS=$SD; mkdir -p "$SDS"; rm -f "$T/tmp/sp/stop-count" "$T/tmp/sp/turn-system"
@@ -784,20 +867,25 @@ triage_stop() { rm -f "$T/tmp/sp/stop-count"; run Stop "" '{"stop_hook_active":f
     TC=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null); }
 beat; run UserPromptSubmit "" '{"prompt":"une question ?"}' on-user.sh
 triage_stop
-printf '%s' "$TC" | grep -q 'Message with no task' && printf '%s' "$TC" | grep -q 'task_create' \
-    && ok "a turn that ends with its message unfiled is reminded" || bad "stop triage" "$OUT"
+printf '%s' "$TC" | grep -q 'with no task' && bad "stop on a question" "$OUT" || ok "a question answered without writing is not reminded"
+# The mod's mark: the turn tried a tool off the read list
+: > "$SD/triage-wrote"; triage_stop
+printf '%s' "$TC" | grep -q 'Work with no task' && printf '%s' "$TC" | grep -q 'task_create' \
+    && ok "a turn that tried to write with its message unfiled is reminded" || bad "stop triage" "$OUT"
 triage_stop
-printf '%s' "$TC" | grep -q 'Message with no task' && bad "stop triage repeat" "$OUT" || ok "the same unfiled message is not reminded twice in a row"
+printf '%s' "$TC" | grep -q 'Work with no task' && bad "stop triage repeat" "$OUT" || ok "the same unfiled message is not reminded twice in a row"
 beat; run UserPromptSubmit "" '{"prompt":"et une autre"}' on-user.sh; triage_stop
-printf '%s' "$TC" | grep -q '2 messages with no task' && printf '%s' "$TC" | grep -q 'task_update(id, description)' \
+printf '%s' "$TC" | grep -q '2 messages with no task' && printf '%s' "$TC" | grep -q 'one task call settles them all' \
     && ok "two messages unfiled: the reminder counts them" || bad "stop two messages" "$OUT"
+rm -f "$SD/triage-wrote"
 printf 'resume\n' > "$TP"; triage_stop
 printf '%s' "$TC" | grep -q 'Tasks left open at the session start' && ! printf '%s' "$TC" | grep -q 'with no task' \
     && ok "a resume left unsettled names task_update(status) alone" || bad "stop resume" "$OUT"
 beat; run UserPromptSubmit "" '{"prompt":"<task-notification>\n<status>completed</status>\n</task-notification>"}' on-user.sh
 [ -f "$T/tmp/sp/turn-system" ] && ok "a system turn is marked for the Stop hook" || bad "turn-system" "absent"
-printf 'prompt\n' > "$TP"; triage_stop
-printf '%s' "$TC" | grep -q 'Message with no task' && bad "stop on a system turn" "$OUT" || ok "no triage reminder at the end of a system turn"
+printf 'prompt\n' > "$TP"; : > "$SD/triage-wrote"; triage_stop
+printf '%s' "$TC" | grep -q 'Work with no task' && bad "stop on a system turn" "$OUT" || ok "no triage reminder at the end of a system turn"
+rm -f "$SD/triage-wrote"
 beat; run UserPromptSubmit "" '{"prompt":"merci"}' on-user.sh
 [ ! -f "$T/tmp/sp/turn-system" ] && ok "a typed prompt clears the system-turn mark" || bad "turn-system kept" "present"
 rm -f "$TP"; triage_stop
@@ -893,6 +981,13 @@ printf '\n# edited\n' >> "$CP/scripts/on-tool.sh"; start_copy
 printf '%s' "$OUT" | jq -e '(.systemMessage | test("scripts/on-tool.sh differs from its published fingerprint")) and (.hookSpecificOutput.additionalContext | test("on-tool.sh differs"))' >/dev/null 2>&1 \
     && ok "an edited on-tool.sh raises a visible warning" || bad "fingerprint edited" "$OUT"
 cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/on-tool.sh" "$CP/scripts/on-tool.sh"
+# The triage gate's read list and its reader, and the beat that arms it, are guards too
+for g in lib/read-tools.txt lib/readlist.sh lib/beat.sh; do
+    printf '\nEdit\n' >> "$CP/scripts/$g"; start_copy
+    printf '%s' "$OUT" | jq -e --arg g "scripts/$g differs" '.systemMessage | contains($g)' >/dev/null 2>&1 \
+        && ok "an edited $g raises a visible warning" || bad "fingerprint $g" "$OUT"
+    cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/$g" "$CP/scripts/$g"
+done
 MK=$CLAUDE_CONFIG_DIR/plugins/marketplaces/kodflow/plugins/kodflow-hooks/hooks; mkdir -p "$MK"
 cp "$CP/fingerprints.sha256" "$MK/"; start_copy
 { [ -z "$OUT" ] || printf '%s' "$OUT" | jq -e '.systemMessage // "" | test("marketplace") | not' >/dev/null 2>&1; } \

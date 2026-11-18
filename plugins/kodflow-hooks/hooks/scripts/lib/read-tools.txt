@@ -1,0 +1,107 @@
+# read-tools.txt — the tools the triage gate always lets through: they read,
+# they never write. Read by on-tool.sh (its fast path and its gate, through
+# readlist.sh) and by the mod (register.ts), so the three agree.
+#
+# One exact tool name per line, surrounding blanks (a CR included) ignored.
+# A line ending in `*` is a prefix; only the two task-tool prefixes below are
+# allowed one (tests/mod and test_hooks.sh hold it), and a bare `*` is
+# ignored by both readers: it would list every tool. A tool absent from this list is a write: the gate refuses it
+# while a message waits for its task, and the mod notes the attempt
+# (triage-wrote). Bash is not here: the gate lets it through on its own
+# checks, and it marks nothing.
+#
+# A forge tool is listed only by its exact name, never by a pattern:
+# mcp__github__mark_all_notifications_read ends in _read and writes.
+Read
+Glob
+Grep
+LS
+ToolSearch
+AskUserQuestion
+WebFetch
+WebSearch
+ListMcpResourcesTool
+ReadMcpResourceTool
+ReadMcpResourceDirTool
+mcp__context7__resolve-library-id
+mcp__context7__query-docs
+mcp__kodflow-hooks__task_*
+mcp__plugin_kodflow-hooks_tasks__task_*
+mcp__github__get_commit
+mcp__github__get_file_contents
+mcp__github__get_label
+mcp__github__get_latest_release
+mcp__github__get_me
+mcp__github__get_release_by_tag
+mcp__github__get_tag
+mcp__github__get_team_members
+mcp__github__get_teams
+mcp__github__issue_read
+mcp__github__list_branches
+mcp__github__list_commits
+mcp__github__list_issue_fields
+mcp__github__list_issue_types
+mcp__github__list_issues
+mcp__github__list_pull_requests
+mcp__github__list_releases
+mcp__github__list_repository_collaborators
+mcp__github__list_tags
+mcp__github__pull_request_read
+mcp__github__search_code
+mcp__github__search_commits
+mcp__github__search_issues
+mcp__github__search_pull_requests
+mcp__github__search_repositories
+mcp__github__search_users
+mcp__gitlab__get_branch_diffs
+mcp__gitlab__get_commit
+mcp__gitlab__get_commit_diff
+mcp__gitlab__get_draft_note
+mcp__gitlab__get_file_contents
+mcp__gitlab__get_issue
+mcp__gitlab__get_issue_link
+mcp__gitlab__get_label
+mcp__gitlab__get_merge_request
+mcp__gitlab__get_merge_request_approval_state
+mcp__gitlab__get_merge_request_diffs
+mcp__gitlab__get_merge_request_note
+mcp__gitlab__get_merge_request_notes
+mcp__gitlab__get_merge_request_version
+mcp__gitlab__get_namespace
+mcp__gitlab__get_project
+mcp__gitlab__get_project_events
+mcp__gitlab__get_release
+mcp__gitlab__get_repository_tree
+mcp__gitlab__get_users
+mcp__gitlab__list_commits
+mcp__gitlab__list_draft_notes
+mcp__gitlab__list_events
+mcp__gitlab__list_group_iterations
+mcp__gitlab__list_group_projects
+mcp__gitlab__list_issue_discussions
+mcp__gitlab__list_issue_links
+mcp__gitlab__list_issues
+mcp__gitlab__list_labels
+mcp__gitlab__list_merge_request_diffs
+mcp__gitlab__list_merge_request_versions
+mcp__gitlab__list_merge_requests
+mcp__gitlab__list_namespaces
+mcp__gitlab__list_project_members
+mcp__gitlab__list_projects
+mcp__gitlab__list_releases
+mcp__gitlab__mr_discussions
+mcp__gitlab__my_issues
+mcp__gitlab__search_repositories
+mcp__gitlab__verify_namespace
+mcp__GitKraken__git_blame
+mcp__GitKraken__git_graph
+mcp__GitKraken__git_log_or_diff
+mcp__GitKraken__git_status
+mcp__GitKraken__gitkraken_workspace_list
+mcp__GitKraken__gitlens_launchpad
+mcp__GitKraken__issues_assigned_to_me
+mcp__GitKraken__issues_get_detail
+mcp__GitKraken__pull_request_assigned_to_me
+mcp__GitKraken__pull_request_get_comments
+mcp__GitKraken__pull_request_get_detail
+mcp__GitKraken__repository_get_file_content

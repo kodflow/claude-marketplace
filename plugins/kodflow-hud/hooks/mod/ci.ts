@@ -5,16 +5,18 @@
 // output tells apart). Only the pull requests an open task cites are asked,
 // and no more often than every CI_EVERY_MS.
 
-import type { HudCiState, HudEpic } from "../../types";
+import type { HudCiState, HudTask } from "../../types";
 
 export const CI_EVERY_MS = 5 * 60_000;
 
-/** The pull requests to ask about: cited by a task not completed. */
-export function prsToCheck(epics: readonly HudEpic[]): string[] {
+/**
+ * The pull requests to ask about: cited by a task shown and not completed
+ * (board.ts visibleTasks: nothing of a closed epic, no orphan).
+ */
+export function prsToCheck(tasks: readonly HudTask[]): string[] {
   const seen = new Set<string>();
-  for (const e of epics)
-    for (const t of e.tasks)
-      if (t.status !== "completed") for (const pr of t.prs) seen.add(pr);
+  for (const t of tasks)
+    if (t.status !== "completed") for (const pr of t.prs) seen.add(pr);
   return [...seen];
 }
 
