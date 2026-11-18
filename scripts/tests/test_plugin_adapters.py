@@ -7,6 +7,7 @@ from io import BytesIO, StringIO
 import json
 import os
 from pathlib import Path
+import subprocess
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
@@ -125,6 +126,62 @@ class PluginAdapterTests(unittest.TestCase):
             }}))
         self.assertEqual(["MCP server 'example' needs a resolved HTTPS URL"], validate_archive(buffer.getvalue()))
 
+    def test_perplexity_reports_non_string_transports(self) -> None:
+        buffer = BytesIO()
+        with ZipFile(buffer, "w") as archive:
+            archive.writestr("plugin.json", '{"name":"fixture"}')
+            archive.writestr("mcp.json", json.dumps({"mcpServers": {
+                "example": {"type": [], "url": "https://example.com/mcp"},
+            }}))
+        self.assertEqual(["MCP server 'example' is not remote HTTP"], validate_archive(buffer.getvalue()))
+
+    def test_perplexity_keeps_tracked_files_and_excludes_ignored_output(self) -> None:
+        with TemporaryDirectory() as temporary:
+            checkout = Path(temporary)
+            package = checkout / "extensions/fixture [library]"
+            skills = package / "skills/fixture"
+            assets = package / "assets"
+            skills.mkdir(parents=True)
+            assets.mkdir()
+            (checkout / ".gitignore").write_text("__pycache__/\n*.cache\n", encoding="utf-8")
+            (skills / "SKILL.md").write_text("fixture", encoding="utf-8")
+            (skills / "__pycache__").mkdir()
+            (skills / "__pycache__/local.pyc").write_bytes(b"local output")
+            tracked = assets / "source.cache"
+            tracked.write_bytes(b"tracked source")
+            (assets / "local.cache").write_bytes(b"local output")
+            subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+            subprocess.run(
+                ["git", "-C", str(checkout), "--literal-pathspecs", "add", "-f",
+                 str(tracked.relative_to(checkout))],
+                check=True,
+            )
+
+            bundle = build_archive(PluginPackage(package, {"name": "fixture"}))
+            with ZipFile(BytesIO(bundle)) as archive:
+                self.assertEqual(
+                    {"assets/source.cache", "plugin.json", "skills/fixture/SKILL.md"},
+                    set(archive.namelist()),
+                )
+                self.assertEqual(b"tracked source", archive.read("assets/source.cache"))
+
+    def test_perplexity_reads_a_gitless_release_staged_inside_a_checkout(self) -> None:
+        with TemporaryDirectory() as temporary:
+            checkout = Path(temporary)
+            staged = checkout / "dist/release"
+            package = staged / "plugins/fixture"
+            skills = package / "skills/fixture"
+            skills.mkdir(parents=True)
+            (staged / "catalog").mkdir()
+            (staged / "catalog/catalog.json").touch()
+            (checkout / ".gitignore").write_text("dist/\n", encoding="utf-8")
+            (skills / "SKILL.md").write_text("fixture", encoding="utf-8")
+            subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+
+            bundle = build_archive(PluginPackage(package, {"name": "fixture"}))
+            with ZipFile(BytesIO(bundle)) as archive:
+                self.assertIn("skills/fixture/SKILL.md", archive.namelist())
+
     def test_perplexity_connector_does_not_substitute_for_required_skill(self) -> None:
         package = self.catalog.packages()[0]
         with TemporaryDirectory() as temporary:
@@ -230,3 +287,32 @@ class PluginCliTests(unittest.TestCase):
             self.assertEqual(b"previous first", first.read_bytes())
             self.assertEqual(b"previous second", second.read_bytes())
             self.assertEqual({first, second}, set(root.iterdir()))
+
+    def test_publication_interrupt_after_replace_restores_previous_outputs(self) -> None:
+        for previously_present in (True, False):
+            with self.subTest(previously_present=previously_present), TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                first, second = root / "first.json", root / "second.json"
+                first.write_bytes(b"previous first")
+                if previously_present:
+                    second.write_bytes(b"previous second")
+                replace = os.replace
+                interrupted = False
+
+                def interrupt_second(source, target):
+                    nonlocal interrupted
+                    replace(source, target)
+                    if target == second and not interrupted:
+                        interrupted = True
+                        raise KeyboardInterrupt
+
+                with patch.object(pluginctl, "ROOT", root), patch.object(
+                    pluginctl.os, "replace", side_effect=interrupt_second,
+                ), self.assertRaises(KeyboardInterrupt):
+                    pluginctl._publish({first: b"new first", second: b"new second"})
+                self.assertEqual(b"previous first", first.read_bytes())
+                if previously_present:
+                    self.assertEqual(b"previous second", second.read_bytes())
+                    self.assertEqual({first, second}, set(root.iterdir()))
+                else:
+                    self.assertEqual({first}, set(root.iterdir()))

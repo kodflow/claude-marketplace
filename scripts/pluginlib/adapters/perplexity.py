@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile, ZipInfo
 
 from ..model import PluginPackage
+from ..sources import source_files
 
 
 MAX_SKILLS = 32
@@ -19,16 +20,30 @@ MAX_DESCRIPTION_BYTES = 1024
 
 
 def _files(package: PluginPackage) -> list[Path]:
-    files = []
+    root = package.root.resolve(strict=True)
     for relative in ("skills", "assets"):
-        root = package.root / relative
-        if root.is_dir():
-            if not root.resolve().is_relative_to(package.root.resolve()):
-                raise ValueError(f"archive sources are outside {package.name}: {relative}")
-            files.extend(path for path in root.rglob("*") if path.is_file())
-    if (package.root / "mcp.json").is_file():
-        files.append(package.root / "mcp.json")
-    return sorted(set(files), key=lambda path: path.relative_to(package.root).as_posix())
+        if not (root / relative).resolve().is_relative_to(root):
+            raise ValueError(f"archive sources are outside {package.name}: {relative}")
+
+    # A release snapshot may itself be staged inside another Git checkout.
+    checkout = root
+    selection = "."
+    for parent in (root, *root.parents):
+        if (parent / ".git").exists():
+            checkout = parent
+            selection = f":(literal){root.relative_to(checkout).as_posix()}"
+            break
+        if (parent / "catalog/catalog.json").is_file():
+            break
+
+    scope = root.relative_to(checkout)
+    files = []
+    for source in source_files(checkout, selection):
+        relative = source.path.relative_to(scope)
+        candidate = package.root / relative
+        if (relative.parts[:1] in {("skills",), ("assets",)} or relative == Path("mcp.json")) and candidate.is_file():
+            files.append(candidate)
+    return files
 
 
 def build_archive(package: PluginPackage) -> bytes:
@@ -141,7 +156,8 @@ def _validate_members(archive: ZipFile, *, require_skills: bool) -> list[str]:
             if not isinstance(server, dict):
                 errors.append(f"MCP server {name!r} must be an object")
                 continue
-            if server.get("type") not in {"streamable-http", "http", "sse"}:
+            transport = server.get("type")
+            if not isinstance(transport, str) or transport not in {"streamable-http", "http", "sse"}:
                 errors.append(f"MCP server {name!r} is not remote HTTP")
             if not _https_endpoint(server.get("url")):
                 errors.append(f"MCP server {name!r} needs a resolved HTTPS URL")
