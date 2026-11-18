@@ -14,6 +14,12 @@ git clone https://github.com/kodflow/claude-marketplace
 cd claude-marketplace && ./scripts/install.sh
 ```
 
+Codex uses the checkout's native marketplace when the client supports plugin
+installation. Custom roles are installed through Codex's agent directory. Use
+`./scripts/install.sh --legacy` to select the versioned flat Codex installation.
+For an isolated canary pinned to a Git SHA, see
+[`docs/marketplace/install.md`](docs/marketplace/install.md).
+
 `--check` reports what it would do and writes nothing. Re-running is safe.
 
 ## What is in it

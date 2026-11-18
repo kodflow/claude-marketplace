@@ -48,5 +48,36 @@ done <<EOF
 $all
 EOF
 
+mkdir -p "$T/repo/.agents/plugins" "$T/repo/codex/skills/demo" "$T/repo/codex/agents"
+cp "$ROOT/.agents/plugins/marketplace.json" "$T/repo/.agents/plugins/"
+printf 'demo skill\n' > "$T/repo/codex/skills/demo/SKILL.md"
+printf 'name = "demo"\n' > "$T/repo/codex/agents/demo.toml"
+cat > "$T/bin/codex" <<'EOF'
+#!/bin/bash
+if [[ ${*: -1} == --help ]]; then
+  [[ ${DEMO_NATIVE:-1} == 1 ]]
+  exit $?
+fi
+printf '%s\n' "$*" >> "$CODEX_CALLS"
+EOF
+chmod 755 "$T/bin/codex"
+export CODEX_CALLS="$T/codex-calls" CODEX_HOME="$T/custom-codex"
+out=$(bash "$T/repo/scripts/install.sh" --codex --check 2>&1); rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$CODEX_HOME" ] && [ ! -e "$CODEX_CALLS" ] &&
+  grep -q 'would: codex plugin marketplace add' <<<"$out" ||
+  bad "native check reads capability without installing" "$out"
+out=$(bash "$T/repo/scripts/install.sh" --codex 2>&1); rc=$?
+[ "$rc" -eq 0 ] && grep -qxF "plugin marketplace add $T/repo" "$CODEX_CALLS" &&
+  grep -qxF 'plugin add kodflow-workflow@kodflow' "$CODEX_CALLS" &&
+  [ -f "$CODEX_HOME/agents/demo.toml" ] && [ ! -e "$CODEX_HOME/skills/demo" ] &&
+  ok "native marketplace plus explicit role install" || bad "native install" "$out"
+rm -f "$CODEX_CALLS"
+out=$(bash "$T/repo/scripts/install.sh" --codex --legacy 2>&1); rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$CODEX_CALLS" ] && [ -f "$CODEX_HOME/skills/demo/SKILL.md" ] &&
+  ok "explicit legacy path installs flat skills" || bad "legacy install" "$out"
+out=$(DEMO_NATIVE=0 CODEX_HOME="$T/old-codex" bash "$T/repo/scripts/install.sh" --codex 2>&1); rc=$?
+[ "$rc" -eq 0 ] && [ ! -e "$CODEX_CALLS" ] && [ -f "$T/old-codex/skills/demo/SKILL.md" ] &&
+  ok "older client selects flat path" || bad "older client fallback" "$out"
+
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

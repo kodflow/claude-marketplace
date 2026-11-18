@@ -57,6 +57,7 @@ jobs:
       - name: The portable marketplace contracts hold
         run: |
           pip install --quiet uv==0.13.9
+          uv lock --project scripts --check
           uv sync --project scripts --frozen
           uv run --project scripts python scripts/tests/run_plugin_tests.py
           uv run --project scripts python scripts/pluginctl.py validate --all --mode publisher-strict
@@ -64,7 +65,15 @@ jobs:
           uv run --project scripts python scripts/pluginctl.py compat --targets all --fail-required-loss >/dev/null
           python3 scripts/plugin-inventory.py --check docs/marketplace/inventory.json
           python3 scripts/stamp-versions.py --check
-          bash scripts/tests/smoke-plugin-load.sh
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '24' }
+
+      - name: Install the pinned marketplace loaders
+        run: npm install -g @anthropic-ai/claude-code@2.1.325 @openai/codex@0.170.0
+
+      - name: Load the current checkout in both hosts
+        run: bash scripts/tests/smoke-hosts.sh --require-both
 
       # The mod lanes' wiring (kodflow/ktn-linter#788), read from the
       # workflows as YAML: every GATES target run by a blocking job here,
