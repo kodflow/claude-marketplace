@@ -15,10 +15,13 @@ projections. The installer and release profiles also carry host companions.
 
 The statuses are not scores:
 
-- `equivalent` means a named automated verifier proves the projection.
+- `equivalent` means the named automated check passed on the package being
+  reported. Native checks cover the configured files. The Perplexity check
+  validates the archive and its required skill content.
 - `advisory-loss` means the usable portable part remains but host integration
   is lost.
-- `absent` means no adapter exists.
+- `absent` means the target does not provide the capability, or its verifier
+  did not pass.
 
 Optional loss is reported but does not block a build. Required loss blocks an
 enabled projection. Hook/mod-only packages use the Claude profile. Codex

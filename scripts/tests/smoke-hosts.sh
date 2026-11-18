@@ -30,7 +30,7 @@ def profile_env(host, home):
 
 def call(host, home, args):
     env = profile_env(host, home)
-    output = subprocess.check_output([host, "plugin", *args, "--json"], env=env, text=True)
+    output = subprocess.check_output([host, "plugin", *args, "--json"], env=env, text=True, timeout=60)
     return json.loads(output.splitlines()[-1] if host == "claude" else output)
 
 with tempfile.TemporaryDirectory(prefix="kodflow-load-") as directory:
@@ -49,11 +49,14 @@ with tempfile.TemporaryDirectory(prefix="kodflow-load-") as directory:
             installed = [Path(plugin["installedPath"])]
         else:
             installed = list((home / "config/plugins/cache/kodflow/kodflow-workflow").iterdir())
-        source = repo / "plugins/kodflow-workflow/skills/search/SKILL.md"
-        if not any((path / "skills/search/SKILL.md").read_bytes() == source.read_bytes()
-                   for path in installed if (path / "skills/search/SKILL.md").is_file()):
-            sys.exit(f"{host}: installed skill differs from this checkout")
-        print(f"{host}: {plugin_id} loaded with the checked-out search skill")
+        source = repo / "plugins/kodflow-workflow"
+        manifest = ".claude-plugin/plugin.json" if host == "claude" else "plugin.json"
+        paths = (manifest, "skills/search/SKILL.md")
+        if not any(all((path / member).is_file() and
+                       (path / member).read_bytes() == (source / member).read_bytes()
+                       for member in paths) for path in installed):
+            sys.exit(f"{host}: installed manifest or skill differs from this checkout")
+        print(f"{host}: {plugin_id} loaded with the checked-out manifest and search skill")
         if host == "codex":
             names = [f"developer-executor-{kind}" for kind in ("correctness", "security", "quality")]
             agents = home / "config/agents"
@@ -61,7 +64,7 @@ with tempfile.TemporaryDirectory(prefix="kodflow-load-") as directory:
             for name in names:
                 shutil.copyfile(repo / f"codex/agents/{name}.toml", agents / f"{name}.toml")
             prompt = subprocess.check_output(
-                ["codex", "debug", "prompt-input"], env=profile_env(host, home), cwd=home, text=True,
+                ["codex", "debug", "prompt-input"], env=profile_env(host, home), cwd=home, text=True, timeout=60,
             )
             if not all(name in prompt for name in names):
                 sys.exit("Codex: the three staged custom roles were not discovered")

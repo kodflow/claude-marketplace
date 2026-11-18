@@ -44,7 +44,10 @@ jobs:
               if not isinstance(source, str) or not source.startswith("./"):
                   bad.append(f"{p['name']}: source must resolve inside the marketplace checkout")
                   continue
-              sub = root / source
+              sub = (root / source).resolve()
+              if not sub.is_relative_to(root.resolve()):
+                  bad.append(f"{p['name']}: source is outside the marketplace checkout")
+                  continue
               if not (sub/".claude-plugin"/"plugin.json").exists():
                   bad.append(f"{p['name']}: no plugin.json at {sub}")
               else:

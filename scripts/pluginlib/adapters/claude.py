@@ -7,11 +7,11 @@ from typing import Any
 from ..model import Catalog, PluginPackage
 
 
-def render_marketplace(catalog: Catalog) -> dict[str, Any]:
+def render_marketplace(catalog: Catalog, packages: list[PluginPackage] | None = None) -> dict[str, Any]:
     plugins = []
-    for entry in catalog.plugins:
-        package = PluginPackage.load(catalog.root / entry["path"])
-        if not package.target("claude").get("enabled"):
+    snapshot = catalog.packages() if packages is None else packages
+    for entry, package in zip(catalog.plugins, snapshot, strict=True):
+        if package.target("claude").get("enabled") is not True:
             continue
         plugins.append({
             "name": entry["name"],

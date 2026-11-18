@@ -19,19 +19,20 @@ def main() -> int:
     group.add_argument("--write", type=Path)
     group.add_argument("--check", type=Path)
     args = parser.parse_args()
-    rendered = canonical_json(build_inventory(ROOT))
+    rendered = canonical_json(build_inventory(ROOT)).encode("utf-8")
     path = args.write or args.check
     if not path.is_absolute():
         path = ROOT / path
+    display = path.relative_to(ROOT) if path.is_relative_to(ROOT) else path
     if args.check:
-        if not path.is_file() or path.read_text() != rendered:
-            print(f"inventory stale: {path.relative_to(ROOT)}", file=sys.stderr)
+        if not path.is_file() or path.read_bytes() != rendered:
+            print(f"inventory stale: {display}", file=sys.stderr)
             return 1
-        print(f"inventory current: {path.relative_to(ROOT)}")
+        print(f"inventory current: {display}")
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(rendered)
-    print(f"inventory written: {path.relative_to(ROOT)}")
+    path.write_bytes(rendered)
+    print(f"inventory written: {display}")
     return 0
 
 

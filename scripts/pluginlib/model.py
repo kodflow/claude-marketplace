@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -12,6 +13,28 @@ EXTENSION_NAMESPACE = "io.github.kodflow"
 PLUGIN_SCHEMA_ID = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 MCP_SCHEMA_ID = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
 TARGETS = ("claude", "openai", "perplexity")
+CATALOG_PACKAGE_PATH = re.compile(r"plugins/[a-z0-9.-]+")
+
+
+class PathContainmentError(ValueError):
+    """A path could not be resolved within its allowed root."""
+
+
+def contained_path(path: Path, root: Path, *, required: bool = True) -> Path:
+    """Resolve a path without masking symlink loops on newer Python versions."""
+    try:
+        base = root.resolve(strict=True)
+        try:
+            resolved = path.resolve(strict=True)
+        except FileNotFoundError:
+            if required:
+                raise
+            resolved = path.resolve(strict=False)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise PathContainmentError(f"cannot resolve {path}: {error}") from error
+    if not resolved.is_relative_to(base):
+        raise PathContainmentError(f"{path} resolves outside {root}")
+    return resolved
 
 
 @dataclass(frozen=True)
@@ -41,7 +64,9 @@ class PluginPackage:
 
     @classmethod
     def load(cls, root: Path) -> "PluginPackage":
-        manifest_path = root / "plugin.json"
+        manifest_path = contained_path(root / "plugin.json", root)
+        if not manifest_path.is_file():
+            raise PathContainmentError(f"{manifest_path} must be a regular file")
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
             raise ValueError(f"{manifest_path} must contain an object")
@@ -68,8 +93,10 @@ class PluginPackage:
         targets = self.extension.get("targets", {})
         if not isinstance(targets, dict):
             return {"enabled": False, "profile": "disabled"}
-        value = targets.get(name, {"enabled": False, "profile": "disabled"})
-        return value if isinstance(value, dict) else {"enabled": False, "profile": "disabled"}
+        value = targets.get(name)
+        if not isinstance(value, dict) or not isinstance(value.get("enabled"), bool):
+            return {"enabled": False, "profile": "disabled"}
+        return value
 
     def skill_directories(self) -> list[Path]:
         skills = self.root / "skills"
@@ -94,10 +121,14 @@ class Catalog:
 
     @classmethod
     def load(cls, path: Path) -> "Catalog":
-        data = json.loads(path.read_text(encoding="utf-8"))
+        root = path.parent.parent
+        source = contained_path(path, root)
+        if not source.is_file():
+            raise PathContainmentError(f"{source} must be a regular file")
+        data = json.loads(source.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise ValueError(f"{path} must contain an object")
-        return cls(root=path.parent.parent, data=data)
+        return cls(root=root, data=data)
 
     @property
     def plugins(self) -> list[dict[str, Any]]:
@@ -105,4 +136,18 @@ class Catalog:
         return value if isinstance(value, list) else []
 
     def packages(self) -> list[PluginPackage]:
-        return [PluginPackage.load(self.root / entry["path"]) for entry in self.plugins]
+        return [PluginPackage.load(self.package_root(entry)) for entry in self.plugins]
+
+    def package_root(self, entry: dict[str, Any]) -> Path:
+        """Validate the declared path before any package manifest is opened."""
+        relative = entry.get("path")
+        if not isinstance(relative, str) or not CATALOG_PACKAGE_PATH.fullmatch(relative):
+            raise PathContainmentError("catalog path must name a single package under plugins/")
+        if relative.removeprefix("plugins/") in {".", ".."}:
+            raise PathContainmentError("catalog path must name a package, not a parent directory")
+        package = self.root / relative
+        # The plugin directory itself can be a link, while plugins/ must still
+        # belong to this repository.
+        contained_path(package, self.root, required=False)
+        contained_path(package, self.root / "plugins", required=False)
+        return package

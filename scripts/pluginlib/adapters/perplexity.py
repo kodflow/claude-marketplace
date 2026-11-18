@@ -19,10 +19,12 @@ MAX_DESCRIPTION_BYTES = 1024
 
 
 def _files(package: PluginPackage) -> list[Path]:
-    files = [package.root / "plugin.json"]
+    files = []
     for relative in ("skills", "assets"):
         root = package.root / relative
         if root.is_dir():
+            if not root.resolve().is_relative_to(package.root.resolve()):
+                raise ValueError(f"archive sources are outside {package.name}: {relative}")
             files.extend(path for path in root.rglob("*") if path.is_file())
     if (package.root / "mcp.json").is_file():
         files.append(package.root / "mcp.json")
@@ -33,28 +35,47 @@ def build_archive(package: PluginPackage) -> bytes:
     """Build byte-for-byte reproducible ZIP content."""
 
     output = BytesIO()
+    root = package.root.resolve(strict=True)
+    manifest = json.dumps(package.manifest, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
     with ZipFile(output, "w", ZIP_DEFLATED, compresslevel=9) as archive:
-        files = {path.relative_to(package.root).as_posix(): path for path in _files(package)}
+        files: dict[str, Path | None] = {
+            path.relative_to(package.root).as_posix(): path for path in _files(package)
+        }
         for workflow in ("search", "review"):
             source = package.root / f"io.github.kodflow/projections/workflows/{workflow}-perplexity.md"
-            if source.is_file():
-                if f"skills/{workflow}/SKILL.md" not in files:
-                    raise ValueError(f"workflow {workflow} has no skill in {package.name}")
-                files[f"skills/{workflow}/workflow-perplexity.md"] = source
+            if not source.is_file():
+                continue
+            if f"skills/{workflow}/SKILL.md" not in files:
+                raise ValueError(f"workflow {workflow} has no skill in {package.name}")
+            member = f"skills/{workflow}/workflow-perplexity.md"
+            if member in files:
+                raise ValueError(f"advisory workflow member already exists: {member}")
+            files[member] = source
+        files["plugin.json"] = None
+        total = len(manifest)
         for name, source in sorted(files.items()):
-            source = source.resolve(strict=True)
-            if not source.is_relative_to(package.root.resolve(strict=True)):
-                raise ValueError(f"archive source is outside {package.name}: {name}")
+            mode = 0o100644
+            if source is not None:
+                source = source.resolve(strict=True)
+                if not source.is_relative_to(root):
+                    raise ValueError(f"archive source is outside {package.name}: {name}")
+                metadata = source.stat()
+                total += metadata.st_size
+                if total > MAX_BYTES:
+                    raise ValueError(f"archive exceeds {MAX_BYTES} uncompressed bytes")
+                if metadata.st_mode & 0o111:
+                    mode = 0o100755
             info = ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = ZIP_DEFLATED
-            info.external_attr = (0o100755 if source.stat().st_mode & 0o111 else 0o100644) << 16
+            info.external_attr = mode << 16
             info.create_system = 3
-            archive.writestr(info, source.read_bytes(), compress_type=ZIP_DEFLATED, compresslevel=9)
+            archive.writestr(info, manifest if source is None else source.read_bytes(),
+                            compress_type=ZIP_DEFLATED, compresslevel=9)
     return output.getvalue()
 
 
 def _https_endpoint(value: object) -> bool:
-    if not isinstance(value, str) or any(c in "{}$" or c.isspace() for c in value):
+    if not isinstance(value, str) or any(c in "{}" or c.isspace() for c in value):
         return False
     try:
         parsed = urlsplit(value)
@@ -64,17 +85,17 @@ def _https_endpoint(value: object) -> bool:
     return parsed.scheme == "https" and bool(parsed.hostname) and parsed.username is None
 
 
-def validate_archive(data: bytes) -> list[str]:
+def validate_archive(data: bytes, *, require_skills: bool = False) -> list[str]:
     """Enforce Perplexity's documented import limits and MCP subset."""
 
     try:
         with ZipFile(BytesIO(data)) as archive:
-            return _validate_members(archive)
+            return _validate_members(archive, require_skills=require_skills)
     except (BadZipFile, OSError, RuntimeError, ValueError) as error:
         return [f"invalid archive: {error}"]
 
 
-def _validate_members(archive: ZipFile) -> list[str]:
+def _validate_members(archive: ZipFile, *, require_skills: bool) -> list[str]:
     errors: list[str] = []
     names = archive.namelist()
     if sum(member.file_size for member in archive.infolist()) > MAX_BYTES:
@@ -106,6 +127,8 @@ def _validate_members(archive: ZipFile) -> list[str]:
     }
     if len(skill_names) > MAX_SKILLS:
         errors.append(f"archive has more than {MAX_SKILLS} skills")
+    if require_skills and not skill_names:
+        errors.append("archive must contain a skill for the skills capability")
     servers = {}
     if "mcp.json" in names:
         mcp = json.loads(archive.read("mcp.json"))
