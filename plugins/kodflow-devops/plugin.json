@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-devops",
-  "version": "0.0.0-rc9eb2abade9d",
+  "version": "0.0.0-r9dedfa01e68d",
   "description": "Infrastructure work, environment health, usage, and template updates.",
   "author": {
     "name": "kodflow",

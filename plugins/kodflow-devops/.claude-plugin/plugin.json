@@ -1,6 +1,6 @@
 {
   "name": "kodflow-devops",
-  "version": "0.0.0-rc9eb2abade9d",
+  "version": "0.0.0-r9dedfa01e68d",
   "description": "Infrastructure, environment health and template sync — Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
   "author": {
     "name": "kodflow",

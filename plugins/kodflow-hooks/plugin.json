@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-hooks",
-  "version": "0.0.0-re534016145c7",
+  "version": "0.0.0-r1b50125e9865",
   "description": "Claude lifecycle hooks, guards, context loading, and structured logging.",
   "author": {
     "name": "kodflow",

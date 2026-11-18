@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-gamedev",
-  "version": "0.0.0-rce91a1c8f05d",
+  "version": "0.0.0-r31379c2b6c57",
   "description": "Sourced combat animation, rig, reference, and asset workflows.",
   "author": {
     "name": "kodflow",

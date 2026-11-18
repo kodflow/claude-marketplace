@@ -7,22 +7,19 @@ from typing import Any
 from ..model import Catalog, PluginPackage
 
 
-def render_marketplace(catalog: Catalog) -> dict[str, Any]:
+def render_marketplace(catalog: Catalog, packages: list[PluginPackage] | None = None) -> dict[str, Any]:
     plugins = []
-    for entry in catalog.plugins:
-        package = PluginPackage.load(catalog.root / entry["path"])
-        if not package.target("claude").get("enabled"):
+    snapshot = catalog.packages() if packages is None else packages
+    for entry, package in zip(catalog.plugins, snapshot, strict=True):
+        if package.target("claude").get("enabled") is not True:
             continue
         plugins.append({
             "name": entry["name"],
             "description": entry["description"],
             "author": {"name": catalog.data["owner"]["name"]},
             "category": entry["category"],
-            "source": {
-                "source": "git-subdir",
-                "url": catalog.data["repository"],
-                "path": entry["path"],
-            },
+            # Relative sources inherit the marketplace checkout and its pin.
+            "source": f"./{entry['path']}",
         })
     return {
         "$schema": "https://json.schemastore.org/claude-code-marketplace.json",

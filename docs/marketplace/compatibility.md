@@ -8,17 +8,20 @@ The table below summarizes phase 3; the JSON reports emitted by `compat
 |---|---|---|---|
 | Skills | native | native plugin load | native ZIP import |
 | Agents | native Markdown agents | legacy flat TOML export; not yet packaged | absent |
-| Multi-agent dispatch | native | native | absent |
+| Multi-agent dispatch | host-supported, package behavior is unverified | host-supported, package behavior is unverified | absent |
 | Hooks | native | absent | absent |
 | Mods / HUD | native | absent | absent |
 | Shell integration | native hook | portable guidance only | absent |
 
 The statuses are not scores:
 
-- `equivalent` means a named automated verifier proves the projection.
+- `equivalent` means the named automated check passed on the package being
+  reported. Native checks cover the configured files. The Perplexity check
+  validates the archive and its required skill content.
 - `advisory-loss` means the usable portable part remains but host integration
   is lost.
-- `absent` means no adapter exists.
+- `absent` means the target does not provide the capability, or its verifier
+  did not pass.
 
 Optional loss is reported but does not block a build. Required loss blocks an
 enabled projection. Consequently hook/mod-only packages are Claude-only in
@@ -29,8 +32,11 @@ package can be staged without Claude's SessionStart hook. The existing flat
 Codex exports remain supported during the canary, but are not misrepresented
 as package-level equivalents; portable roles arrive in phase 4.
 
-Perplexity's real import UI remains an explicit release gate because it cannot
-be exercised headlessly. Phase 3 proves the documented ZIP shape and limits.
+The ZIP verifier checks the documented package shape and limits. To pass the
+Perplexity release gate, import the archive in Computer, open the installed
+plugin, and check that all expected skills and connectors appear and can be
+used. Upload success alone does not show that every connector was loaded.
+See the [manual import procedure](https://www.perplexity.ai/help-center/en/articles/2026100802-create-or-upload-a-custom-plugin).
 
 ## Commands
 

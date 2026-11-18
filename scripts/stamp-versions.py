@@ -12,57 +12,57 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
-import stat
-import subprocess
 import sys
+
+from pluginlib.sources import source_files, trust_executable_mode
 
 
 EXCLUDED_PARTS = {".claude-plugin", ".codex-plugin", "dist", "__pycache__"}
 MANIFESTS = ("plugin.json", ".claude-plugin/plugin.json")
 
 
-def _tracked_and_untracked(root: Path, plugin: str) -> list[str]:
-    result = subprocess.run(
-        [
-            "git", "-C", str(root), "ls-files", "--cached", "--others",
-            "--exclude-standard", "-z", "--", f"plugins/{plugin}",
-        ],
-        check=True,
-        capture_output=True,
-    )
-    return sorted(item for item in result.stdout.decode().split("\0") if item)
-
-
-def _canonical_bytes(path: Path, relative: str) -> bytes:
-    data = path.read_bytes()
+def _canonical_bytes(data: bytes, relative: str) -> bytes:
     if relative in MANIFESTS:
-        document = json.loads(data)
+        document = json.loads(data.decode("utf-8"))
         document.pop("version", None)
         return json.dumps(
             document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode()
+        ).encode("utf-8")
     return data
+
+
+def _generated(plugin: Path, relative: Path) -> bool:
+    if any(part in EXCLUDED_PARTS for part in relative.parts) and relative.as_posix() not in MANIFESTS:
+        return True
+    if relative.parts[:2] == ("io.github.kodflow", "projections"):
+        return True
+    return (
+        len(relative.parts) == 2
+        and relative.parts[0] == "agents"
+        and relative.suffix == ".md"
+        and (plugin / "io.github.kodflow" / "roles" / relative.stem / "role.yaml").is_file()
+    )
 
 
 def compute(root: Path, plugin: str) -> str:
     digest = hashlib.sha256()
-    prefix = f"plugins/{plugin}/"
-    for repository_path in _tracked_and_untracked(root, plugin):
-        relative = repository_path.removeprefix(prefix)
-        if any(part in EXCLUDED_PARTS for part in Path(relative).parts):
+    package = Path("plugins") / plugin
+    trust_executable = trust_executable_mode(root)
+    for source in source_files(root, package.as_posix()):
+        relative = source.path.relative_to(package)
+        if _generated(root / package, relative):
             continue
-        path = root / repository_path
-        if not path.is_file():
-            continue
-        mode = "100755" if path.stat().st_mode & stat.S_IXUSR else "100644"
-        content = hashlib.sha256(_canonical_bytes(path, relative)).hexdigest()
-        digest.update(f"{mode} {content} {relative}\n".encode())
+        name = relative.as_posix()
+        mode = source.mode(root, trust_executable)
+        content = hashlib.sha256(_canonical_bytes(source.content(root), name)).hexdigest()
+        digest.update(f"{mode} {content} ".encode("ascii") + os.fsencode(name) + b"\n")
     return "0.0.0-r" + digest.hexdigest()[:12]
 
 
 def _render(path: Path, version: str) -> str:
-    document = json.loads(path.read_text())
+    document = json.loads(path.read_text(encoding="utf-8"))
     document["version"] = version
     return json.dumps(document, ensure_ascii=False, indent=2) + "\n"
 
@@ -77,19 +77,23 @@ def main() -> int:
     root = args.root.resolve()
     stale: list[str] = []
     for directory in sorted((root / "plugins").iterdir()):
-        if not directory.is_dir() or not (directory / "plugin.json").is_file():
+        if directory.is_symlink() or not directory.is_dir() or not (directory / "plugin.json").is_file():
             continue
+        manifests = [directory / manifest for manifest in MANIFESTS]
+        for path in manifests:
+            if path.is_symlink() or path.parent.is_symlink():
+                print(f"cannot stamp linked manifest: {path.relative_to(root)}", file=sys.stderr)
+                return 1
         version = compute(root, directory.name)
-        for manifest in MANIFESTS:
-            path = directory / manifest
+        for path in manifests:
             if not path.is_file():
                 continue
-            current = json.loads(path.read_text()).get("version")
+            current = json.loads(path.read_text(encoding="utf-8")).get("version")
             if current == version:
                 continue
             stale.append(f"{path.relative_to(root)}: {current} -> {version}")
             if not args.check:
-                path.write_text(_render(path, version))
+                path.write_bytes(_render(path, version).encode("utf-8"))
     for item in stale:
         print(("stale " if args.check else "stamped ") + item)
     if args.check and stale:

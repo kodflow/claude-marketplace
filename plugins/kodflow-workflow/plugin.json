@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-workflow",
-  "version": "0.0.0-rea7e228d1439",
+  "version": "0.0.0-r0e8bbb27520c",
   "description": "Tracked research, planning, delivery, and handoff workflows.",
   "author": {
     "name": "kodflow",
