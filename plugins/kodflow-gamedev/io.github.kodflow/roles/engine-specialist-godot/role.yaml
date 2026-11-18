@@ -1,0 +1,22 @@
+apiVersion: io.github.kodflow/role/v1
+id: engine-specialist-godot
+description: 'Godot 4.7 3D animation engineering: Skeleton3D poses, BoneAttachment3D props,
+  AnimationPlayer and AnimationTree, GLB skeleton import, SkeletonModifier3D and IK, landmark
+  nodes, deterministic per-frame sampling of bones, props and landmarks for the plugin''s
+  Godot sampler, and the Godot MCP tools. Called by the kodflow-gamedev skills.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: opus
+  effort: medium
+  color: blue

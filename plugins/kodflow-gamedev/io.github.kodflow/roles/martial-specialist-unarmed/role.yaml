@@ -1,0 +1,23 @@
+apiVersion: io.github.kodflow/role/v1
+id: martial-specialist-unarmed
+description: 'Unarmed combat expert across cultures: boxing, wrestling under UWW rules, judo,
+  jujutsu, grappling, kicks, strikes and falls, described as a fighter performs them, cited
+  from rulebooks and primary texts. Names the technique, describes it in joint terms, proposes
+  constraints. Called only by the kodflow-gamedev skills /move and /anim-review.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch
+  model: opus
+  effort: medium
+  color: cyan
+  experimental: true

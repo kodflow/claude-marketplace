@@ -1,0 +1,23 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-specialist-python
+description: Python specialist — analyses Python but has no Write tool and does not create
+  worktrees, commit, use make, or write through gh; a fix brief goes to general-purpose with
+  [general-purpose-ok]. Use when a change touches .py files, pyproject.toml or requirements
+  files. Escalate to opus/medium when it spans several modules, asyncio or thread concurrency,
+  or a protocol.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: standard
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: sonnet
+  effort: medium
+  color: blue

@@ -1,0 +1,22 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-specialist-zig
+description: Zig specialist — analyses Zig but has no Write tool and does not create worktrees,
+  commit, or use gh/make; a fix brief goes to general-purpose with [general-purpose-ok]. Use
+  when a change touches .zig files, build.zig or build.zig.zon. Escalate to opus/medium when
+  it spans several modules, threads, or a wire protocol.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: standard
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: sonnet
+  effort: medium
+  color: blue

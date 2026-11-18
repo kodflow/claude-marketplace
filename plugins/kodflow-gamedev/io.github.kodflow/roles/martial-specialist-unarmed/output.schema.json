@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "martial-specialist-unarmed result",
+  "description": "The role instructions specify the applicable report format for the current host and mode.",
+  "type": "object",
+  "required": [
+    "schema",
+    "agent",
+    "role",
+    "status",
+    "summary"
+  ],
+  "properties": {
+    "schema": {
+      "const": "panel-member/v1"
+    },
+    "agent": {
+      "const": "martial-specialist-unarmed"
+    },
+    "role": {
+      "enum": [
+        "governing",
+        "consulted"
+      ]
+    },
+    "status": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kodflow/claude-marketplace/schemas/kodflow-role-v1.schema.json",
+  "title": "Kodflow role",
+  "type": "object",
+  "required": ["apiVersion", "id", "description", "instructions", "capabilities", "modelClass", "inputSchema", "outputSchema", "sideEffects", "claude"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "io.github.kodflow/role/v1" },
+    "id": { "type": "string", "maxLength": 64, "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "description": { "type": "string", "minLength": 1 },
+    "instructions": { "$ref": "#/$defs/path" },
+    "inputSchema": { "$ref": "#/$defs/path" },
+    "outputSchema": { "$ref": "#/$defs/path" },
+    "capabilities": {
+      "type": "object",
+      "required": ["required", "optional"],
+      "additionalProperties": false,
+      "properties": {
+        "required": { "$ref": "#/$defs/capabilities" },
+        "optional": { "$ref": "#/$defs/capabilities" }
+      }
+    },
+    "modelClass": { "enum": ["fast", "standard", "deep", "verify"] },
+    "codexEffort": { "enum": ["low", "medium", "high", "xhigh"] },
+    "sideEffects": { "enum": ["none", "workspace", "external"] },
+    "claude": {
+      "type": "object",
+      "required": ["tools", "model", "effort", "color"],
+      "additionalProperties": false,
+      "properties": {
+        "tools": { "type": "string", "minLength": 1 },
+        "model": { "enum": ["haiku", "sonnet", "opus", "fable"] },
+        "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
+        "color": { "enum": ["red", "blue", "green", "yellow", "purple", "orange", "pink", "cyan"] },
+        "experimental": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "path": { "type": "string", "pattern": "^\\./[^\\\\\\r\\n]+$" },
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z]+(?:[.-][a-z0-9]+)*$" }
+    }
+  }
+}

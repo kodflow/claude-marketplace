@@ -1,9 +1,9 @@
 ---
 name: devops-executor-linux
 description: Linux administration router — reads /etc/os-release, dispatches to the matching
-  os-specialist-<distro> agent, with a generic fallback. Use when a task concerns a Linux host,
-  systemd units, packages or sysadmin commands and the distro is not pinned. Escalate to
-  sonnet/medium when the distro is unknown or the diagnosis is ambiguous.
+  os-specialist-<distro> agent, with a generic fallback. Use when a task concerns a Linux
+  host, systemd units, packages or sysadmin commands and the distro is not pinned. Escalate
+  to sonnet/medium when the distro is unknown or the diagnosis is ambiguous.
 tools: Read, Glob, Grep, Bash, Task, WebFetch, mcp__context7__*
 model: haiku
 effort: low

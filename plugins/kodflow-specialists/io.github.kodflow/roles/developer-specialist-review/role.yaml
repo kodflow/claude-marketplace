@@ -1,0 +1,28 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-specialist-review
+description: Code review specialist using RLM decomposition — coordinates correctness, security,
+  design, quality and shell sub-agents in parallel on GitHub PRs, GitLab MRs or local diffs;
+  output is a local plan file. Use when a PR, MR or diff needs a full review.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+  - agents.delegate
+  - forge.access
+modelClass: standard
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: workspace
+claude:
+  tools: Read, Edit, Write, Glob, Grep, Task, TaskCreate, TaskUpdate, TaskList, Bash, mcp__github__pull_request_read,
+    mcp__github__list_pull_requests, mcp__gitlab__get_merge_request, mcp__gitlab__get_merge_request_changes,
+    mcp__gitlab__list_merge_request_notes, mcp__gitlab__list_merge_request_discussions, mcp__gitlab__list_merge_requests,
+    mcp__gitlab__list_pipelines, mcp__context7__resolve-library-id, mcp__context7__query-docs,
+    SendMessage, TaskGet, WebFetch
+  model: sonnet
+  effort: medium
+  color: blue

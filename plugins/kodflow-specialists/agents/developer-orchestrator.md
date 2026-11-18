@@ -1,11 +1,12 @@
 ---
 name: developer-orchestrator
 description: Developer orchestrator using RLM decomposition — coordinates review, refactoring,
-  testing and development, delegating to specialists, on GitHub PRs and GitLab MRs. Use when a task
-  spans several languages or modules and needs delegation.
+  testing and development, delegating to specialists, on GitHub PRs and GitLab MRs. Use when
+  a task spans several languages or modules and needs delegation.
 tools: Read, Glob, Grep, Task, TaskCreate, TaskUpdate, TaskList, Bash, WebFetch, mcp__github__pull_request_read,
-  mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__gitlab__get_merge_request, mcp__gitlab__get_merge_request_changes,
-  mcp__gitlab__create_merge_request, mcp__gitlab__list_merge_requests, mcp__gitlab__list_pipelines
+  mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__gitlab__get_merge_request,
+  mcp__gitlab__get_merge_request_changes, mcp__gitlab__create_merge_request, mcp__gitlab__list_merge_requests,
+  mcp__gitlab__list_pipelines
 model: opus
 effort: medium
 color: blue

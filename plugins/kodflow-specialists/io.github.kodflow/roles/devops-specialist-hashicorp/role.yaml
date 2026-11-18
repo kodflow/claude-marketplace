@@ -1,0 +1,22 @@
+apiVersion: io.github.kodflow/role/v1
+id: devops-specialist-hashicorp
+description: HashiCorp stack specialist — Vault, Consul, Nomad, Packer and Boundary; returns
+  JSON with configurations and recommendations. Use when a task touches .hcl or .nomad files,
+  Vault policies, Consul config or Packer templates.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: standard
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, WebFetch,
+    mcp__context7__*
+  model: sonnet
+  effort: medium
+  color: orange

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "devops-orchestrator result",
+  "description": "The role instructions specify the applicable report format for the current host and mode.",
+  "type": [
+    "object",
+    "array",
+    "string"
+  ]
+}

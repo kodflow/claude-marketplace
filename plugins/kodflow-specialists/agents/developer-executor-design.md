@@ -1,10 +1,10 @@
 ---
 name: developer-executor-design
-description: Design and architecture analyzer — antipatterns, DDD violations, layering issues, SOLID
-  breaches; returns JSON with pattern references and fixes. Use when a review needs a structure pass
-  over new modules, interfaces or package boundaries.
-tools: Read, Glob, Grep, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebFetch,
-  SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
+description: Design and architecture analyzer — antipatterns, DDD violations, layering issues,
+  SOLID breaches; returns JSON with pattern references and fixes. Use when a review needs
+  a structure pass over new modules, interfaces or package boundaries.
+tools: Read, Glob, Grep, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs,
+  WebFetch, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 model: sonnet
 effort: medium
 color: blue

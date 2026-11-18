@@ -1,0 +1,292 @@
+{
+  "01-pilot": {
+    "plugins/kodflow-specialists/agents/developer-executor-correctness.md": {
+      "claudeSha256": "02925107cfb3c01518f2d77a1e62fcc71af7888e7d921c60f9fd2d9fef070312",
+      "metadataSha256": "b0f7a3a91a9888fa6b14f0177e9340b37a1f84e87f424fce72b79990553cf22e",
+      "instructionsSha256": "63d519151912c782fd71de4a1770ff92052ee77f279dcdb2d4c624d7c1eeea7f",
+      "codexSha256": "3af253df0c16959f24e0bf51b8a1612b5f15d489fb409038d5552983354898f2"
+    },
+    "plugins/kodflow-specialists/agents/developer-executor-quality.md": {
+      "claudeSha256": "2fba830f42aedbbe8e33bb9b7e926630b8b8907b3ab4680d7faa130209ded62e",
+      "metadataSha256": "9e4636a2671ab8bc560c96cfa1964b09f660b35d4f890a89ea2d70f04928eb3a",
+      "instructionsSha256": "03c842cc25f1999f6b36b67b226bd45dd0cb871be4ee67fefac1f42df9cf72ad",
+      "codexSha256": "ba7c8934196a962afb2024b1032e8c6ee0d17d9a1de1a90cb66570d26f2a1746"
+    },
+    "plugins/kodflow-specialists/agents/developer-executor-security.md": {
+      "claudeSha256": "eac3f8c3c7992d3b499d28354406e03afd5b354498bd77e03a9ecd5fbb9b95f9",
+      "metadataSha256": "cb0c7e34b52da2a6bf61440a3a750da27e72a953d3ef6c8bbaff03573dbeeaec",
+      "instructionsSha256": "d63361c4a546c9d8adf3a20eeef15b65bcf5fc2e1081ee71f33a0ce6d2784b7a",
+      "codexSha256": "edb194659957b8fc055130722f5e730ebcd6a83acf824f3a45f7e6335accbede"
+    }
+  },
+  "02-languages": {
+    "plugins/kodflow-specialists/agents/developer-specialist-c.md": {
+      "claudeSha256": "2daa7b70280208a0867146e381130ae2232323fa49b649de7f9271e19d820ec5",
+      "metadataSha256": "394a92a75860dc99b986449dc39b2d6845e6bd4e7219651586c1a5c352640424",
+      "instructionsSha256": "fe9e4e3955c6c263eef902b95386a8da96719a47ad09e29ee8df0a45f78726a5",
+      "codexSha256": "91876e12d64cf041c18d74db82b49e6b97a53c7298a3d801e05d2cb66e98ee60"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-cpp.md": {
+      "claudeSha256": "124b75a759529c879cf3cc7b62d1f51b64da0a5a85e9ad9de383714f7af4e10f",
+      "metadataSha256": "d3c7cb2413c51aa959db2bd54ab4526d0b4a56598bdfdfcf7e88269ad3a086bd",
+      "instructionsSha256": "528871b6089031e614c67302a95f4d794e807c9c5bd2164dd1d602b77c443a6e",
+      "codexSha256": "39ed45de2616247d81b3df90215ae999a697af66c4380976c2b2ea915cb577e7"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-go.md": {
+      "claudeSha256": "70d9f111e5334914e1f76d510eea449039cbd0608070c6552f221343838ac27a",
+      "metadataSha256": "c4f6dc75efbc1407a35a9c5f70e66a2386731a6f3dc751ebbb2223d6a13913c9",
+      "instructionsSha256": "0cea816f13c5944dceb383a197ca334bb4ebad87156d97dc145ba85dd56f7d9a",
+      "codexSha256": "d4f2b1a4d3c94c7b3c0bafb68a8ae3ffa98232c2ff6a8bffec5bfe5a035f82b0"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-nodejs.md": {
+      "claudeSha256": "7dbcd53307c8cb56a43d6083dcd65b82fd1c333821347fb316df22c5e3a88470",
+      "metadataSha256": "c9ba958cf3703912ab887140954954c46c1c2efa398cecd0f22bd9ae759c994a",
+      "instructionsSha256": "b1f538ef5388c92d9c8533b8c94e1eca68dd29d11ca240afe098bbdd39680032",
+      "codexSha256": "b8310f498eb91dc58c293e10236d1eb1fb138fa672b695ec8916e79069f64a74"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-protobuf.md": {
+      "claudeSha256": "cebebb1162fa814408804c70a7423e62be6c1da51e7cedd6b289e47bbce4c7db",
+      "metadataSha256": "7c60ca5807362625b2e6773bc3091365d69d46f1e362b8b1e4d71bf035c09383",
+      "instructionsSha256": "ae29679ce1d03a21b5fcf31714f5d665bc018522df7024978fbd42e675c18e48",
+      "codexSha256": "9b998b9c6d9375fdb3e57bcdc63ffd54bdbad8ce16caeabf0048cbe140410eae"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-python.md": {
+      "claudeSha256": "8c0d7deeb798d1d4c2786a33927a0669702ec3edae307b1588b2ab9b9f1e710d",
+      "metadataSha256": "0646829f01d0db47c19605874a3f367b30c0b8a04a9e33421bd9bf97438426a4",
+      "instructionsSha256": "ee6e4c5d094e39aefd0ea980d7b1225aa8b4cbac5c15c37bd9ba6c4018e7a39e",
+      "codexSha256": "faa1624ee035d0f85e323b0e957e88f6be86745ca25fc9c2bc0334a32ef2f062"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-react.md": {
+      "claudeSha256": "d1d4ab44bfbfe28b2962a8d5d855152efbb22df540ff5758868c20ca33407805",
+      "metadataSha256": "b004a545af9809eb5a16a70a3731e92c87e7f07caee92a205a5f405e77d0a662",
+      "instructionsSha256": "2ef58ba7dab47154424fa758f36f4886aa1e7e4834bc9624b886a77a57d519c1",
+      "codexSha256": "670b9e5eb6e7b7a5435e2e882ef2fea1248985972743609e063d0c6fe457e5ae"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-rust.md": {
+      "claudeSha256": "2573e725e375a4029a5d67fd03079b1b9969d4ce5c1ffae53df7b6c6e0cfa76b",
+      "metadataSha256": "5b8d90f6823c311ac7b70149b9a40ec7495e86a0ccfb0bf4729db89d11b4c960",
+      "instructionsSha256": "e859581210085eb38d16ef5acdf3fbdd30b923a46d6ccaaf6d5aa141e5d7beb9",
+      "codexSha256": "7132b72e656d68a4b665ec021ce3748cdbd9cba976920269e2c6eadb7deb3718"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-zig.md": {
+      "claudeSha256": "1cb1bab6a669715ee41bf2583db9f3232d2821e6bb89ba270bd163883584cf38",
+      "metadataSha256": "a1c43f65da671c9a1ffc9cec43ead6ec869b75cca4d19c856ca2be522b6f7613",
+      "instructionsSha256": "08095d97a22d97388f67436ceaec6f8e6032e975357b540137190f30fe49d49d",
+      "codexSha256": "1a0f72943b19163d3170a773199d123949543deb690695c0be1c948968eaa97f"
+    }
+  },
+  "03-platforms": {
+    "plugins/kodflow-specialists/agents/data-specialist-postgres.md": {
+      "claudeSha256": "efc386cbef7fd45b66b7ba92650061725d786a19ea5dc10a8b46020925f057e5",
+      "metadataSha256": "b85030771d3df2b75dcd2b973c085909e0d2a7cdb76206dd36b541313a00ffc1",
+      "instructionsSha256": "d49b3b14450cd6919a7b6b300eef2bfc23da7d1e129c34609aff938d9d4341a3",
+      "codexSha256": "8e6381d8af128a81428387462dd20122d68a0823fbe2e4eb65e64ce9f494c050"
+    },
+    "plugins/kodflow-specialists/agents/data-specialist-valkey.md": {
+      "claudeSha256": "60db8fff9101d7acd027a54943130358843b69729d73d8859c2c7916cfe0c36c",
+      "metadataSha256": "13e9f87bbc7765129a86412a360a538cb9977b9f075bbc199f24d3076994609c",
+      "instructionsSha256": "dafb2485e028eb370aabdf3031da80d6966f29bb874ef596afd78a2c5d62f884",
+      "codexSha256": "269590768f2da1792affd3abd835828a4acdfec551fed9cc6c666b7d9d17e4e7"
+    },
+    "plugins/kodflow-specialists/agents/devops-specialist-docker.md": {
+      "claudeSha256": "2d66f03c1283fb3efb2e7de94407fe56abfe7a634a0c7ee71b729f4e75717692",
+      "metadataSha256": "14d9b21c3f0e3242f36ae11f029f968f7808a84ce96b2ad1d4c8e48e3c3baf10",
+      "instructionsSha256": "910264d2eeb712f757a9f6984bda08c3b837d58b6a3a0754ca471edce17f6f3f",
+      "codexSha256": "820f979350d1752e7e66547c5d118f1176eec1359d9971f71b466935ffc97537"
+    },
+    "plugins/kodflow-specialists/agents/devops-specialist-hashicorp.md": {
+      "claudeSha256": "165c69d4e96b82d5c7896b17facc2f4e4e85cb6988591a9e106cbeea266b92f7",
+      "metadataSha256": "820129d9fbb4de93bbb6792f42fdb01e07ba1bcde0bc672b3145541dcb6ea17a",
+      "instructionsSha256": "43c7915cbd151f657ffc39fe76532d6aca33544e32ec95bc997a515e9ceac37e",
+      "codexSha256": "a7675b2930d8ec789c5ca7b0bb0566046f0737bf1e70c3aaf29156a3c6a90678"
+    },
+    "plugins/kodflow-specialists/agents/devops-specialist-infrastructure.md": {
+      "claudeSha256": "896321b6a56da92b372cb503a69c330712549f932f2f0b1c8b2f6fce25917762",
+      "metadataSha256": "cc20f59e4d0a1b3cf87a9529a6b632304dcbb6a07a120a4d999cbc0d9df85567",
+      "instructionsSha256": "f4ffdd8e934b329f91cf51748113a3cee7acd658a983ca46c6ee689985e84a1a",
+      "codexSha256": "f752e7699e1c2d25e575ae7b09f8c425753f47000a4c2ca2af74458dd9b25db3"
+    },
+    "plugins/kodflow-specialists/agents/devops-specialist-kubernetes.md": {
+      "claudeSha256": "fd0e34ce0745dd4155eb62ae108d736b39c05845422e499e2b3e8a9578166069",
+      "metadataSha256": "ed475950f413e61c237135e2221334e3a1d9c005449f53a4bfbe166058b8bfe5",
+      "instructionsSha256": "ee1c774217d7bddc4aaaf3784e700a3f33b8f5ee3cf7824e9f455dde67aa76d6",
+      "codexSha256": "12120d5bbf5019cd3f2738ac13e232dea909df4a7c2754a90b976c09e3966d42"
+    },
+    "plugins/kodflow-specialists/agents/devops-specialist-security.md": {
+      "claudeSha256": "f507f7c3e7b50a41d2370533e8e87abcc05ac3798245ff4cf76fc6d734e79fec",
+      "metadataSha256": "d1f64047e5daa23da0ca41812318946ed4670470de0d53b9aff33d7a8647ef79",
+      "instructionsSha256": "d0f33d5938a3c79aad8633bf3a803b3380137ca4817a3310bb403f01ce8d8630",
+      "codexSha256": "dd79069ef779be431cfcebca532944ec2513d657a3a9d4e554a1965fa21cbfca"
+    },
+    "plugins/kodflow-specialists/agents/domain-specialist-systemd.md": {
+      "claudeSha256": "cb39f171b731309ba7b50982120338c8da1afba37e33f67f7116184d69420c5d",
+      "metadataSha256": "f802a93570abe440fcafc512409eee5a6e5139d8233aa5928206a62eec572bdd",
+      "instructionsSha256": "44141e441286a62d63034ecfae8218fd2b24cee19c9dcf65c45d69de6854b385",
+      "codexSha256": "6060adc15d929b01b7eb8f647f7396be0652ce4648e5e8d7de0c1e615ed42c42"
+    },
+    "plugins/kodflow-specialists/agents/domain-specialist-telecom.md": {
+      "claudeSha256": "748aaa64a78d40b022d2294e41f6d7f62f8916868044cb20ee911b08139e7b7a",
+      "metadataSha256": "8aa15375ac6391923dae719497966c88c304a3a49eccfc8491961e0cce04e3dd",
+      "instructionsSha256": "75ee5ca48695aabcd46786c2e2b780029efbd79b95cc3444ad9a43a3524de272",
+      "codexSha256": "94fec459e74af64f6663b01aaf315e7dac318057bf8f5afcb01dc56ef8639eba"
+    },
+    "plugins/kodflow-specialists/agents/os-specialist-alpine.md": {
+      "claudeSha256": "48916ae3970ad007dfb23cdec97fdd4f56c4758cbdd3473fe4468685f9be7b26",
+      "metadataSha256": "d87acba789b658ae5b49dd74c1377637b63c7ccf0dd88052e55a9bfceb4c6eae",
+      "instructionsSha256": "34516bd694105292e082ba8a1cb57b8f28632d8b2dec5ea9d51b903756da0481",
+      "codexSha256": "11d8d199d539eb9730cc054611832a9d1c5ed96faf310c55aaefdc95d03686d3"
+    },
+    "plugins/kodflow-specialists/agents/os-specialist-debian.md": {
+      "claudeSha256": "a90e84a128d5df0ce11187dcfeda45eb17bb2d07730e99464dd1b2bbd40e2793",
+      "metadataSha256": "901fd856cf39994d93154e13a9d5497e9c633fb8c0024d7ef0615ed6d9b7ba57",
+      "instructionsSha256": "7205d61b76b5f2fe6c6c5a77256659a8d77fa88aeef228e8fee4af8a0056e465",
+      "codexSha256": "24a536a5a8b131998abe849cb9aca9d8789f51de7ada3d1160232ac8d5c77f70"
+    },
+    "plugins/kodflow-specialists/agents/os-specialist-ubuntu.md": {
+      "claudeSha256": "faa404a890ee35a79c905104ec6b17608ad02c41251d2481b9cb91712b26891a",
+      "metadataSha256": "cf91d9bf202d16889abfafed852534a8ec8e7dfe6cd49acb68871816796ee11a",
+      "instructionsSha256": "4b9c4213237d353a892c22848abd3100e1eeb4be5aee8a200c5373f29db1c429",
+      "codexSha256": "bbe74e1041429b5f8d537493674bd7577a48345ea1a02e2f97bcef78425d9d65"
+    },
+    "plugins/kodflow-specialists/agents/tooling-specialist-ansible.md": {
+      "claudeSha256": "ced88fd7dc0515ac6d1f5712169901450cc4cbd7debd671779de2ce3530a51b2",
+      "metadataSha256": "a16e020e1c0e941d5b08ee43edddd07a9a6173aa26fc0b0dff80e95a55363d46",
+      "instructionsSha256": "3919e5ce25482bb9b6d537c5ba55506d16a1145e0e47b74e6fc1ded138800b6c",
+      "codexSha256": "08e1372ea61db5dedfa292826418a3f6007f6252a717d49bf0d4234481fee194"
+    },
+    "plugins/kodflow-specialists/agents/tooling-specialist-github-actions.md": {
+      "claudeSha256": "b7e8cd95894a930c39d1e7711c1c52878aa0b56f58fefbfc9ce1a66c1f369af8",
+      "metadataSha256": "c5458e5ca7e4a6cfdc0c57fa688d57d33ec73ec9592d9e7067d0dcc9b80c4fa0",
+      "instructionsSha256": "23471c030b7ad59494a063d03ea594d476f855982ec8cc335f8ce0efb235913e",
+      "codexSha256": "1ca9fba5ad21b7ccc137ea0f2ce5ff053a650d67f05efa97e1b1e4eefd4239c5"
+    },
+    "plugins/kodflow-specialists/agents/tooling-specialist-gitlab-ci.md": {
+      "claudeSha256": "616111fae35f67cf5f99584f0d7811ae74eaa635c2ef30f867039de1bbe69172",
+      "metadataSha256": "3e065fb8b8f4c7f923d9b2d382b6ca529d3b81309c4be15db82755e4ec50433e",
+      "instructionsSha256": "b066b4666b41869ef61b89e1418f2ee068e53f69a0ba9e50512c106ff2b37e4b",
+      "codexSha256": "d4c2a83325614366e5a9b90fecf4e291933a7ce466bd4772aaf4b80fd3d3df25"
+    }
+  },
+  "04-executors": {
+    "plugins/kodflow-specialists/agents/developer-commentator-worker.md": {
+      "claudeSha256": "9521083e6adc2a571aa984efe2cc2424d51fbc37de732b7ccad67c31a3804020",
+      "metadataSha256": "20bd022fc72e79b96e1acff0d8771d4bca087207f38b5dc3b2c4343da06fad30",
+      "instructionsSha256": "7f24e0e7f1f29a5307d851e62fffd598a2fc50c26130ddb181f6a023554b2ab6",
+      "codexSha256": "4a4fe115df0fe88c1118f8eb594f0cf34c855397c4a1996250faf7dce130e3f2"
+    },
+    "plugins/kodflow-specialists/agents/developer-commentator.md": {
+      "claudeSha256": "fe6aa843190912c7c495b33df67aee49500919100d99ecc9d272730e47592709",
+      "metadataSha256": "fbc6f9cb616546c6a7d68f78cc7f57e66552248fa904defc6bae7db4d5372cc0",
+      "instructionsSha256": "dfda9a8cc847e08f9546b1b7eafcbe2b8d0477fd51a4a63cc6b6e7951647b3e4",
+      "codexSha256": "2bee87632e9cc43d53e59dc02e121de1e78d7c9acd8ae27bb1f00477883be7be"
+    },
+    "plugins/kodflow-specialists/agents/developer-executor-design.md": {
+      "claudeSha256": "06d8f615593acc5b892117e5634bde4f2982a4b9f35bc22fdde58832e137115e",
+      "metadataSha256": "97fd18361c8024de8c97e72f66d99881f1e2a650ab30266f7d6266eef7e7dda2",
+      "instructionsSha256": "79a12e09a552b54e003bc2fdb531483555a4f2d83ab7afa11f900f358c12dc50",
+      "codexSha256": "824f8618b8df10948c6346ccc7ca31b1647cad3660dcb54899949bd728c30d15"
+    },
+    "plugins/kodflow-specialists/agents/developer-executor-shell.md": {
+      "claudeSha256": "81320bd71150c10fcab98521a4cbe32bc344cf353f3370aeb84547324e4e7fff",
+      "metadataSha256": "1609b95ed84070447d4dfcc43c5bc671f326af15ca4cef091ea5cddd418edd47",
+      "instructionsSha256": "3940bb6b8f76cdc64543715d1133622605e5dec7f74a7b0226c04fdf22b70aab",
+      "codexSha256": "7fb6523a47b31fe7d2154cfda5ff5fb5b537c5baef7da6dc603c7035e64790da"
+    },
+    "plugins/kodflow-specialists/agents/developer-orchestrator.md": {
+      "claudeSha256": "a8c5158d153bc898abbbace0eb0b9d0077fb8b7b92776cef6ef9abb277f2b778",
+      "metadataSha256": "eef7041ddce141e8e99906705cb589ecacae1956b2f5237cd4e8a6b76c263bdd",
+      "instructionsSha256": "a52ceae145a1668f5883172494743757ceadd3d7eb8445749461dc2fb5304c1e",
+      "codexSha256": "9d24d71e455fdba9e4a2d612f747a540eb4fe7a8798df18e55db4a64854fd659"
+    },
+    "plugins/kodflow-specialists/agents/developer-specialist-review.md": {
+      "claudeSha256": "1abcb4bd824f2d12d33ad3a85d411be424a53bb585019bb18399ce66054567ed",
+      "metadataSha256": "e66e5acfae1a83dff6600335e077ac580c8ad08ab9b5e7cde33af47be98cba48",
+      "instructionsSha256": "b73a0e6cfc0c778d3d35653df73b155fb936b220cd9e13f46602b6180e2d3065",
+      "codexSha256": "ef6c1753d2f2b60002c405c569d3e0c63f467bbeb951cb731d511df48540b1e8"
+    },
+    "plugins/kodflow-specialists/agents/devops-executor-linux.md": {
+      "claudeSha256": "c9c6152b4f43ad714fc9aca9f0d315f0d29f2dc7cba2c9aaeb4ade3ee1ef64f9",
+      "metadataSha256": "0688a6306c24b904f43cc7887b61a708279f56d12432bb56c1fddf937e2c574f",
+      "instructionsSha256": "307507c4ec6a54cf2f08c27a6f3c40dc825be0f53feca36cd361b76f9abe98b0",
+      "codexSha256": "b29008b73fcdeb0e9db288f5c3e02c5793b177f06bf0b9f441e9976d16c646d2"
+    },
+    "plugins/kodflow-specialists/agents/devops-orchestrator.md": {
+      "claudeSha256": "a6e11dd6b3ef8d58beb0e910be6df5fd8be2af0c491fab0d371b6ebe9c7a1691",
+      "metadataSha256": "44b5ef9e974ef56e8a18dd969be70812244428bb59120ae39fd1109fe6dd5363",
+      "instructionsSha256": "e000f52317e14cd2db1ff52c7eb1505ad81d94613cbe55cf259c3cafc3181958",
+      "codexSha256": "58f14e857554930e149ed6da6098cd00db48b20ebbd0955558559663869a6ab4"
+    }
+  },
+  "05-gamedev": {
+    "plugins/kodflow-gamedev/agents/anatomy-specialist-biomechanics.md": {
+      "claudeSha256": "371b474ed2aff83215aa5b95e49afc307f4c31b267c18a1abadc8271a0b1d495",
+      "metadataSha256": "d51b26f2da0f70047befff1d7dfc0ea481df8d0d4c390406691387e175dacaa4",
+      "instructionsSha256": "3612a99469e4f7aca359bdacefaabe6a8bc7ff0a748baf70e21dce2e502fba19"
+    },
+    "plugins/kodflow-gamedev/agents/animation-specialist-combat.md": {
+      "claudeSha256": "52d4ecba1e9309fa53ae4d91f5b56e009de81dffed47ec6b44f62d4bf405914f",
+      "metadataSha256": "96f72b71c11387cfbac67c38e8d2d84ff7e894e07d5327c00c91e3d8a18322e5",
+      "instructionsSha256": "ed92e04cf463c5fb75eb3d53b4a22aaeeb6aa2b9c1d035ffc65c4b8fe1c7745a"
+    },
+    "plugins/kodflow-gamedev/agents/asset-specialist-meshy.md": {
+      "claudeSha256": "0550f0ea6a515998f52cdc01dcb9a66a71a3f9abd85b2c553d424901f20426a5",
+      "metadataSha256": "dfa5819093651d53f3361e9b821cca4f8f184dddc3ab028f1b6dcd78ee3c017f",
+      "instructionsSha256": "3b8d6badcf8624718aa7cd5fc9daa9a7e26f4bf3d18fe219360af826b47a7ca9"
+    },
+    "plugins/kodflow-gamedev/agents/engine-specialist-godot.md": {
+      "claudeSha256": "d7317597b940522cc8081111b26954c6b09ea8541d66fdda7e395df713899304",
+      "metadataSha256": "491154012225c17ba3d8fe9213ca381fa4fa83be27ec325188701bf544215687",
+      "instructionsSha256": "d00503ceb5e63f623d97ba37c87b6df778e44560ae8599358e8e5caac297eace"
+    },
+    "plugins/kodflow-gamedev/agents/engine-specialist-threejs.md": {
+      "claudeSha256": "a3f1d2883d04b9a2376d2676925811394ae4edb72ebcbb5b015719ee6740071d",
+      "metadataSha256": "70b9cd7b3168743c140fd261fa89c786f0c753e2ffdda6771bd6d10d0c3a4ca4",
+      "instructionsSha256": "5c6a34fac955ff782c3e625568e36f4e9c50d35c71c94177ac36208c5ecf840b"
+    },
+    "plugins/kodflow-gamedev/agents/gamedev-animation-director.md": {
+      "claudeSha256": "d14b23518eb0f25e165d9931f5b38dfb19024e2c742d61e57ab36464f201c703",
+      "metadataSha256": "57f32cb9ab998be6cce693c802ced6c12ee4b96c25ba65f965fe45492fd71399",
+      "instructionsSha256": "4aa5820373c20c73ee94038216bc03ea7c2b3188c8f02401a560f1e7922b8ffa"
+    },
+    "plugins/kodflow-gamedev/agents/martial-specialist-antiquity.md": {
+      "claudeSha256": "a7f8f13c38e9b151e6372795b4218751ceb125f4e28c35d49950546d09bcf0a1",
+      "metadataSha256": "5f2710cda898c5b71366e34450ff16bf96c539ce12dacc6fe55be98ade3fcc29",
+      "instructionsSha256": "2f84875a338eb4c369c49fb17e89f7fe5697e4324d12bbeb3115abbc993a324e"
+    },
+    "plugins/kodflow-gamedev/agents/martial-specialist-east-asia.md": {
+      "claudeSha256": "919c0264ce58d97e8ed44fe1e73e56dd401d61bc1770a55315af75e68e76c6c1",
+      "metadataSha256": "7d73dc209dabff1f43d3059e0baa41a3bc50a3fbe96971517848f65fff48fed3",
+      "instructionsSha256": "816a8ab6b764e19b095ccc54b6d88f6b09695a5b743bd2bc778331f903776c87"
+    },
+    "plugins/kodflow-gamedev/agents/martial-specialist-europe.md": {
+      "claudeSha256": "dce0a20eb5d89a42eac8a43c2f543ef9b0b0a0a6998a0833a931223777504674",
+      "metadataSha256": "2a32dd6b4794e411e54fc647c7f3b9b96b91082321430d511fc2c1b92e2d8077",
+      "instructionsSha256": "f80b8987c0691ba1af0dacb8b16fd57cdf807fe6e504c36afcc401ee926b47e8"
+    },
+    "plugins/kodflow-gamedev/agents/martial-specialist-south-asia.md": {
+      "claudeSha256": "3b851f8b6f098dffc24b38535fbc35c32e07c2f402609618184f8132283ce49c",
+      "metadataSha256": "8292d3b86a996a25b73a54ba206ca4e353a1ab9aa84b2e325a880ff3e90501b3",
+      "instructionsSha256": "d7d99643b2a34b1ef751b464fa25d2285a4e0df31b410221ff616e39200704ad"
+    },
+    "plugins/kodflow-gamedev/agents/martial-specialist-southeast-asia.md": {
+      "claudeSha256": "22fa9f19756487ecdb7d5a19305f618bb63e6340f56d74a5140e18143570443f",
+      "metadataSha256": "40f8079c5d8ba2a8b41843be6ec7a197f6e47ef8e51041703b4d96dcc57ffdf2",
+      "instructionsSha256": "48fd91c69fc4db6501e8f5f585219f1a99a4bffdc062ed0be264b9efffb1af98"
+    },
+    "plugins/kodflow-gamedev/agents/martial-specialist-unarmed.md": {
+      "claudeSha256": "c142a43051f4368b6fcbd230ea8e8a629a3b95f4f9e9e62bcb4bfdebe5127973",
+      "metadataSha256": "f3cfa7815f1e5b4bcff476677af5b816e9f4d5f5a8111f5a346edd19b51d145d",
+      "instructionsSha256": "a294d2db5923bdb46f48316a70474309ae96c01c3a5ad55262744236d47c3a4b"
+    },
+    "plugins/kodflow-gamedev/agents/reference-specialist-imagery.md": {
+      "claudeSha256": "9a0bccb62afcb8ecb949421e2477b73fe6fff13f8484e504c48461b1b2357b3e",
+      "metadataSha256": "62c6871718779e9df0c66bdaa135e3c2543602fe61aa64064231fae0eee327c7",
+      "instructionsSha256": "7abffac744e0c6a15910d465b8475f99cc78173241dd9700e1df508c0ba99395"
+    },
+    "plugins/kodflow-gamedev/agents/rig-specialist-ik.md": {
+      "claudeSha256": "f267c4230207355915d9eeba49c721263d830b679974973185f7932e691621a2",
+      "metadataSha256": "aea3e23911a7299b8442ca11f829f964fa1e641cf63de28a7494658a10ac6764",
+      "instructionsSha256": "0ec27f4f1c93feea8ec9ab3ebc1f74275bbe5b1ef0847e25ae4d76fd1b1fc8b1"
+    }
+  }
+}

@@ -1,6 +1,9 @@
 ---
 name: martial-specialist-antiquity
-description: "Greco-Roman combat expert: hoplite aspis and dory, Roman legionary gladius, scutum and pilum, gladiator armatures, pankration, palē and pygmachia, read from ancient texts, artefacts and iconography. Names the technique, describes it in joint terms, proposes constraints. Called only by the kodflow-gamedev skills /move and /anim-review."
+description: 'Greco-Roman combat expert: hoplite aspis and dory, Roman legionary gladius,
+  scutum and pilum, gladiator armatures, pankration, palē and pygmachia, read from ancient
+  texts, artefacts and iconography. Names the technique, describes it in joint terms, proposes
+  constraints. Called only by the kodflow-gamedev skills /move and /anim-review.'
 tools: Read, Glob, Grep, Bash, WebFetch
 model: opus
 effort: medium

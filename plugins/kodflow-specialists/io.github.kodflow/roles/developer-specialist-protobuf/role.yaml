@@ -1,0 +1,22 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-specialist-protobuf
+description: Protocol Buffers and gRPC specialist for schema design, wire compatibility and
+  code generation. Use when *.proto, buf.yaml, buf.gen.yaml or generated pb files are present,
+  or the task changes a gRPC service or message.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+modelClass: standard
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: workspace
+claude:
+  tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
+  model: sonnet
+  effort: medium
+  color: blue

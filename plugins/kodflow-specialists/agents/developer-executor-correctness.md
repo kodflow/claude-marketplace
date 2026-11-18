@@ -1,11 +1,11 @@
 ---
 name: developer-executor-correctness
 description: Algorithmic correctness analyzer — invariant violations, state machine flaws,
-  concurrency bugs, off-by-one and swallowed errors; returns JSON with counterexamples and patches.
-  Use when a diff or module needs a proof-style correctness pass. Escalate to opus/max when a
-  counterexample search one xhigh pass did not settle.
-tools: Read, Glob, Grep, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs, WebFetch,
-  SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
+  concurrency bugs, off-by-one and swallowed errors; returns JSON with counterexamples and
+  patches. Use when a diff or module needs a proof-style correctness pass. Escalate to opus/max
+  when a counterexample search one xhigh pass did not settle.
+tools: Read, Glob, Grep, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs,
+  WebFetch, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 model: opus
 effort: xhigh
 color: blue

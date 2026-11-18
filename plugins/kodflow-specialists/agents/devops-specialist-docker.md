@@ -1,7 +1,7 @@
 ---
 name: devops-specialist-docker
-description: Docker specialist — Dockerfile optimization, Docker Compose, container security and
-  image management. Use when a task touches a Dockerfile, compose.yaml or docker-compose.yml,
+description: Docker specialist — Dockerfile optimization, Docker Compose, container security
+  and image management. Use when a task touches a Dockerfile, compose.yaml or docker-compose.yml,
   .dockerignore, or an image build or size question.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet

@@ -1,10 +1,11 @@
 ---
 name: developer-executor-shell
 description: Shell script, Dockerfile and CI/CD safety analyzer — dangerous patterns, missing
-  safeguards, config issues, via deterministic pattern matching; returns JSON. Use when a change
-  touches .sh files, Dockerfiles or CI pipeline files. Escalate to sonnet/medium when findings need
-  judgement beyond pattern matching or are ambiguous.
-tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, WebFetch, mcp__context7__*
+  safeguards, config issues, via deterministic pattern matching; returns JSON. Use when a
+  change touches .sh files, Dockerfiles or CI pipeline files. Escalate to sonnet/medium when
+  findings need judgement beyond pattern matching or are ambiguous.
+tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet,
+  WebFetch, mcp__context7__*
 model: haiku
 effort: low
 color: blue

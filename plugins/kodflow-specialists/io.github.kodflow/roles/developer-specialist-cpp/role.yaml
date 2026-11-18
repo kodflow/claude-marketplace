@@ -1,0 +1,22 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-specialist-cpp
+description: C++ specialist — analyses C++ but has no Write tool and does not create worktrees,
+  commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when
+  a change touches .cpp, .hpp or .cc files, or CMakeLists.txt. Escalate to opus/medium when
+  it spans several modules, threads or atomics, or a wire protocol.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: standard
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: sonnet
+  effort: medium
+  color: blue

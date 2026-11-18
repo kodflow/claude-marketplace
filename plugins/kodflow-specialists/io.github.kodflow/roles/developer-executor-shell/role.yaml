@@ -1,0 +1,24 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-executor-shell
+description: Shell script, Dockerfile and CI/CD safety analyzer — dangerous patterns, missing
+  safeguards, config issues, via deterministic pattern matching; returns JSON. Use when a
+  change touches .sh files, Dockerfiles or CI pipeline files. Escalate to sonnet/medium when
+  findings need judgement beyond pattern matching or are ambiguous.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+modelClass: fast
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: workspace
+claude:
+  tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet,
+    WebFetch, mcp__context7__*
+  model: haiku
+  effort: low
+  color: blue

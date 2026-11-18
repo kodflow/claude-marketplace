@@ -1,0 +1,23 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-specialist-react
+description: React 19 specialist — JSX/TSX, hooks, React Server Components, Suspense boundaries,
+  Concurrent Mode. Use when a change touches .jsx or .tsx files, or a node project declares
+  a react dependency. Escalate to opus/medium when the change spans several modules, server/client
+  boundaries, or concurrent rendering.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+modelClass: standard
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: workspace
+claude:
+  tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
+  model: sonnet
+  effort: medium
+  color: blue

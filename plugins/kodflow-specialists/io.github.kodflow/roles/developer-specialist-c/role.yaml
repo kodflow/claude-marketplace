@@ -1,0 +1,21 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-specialist-c
+description: C specialist — analyses C but has no Write tool and does not create worktrees,
+  commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when
+  a change touches .c/.h files or Makefile/CMake C targets.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: opus
+  effort: medium
+  color: blue

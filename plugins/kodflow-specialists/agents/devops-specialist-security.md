@@ -1,8 +1,8 @@
 ---
 name: devops-specialist-security
-description: DevSecOps scanning specialist — vulnerability detection, compliance checking and
-  secrets scanning; returns JSON with findings and remediation. Use when a task asks for a
-  vulnerability, CVE, compliance or leaked-secret scan of images, dependencies or infrastructure.
+description: DevSecOps scanning specialist — vulnerability detection, compliance checking
+  and secrets scanning; returns JSON with findings and remediation. Use when a task asks for
+  a vulnerability, CVE, compliance or leaked-secret scan of images, dependencies or infrastructure.
   Escalate to opus/medium when findings span several components or an exploit chain.
 tools: Read, Glob, Grep, SendMessage, TaskUpdate, Bash, WebFetch, mcp__context7__*
 model: sonnet

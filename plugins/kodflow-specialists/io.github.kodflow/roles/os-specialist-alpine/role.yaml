@@ -1,0 +1,23 @@
+apiVersion: io.github.kodflow/role/v1
+id: os-specialist-alpine
+description: Alpine Linux specialist — apk, OpenRC/s6, musl libc, BusyBox and minimal images,
+  checked against the official Alpine wiki; returns JSON. Use when a task touches Alpine,
+  apk, musl-specific behaviour or an alpine base image. Escalate to sonnet/medium when the
+  answer needs judgement beyond pattern matching or the findings are ambiguous.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: fast
+codexEffort: medium
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: haiku
+  effort: medium
+  color: green

@@ -1,0 +1,22 @@
+apiVersion: io.github.kodflow/role/v1
+id: domain-specialist-systemd
+description: systemd semantics reviewer — unit-file directives and sections, Exec prefixes,
+  sd_notify, readiness and watchdog — checked against raw freedesktop.org man pages, never
+  a summary. Use when a plan or code writes or relies on unit files or sd_notify.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+codexEffort: high
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: opus
+  effort: high
+  color: purple

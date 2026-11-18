@@ -8,43 +8,14 @@ Markdown with YAML. Generating rather than hand-porting is what keeps the two
 from drifting — a hand port is correct once.
 """
 import pathlib, re, sys, yaml
+
+from pluginlib.codex_text import neutralise, render_agent, role_agent_fields
 try:
     import tomli_w
 except ImportError:
     tomli_w = None
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
-
-# Names that mean nothing on the other CLI. Rewritten, not deleted: an agent
-# told to "use mcp__context7__query-docs" on Codex would simply fail to find it.
-NEUTRALISE = [
-    (r"`mcp__context7__resolve-library-id`\s*then\s*`mcp__context7__query-docs`",
-     "the library-documentation tool available to you"),
-    (r"`mcp__context7__[a-z_-]+`", "the library-documentation tool"),
-    (r"`mcp__github__[a-z_*]+`",   "the GitHub tool"),
-    (r"`mcp__gitlab__[a-z_*]+`",   "the GitLab tool"),
-    (r"`AskUserQuestion`",         "a multiple-choice question to the user"),
-    (r"`Agent\(\*\)`|the `Agent` tool", "a subagent"),
-    (r'Skill\(skill="([a-z-]+)"[^)]*\)', r"the /\1 skill"),
-    (r"~/\.claude/skills/",        "~/.codex/skills/"),
-    (r"~/\.claude/agents/",        "~/.codex/agents/"),
-    # Plugin-root resolution has no Codex equivalent: skills are installed flat
-    # under ~/.codex/skills, so the fallback must point there, not at ~/.claude.
-    (r'\$\{CLAUDE_PLUGIN_ROOT:-\$HOME/\.claude\}', '${CODEX_HOME:-$HOME/.codex}'),
-    (r"\$ARGUMENTS",               "the arguments"),
-]
-
-# Claude tier -> Codex model + effort. Verified current 2026-09: GPT-6 Astra is
-# the flagship; the 5.6 family covers the tiers below it. Confirm before
-# trusting: this mapping is a starting point, not a measurement.
-TIER = {
-    "opus":   ("gpt-6-astra",   "high"),
-    "sonnet": ("gpt-5.6-sol",   "medium"),
-    "haiku":  ("gpt-5.6-luna",  "low"),
-    "fable":  ("gpt-6-astra",   "xhigh"),
-}
-
-CODEX_EFFORTS = {"low", "medium", "high", "xhigh"}
 
 # Plugins a project enables for itself and nobody installs for the user
 # (scripts/install-exclude.txt, which install.sh reads too): their skills and
@@ -60,18 +31,10 @@ EXCLUDE_PLUGINS = excluded_plugins(ROOT)
 def plugin_of(path):
     return path.relative_to(ROOT).parts[1]
 
-def neutralise(t):
-    for pat, rep in NEUTRALISE:
-        t = re.sub(pat, rep, t)
-    return t
-
 def split(raw):
     if not raw.startswith("---\n"): return {}, raw
     e = raw.find("\n---\n", 4)
     return (yaml.safe_load(raw[4:e+1]) or {}), raw[e+5:]
-
-def toml_escape(s):
-    return s.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
 
 skills_out = ROOT / "codex" / "skills"
 agents_out = ROOT / "codex" / "agents"
@@ -120,27 +83,21 @@ n_ag = 0
 for src in sorted(ROOT.glob("plugins/*/agents/*.md")):
     if plugin_of(src) in EXCLUDE_PLUGINS: continue
     fm, body = split(src.read_text())
+    package = src.parent.parent.resolve()
+    role = package / "io.github.kodflow" / "roles" / src.stem / "role.yaml"
+    if role.is_file():
+        if not role.resolve().is_relative_to(package):
+            raise ValueError(f"{role}: role leaves the package")
+        data = yaml.safe_load(role.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or data.get("id") != src.stem:
+            raise ValueError(f"{role}: role id must match {src.stem!r}")
+        instructions = (role.parent / data["instructions"]).resolve()
+        if not instructions.is_relative_to(role.parent.resolve()):
+            raise ValueError(f"{role}: instructions leave the role")
+        fm = role_agent_fields(data)
+        body = instructions.read_text(encoding="utf-8")
     name = fm.get("name", src.stem)
-    model, effort = TIER.get(str(fm.get("model", "sonnet")), TIER["sonnet"])
-    # The agent's own effort wins over the tier's default. Codex agent TOML
-    # takes low/medium/high/xhigh; `max` is model-dependent there, so it is
-    # written as the highest level every Codex model accepts.
-    if str(fm.get("effort", "")) in CODEX_EFFORTS:
-        effort = str(fm["effort"])
-    elif str(fm.get("effort", "")) == "max":
-        effort = "xhigh"
-    desc = " ".join(str(fm.get("description", "")).split())
-    instr = neutralise(body).strip()
-    (agents_out / f"{name}.toml").write_text(
-        # The marker is what lets the installer tell a file it produced from a
-        # file the user wrote, so it can retire the first and never the second.
-        f'# generated-from: plugins/*/agents/{src.name}\n'
-        f'name = "{name}"\n'
-        f'description = """{toml_escape(desc)}"""\n'
-        f'model = "{model}"\n'
-        f'model_reasoning_effort = "{effort}"\n\n'
-        f'developer_instructions = """\n{toml_escape(instr)}\n"""\n'
-    )
+    (agents_out / f"{name}.toml").write_text(render_agent(fm, body, src.name))
     written.add(agents_out / f"{name}.toml")
     n_ag += 1
 

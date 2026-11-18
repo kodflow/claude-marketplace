@@ -1,0 +1,22 @@
+apiVersion: io.github.kodflow/role/v1
+id: engine-specialist-threejs
+description: 'three.js r186 animation engineering: SkinnedMesh, Skeleton and Bone, world transforms,
+  AnimationMixer time control, GLTFLoader and GLTFExporter, procedural rigs, headless sampling
+  in Node, and the project adapter (clips, sampleWorld) behind the plugin''s three.js sampler.
+  Called by the kodflow-gamedev skills.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: opus
+  effort: medium
+  color: purple

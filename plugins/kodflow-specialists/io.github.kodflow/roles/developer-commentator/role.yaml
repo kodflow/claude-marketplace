@@ -1,0 +1,22 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-commentator
+description: Comment audit orchestrator — dispatches Haiku workers per file so comments explain
+  WHY not WHAT, functions carry docstrings and language conventions hold. Use when comments
+  or docstrings must be audited across a project or directory, not a single file.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+  - agents.delegate
+modelClass: standard
+inputSchema: ./input.schema.json
+outputSchema: ./output.schema.json
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, Agent, TaskCreate, TaskUpdate, TaskList, WebFetch, mcp__context7__*
+  model: sonnet
+  effort: medium
+  color: blue
