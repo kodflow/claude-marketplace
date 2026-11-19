@@ -35,12 +35,19 @@ jobs:
       - name: Manifests parse and reference real paths
         run: |
           python3 - <<'PY'
-          import json, pathlib, sys
+          import json, pathlib, re, sys
           root = pathlib.Path(".")
           mk = json.loads((root/".claude-plugin/marketplace.json").read_text())
           bad = []
           for p in mk["plugins"]:
               source = p["source"]
+              if isinstance(source, dict) and source.get("source") == "url":
+                  # A pinned external entry (catalog externals[]): opt-in only.
+                  if (not source.get("url", "").startswith("https://")
+                          or not re.fullmatch(r"[0-9a-f]{40}", source.get("sha", ""))
+                          or p.get("installByDefault") is not False):
+                      bad.append(f"{p['name']}: external source must be https, pinned by sha, installByDefault false")
+                  continue
               if not isinstance(source, str) or not source.startswith("./"):
                   bad.append(f"{p['name']}: source must resolve inside the marketplace checkout")
                   continue

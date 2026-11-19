@@ -35,7 +35,7 @@ def fixture_catalog(root: Path, *names: str) -> Catalog:
         "repository": "https://example.invalid/repo.git",
         "owner": {"name": "fixture", "url": "https://example.invalid"},
         "plugins": [
-            {"name": name, "path": f"plugins/{name}", "description": name, "category": "test"}
+            {"name": name, "path": f"plugins/{name}", "category": "test"}
             for name in names
         ],
     })
@@ -262,7 +262,7 @@ class PluginValidationTests(unittest.TestCase):
                     "targets": {},
                 }
                 (package / "plugin.json").write_text(json.dumps(manifest(name, {"extensions": {"io.github.kodflow": extension}})))
-                entries.append({"name": name, "path": f"plugins/{name}", "description": name, "category": "test"})
+                entries.append({"name": name, "path": f"plugins/{name}", "category": "test"})
             data = {
                 "$schema": "../schemas/kodflow-catalog-v1.schema.json",
                 "schemaVersion": 1,

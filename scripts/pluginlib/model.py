@@ -135,6 +135,12 @@ class Catalog:
         value = self.data.get("plugins", [])
         return value if isinstance(value, list) else []
 
+    @property
+    def externals(self) -> list[dict[str, Any]]:
+        """Third-party entries pinned by commit; never loaded as packages."""
+        value = self.data.get("externals", [])
+        return [entry for entry in value if isinstance(entry, dict)] if isinstance(value, list) else []
+
     def packages(self) -> list[PluginPackage]:
         return [PluginPackage.load(self.package_root(entry)) for entry in self.plugins]
 

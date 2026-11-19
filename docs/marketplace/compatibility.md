@@ -48,6 +48,21 @@ python3 scripts/stamp-versions.py --check
 Run `build` without `--check` to refresh committed host marketplaces and write
 Perplexity archives under ignored `dist/perplexity/`.
 
+Each package's root `plugin.json` is its only hand-edited manifest. `build`
+generates `.claude-plugin/plugin.json` from it, adding the Claude-only fields of
+`extensions."io.github.kodflow".targets.claude.manifest` (such as `types` and
+`userConfig`) and `engines.claude-code` when `targets.claude.minimumVersion` is
+2.1.323 or later. The overlay cannot set `name`, `version`, `description` or
+`engines`. `stamp-versions.py` writes only the root manifest, so run it first,
+then `build`.
+
+`catalog/catalog.json` lists third-party plugins under `externals[]`, each pinned
+to an HTTPS URL and a 40-character commit. Only the Claude marketplace lists
+them, with `installByDefault: false`; they are never packaged, stamped,
+inventoried or released. `pluginctl.py bump-external <name> [--sha X]` moves a
+pin, refuses an upstream version that goes down (exit 4) and exits 3 when the
+upstream content changed under an unchanged version.
+
 Run `roles` and `workflows` to refresh their generated files and ownership
 inventories under `catalog/`. Their `--check` mode reports drift and obsolete
 owned files. Write mode can retire previously generated files using the

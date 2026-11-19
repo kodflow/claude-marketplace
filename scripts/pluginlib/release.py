@@ -58,7 +58,10 @@ def _package(files: dict, package: PluginPackage, paths: tuple[str, ...]) -> Non
 
 
 def _profile_catalog(source: dict, included: set[str]) -> bytes:
-    return _bytes({**source, "plugins": [entry for entry in source["plugins"] if entry["name"] in included]})
+    # Pinned third-party entries are a Claude marketplace concern only; no
+    # release profile ships or describes them.
+    kept = {key: value for key, value in source.items() if key != "externals"}
+    return _bytes({**kept, "plugins": [entry for entry in source["plugins"] if entry["name"] in included]})
 
 
 def _role_archives(root: Path, packages: list[PluginPackage], files: dict) -> None:

@@ -4,11 +4,12 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, redirect_stdout
 import json
 import os
 from pathlib import Path
 import stat
+import sys
 import tempfile
 
 from pluginlib.adapters import (
@@ -18,7 +19,9 @@ from pluginlib.adapters import (
     render_openai_marketplace,
     validate_archive,
 )
+from pluginlib.externals import BumpError, bump_external
 from pluginlib.inventory import build_inventory, canonical_json
+from pluginlib.manifest import CLAUDE_MANIFEST, render_claude_manifest
 from pluginlib.model import Catalog, PluginPackage, TARGETS, ValidationIssue
 from pluginlib.roles import build_role_artifacts, compile_roles
 from pluginlib.validate import MODES, validate_catalog_packages, validate_package, validate_plugin
@@ -148,12 +151,14 @@ def _print_issues(issues: list[ValidationIssue]) -> None:
         print(f"{issue.severity}: {issue.code}: {issue.path}: {issue.message}")
 
 
-def _catalog_packages() -> tuple[Catalog | None, list[PluginPackage], list[ValidationIssue]]:
+def _catalog_packages(
+    mode: str = "publisher-strict",
+) -> tuple[Catalog | None, list[PluginPackage], list[ValidationIssue]]:
     try:
         catalog = _catalog()
     except (OSError, ValueError) as error:
         return None, [], [ValidationIssue("error", "catalog-manifest", str(CATALOG_PATH), str(error))]
-    packages, issues = validate_catalog_packages(catalog, SCHEMAS)
+    packages, issues = validate_catalog_packages(catalog, SCHEMAS, mode)
     return catalog, packages, issues
 
 
@@ -173,7 +178,7 @@ def command_validate(args: argparse.Namespace) -> int:
     if args.plugin_data_root is not None and (args.all or args.fixtures or len(args.paths) != 1):
         raise SystemExit("--plugin-data-root requires one explicit package path")
     if args.all:
-        _, packages, issues = _catalog_packages()
+        _, packages, issues = _catalog_packages(args.mode)
         for package in packages:
             issues.extend(validate_package(package, SCHEMAS, args.mode))
     else:
@@ -258,6 +263,11 @@ def command_build(args: argparse.Namespace) -> int:
         outputs[ROOT / ".claude-plugin/marketplace.json"] = canonical_json(
             render_claude_marketplace(catalog, packages),
         ).encode("utf-8")
+        # The Claude manifest is generated only here, from the root manifest and
+        # its claude overlay; run scripts/stamp-versions.py first, then build.
+        for package in packages:
+            if package.target("claude").get("enabled") is True:
+                outputs[package.root / CLAUDE_MANIFEST] = render_claude_manifest(package.manifest)
     if "openai" in targets:
         outputs[ROOT / ".agents/plugins/marketplace.json"] = canonical_json(
             render_openai_marketplace(catalog, packages),
@@ -388,6 +398,22 @@ def command_workflows(args: argparse.Namespace) -> int:
     return _compiled("workflows", compile_projections(ROOT), {}, args.check)
 
 
+def command_bump_external(args: argparse.Namespace) -> int:
+    try:
+        result = bump_external(CATALOG_PATH, args.name, args.sha)
+    except BumpError as error:
+        print(canonical_json(error.report).rstrip())
+        return error.exit_code
+    print(canonical_json(result.report).rstrip())
+    if result.changed:
+        # Keep stdout to the JSON report; the build log goes to stderr.
+        with redirect_stdout(sys.stderr):
+            status = command_build(argparse.Namespace(targets="all", check=False))
+        if status:
+            return status
+    return result.exit_code
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser()
     commands = root.add_subparsers(dest="command", required=True)
@@ -418,6 +444,13 @@ def parser() -> argparse.ArgumentParser:
     workflows = commands.add_parser("workflows", help="compile and verify host delegation instructions")
     workflows.add_argument("--check", action="store_true")
     workflows.set_defaults(function=command_workflows)
+    bump = commands.add_parser(
+        "bump-external",
+        help="pin an external plugin to a new upstream commit (exit 3: content changed at an equal version)",
+    )
+    bump.add_argument("name")
+    bump.add_argument("--sha", help="40-character commit to pin; default: the upstream HEAD")
+    bump.set_defaults(function=command_bump_external)
     return root
 
 

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "overlay-version",
+  "version": "0.0.0",
+  "description": "Fixture whose Claude overlay redefines a derived field.",
+  "extensions": {
+    "io.github.kodflow": {
+      "schemaVersion": 1,
+      "installByDefault": false,
+      "scope": "user",
+      "dependencies": [],
+      "capabilities": {},
+      "targets": {
+        "claude": {
+          "enabled": true,
+          "profile": "native",
+          "manifest": {
+            "version": "9.9.9",
+            "types": "./types/index.d.ts"
+          }
+        }
+      }
+    }
+  }
+}

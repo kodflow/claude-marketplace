@@ -59,9 +59,28 @@ class PluginAdapterTests(unittest.TestCase):
 
     def test_claude_sources_inherit_the_marketplace_revision(self) -> None:
         entries = render_claude_marketplace(self.catalog)["plugins"]
-        self.assertTrue(entries)
-        for entry in entries:
+        local = [entry for entry in entries if isinstance(entry["source"], str)]
+        self.assertEqual(len(self.catalog.plugins), len(local))
+        for entry in local:
             self.assertEqual(f"./plugins/{entry['name']}", entry["source"])
+
+    def test_claude_marketplace_descriptions_come_from_the_root_manifest(self) -> None:
+        entries = {entry["name"]: entry for entry in render_claude_marketplace(self.catalog)["plugins"]}
+        for package in self.catalog.packages():
+            self.assertEqual(package.manifest["description"], entries[package.name]["description"])
+        self.assertNotIn("description", self.catalog.plugins[0])
+
+    def test_externals_render_only_into_the_claude_marketplace(self) -> None:
+        externals = {entry["name"]: entry for entry in self.catalog.externals}
+        self.assertIn("coderabbit", externals)
+        claude = {entry["name"]: entry for entry in render_claude_marketplace(self.catalog)["plugins"]}
+        entry = claude["coderabbit"]
+        source = externals["coderabbit"]["source"]
+        self.assertEqual({"source": "url", "url": source["url"], "sha": source["sha"]}, entry["source"])
+        self.assertIs(False, entry["installByDefault"])
+        openai = {entry["name"] for entry in render_openai_marketplace(self.catalog)["plugins"]}
+        self.assertNotIn("coderabbit", openai)
+        self.assertNotIn("coderabbit", {package.name for package in self.catalog.packages()})
 
     def test_declined_and_unverified_openai_capabilities_are_never_equivalent(self) -> None:
         package = self.catalog.packages()[0]

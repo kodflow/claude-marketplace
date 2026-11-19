@@ -12,7 +12,7 @@
         "name": "kodflow"
       },
       "category": "workflow",
-      "description": "Tracked research, planning, delivery, and handoff workflows.",
+      "description": "The work loop: open a tracked piece of work, research it, plan it, argue the plan, turn it into an executable contract, ship it. Each skill hands the next exactly what it needs, and every step leaves a trail the next session can read.",
       "name": "kodflow-workflow",
       "source": "./plugins/kodflow-workflow"
     },
@@ -21,7 +21,7 @@
         "name": "kodflow"
       },
       "category": "review",
-      "description": "Evidence-bound review, debugging, linting, and architectural decisions.",
+      "description": "Evidence-bound review and debugging. Findings cite real code and a counterexample; deterministic scanners run for real and their exit codes populate the report; an external non-LLM verifier can invalidate the whole run. Root-cause-first debugging refuses a fix nobody proved.",
       "name": "kodflow-review",
       "source": "./plugins/kodflow-review"
     },
@@ -30,7 +30,7 @@
         "name": "kodflow"
       },
       "category": "devops",
-      "description": "Infrastructure work, environment health, usage, and template updates.",
+      "description": "Infrastructure, environment health and template sync — Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
       "name": "kodflow-devops",
       "source": "./plugins/kodflow-devops"
     },
@@ -39,7 +39,7 @@
         "name": "kodflow"
       },
       "category": "devops",
-      "description": "Shell integration, session selection, and local housekeeping.",
+      "description": "The shell side of the harness: super-claude on PATH instead of an alias, a session picker on TAB that lists only conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell.",
       "name": "kodflow-shell",
       "source": "./plugins/kodflow-shell"
     },
@@ -48,7 +48,7 @@
         "name": "kodflow"
       },
       "category": "agents",
-      "description": "Language, platform, security, and concern-specific agents.",
+      "description": "Language, platform and concern specialists that routing dispatches to. Each verifies an API, a default, a limit or a deprecation against documentation before asserting it, returns what it consulted and what it could not confirm, and tries to break its own finding before reporting it.",
       "name": "kodflow-specialists",
       "source": "./plugins/kodflow-specialists"
     },
@@ -57,7 +57,7 @@
         "name": "kodflow"
       },
       "category": "hooks",
-      "description": "Claude lifecycle hooks, guards, context loading, and structured logging.",
+      "description": "The lifecycle machinery the other plugins assume: shell-output compression that never rewrites a read whose bytes matter, a git guard, a delegation gate (code in a git repository is produced by subagents, the main thread reviews and merges), session context, a formatter, a turn-end quality gate, one structured log, the state of the project documents, a journal of refusals, and the session task list as five tools served by a mod (function hooks, Claude Code 2.1.293 or later) that keeps each agent's tasks apart for the status line. One script per event (16 events, 5 scripts), each a fixed sequence — gate, block, transform, observe — because hooks on the same event run in parallel and only a single script can order them. Every path that is not a deliberate block exits 0.",
       "name": "kodflow-hooks",
       "source": "./plugins/kodflow-hooks"
     },
@@ -66,7 +66,7 @@
         "name": "kodflow"
       },
       "category": "hooks",
-      "description": "Claude task, refusal, document, and hunt heads-up display.",
+      "description": "Optional heads-up display beside the status line, as a mod (function hooks, Claude Code 2.1.293 or later): a Tasks pane with the open epics of kodflow-hooks' task list as a tree (subtasks, blockers, the critical path, the worker, model and effort on each task, the time since it last moved, a silent flag, the tasks waiting on the person) or as a graph by state, driven by keys and clicks, a clicked row or tab never moving from under the pointer; the only pane, so always the first tab and the one shown, its title counting the tasks left (the subagents are Claude Code's own list under the prompt); toasts for a task done, blocked or gone silent; a few words of each reply drawn in colour where the model marks them ({{r:…}} red, {{o:…}} orange, {{v:…}} green, {{p:…}} pink), the convention given in one system prompt section. Two more views beside the tree and the graph: « Refus », what kodflow-hooks refused (blocks.jsonl), newest first, the counts of the last hour and of the session, and a rule the person confirms with a click added to the project's .claude/settings.local.json; « Documents », the project's documents (docs.json) present, missing or ignored, a click ignoring or bringing one back in docs/manifest.json, « Créer » drafting the docs prompt in the prompt box, never sent. A last one, « Chasse », only while /hunt lists a run: each hunt's state, counter, pass, heavy queue, tip, Codex, pending decisions and the events since the view was last left, « figée » or « orpheline probable » when its beat is old, « reprendre » drafting /hunt --resume, never sent. No tool, no refusal; KODFLOW_COLORS=off turns off the colours and the section.",
       "name": "kodflow-hud",
       "source": "./plugins/kodflow-hud"
     },
@@ -75,7 +75,7 @@
         "name": "kodflow"
       },
       "category": "hooks",
-      "description": "Claude heads-up display for ktn-linter findings.",
+      "description": "ktn-linter's findings beside the prompt, as a mod (function hooks, Claude Code 2.1.299 or later). It completes the hooks ktn-linter installs and replaces none: they keep delivering the findings to the model, this mod only shows them. Active in a Go project only (the same predicate as ktn-linter's own resolver); inert where nothing draws (-p, the Agent SDK, Kepler).",
       "name": "kodflow-ktn",
       "source": "./plugins/kodflow-ktn"
     },
@@ -84,9 +84,20 @@
         "name": "kodflow"
       },
       "category": "agents",
-      "description": "Sourced combat animation, rig, reference, and asset workflows.",
+      "description": "Combat animation that is anatomically and martially right, for game projects that enable it. /move briefs a panel (director, anatomy, six martial areas, animation craft, rig, imagery, Godot and three.js) and turns its sourced proposals into measurable constraints; /anim-review measures a sampled clip against them and asks the owner's verdict; /anim-feedback records that verdict as an ADR that every later run reads first; /reference fetches licensed reference images; /meshy generates characters, weapons and props with Meshy, fetches them with their licence and judges them against the rig. Enabled per project, never installed by the user installer.",
       "name": "kodflow-gamedev",
       "source": "./plugins/kodflow-gamedev"
+    },
+    {
+      "category": "review",
+      "description": "CodeRabbit review and autofix skills with its hosted MCP server (OAuth sign-in), pinned to an upstream commit. Opt-in: not part of the default installation.",
+      "installByDefault": false,
+      "name": "coderabbit",
+      "source": {
+        "sha": "d8e182b7e7c5128e354fd7ff335286cf157cb500",
+        "source": "url",
+        "url": "https://github.com/coderabbitai/skills.git"
+      }
     }
   ]
 }

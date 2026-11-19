@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .manifest import canonical_json
 from .model import EXTENSION_NAMESPACE
 from .sources import SourceFile, source_files
 
@@ -76,7 +77,3 @@ def build_inventory(repo_root: Path) -> dict[str, Any]:
         totals["hookBundles"] += int(hook_bundle)
         totals["files"] += len(files)
     return {"schemaVersion": 1, "plugins": plugins, "totals": totals}
-
-
-def canonical_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"

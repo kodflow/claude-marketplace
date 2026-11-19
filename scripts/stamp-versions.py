@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Stamp portable and legacy manifests from a cycle-free content digest.
+"""Stamp the root manifest of each plugin from a cycle-free content digest.
 
 The digest covers canonical plugin sources, including untracked files during a
-build, but excludes host projections and distribution output. Both manifest
-versions are removed before hashing, so one stamp followed by repeated checks
-is stable.
+build, but excludes host projections and distribution output. The manifest
+version is removed before hashing, so one stamp followed by repeated checks is
+stable.
+
+Only the root plugin.json is written. The Claude manifest
+(.claude-plugin/plugin.json) is a projection of it: run this script first, then
+`scripts/pluginctl.py build`. `--check` also reports a Claude manifest that is
+not the projection of the stamped root.
 """
 
 from __future__ import annotations
@@ -16,11 +21,12 @@ import os
 from pathlib import Path
 import sys
 
+from pluginlib.manifest import CLAUDE_MANIFEST, render_claude_manifest
 from pluginlib.sources import source_files, trust_executable_mode
 
 
 EXCLUDED_PARTS = {".claude-plugin", ".codex-plugin", "dist", "__pycache__"}
-MANIFESTS = ("plugin.json", ".claude-plugin/plugin.json")
+MANIFESTS = ("plugin.json",)
 
 
 def _canonical_bytes(data: bytes, relative: str) -> bytes:
@@ -76,29 +82,43 @@ def main() -> int:
     args = arguments.parse_args()
     root = args.root.resolve()
     stale: list[str] = []
+    projections: list[str] = []
     for directory in sorted((root / "plugins").iterdir()):
         if directory.is_symlink() or not directory.is_dir() or not (directory / "plugin.json").is_file():
             continue
-        manifests = [directory / manifest for manifest in MANIFESTS]
-        for path in manifests:
-            if path.is_symlink() or path.parent.is_symlink():
-                print(f"cannot stamp linked manifest: {path.relative_to(root)}", file=sys.stderr)
-                return 1
+        path = directory / "plugin.json"
+        claude = directory / CLAUDE_MANIFEST
+        if any(item.is_symlink() for item in (path, path.parent, claude, claude.parent)):
+            print(f"cannot stamp linked manifest: {path.relative_to(root)}", file=sys.stderr)
+            return 1
         version = compute(root, directory.name)
-        for path in manifests:
-            if not path.is_file():
-                continue
-            current = json.loads(path.read_text(encoding="utf-8")).get("version")
-            if current == version:
-                continue
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        current = manifest.get("version")
+        if current != version:
             stale.append(f"{path.relative_to(root)}: {current} -> {version}")
             if not args.check:
                 path.write_bytes(_render(path, version).encode("utf-8"))
+        if claude.is_file():
+            try:
+                expected = render_claude_manifest({**manifest, "version": version})
+            except ValueError as error:
+                print(f"invalid Claude overlay in {path.relative_to(root)}: {error}", file=sys.stderr)
+                return 1
+            # A CRLF checkout of the generated file is still the projection.
+            if claude.read_bytes().replace(b"\r\n", b"\n") != expected:
+                projections.append(claude.relative_to(root).as_posix())
     for item in stale:
         print(("stale " if args.check else "stamped ") + item)
-    if args.check and stale:
-        print("run scripts/stamp-versions.py and commit the result", file=sys.stderr)
-    return int(args.check and bool(stale))
+    for item in projections:
+        print(f"{'stale' if args.check else 'regenerate'} projection {item}")
+    if args.check and (stale or projections):
+        print(
+            "run scripts/stamp-versions.py, then scripts/pluginctl.py build, and commit the result",
+            file=sys.stderr,
+        )
+    elif projections:
+        print("now run scripts/pluginctl.py build to regenerate the Claude manifests", file=sys.stderr)
+    return int(args.check and bool(stale or projections))
 
 
 if __name__ == "__main__":
