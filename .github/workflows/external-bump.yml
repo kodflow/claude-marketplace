@@ -1,0 +1,198 @@
+# external-bump — move the pinned external entries (catalog externals[]) to
+# their upstream HEAD, weekly, by a draft pull request a person reviews.
+#
+# scripts/pluginctl.py bump-external rewrites the pin and rebuilds the
+# projections; it refuses a version that goes down (exit 4) and reports a
+# content change under an unchanged version (exit 3, the PR is marked). Here:
+# the upstream diff between the two commits goes into the PR body, a bump that
+# adds a hooks/ file or an executable file is refused (an issue says why), the
+# entry is installed from the bumped marketplace in a throwaway Claude profile,
+# then the PR is opened as a draft with GITHUB_TOKEN. Pull requests opened with
+# that token start no workflow, so ci.yml is dispatched on the branch. No PAT.
+# When Actions may not open pull requests in this repository, an issue carries
+# the same body instead.
+name: external-bump
+
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: external-bump
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  coderabbit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      issues: write
+    env:
+      NAME: coderabbit
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: '3.13' }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '24' }
+
+      - name: Bump the pin
+        id: bump
+        run: |
+          pip install --quiet uv==0.13.9
+          uv sync --project scripts --locked
+          set +e
+          uv run --project scripts --locked python scripts/pluginctl.py bump-external "$NAME" > report.json
+          rc=$?
+          set -e
+          cat report.json
+          case "$rc" in
+            0|3) ;;
+            *) echo "::error::bump-external refused (exit $rc)"; exit "$rc" ;;
+          esac
+          same=false
+          [ "$rc" -eq 3 ] && same=true
+          {
+            echo "status=$(jq -r .status report.json)"
+            echo "from=$(jq -r .from.sha report.json)"
+            echo "to=$(jq -r .to.sha report.json)"
+            echo "url=$(jq -r .url report.json)"
+            echo "same_version=$same"
+          } >> "$GITHUB_OUTPUT"
+          # Generated files ignored by git aside, the pin and its projections only.
+          rm -rf scripts/.venv
+          git status --short
+
+      - name: An open pull request for this commit already
+        id: open
+        if: steps.bump.outputs.status != 'unchanged'
+        env:
+          TO: ${{ steps.bump.outputs.to }}
+        run: |
+          branch="external-bump/${NAME}-${TO:0:12}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "a pull request for $branch is already open"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The upstream between the two pins: its diff --stat goes into the body;
+      # a new file under hooks/ or a new executable bit is refused.
+      - name: The upstream change, read
+        id: upstream
+        if: steps.bump.outputs.status != 'unchanged' && steps.open.outputs.exists == 'false'
+        env:
+          URL: ${{ steps.bump.outputs.url }}
+          FROM: ${{ steps.bump.outputs.from }}
+          TO: ${{ steps.bump.outputs.to }}
+        run: |
+          up="$RUNNER_TEMP/upstream"
+          git init --quiet "$up"
+          git -C "$up" fetch --quiet --no-tags "$URL" "$FROM" "$TO"
+          git -C "$up" diff --stat "$FROM" "$TO" > "$RUNNER_TEMP/stat.txt"
+          git -C "$up" diff --summary "$FROM" "$TO" > "$RUNNER_TEMP/summary.txt"
+          cat "$RUNNER_TEMP/stat.txt" "$RUNNER_TEMP/summary.txt"
+          git -C "$up" diff --name-only --diff-filter=A "$FROM" "$TO" \
+            | awk '/(^|\/)hooks\// { print "new hook file: " $0 }' > "$RUNNER_TEMP/refused.txt"
+          awk '/^ (create mode 100755|mode change [0-7]+ => 100755) / { sub(/^ /, ""); print "new executable: " $0 }' \
+            "$RUNNER_TEMP/summary.txt" >> "$RUNNER_TEMP/refused.txt"
+          if [ -s "$RUNNER_TEMP/refused.txt" ]; then
+            cat "$RUNNER_TEMP/refused.txt"
+            echo "refused=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "refused=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refused upstream change, said in an issue
+        if: steps.upstream.outputs.refused == 'true'
+        env:
+          FROM: ${{ steps.bump.outputs.from }}
+          TO: ${{ steps.bump.outputs.to }}
+        run: |
+          {
+            echo "The weekly bump of \`$NAME\` from \`$FROM\` to \`$TO\` was refused: the upstream adds hooks or executable files, which an external entry must not bring in unreviewed."
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/refused.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/issue.md"
+          gh issue create --title "external-bump: $NAME ${TO:0:12} refused" --body-file "$RUNNER_TEMP/issue.md"
+          echo "::error::bump refused, see the issue just opened"
+          exit 1
+
+      - name: Claude Code, at the version .github/versions.env pins
+        if: steps.upstream.outputs.refused == 'false'
+        run: |
+          . ./.github/versions.env
+          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          claude --version
+
+      - name: The bumped entry installs in a throwaway profile
+        if: steps.upstream.outputs.refused == 'false'
+        env:
+          BRANCH: ${{ steps.open.outputs.branch }}
+          TO: ${{ steps.bump.outputs.to }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --quiet -c "$BRANCH"
+          git add -A
+          git commit --quiet -m "chore(catalog): pin $NAME to ${TO:0:12}"
+          bash scripts/tests/smoke-plugins.sh --external "$NAME" --work "$RUNNER_TEMP/smoke" | tee "$RUNNER_TEMP/smoke.txt"
+
+      - name: A draft pull request, CI dispatched on its branch
+        if: steps.upstream.outputs.refused == 'false'
+        env:
+          BRANCH: ${{ steps.open.outputs.branch }}
+          FROM: ${{ steps.bump.outputs.from }}
+          TO: ${{ steps.bump.outputs.to }}
+          URL: ${{ steps.bump.outputs.url }}
+          SAME_VERSION: ${{ steps.bump.outputs.same_version }}
+        run: |
+          title="chore(catalog): pin $NAME to ${TO:0:12}"
+          [ "$SAME_VERSION" = true ] && title="$title [content changed, same version]"
+          {
+            if [ "$SAME_VERSION" = true ]; then
+              echo "> **The upstream content changed while its version did not.** Claude Code keys its cache on the version: review what changed before merging."
+              echo
+            fi
+            echo "Weekly bump of the pinned external entry \`$NAME\` ($URL)."
+            echo
+            echo '```json'
+            cat report.json
+            echo '```'
+            echo
+            echo "Upstream \`git diff --stat ${FROM:0:12}..${TO:0:12}\`:"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/stat.txt"
+            echo '```'
+            echo
+            echo "Installed from this branch in a throwaway Claude Code profile:"
+            echo
+            echo '```'
+            awk '/^(external|smoke):/' "$RUNNER_TEMP/smoke.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/body.md"
+          git push --quiet origin "$BRANCH"
+          if gh pr create --draft --base main --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md"; then
+            gh workflow run ci.yml --ref "$BRANCH"
+          else
+            echo "::warning::Actions may not open pull requests here: an issue carries the bump instead"
+            gh issue create --title "external-bump: $title" --body-file "$RUNNER_TEMP/body.md"
+            gh workflow run ci.yml --ref "$BRANCH"
+          fi

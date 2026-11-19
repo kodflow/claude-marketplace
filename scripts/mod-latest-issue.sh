@@ -52,7 +52,7 @@ trap 'rm -f "$body_file"' EXIT
   cat "$gap_file"
   echo '```'
   echo
-  echo "Advisory: no pull request and no release waits on this lane. Bump \`CLAUDE_CODE_VERSION\` of the \`mod-ktn\` job once the mod is fixed for it."
+  echo "Advisory: no pull request and no release waits on this lane. Raise \`targets.claude.minimumVersion\` of \`plugins/kodflow-ktn/plugin.json\` (the \`mod-ktn\` job's engine) once the mod is fixed for it."
   echo
   echo "<!-- mod-latest-signature: ${signature} -->"
 } > "$body_file"

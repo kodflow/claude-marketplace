@@ -12,7 +12,7 @@ if it does not load, nothing the model receives changes.
 
 It needs **Claude Code 2.1.299 or later** (the oldest version measured by the
 spike of [kodflow/ktn-linter#774](https://github.com/kodflow/ktn-linter/issues/774);
-CI pins 2.1.301). Below that it shows one status line and does nothing else.
+the CI tests that floor, read from `targets.claude.minimumVersion`). Below that it shows one status line and does nothing else.
 
 ## Install
 
@@ -260,8 +260,8 @@ release — the plugin is published here, by commit or by its own
 
 - **`mod-ktn` in `ci.yml`, blocking.** The pure modules first, before the
   engine is installed, so their verdict stands whatever happens to it; then
-  `make mod-check` on Claude Code pinned by `CLAUDE_CODE_VERSION`, bumped by
-  hand: the validator (one `session.start`, no tool hook, and the surface —
+  `make mod-check` on Claude Code at the plugin's floor, read from
+  `targets.claude.minimumVersion` of its `plugin.json`: the validator (one `session.start`, no tool hook, and the surface —
   the events hooked and the `$` calls made — equal to
   `tests/fixtures/surface.json`), then `claude plugin test`.
 - **The precondition.** `claude plugin test` exits 1 when hooks modules are

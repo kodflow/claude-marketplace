@@ -20,6 +20,7 @@ result can be attributed to one exact commit.
 git clone https://github.com/kodflow/claude-marketplace.git kodflow-canary
 cd kodflow-canary
 git checkout --detach "$KODFLOW_CANARY_SHA"
+bash scripts/tests/smoke-plugins.sh
 bash scripts/tests/smoke-hosts.sh --require-both
 canary_home=$(mktemp -d)
 (
@@ -31,7 +32,14 @@ canary_home=$(mktemp -d)
 ```
 
 Keep the checkout at the selected commit while using its local marketplace.
-The smoke test creates and disposes of its own empty profiles.
+Both smoke tests create and dispose of their own empty profiles.
+`smoke-plugins.sh` serves the checkout's HEAD as the Git marketplace a user
+adds (`url.insteadOf` in the throwaway HOME points the published URL at a bare
+copy, so nothing is fetched), runs `install.sh`, and compares every installed
+plugin with the tree byte for byte. `--migrate-from <sha>` installs at an older
+commit first and checks that `marketplace update` then `plugin update` land
+on HEAD. The `Marketplace canary` workflow runs all of this on a commit's
+release artifact before it reaches main.
 
 Codex accepts repeat registration from the same checkout. To use a different
 checkout with an existing Codex profile, inspect the current source with
@@ -42,8 +50,55 @@ canary profile does not require removing any existing registration.
 
 ## Rollback
 
-Use the previous validated checkout with `--checkout`, or use that checkout's
-`--legacy` path for Codex. Verify the restored skills and agents before
-removing the canary marketplace from the client. Existing flat files stay in
-place throughout the canary period, so do the first native install in an
-isolated profile to avoid duplicate skill names.
+### Claude Code
+
+Pin the marketplace to the previous commit, then update each plugin. Never run
+`claude plugin marketplace remove kodflow`: it uninstalls every kodflow plugin
+with it.
+
+```sh
+prev=<full sha of the previous good commit>
+claude plugin marketplace add "https://github.com/kodflow/claude-marketplace.git#$prev"
+claude plugin list                       # the installed kodflow plugins and their scope
+claude plugin update --scope user kodflow-hooks@kodflow   # once per plugin and scope
+```
+
+The `add` above writes `"ref": "<prev>"` into
+`extraKnownMarketplaces.kodflow.source` of `~/.claude/settings.json` and moves
+the marketplace clone to that commit; `plugin update` then reinstalls the
+plugin as it was there. A plugin installed at project or local scope is
+updated with that `--scope`. Restart open sessions to apply it.
+
+To move forward again, delete the `"ref"` key from
+`extraKnownMarketplaces.kodflow.source`, run
+`claude plugin marketplace add https://github.com/kodflow/claude-marketplace.git`,
+then the same `plugin update` commands.
+
+Checked with Claude Code 2.1.328 in a throwaway profile: a `"ref"` added to
+`settings.json` by hand is not picked up by `claude plugin marketplace update`
+(the CLI then reports the marketplace as not found until the next `add`), so
+the `add` is the step that applies it. The rollback only works between commits
+whose `marketplace.json` uses relative sources (`./plugins/...`, #168 and
+later): before, each plugin pointed at the repository's default branch, which
+a marketplace `ref` does not move.
+
+### Codex
+
+Before a native install, keep the flat installation it may retire:
+
+```sh
+tar -C "${CODEX_HOME:-$HOME/.codex}" -czf ~/.cache/kodflow-codex-$(date +%Y%m%d).tgz skills agents
+```
+
+To roll back, remove the native plugins, then restore that archive:
+
+```sh
+for p in $(codex plugin list --json | jq -r '.installed[] | select(.marketplaceName == "kodflow") | .pluginId'); do
+  codex plugin remove "$p"
+done
+tar -C "${CODEX_HOME:-$HOME/.codex}" -xzf ~/.cache/kodflow-codex-<date>.tgz
+```
+
+Or run `scripts/install.sh --codex --legacy` from the previous good checkout,
+which removes the native plugins and installs its flat skills and agents.
+Verify the restored skills and agents before removing anything else.

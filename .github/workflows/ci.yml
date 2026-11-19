@@ -1,12 +1,25 @@
 name: ci
-on: [push, pull_request]
+# Pushes to main and pull requests; workflow_dispatch so another workflow
+# (external-bump.yml) can run the checks on a branch it opened, without a PAT.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with: { python-version: '3.13' }
 
       # The repository is public. This is the gate, and it runs before anything
@@ -100,12 +113,6 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
-
-      - name: Install the pinned marketplace loaders
-        run: npm install -g @anthropic-ai/claude-code@2.1.325 @openai/codex@0.170.0
-
-      - name: Load the current checkout in both hosts
-        run: bash scripts/tests/smoke-hosts.sh --require-both
 
       # The mod lanes' wiring (kodflow/ktn-linter#788), read from the
       # workflows as YAML: every GATES target run by a blocking job here,
@@ -403,7 +410,7 @@ jobs:
   hooks-bash32:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: bash-guard corpus and hook suite under /bin/bash 3.2
         run: |
           /bin/bash --version | head -1
@@ -431,21 +438,29 @@ jobs:
       - name: kodflow-gamedev's suite under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-gamedev/tests/run-tests.sh
 
+  # The marketplace installed from Git in throwaway homes, Claude and Codex,
+  # at the versions .github/versions.env pins (plugin-smoke.yml).
+  plugin-smoke:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/plugin-smoke.yml
+
   # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
-  # are checked by the engine itself, at the version the README names as
-  # tested. Bumped by hand: a new release can move the plugin API.
+  # are checked by the engine itself, at the oldest version the mods support:
+  # targets.claude.minimumVersion of plugins/kodflow-hud (kodflow-hooks' mod
+  # has the same floor). Raising the floor there moves this job with it.
   mod:
     runs-on: ubuntu-latest
-    env:
-      CLAUDE_CODE_VERSION: 2.1.296
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
 
-      - name: Claude Code, pinned
+      - name: Claude Code, at the mods' floor
         run: |
-          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          floor=$(jq -er '.extensions["io.github.kodflow"].targets.claude.minimumVersion' plugins/kodflow-hud/plugin.json)
+          npm install -g "@anthropic-ai/claude-code@${floor}"
           claude --version
 
       # Every warning and every error fails the job, the missing-version one
@@ -538,19 +553,18 @@ jobs:
       - name: The conformance corpus, a real disk, several processes (node)
         run: node plugins/kodflow-hooks/tests/mod/run-node.ts
 
-  # kodflow-ktn: ktn-linter's mod. Its floor is Claude Code 2.1.299, the
-  # oldest version kodflow/ktn-linter#774 measured, above the engine the job
-  # above pins: it gets an engine of its own, pinned and bumped by hand.
+  # kodflow-ktn: ktn-linter's mod. Its floor is the oldest version
+  # kodflow/ktn-linter#774 measured, above the job above's: it gets an engine
+  # of its own, read from targets.claude.minimumVersion of plugins/kodflow-ktn.
   # Nothing here can redden ktn-linter's release: this repository publishes
   # the plugin, by marketplace commit and by its own kodflow-ktn/v* tags
   # (kodflow-ktn-release.yml), and ktn-linter does not depend on it. The
   # latest engine is mod-latest.yml's, scheduled and advisory (#788).
   mod-ktn:
     runs-on: ubuntu-latest
-    env:
-      CLAUDE_CODE_VERSION: 2.1.301
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
 
@@ -561,9 +575,10 @@ jobs:
       - name: kodflow-ktn's pure modules (node --test)
         run: make mod-pure
 
-      - name: Claude Code, pinned
+      - name: Claude Code, at kodflow-ktn's floor
         run: |
-          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          floor=$(jq -er '.extensions["io.github.kodflow"].targets.claude.minimumVersion' plugins/kodflow-ktn/plugin.json)
+          npm install -g "@anthropic-ai/claude-code@${floor}"
           claude --version
 
       # make mod-check (the gate GATES names): the pure modules again, the

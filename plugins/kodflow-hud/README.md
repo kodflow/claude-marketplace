@@ -30,7 +30,7 @@ not.
 
 It is a mod: a hooks module (`hooks/mod/register.tsx`) the engine loads from
 `hooks/hooks.json` → `modules`. It needs **Claude Code 2.1.293 or later**
-(tested on 2.1.296, the version the CI pins) and reads the task list that
+(the CI tests it on that floor, read from `targets.claude.minimumVersion`) and reads the task list that
 **kodflow-hooks** keeps; without kodflow-hooks the Tasks pane says there is no
 list.
 
