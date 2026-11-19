@@ -63,6 +63,22 @@ inventoried or released. `pluginctl.py bump-external <name> [--sha X]` moves a
 pin, refuses an upstream version that goes down (exit 4) and exits 3 when the
 upstream content changed under an unchanged version.
 
+The `coderabbit` external entry is opt-in. Its upstream plugin declares
+CodeRabbit's hosted MCP server, which signs in through OAuth in the browser
+the first time it is used: a default install would have put a sign-in prompt
+in front of every user, so `install.sh` never installs it. Install it with
+`claude plugin install coderabbit@kodflow`. The weekly `external-bump`
+workflow moves its pin by a draft pull request: it shows the upstream
+`git diff --stat`, refuses an upstream that adds hooks or executable files, and
+installs the entry in a throwaway profile first.
+
+Reported, not verified here: the OpenAI desktop app may read
+`.claude-plugin/marketplace.json` when it is given this repository, besides
+the `.agents/plugins/marketplace.json` that the Codex CLI reads. That file
+lists the Claude packages and the `coderabbit` external entry, which are not
+Codex plugins. If the app lists them, use the Codex CLI marketplace
+(`scripts/install.sh --codex`) instead.
+
 Run `roles` and `workflows` to refresh their generated files and ownership
 inventories under `catalog/`. Their `--check` mode reports drift and obsolete
 owned files. Write mode can retire previously generated files using the
