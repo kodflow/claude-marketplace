@@ -11,7 +11,7 @@ Preserve the existing skill's evidence and report format. Keep repository files 
 
 ## local-evidence
 
-Assign role `developer-executor-design` with `read` access. Prerequisites: none.
+Assign role `kodflow-specialists:developer-executor-design` with `read` access. Prerequisites: none.
 Timeout: 180 seconds. Retries: 1.
 
 Check project context and documentation available to this session. Record factual claims, source paths, dates and gaps. Treat unverified or stale sources as leads. Do not edit the knowledge base or repository.
@@ -69,7 +69,7 @@ Output JSON Schema:
 
 ## primary-sources
 
-Assign role `developer-executor-design` with `read` access. Prerequisites: none.
+Assign role `kodflow-specialists:developer-executor-design` with `read` access. Prerequisites: none.
 Timeout: 240 seconds. Retries: 1.
 
 Investigate the query using authoritative primary sources. Record source URLs, release or protocol versions and checked facts. Preserve source provenance and keep unsupported interpretations separate from verified claims.
@@ -127,7 +127,7 @@ Output JSON Schema:
 
 ## corroboration
 
-Assign role `developer-executor-correctness` with `read` access. Prerequisites: none.
+Assign role `kodflow-specialists:developer-executor-correctness` with `read` access. Prerequisites: none.
 Timeout: 240 seconds. Retries: 1.
 
 Independently verify the query's likely assumptions against primary sources. Focus on boundary conditions, disagreements, and platform or version drift. Return each claim with its evidence and whether the source was checked.
@@ -185,7 +185,7 @@ Output JSON Schema:
 
 ## validate-sources
 
-Assign role `developer-executor-correctness` with `read` access. Prerequisites: local-evidence, primary-sources, corroboration.
+Assign role `kodflow-specialists:developer-executor-correctness` with `read` access. Prerequisites: local-evidence, primary-sources, corroboration.
 Timeout: 180 seconds. Retries: 0.
 
 Cross-check the three results. Deduplicate by claim and source, reject unsupported evidence, resolve conflicting versions or mark the conflict explicitly, and retain only verified claims. Report unresolved gaps.
@@ -250,7 +250,7 @@ Output JSON Schema:
 
 ## synthesize
 
-Assign role `developer-orchestrator` with `read` access. Prerequisites: validate-sources.
+Assign role `kodflow-specialists:developer-orchestrator` with `read` access. Prerequisites: validate-sources.
 Timeout: 180 seconds. Retries: 0.
 
 Produce the existing /search Markdown context from verified claims. Separate assumptions and unresolved gaps, keep version and source attribution, and return the report to the operator for placement. Do not write local files.

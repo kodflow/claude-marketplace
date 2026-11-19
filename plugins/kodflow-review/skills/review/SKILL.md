@@ -134,7 +134,7 @@ $ARGUMENTS
 For defensive review of a local diff, use this package's generated workflow
 on [Claude](../../io.github.kodflow/projections/workflows/review-claude.md),
 [Codex](../../io.github.kodflow/projections/workflows/review-openai.md), or
-[Perplexity](workflow-perplexity.md) when the installation includes it. Check
+[Perplexity](../../io.github.kodflow/projections/workflows/review-perplexity.md) when the installation includes it. Check
 required capabilities before starting. The workflow orders specialist,
 consolidation, and verification work. The existing inspection scope,
 coverage manifest, deterministic tiers, and local report still apply. When

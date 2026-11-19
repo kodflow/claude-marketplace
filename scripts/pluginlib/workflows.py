@@ -250,6 +250,16 @@ def task_input(task: Task, inputs: dict, dependencies: dict) -> dict:
     return result
 
 
+# Claude Code addresses a plugin agent by its namespaced name; a bare name only
+# resolves when the agent is installed at user level, which a marketplace
+# install is not.
+CLAUDE_ROLE_NAMESPACE = "kodflow-specialists"
+
+
+def _role_name(role: str, host: str) -> str:
+    return f"{CLAUDE_ROLE_NAMESPACE}:{role}" if host == "claude" else role
+
+
 def render_projection(workflow: Workflow, host: str) -> bytes:
     """Produce instructions that preserve task order and capability gating."""
     name, delegation, available = HOSTS[host]
@@ -281,7 +291,7 @@ def render_projection(workflow: Workflow, host: str) -> bytes:
         lines += [
             f"## {task.id}",
             "",
-            f"Assign role `{task.role}` with `{task.access}` access. Prerequisites: "
+            f"Assign role `{_role_name(task.role, host)}` with `{task.access}` access. Prerequisites: "
             + (", ".join(task.needs) or "none") + ".",
             f"Timeout: {task.timeout} seconds. Retries: {task.retries}.",
             "",

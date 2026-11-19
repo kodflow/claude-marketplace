@@ -87,6 +87,12 @@ def build_archive(package: PluginPackage) -> bytes:
             if member in files:
                 raise ValueError(f"advisory workflow member already exists: {member}")
             files[member] = source
+            # The skill text links the projections by their package-relative
+            # path; carry them there so no link in the archive is dead.
+            for host in ("claude", "openai", "perplexity"):
+                companion = source.with_name(f"{workflow}-{host}.md")
+                if companion.is_file():
+                    files[f"io.github.kodflow/projections/workflows/{companion.name}"] = companion
         files["plugin.json"] = None
         total = len(manifest)
         for name, source in sorted(files.items()):

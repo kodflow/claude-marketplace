@@ -15,7 +15,8 @@ from .roles import perplexity_role_skills
 
 
 PROFILES = ("portable", "claude-full", "openai-local", "openai-public", "perplexity")
-PORTABLE = ("plugin.json", "mcp.json", "skills", "assets", "bin")
+# The projections travel with the skills: their SKILL.md links them by package path.
+PORTABLE = ("plugin.json", "mcp.json", "skills", "assets", "bin", "io.github.kodflow/projections")
 LOCAL_OPENAI = (*PORTABLE, ".codex-plugin", "hooks", "io.github.kodflow")
 
 
