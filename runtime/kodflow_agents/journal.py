@@ -143,10 +143,10 @@ class Journal:
         ).fetchone()
         if row is None:
             return True
-        return (
-            row[0] == route and row[1] is None and row[2] is not None
-            and json.loads(row[2])["state"] in {"failed", "cancelled"}
-        )
+        if row[0] != route or row[1] is not None or row[2] is None:
+            return False
+        event = json.loads(row[2])
+        return event["state"] in {"failed", "cancelled"} and event.get("retryable_on_expiry", True)
 
     @staticmethod
     def checkpoint_current(

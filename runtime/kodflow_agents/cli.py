@@ -229,11 +229,15 @@ def main(argv: list[str] | None = None) -> int:
         execution = state.get("execution")
         if not execution:
             raise ProviderError("this run has no pinned provider bindings")
-        if execution["live"] != args.live:
-            raise ProviderError("resume with the original live or offline execution mode")
         default = execution["default_provider"]
         if args.default_provider is not None and args.default_provider != default:
             raise ProviderError("the default provider differs from the pinned run binding")
+        if args.command == "reconcile" and args.abandon:
+            supervisor = Supervisor(store, journal, {}, default_provider=default)
+            _print(supervisor.abandon_submission(args.run_id, args.task_id))
+            return 0
+        if execution["live"] != args.live:
+            raise ProviderError("resume with the original live or offline execution mode")
         workflow = store.definition(args.run_id)
         providers = _provider_bindings(args.live, _workflow_providers(workflow, default))
         supervisor = Supervisor(store, journal, providers, default_provider=default)
@@ -253,10 +257,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "cancel":
             supervisor.cancel(args.run_id)
         elif args.command == "reconcile":
-            if args.abandon:
-                _print(supervisor.abandon_submission(args.run_id, args.task_id))
-            else:
-                _print(supervisor.reconcile(args.run_id, args.task_id, args.native_id))
+            _print(supervisor.reconcile(args.run_id, args.task_id, args.native_id))
         return 0
     except (ProviderError, ValueError, KeyError, sqlite3.Error, OSError) as error:
         print(f"kodflow-agents: {error}", file=sys.stderr)

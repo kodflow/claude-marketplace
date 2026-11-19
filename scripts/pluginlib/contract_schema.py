@@ -42,6 +42,14 @@ def _subschemas(value: dict) -> Iterator[object]:
             yield value[key]
 
 
+def _check_meta_schema(schema: dict | bool, target: str | None = None) -> None:
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError as error:
+        prefix = "" if target is None else f"invalid JSON Schema reference target {target!r}: "
+        raise ValueError(prefix + error.message) from error
+
+
 def check_contract_schema(schema: dict) -> None:
     """Inspect schema positions and follow fragment targets, even under annotations."""
     # Drop YAML alias identity so a visited node represents a unique location
@@ -52,14 +60,12 @@ def check_contract_schema(schema: dict) -> None:
             raise ValueError("object keys must be strings")
     except (TypeError, ValueError) as error:
         raise ValueError(f"schema must be JSON-compatible: {error}") from error
-    try:
-        Draft202012Validator.check_schema(document)
-    except SchemaError as error:
-        raise ValueError(error.message) from error
+    _check_meta_schema(document)
 
     root = DRAFT202012.create_resource(document)
     queue = [(document, LOCAL_REGISTRY.resolver_with_root(root))]
     visited = set()
+    checked_targets = {id(document)}
     while queue:
         node, resolver = queue.pop()
         if isinstance(node, bool):
@@ -80,6 +86,12 @@ def check_contract_schema(schema: dict) -> None:
                 raise ValueError(f"unresolved local JSON Schema reference: {fragment!r}") from error
             if not isinstance(target.contents, (dict, bool)):
                 raise ValueError(f"local JSON Schema reference is not a schema: {fragment!r}")
+            # Meta-schema validation of the root does not cover literals in
+            # annotations. A reference activates such a literal as a schema.
+            target_id = id(target.contents)
+            if target_id not in checked_targets:
+                _check_meta_schema(target.contents, fragment)
+                checked_targets.add(target_id)
             queue.append((target.contents, target.resolver))
 
         # Examples and other literal data are left alone unless a fragment

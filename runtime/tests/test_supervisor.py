@@ -539,6 +539,27 @@ def test_abandoned_outcome_preserves_no_retry_if_local_transition_interrupted(tm
     assert remote.submissions == 1
 
 
+def test_expired_persisted_continuation_failure_is_never_resubmitted(tmp_path):
+    now = [10.0]
+    remote = SlowProvider()
+    run, store, journal, _, _ = setup(tmp_path, remote, clock=lambda: now[0], retries=2)
+    attempt = store.advance(run, set())[0]
+    key = attempt.idempotency_key
+    route = "test-provider"
+    assert journal.reserve(key, route)
+    failure = Event("failed", Handle("paused"), reason="continuation rejected", retryable_on_expiry=False)
+    assert journal.save(key, route, failure, action="submit", revision=0)
+    now[0] = attempt.deadline + 1
+
+    reopened = StateStore(store.database, clock=lambda: now[0])
+    supervisor = Supervisor(reopened, Journal(store.database), {"test": Binding(remote, route)}, default_provider="test")
+    entry = supervisor.step(run)["tasks"]["demo"]
+    assert entry["status"] == "failed"
+    assert entry["error"] == "continuation rejected"
+    assert entry["attempt"] == 1
+    assert remote.submissions == 0
+
+
 def test_abandon_targets_active_compensation_and_preserves_original_result(tmp_path):
     from kodflow_agents.ports import ABANDONED_SUBMISSION
 

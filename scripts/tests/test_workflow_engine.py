@@ -119,6 +119,20 @@ class WorkflowCompilerTest(unittest.TestCase):
             with self.assertRaisesRegex(WorkflowError, "unresolved local JSON Schema reference"):
                 load_workflow(path)
 
+    def test_fragment_target_must_be_valid_under_the_meta_schema(self):
+        source = yaml.safe_load(TRANSACTION.read_text(encoding="utf-8"))
+        schema = {"type": "object", "default": {"type": 123}}
+        source["tasks"][0]["inputSchema"] = schema
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workflow.yaml"
+            path.write_text(yaml.safe_dump(source), encoding="utf-8")
+            self.assertEqual(load_workflow(path).tasks[0].input_schema["default"], {"type": 123})
+
+            schema["$ref"] = "#/default"
+            path.write_text(yaml.safe_dump(source), encoding="utf-8")
+            with self.assertRaisesRegex(WorkflowError, "invalid JSON Schema reference target '#/default'"):
+                load_workflow(path)
+
     def test_value_validation_rejects_unregistered_resources(self):
         with self.assertRaisesRegex(WorkflowError, "could not apply JSON Schema"):
             validate_value({"$ref": "urn:kodflow:test:unregistered"}, {}, "local registry")

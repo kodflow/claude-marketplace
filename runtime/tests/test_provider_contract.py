@@ -655,6 +655,7 @@ def test_anthropic_definite_continuation_failure_keeps_known_submission(monkeypa
     event = Anthropic(transport).submit(REQUEST)
     assert event.state == "failed" and event.handle.native_id == "paused"
     assert event.usage == {"input_tokens": 6} and len(transport.calls) == 2
+    assert not event.retryable_on_expiry
 
 
 def test_transport_classifies_connection_failure_only_before_wire_boundary_as_unsent(monkeypatch):
@@ -686,13 +687,15 @@ def test_transport_classifies_connection_failure_only_before_wire_boundary_as_un
         Transport().request("POST", "https://service.example", {}, timeout=5)
 
 
-def test_transport_decodes_only_bounded_http_error_classification(monkeypatch):
+@pytest.mark.parametrize("malformation", [None, "oversized", "too-deep"])
+def test_transport_decodes_only_bounded_http_error_classification(monkeypatch, malformation):
     from io import BytesIO
     from urllib.error import HTTPError
 
     headers = Message()
     headers["Content-Type"] = "application/json"
     headers["request-id"] = "req_test"
+
     class FixedLengthBody(BytesIO):
         def __init__(self, raw):
             super().__init__(raw)
@@ -706,7 +709,20 @@ def test_transport_decodes_only_bounded_http_error_classification(monkeypatch):
         def isclosed(self):
             return not self.length
 
-    body = FixedLengthBody(b'{"type":"error","error":{"type":"rate_limit_error","message":"do not log PRIVATE"}}')
+    if malformation == "oversized":
+        detail = b'"' + (b"x" * 16384) + b'"'
+    else:
+        detail = b'"do not log PRIVATE"'
+    body = FixedLengthBody(b'{"type":"error","error":{"type":"rate_limit_error","message":' + detail + b"}}")
+
+    if malformation == "too-deep":
+        from kodflow_agents import transport
+
+        def decoder_recursion_limit(_):
+            raise RecursionError("decoder depth exceeded")
+
+        decoder = SimpleNamespace(loads=decoder_recursion_limit, dumps=transport.json.dumps)
+        monkeypatch.setattr(transport, "json", decoder)
 
     class ResponseSocket:
         def settimeout(self, _):
@@ -723,6 +739,8 @@ def test_transport_decodes_only_bounded_http_error_classification(monkeypatch):
     monkeypatch.setattr("kodflow_agents.transport.build_opener", opener)
     with pytest.raises(ProviderHTTPError, match="429.*req_test") as failure:
         Transport().request("POST", "https://service.example", {}, timeout=5)
-    assert failure.value.error_type == "rate_limit_error"
+    assert failure.value.status == 429
+    assert failure.value.request_id == "req_test"
+    assert failure.value.error_type == (None if malformation else "rate_limit_error")
     assert body.closed
     assert "PRIVATE" not in str(failure.value)

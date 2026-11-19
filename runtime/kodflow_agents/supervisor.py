@@ -278,10 +278,11 @@ class Supervisor:
                     event, _ = self._poll(binding, key, event, revision, timeout=20)
                     if event.state not in TERMINAL:
                         raise ProviderError("expired provider attempt remains active and cannot be cancelled")
-            if event is not None and event.state in {"completed", ABANDONED_SUBMISSION}:
-                # A finished remote task and an operator-abandoned submission
-                # must not be repeated when their local workflow deadline passes.
-                message = event.reason if event.state == ABANDONED_SUBMISSION else "deadline exceeded"
+            if event is not None and (
+                event.state in {"completed", ABANDONED_SUBMISSION} or not event.retryable_on_expiry
+            ):
+                # A known spent request must not be repeated after the local deadline.
+                message = "deadline exceeded" if event.state == "completed" else event.reason
                 self.store.fail(
                     run_id, dispatch.task_id, dispatch.attempt, message,
                     retryable=False, compensation=dispatch.compensation,
@@ -363,29 +364,37 @@ class Supervisor:
             run_id, task_id, attempt, payload, approved=approval, checkpoint_revision=checkpoint,
         )
 
-    def _recovery_entry(self, run_id: str, task_id: str) -> tuple[Binding, Json, bool]:
-        binding, entry = self._pending(run_id, task_id)
+    def _recovery_entry(self, state: Json, task_id: str) -> tuple[Json, bool]:
+        if task_id not in state["tasks"]:
+            raise ProviderError("unknown workflow task")
+        entry = state["tasks"][task_id]
         compensation = entry.get("compensation")
         if compensation and compensation["status"] in {"running", "waiting_input"}:
-            return binding, compensation, True
-        return binding, entry, False
+            return compensation, True
+        return entry, False
 
     def abandon_submission(self, run_id: str, task_id: str) -> Event:
         """Close an unconfirmed submit locally without retrying or claiming remote cancellation."""
-        self._verify_run(run_id)
-        binding, entry, compensation = self._recovery_entry(run_id, task_id)
+        state = self.store.snapshot(run_id)
+        entry, compensation = self._recovery_entry(state, task_id)
         logical_key = entry.get("idempotency_key")
         if not logical_key or entry["status"] != "running":
             raise ProviderError("task has no active submission to abandon")
+        execution = state.get("execution")
+        if execution is not None:
+            route = execution["task_routes"][task_id]["route"]
+        else:
+            # Preserve older, directly constructed workflows with no stored route.
+            route = self._binding(state["tasks"][task_id]["provider"]).route
         key = operation_key(logical_key, entry["attempt"])
-        event, action, revision = self.journal.read_revision(key, binding.route)
+        event, action, revision = self.journal.read_revision(key, route)
         if event is None and action in {"submit", "submit_unknown"}:
             self._require_submit_not_in_flight(entry, action)
             event = Event(
                 ABANDONED_SUBMISSION, Handle(""),
                 reason="operator abandoned the submission; remote outcome remains unknown",
             )
-            if not self.journal.save(key, binding.route, event, action=action, revision=revision):
+            if not self.journal.save(key, route, event, action=action, revision=revision):
                 raise ProviderError("provider submission changed before it could be abandoned")
         elif event is None or event.state != ABANDONED_SUBMISSION:
             raise ProviderError("task has no uncertain submission to abandon")
@@ -402,7 +411,9 @@ class Supervisor:
     def reconcile(self, run_id: str, task_id: str, native_id: str | None = None) -> Event:
         """Recover an interrupted operation by polling its known native handle."""
         self._verify_run(run_id)
-        binding, entry, compensation = self._recovery_entry(run_id, task_id)
+        state = self.store.snapshot(run_id)
+        entry, compensation = self._recovery_entry(state, task_id)
+        binding = self._binding(state["tasks"][task_id]["provider"])
         logical_key = entry.get("idempotency_key")
         if not logical_key:
             raise ProviderError("task has no provider attempt")

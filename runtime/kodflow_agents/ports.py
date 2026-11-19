@@ -90,6 +90,7 @@ class Event:
     artifacts_collected: bool = True
     poll_not_before: float | None = None
     prompt_url: str | None = None
+    retryable_on_expiry: bool = True
 
 
 class Provider:

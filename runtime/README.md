@@ -76,7 +76,8 @@ no repository-write capability.
   `reconcile RUN TASK --abandon` to close the uncertain attempt locally. If the
   worker disappeared during submission, wait until its attempt deadline before
   abandoning it. The command records the unknown remote outcome and disables
-  retries for that attempt. Remote processing and charges may still occur.
+  retries for that attempt. It uses the stored binding without credentials or
+  `--live`. Remote processing and charges may still occur.
 - For input, use `input RUN TASK --attempt N --checkpoint N --value JSON_OBJECT`.
   A2A accepts a `text` field. Computer accepts an `answers` object. Finish sign-ins
   and other URL-based prompts in the provider UI. The CLI reports Computer's

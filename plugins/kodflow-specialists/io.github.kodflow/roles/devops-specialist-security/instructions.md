@@ -151,6 +151,8 @@ syft image:tag -o json > sbom.json
 
 ### Secrets
 
+Use Gitleaks v8.19.0 or later for the `git` and `dir` subcommands.
+
 ```bash
 # Git history
 gitleaks git --redact --verbose .

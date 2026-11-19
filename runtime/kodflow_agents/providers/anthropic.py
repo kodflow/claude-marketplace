@@ -23,6 +23,11 @@ class Anthropic(Provider):
     def __init__(self, transport: Transport) -> None:
         self.transport = transport
 
+    @staticmethod
+    def _failed(handle: Handle, usage: dict[str, int], reason: str) -> Event:
+        # A returned Messages handle proves that the workflow request started.
+        return Event("failed", handle, usage=usage, reason=reason, retryable_on_expiry=False)
+
     def submit(self, request: Request) -> Event:
         messages = [{"role": "user", "content": request.prompt()}]
         body = {
@@ -51,11 +56,11 @@ class Anthropic(Provider):
                 rejection = f"Anthropic rejected the request: {error}"
                 if handle is None:
                     raise SubmissionRejected(rejection) from None
-                return Event("failed", handle, usage=usage, reason=rejection)
+                return self._failed(handle, usage, rejection)
             except NoSendError:
                 if handle is None:
                     raise
-                return Event("failed", handle, usage=usage, reason="Anthropic continuation was not sent")
+                return self._failed(handle, usage, "Anthropic continuation was not sent")
             identifier = reply.get("id")
             if not isinstance(identifier, str) or not identifier:
                 raise ProviderError("Anthropic did not return a message id")
@@ -76,7 +81,7 @@ class Anthropic(Provider):
                 continue
             if reason in {"end_turn", "stop_sequence"} and any(text):
                 return Event("completed", handle, text="\n".join(text), usage=usage)
-            return Event("failed", handle, usage=usage, reason="Anthropic did not complete a text response")
+            return self._failed(handle, usage, "Anthropic did not complete a text response")
         if handle is None:
             raise NoSendError("Anthropic request deadline exhausted before sending")
-        return Event("failed", handle, usage=usage, reason="Anthropic continuation budget exhausted")
+        return self._failed(handle, usage, "Anthropic continuation budget exhausted")

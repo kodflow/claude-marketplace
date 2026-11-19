@@ -333,7 +333,7 @@ class Transport:
     def _object(raw: bytes) -> Json:
         try:
             value = json.loads(raw)
-        except (UnicodeError, ValueError):
+        except (UnicodeError, ValueError, RecursionError):
             raise ProviderError("provider returned invalid JSON") from None
         if not isinstance(value, dict):
             raise ProviderError("provider returned a non-object JSON response")

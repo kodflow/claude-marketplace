@@ -2296,7 +2296,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/.claude-plugin/plugin.json",
-          "sha256": "fd7dc75eff40f601346389e4e52c805c06ecc3c2a83f4d6bb101a278a8551aaa"
+          "sha256": "3318d4fc44ff834b43d5ec92a2fbecb060ff2e4d8ccaf1402e464b7931f63142"
         },
         {
           "class": "host-extension",
@@ -2431,7 +2431,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/devops-specialist-security.md",
-          "sha256": "256fbadd2f8cf470be5199cdb1b9b1febf83336375093b9f2fa52cc5a320b3d2"
+          "sha256": "40129c81659672a18e6fe11fc07e4f7c5c9cf41d86da913bfba7eb9978c315e1"
         },
         {
           "class": "host-extension",
@@ -2741,7 +2741,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/devops-specialist-security/instructions.md",
-          "sha256": "b19bf048a2825b1198c02111477ce5fc5585303e7fd0738af93197a07cbb67bf"
+          "sha256": "3a2805d5aaa350509f6e477b832b1f3a28d68a9c3a85c468bec8295a0659c493"
         },
         {
           "class": "support",
@@ -2831,7 +2831,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-specialists/plugin.json",
-          "sha256": "390f81a898b676a12db8db81f90c5d6a08df80ec3fce7e458d517467aa95ca1d"
+          "sha256": "4abc5bd60ebdaa7f5e107860ef4389f386a0e809b53846f1ccb5b579cb640930"
         }
       ],
       "dependencies": [],
