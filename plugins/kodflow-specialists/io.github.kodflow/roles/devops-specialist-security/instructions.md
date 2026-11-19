@@ -152,8 +152,11 @@ syft image:tag -o json > sbom.json
 ### Secrets
 
 ```bash
-# Secret detection
-gitleaks detect --source . --redact --verbose
+# Git history
+gitleaks git --redact --verbose .
+
+# Working tree, including uncommitted and untracked files
+gitleaks dir --redact --verbose .
 ```
 
 ### Kubernetes

@@ -99,8 +99,19 @@ class Journal:
         if written != 1:
             raise ProviderError("provider checkpoint changed or an operation requires reconciliation")
 
-    def release_unsent(self, key: str, route: str, action: str, *, revision: int) -> None:
-        """Clear only a matching reservation whose provider confirms no send."""
+    def mark_submit_unknown(self, key: str, route: str, *, revision: int) -> None:
+        """Distinguish an observed ambiguous failure from a worker still submitting."""
+        with closing(self._connect()) as connection, connection:
+            written = connection.execute(
+                "UPDATE provider_operations SET action = 'submit_unknown' "
+                "WHERE id = ? AND route = ? AND revision = ? AND action = 'submit'",
+                (key, route, revision),
+            ).rowcount
+        if written != 1:
+            raise ProviderError("provider submission reservation changed before recording its unknown outcome")
+
+    def release_unprocessed(self, key: str, route: str, action: str, *, revision: int) -> None:
+        """Clear a matching reservation after a pre-send failure or proven rejection."""
         if action == "submit":
             query = "DELETE FROM provider_operations WHERE event IS NULL"
         else:
@@ -111,7 +122,7 @@ class Journal:
                 (key, route, action, revision),
             ).rowcount
         if written != 1:
-            raise ProviderError("provider operation changed before its unsent reservation could be released")
+            raise ProviderError("provider operation changed before its reservation could be released")
 
     def confirmed(
         self, key: str, route: str, action: str, *, revision: int, decision: bool | None = None,

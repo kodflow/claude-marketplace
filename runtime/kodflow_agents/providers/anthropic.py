@@ -2,10 +2,21 @@
 
 import time
 
-from ..ports import Event, Handle, NoSendError, Provider, ProviderError, Request
-from ..transport import Transport, credential, objects, token_usage
+from ..ports import Event, Handle, NoSendError, Provider, ProviderError, Request, SubmissionRejected
+from ..transport import ProviderHTTPError, Transport, credential, objects, token_usage
 
 _MAX_CONTINUATIONS = 3
+# Admission errors described by the Claude API contract. A bare HTTP status,
+# timeout or server error cannot establish that inference never started.
+_ADMISSION_ERRORS = {
+    400: "invalid_request_error",
+    401: "authentication_error",
+    402: "billing_error",
+    403: "permission_error",
+    404: "not_found_error",
+    413: "request_too_large",
+    429: "rate_limit_error",
+}
 
 
 class Anthropic(Provider):
@@ -29,10 +40,22 @@ class Anthropic(Provider):
             timeout = deadline - time.monotonic()
             if timeout <= 0:
                 break
-            reply = self.transport.request(
-                "POST", "https://api.anthropic.com/v1/messages",
-                {**body, "messages": list(messages)}, headers=headers, timeout=timeout,
-            ).body
+            try:
+                reply = self.transport.request(
+                    "POST", "https://api.anthropic.com/v1/messages",
+                    {**body, "messages": list(messages)}, headers=headers, timeout=timeout,
+                ).body
+            except ProviderHTTPError as error:
+                if not error.error_type or _ADMISSION_ERRORS.get(error.status) != error.error_type:
+                    raise
+                rejection = f"Anthropic rejected the request: {error}"
+                if handle is None:
+                    raise SubmissionRejected(rejection) from None
+                return Event("failed", handle, usage=usage, reason=rejection)
+            except NoSendError:
+                if handle is None:
+                    raise
+                return Event("failed", handle, usage=usage, reason="Anthropic continuation was not sent")
             identifier = reply.get("id")
             if not isinstance(identifier, str) or not identifier:
                 raise ProviderError("Anthropic did not return a message id")

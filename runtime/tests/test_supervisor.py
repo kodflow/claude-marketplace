@@ -461,3 +461,125 @@ def test_poll_eligibility_survives_restart_without_delaying_other_tasks(tmp_path
     assert state["status"] == "completed"
     assert state["tasks"]["slow"]["provider_prompt_url"] is None
     assert remote.resumes == 1
+
+
+def test_documented_rejection_releases_reservation_without_automatic_resubmit(tmp_path):
+    from kodflow_agents.ports import SubmissionRejected
+
+    class LimitedProvider(SlowProvider):
+        def submit(self, request):
+            if self.submissions == 0:
+                self.submissions += 1
+                raise SubmissionRejected("Anthropic rejected the request: provider returned HTTP 429")
+            return super().submit(request)
+
+    remote = LimitedProvider()
+    run, store, journal, _, supervisor = setup(tmp_path, remote)
+    with pytest.raises(SubmissionRejected, match="429"):
+        supervisor.step(run)
+    assert remote.submissions == 1
+    entry = store.snapshot(run)["tasks"]["demo"]
+    assert journal.read(entry["idempotency_key"], "test-provider") == (None, None)
+    assert supervisor.step(run)["tasks"]["demo"]["attempt"] == entry["attempt"] == 1
+    assert remote.submissions == 2
+
+
+def test_observed_ambiguous_attempt_can_be_abandoned_without_retry(tmp_path):
+    from kodflow_agents.ports import ABANDONED_SUBMISSION
+
+    remote = DroppedProvider()
+    run, store, journal, _, supervisor = setup(tmp_path, remote, retries=2)
+    with pytest.raises(ProviderError, match="submission outcome is unknown"):
+        supervisor.step(run)
+    key = store.snapshot(run)["tasks"]["demo"]["idempotency_key"]
+    assert journal.read(key, "test-provider") == (None, "submit_unknown")
+    abandoned = supervisor.abandon_submission(run, "demo")
+    assert abandoned.state == ABANDONED_SUBMISSION
+    assert abandoned.handle.native_id == ""
+    entry = supervisor.step(run)["tasks"]["demo"]
+    assert entry["status"] == "failed" and "remote outcome remains unknown" in entry["error"]
+    assert remote.submissions == 1 and not remote.cancellations
+
+
+def test_abandon_fences_crashed_submissions_after_deadline(tmp_path):
+    from kodflow_agents.ports import ABANDONED_SUBMISSION
+
+    now = [10.0]
+    run, store, journal, _, supervisor = setup(tmp_path, SlowProvider(), clock=lambda: now[0])
+    attempt = store.advance(run, set())[0]
+    key = attempt.idempotency_key
+    assert journal.reserve(key, "test-provider")
+    with pytest.raises(ProviderError, match="might still be in flight"):
+        supervisor.abandon_submission(run, "demo")
+    with pytest.raises(ProviderError, match="might still be in flight"):
+        supervisor.reconcile(run, "demo", "live-native-handle")
+    assert journal.read(key, "test-provider") == (None, "submit")
+
+    now[0] = attempt.deadline + 1
+    assert supervisor.abandon_submission(run, "demo").state == ABANDONED_SUBMISSION
+    assert not journal.save(key, "test-provider", Event("completed", Handle("late")), action="submit", revision=0)
+    assert store.snapshot(run)["tasks"]["demo"]["status"] == "failed"
+
+
+def test_abandoned_outcome_preserves_no_retry_if_local_transition_interrupted(tmp_path, monkeypatch):
+    now = [10.0]
+    remote = DroppedProvider()
+    run, store, _, _, supervisor = setup(tmp_path, remote, clock=lambda: now[0], retries=2)
+    with pytest.raises(ProviderError, match="submission outcome is unknown"):
+        supervisor.step(run)
+    with monkeypatch.context() as patch:
+        def interrupted(*args, **kwargs):
+            raise OSError("local transition interrupted")
+
+        patch.setattr(store, "fail", interrupted)
+        with pytest.raises(OSError, match="interrupted"):
+            supervisor.abandon_submission(run, "demo")
+    now[0] += 301
+    assert supervisor.step(run)["status"] == "failed"
+    assert remote.submissions == 1
+
+
+def test_abandon_targets_active_compensation_and_preserves_original_result(tmp_path):
+    from kodflow_agents.ports import ABANDONED_SUBMISSION
+
+    path = tmp_path / "compensation.yaml"
+    path.write_text("""apiVersion: io.github.kodflow/workflow/v1
+id: recovery
+description: Recover a provider submission during compensation.
+inputSchema: {type: object}
+tasks:
+  - id: stage
+    role: worker
+    access: write
+    ownedPaths: [approved.txt]
+    compensation: Undo staged write.
+    instructions: Stage the write.
+    inputSchema: {type: object}
+    outputSchema: {type: object}
+  - id: verify
+    role: reviewer
+    needs: [stage]
+    instructions: Verify.
+    inputSchema: {type: object}
+    outputSchema: {type: object}
+""", encoding="utf-8")
+    workflow = load_workflow(path)
+    database = tmp_path / "runs.sqlite"
+    store = StateStore(database)
+    journal = Journal(database)
+    supervisor = Supervisor(store, journal, {"test": Binding(SlowProvider(), "test-provider")}, default_provider="test")
+    run = store.create_run(workflow, {})
+    capabilities = {"repository.write"}
+    assert store.advance(run, capabilities)[0].task_id == "stage"
+    store.complete(run, "stage", 1, {"changed": True})
+    assert store.advance(run, capabilities)[0].task_id == "verify"
+    store.fail(run, "verify", 1, "verification failed", retryable=False)
+    compensation = store.advance(run, capabilities)[0]
+    assert compensation.compensation and compensation.task_id == "stage"
+    assert journal.reserve(compensation.idempotency_key, "test-provider")
+    journal.mark_submit_unknown(compensation.idempotency_key, "test-provider", revision=0)
+    assert supervisor.abandon_submission(run, "stage").state == ABANDONED_SUBMISSION
+    record = store.snapshot(run)["tasks"]["stage"]
+    assert record["result"] == {"changed": True} and record["status"] == "completed"
+    assert record["compensation"]["status"] == "failed"
+    assert "remote outcome remains unknown" in record["compensation"]["error"]

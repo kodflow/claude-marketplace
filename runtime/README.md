@@ -72,8 +72,11 @@ no repository-write capability.
   Native handles are persisted before workflow task results.
 - If a submission dropped its connection before the native handle was saved,
   use `reconcile RUN TASK --native-id ID` when the provider supports retrieving
-  that handle. A worker with a synchronous-only API might require operator
-  investigation instead. The runtime keeps an uncertain attempt visible.
+  that handle. When investigation cannot recover a handle, use
+  `reconcile RUN TASK --abandon` to close the uncertain attempt locally. If the
+  worker disappeared during submission, wait until its attempt deadline before
+  abandoning it. The command records the unknown remote outcome and disables
+  retries for that attempt. Remote processing and charges may still occur.
 - For input, use `input RUN TASK --attempt N --checkpoint N --value JSON_OBJECT`.
   A2A accepts a `text` field. Computer accepts an `answers` object. Finish sign-ins
   and other URL-based prompts in the provider UI. The CLI reports Computer's

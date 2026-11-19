@@ -7,21 +7,15 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 
-from jsonschema import Draft202012Validator, SchemaError
 import yaml
 
 from .codex_text import render_agent, role_agent_fields
+from .contract_schema import check_contract_schema, offline_validator
 
 
 ROLE_PATH = Path("io.github.kodflow/roles")
 ROLE_SCHEMA = "kodflow-role-v1.schema.json"
 ROLE_ID = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
-SCHEMA_MAPS = ("$defs", "definitions", "properties", "patternProperties", "dependentSchemas", "dependencies")
-SCHEMA_ARRAYS = ("allOf", "anyOf", "oneOf", "prefixItems")
-SCHEMA_CHILDREN = (
-    "additionalProperties", "contains", "contentSchema", "else", "if", "items", "not",
-    "propertyNames", "then", "unevaluatedItems", "unevaluatedProperties",
-)
 
 
 @dataclass(frozen=True)
@@ -113,31 +107,6 @@ def _role_file(root: Path, value: str) -> Path:
     return path
 
 
-def _check_schema_refs(value: object) -> None:
-    """Keep validation and task execution independent of remote schema retrieval."""
-    if not isinstance(value, dict):
-        return
-    for name in ("$ref", "$dynamicRef"):
-        if name in value:
-            target = value[name]
-            if not isinstance(target, str) or not target.startswith("#"):
-                raise ValueError(f"role schema reference must stay in its document: {target!r}")
-    # Traverse only subschema positions. The keys of a properties map and
-    # arbitrary example or default data do not have schema semantics.
-    for name in SCHEMA_MAPS:
-        children = value.get(name)
-        if isinstance(children, dict):
-            for child in children.values():
-                _check_schema_refs(child)
-    for name in SCHEMA_ARRAYS:
-        children = value.get(name)
-        if isinstance(children, list):
-            for child in children:
-                _check_schema_refs(child)
-    for name in SCHEMA_CHILDREN:
-        _check_schema_refs(value.get(name))
-
-
 def _contract(root: Path, value: str | dict, location: str) -> dict:
     if isinstance(value, str):
         path = _role_file(root, value)
@@ -147,18 +116,10 @@ def _contract(root: Path, value: str | dict, location: str) -> dict:
         document = value
     if not isinstance(document, dict):
         raise ValueError(f"{location} must contain a JSON Schema object")
-    # PyYAML can represent recursive aliases. Python's JSON reader also accepts
-    # non-finite numbers unless they are checked explicitly.
     try:
-        if json.loads(json.dumps(document, allow_nan=False)) != document:
-            raise ValueError("object keys must be strings")
-    except (TypeError, ValueError) as error:
-        raise ValueError(f"{location} must be JSON-compatible: {error}") from error
-    try:
-        Draft202012Validator.check_schema(document)
-    except SchemaError as error:
-        raise ValueError(f"{location}: {error.message}") from error
-    _check_schema_refs(document)
+        check_contract_schema(document)
+    except ValueError as error:
+        raise ValueError(f"{location}: {error}") from error
     return document
 
 
@@ -169,7 +130,7 @@ def load_roles(package_root: Path, schemas: Path) -> list[Role]:
     if not roles_root.exists() and not roles_root.is_symlink():
         return []
     roles_root = _inside(roles_root, root)
-    validator = Draft202012Validator(json.loads((schemas / ROLE_SCHEMA).read_text(encoding="utf-8")))
+    validator = offline_validator(json.loads((schemas / ROLE_SCHEMA).read_text(encoding="utf-8")))
     roles = []
     for source in sorted(roles_root.glob("*/role.yaml")):
         role_root = _inside(source.parent, roles_root)

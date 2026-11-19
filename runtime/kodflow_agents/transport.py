@@ -6,6 +6,7 @@ import http.client
 import json
 import os
 from queue import Empty, Queue
+import re
 import socket
 from threading import Lock, Thread, Timer
 import time
@@ -19,6 +20,7 @@ from .ports import Json, NoSendError, ProviderError
 
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 _READ_BYTES = 64 * 1024
+_ERROR_BYTES = 16 * 1024
 
 
 @dataclass(frozen=True)
@@ -35,12 +37,21 @@ class _ResponseReadError(ProviderError):
     """The provider's response body could not be read before the deadline."""
 
 
-class ProviderHTTPError(ProviderError):
-    """Status-based recovery is safe only for the protocols that define it."""
+class ProviderConnectionError(ProviderError):
+    """A connection failed after an application request could have been sent."""
 
-    def __init__(self, status: int) -> None:
+
+class ProviderHTTPError(ProviderError):
+    """An HTTP error response received from the provider or its gateway."""
+
+    def __init__(self, status: int, *, error_type: str | None = None, request_id: str | None = None) -> None:
         self.status = status
-        super().__init__(f"provider returned HTTP {status}")
+        self.error_type = error_type
+        self.request_id = request_id
+        message = f"provider returned HTTP {status}"
+        if request_id:
+            message += f" ({request_id})"
+        super().__init__(message)
 
 
 def credential(variable: str) -> str:
@@ -95,6 +106,7 @@ class _Deadline:
         self.expires = time.monotonic() + timeout
         self.lock = Lock()
         self.socket: socket.socket | None = None
+        self.aborted = False
         self.watchdog = Timer(timeout, self.interrupt)
         self.watchdog.daemon = True
 
@@ -113,16 +125,27 @@ class _Deadline:
 
     def attach(self, connection: socket.socket) -> None:
         with self.lock:
-            self.socket = connection
+            if self.aborted:
+                raise NoSendError("provider connection was interrupted before sending")
             connection.settimeout(self.remaining())
+            # Attach before urllib can send any application request. A timeout
+            # after this boundary cannot prove whether the provider received it.
+            self.socket = connection
 
-    def interrupt(self) -> None:
+    def interrupt(self) -> bool:
         with self.lock:
-            if self.socket is not None:
-                try:
-                    self.socket.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    pass
+            self.aborted = True
+            if self.socket is None:
+                return False
+            try:
+                self.socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            return True
+
+    def connected(self) -> bool:
+        with self.lock:
+            return self.socket is not None
 
     def arm_read(self) -> None:
         with self.lock:
@@ -141,12 +164,12 @@ class _DeadlineHandler(HTTPSHandler):
 
         class Connection(http.client.HTTPSConnection):
             def connect(self):
-                super().connect()
                 try:
+                    super().connect()
                     deadline.attach(self.sock)
-                except ProviderError:
+                except (OSError, http.client.HTTPException, ProviderError):
                     self.close()
-                    raise
+                    raise NoSendError("provider HTTPS connection failed before sending") from None
 
         return self.do_open(Connection, req, context=self._context)
 
@@ -154,11 +177,14 @@ class _DeadlineHandler(HTTPSHandler):
 class Transport:
     def _open(self, method: str, url: str, payload: Json | None, headers: Mapping[str, str], deadline: _Deadline):
         https_origin(url)
-        body = json.dumps(payload, allow_nan=False).encode() if payload is not None else None
-        request = Request(
-            url, data=body, method=method,
-            headers={"Content-Type": "application/json", "Accept": "application/json", **headers},
-        )
+        try:
+            body = json.dumps(payload, allow_nan=False).encode() if payload is not None else None
+            request = Request(
+                url, data=body, method=method,
+                headers={"Content-Type": "application/json", "Accept": "application/json", **headers},
+            )
+        except (TypeError, ValueError):
+            raise NoSendError("provider request could not be encoded before sending") from None
         opener = build_opener(_NoRedirect(), _DeadlineHandler(deadline))
         mailbox: Queue = Queue()
         handoff = Lock()
@@ -168,12 +194,14 @@ class Transport:
             try:
                 outcome = opener.open(request, timeout=deadline.remaining())
             except HTTPError as error:
-                error.close()
-                outcome = ProviderHTTPError(error.code)
+                outcome = self._http_error(error, deadline)
             except ProviderError as error:
-                outcome = error
+                outcome = error if deadline.connected() else NoSendError("provider connection failed before sending")
             except (URLError, OSError, ValueError, http.client.HTTPException):
-                outcome = ProviderError("provider connection failed")
+                if deadline.connected():
+                    outcome = ProviderConnectionError("provider connection failed after the request may have been sent")
+                else:
+                    outcome = NoSendError("provider connection failed before sending")
             with handoff:
                 # System DNS can outlast a socket timeout. Dispose of a late
                 # response in the worker, after the caller has stopped waiting.
@@ -195,16 +223,43 @@ class Transport:
                     late = None
                 if late is not None and not isinstance(late, ProviderError):
                     late.close()
-            deadline.interrupt()
+            if not deadline.interrupt():
+                raise NoSendError("provider connection deadline expired before sending") from None
             raise _ResponseReadError("provider request deadline exceeded") from None
         if isinstance(outcome, ProviderError):
             raise outcome
         return outcome
 
+    @classmethod
+    def _http_error(cls, response: HTTPError, deadline: _Deadline) -> ProviderHTTPError:
+        error_type = None
+        request_id = None
+        with response:
+            if response.headers is not None:
+                identifier = response.headers.get("request-id", "")
+                if re.fullmatch(r"req_[A-Za-z0-9_-]{1,124}", identifier):
+                    request_id = identifier
+                if response.headers.get_content_type() == "application/json":
+                    try:
+                        body = cls._object(b"".join(cls._chunks(response, deadline, limit=_ERROR_BYTES)))
+                    except ProviderError:
+                        body = {}
+                    error = body.get("error")
+                    if body.get("type") == "error" and isinstance(error, dict):
+                        if isinstance(error.get("type"), str):
+                            error_type = error["type"]
+        return ProviderHTTPError(response.code, error_type=error_type, request_id=request_id)
+
     @staticmethod
-    def _chunks(response, deadline: _Deadline) -> Iterator[bytes]:
-        remaining = MAX_RESPONSE_BYTES
+    def _chunks(response, deadline: _Deadline, *, limit: int = MAX_RESPONSE_BYTES) -> Iterator[bytes]:
+        remaining = limit
+        is_closed = getattr(response, "isclosed", None)
         while True:
+            # HTTPResponse closes its socket as soon as Content-Length is
+            # consumed. Keep the bytes already read without rearming that socket.
+            if is_closed is not None and is_closed():
+                Transport._require_complete_body(response)
+                return
             try:
                 deadline.arm_read()
                 data = response.read1(min(remaining + 1, _READ_BYTES))
@@ -213,11 +268,18 @@ class Transport:
                 deadline.remaining()
                 raise _ResponseReadError("provider response could not be read") from None
             if not data:
+                Transport._require_complete_body(response)
                 return
             remaining -= len(data)
             if remaining < 0:
                 raise ProviderError("provider response exceeded its byte limit")
             yield data
+
+    @staticmethod
+    def _require_complete_body(response) -> None:
+        remaining = getattr(response, "length", None)
+        if remaining is not None and remaining > 0:
+            raise _ResponseReadError("provider response ended before its declared content length")
 
     def request(
         self, method: str, url: str, payload: Json | None = None, *,

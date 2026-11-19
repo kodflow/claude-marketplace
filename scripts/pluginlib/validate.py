@@ -10,9 +10,9 @@ import re
 from typing import Any
 from urllib.parse import urlsplit
 
-from jsonschema import Draft202012Validator
 import yaml
 
+from .contract_schema import offline_validator
 from .model import (
     Catalog,
     EXTENSION_NAMESPACE,
@@ -67,7 +67,7 @@ def _schema_issues(
                 if namespace == EXTENSION_NAMESPACE
             }
     for error in sorted(
-        Draft202012Validator(schema).iter_errors(candidate),
+        offline_validator(schema).iter_errors(candidate),
         key=lambda item: tuple(str(part) for part in item.path),
     ):
         location = "/".join(str(item) for item in error.path) or "."
@@ -184,7 +184,7 @@ def _validator_issues(
 ) -> list[ValidationIssue]:
     issues = []
     for error in sorted(
-        Draft202012Validator(schema).iter_errors(data),
+        offline_validator(schema).iter_errors(data),
         key=lambda item: tuple(str(part) for part in item.path),
     ):
         location = "/".join(str(item) for item in error.path) or "."

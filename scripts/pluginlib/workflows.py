@@ -9,10 +9,10 @@ from pathlib import Path, PurePosixPath
 import re
 from typing import Any
 
-from jsonschema import Draft202012Validator
-from jsonschema.exceptions import SchemaError
 import yaml
 from yaml.constructor import ConstructorError
+
+from .contract_schema import check_contract_schema, offline_validator
 
 
 SCHEMAS = Path(__file__).resolve().parents[2] / "schemas"
@@ -103,39 +103,15 @@ class Workflow:
 
 
 def _check_schema(schema: dict, where: str) -> None:
-    def check_refs(value: Any) -> None:
-        if not isinstance(value, dict):
-            return
-        for key in ("$ref", "$dynamicRef"):
-            if key in value and not value[key].startswith("#"):
-                raise WorkflowError(f"{where}: external JSON Schema references are unsupported")
-        # Defaults, constants, and examples may contain literal reference keys.
-        for key in ("$defs", "definitions", "dependentSchemas", "patternProperties", "properties"):
-            children = value.get(key)
-            if isinstance(children, dict):
-                for child in children.values():
-                    check_refs(child)
-        for key in ("allOf", "anyOf", "oneOf", "prefixItems"):
-            children = value.get(key)
-            if isinstance(children, list):
-                for child in children:
-                    check_refs(child)
-        for key in (
-            "additionalItems", "additionalProperties", "contains", "contentSchema", "else", "if",
-            "items", "not", "propertyNames", "then", "unevaluatedItems", "unevaluatedProperties",
-        ):
-            check_refs(value.get(key))
-
     try:
-        Draft202012Validator.check_schema(schema)
-    except SchemaError as error:
-        raise WorkflowError(f"{where}: {error.message}") from error
-    check_refs(schema)
+        check_contract_schema(schema)
+    except ValueError as error:
+        raise WorkflowError(f"{where}: {error}") from error
 
 
 def validate_value(schema: dict, value: Any, where: str) -> None:
     try:
-        error = next(Draft202012Validator(schema).iter_errors(value), None)
+        error = next(offline_validator(schema).iter_errors(value), None)
     except Exception as error:
         # A broken local $ref is a contract error, not a provider failure.
         raise WorkflowError(f"{where}: could not apply JSON Schema: {error}") from error

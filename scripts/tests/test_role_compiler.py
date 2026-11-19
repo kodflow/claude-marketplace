@@ -194,6 +194,18 @@ class RoleCompilerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "stay in its document"):
                 load_roles(package, SCHEMAS)
 
+    def test_role_checks_schema_referenced_under_an_annotation(self):
+        with TemporaryDirectory() as temp:
+            package = Path(temp) / "example"
+            role = package / "io.github.kodflow/roles" / PILOT
+            shutil.copytree(SPECIALISTS / "io.github.kodflow/roles" / PILOT, role)
+            descriptor = role / "role.yaml"
+            data = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
+            data["outputSchema"] = {"$ref": "#/default", "default": {"$ref": "#/$defs/missing"}}
+            descriptor.write_text(yaml.safe_dump(data), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unresolved local JSON Schema reference"):
+                load_roles(package, SCHEMAS)
+
     def test_inline_and_referenced_role_contracts_are_equivalent(self):
         with TemporaryDirectory() as temp:
             package = Path(temp) / "example"

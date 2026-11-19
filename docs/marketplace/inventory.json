@@ -2296,7 +2296,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/.claude-plugin/plugin.json",
-          "sha256": "82a04031a497d56ec549b4dfc194de69a8f54ebe77c93ffcae667cb9e00b8123"
+          "sha256": "fd7dc75eff40f601346389e4e52c805c06ecc3c2a83f4d6bb101a278a8551aaa"
         },
         {
           "class": "host-extension",
@@ -2366,7 +2366,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-nodejs.md",
-          "sha256": "5bb2e05ce1bb6cfdb32b69a58041e8c3a36f610222e97b5401a4b6d700c6c42a"
+          "sha256": "ae6e068f8a3a9320956a98beead1e255dc570857c0db685c67b41221b5ab6772"
         },
         {
           "class": "host-extension",
@@ -2431,7 +2431,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/devops-specialist-security.md",
-          "sha256": "98d41790c2d5ca9770357bc02d0bcd263e0c4e578bd246764a8660bbe2459900"
+          "sha256": "256fbadd2f8cf470be5199cdb1b9b1febf83336375093b9f2fa52cc5a320b3d2"
         },
         {
           "class": "host-extension",
@@ -2611,7 +2611,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-nodejs/instructions.md",
-          "sha256": "4da1045596a6ddd5c1d118aaddadb59a3d8ecd3ed06a18aefa64f3ae4a56ee20"
+          "sha256": "aad5caefd6f20b476a179aa9a833498a1a1766ca24d772483292e0f2e14f15cf"
         },
         {
           "class": "support",
@@ -2741,7 +2741,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/devops-specialist-security/instructions.md",
-          "sha256": "34e1b2b1b9f84d67576b1c376a8ef16afc3188e14a4d97b52ea604f0eabe877a"
+          "sha256": "b19bf048a2825b1198c02111477ce5fc5585303e7fd0738af93197a07cbb67bf"
         },
         {
           "class": "support",
@@ -2831,7 +2831,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-specialists/plugin.json",
-          "sha256": "26a25fd07fdc8436154f081db635042c5abec1dbc39ce660de33b21f0ca9907c"
+          "sha256": "390f81a898b676a12db8db81f90c5d6a08df80ec3fce7e458d517467aa95ca1d"
         }
       ],
       "dependencies": [],

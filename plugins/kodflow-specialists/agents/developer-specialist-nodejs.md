@@ -89,7 +89,7 @@ before_approval:
   1_types: "tsc --noEmit passes with zero errors"
   2_lint: "eslint . --max-warnings 0"
   3_format: "prettier --check ."
-  4_tests: "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80"
+  4_tests: "vitest run --coverage.enabled --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80"
   5_docs: "All exports have JSDoc"
 ```
 

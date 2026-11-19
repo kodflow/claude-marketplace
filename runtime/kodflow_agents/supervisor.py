@@ -9,7 +9,10 @@ import json
 from typing import Any
 
 from .journal import Journal, operation_key
-from .ports import Event, Json, NoSendError, Provider, ProviderError, Request, TERMINAL, uses_text_output
+from .ports import (
+    ABANDONED_SUBMISSION, Event, Handle, Json, NoSendError, Provider, ProviderError, Request,
+    SubmissionRejected, TERMINAL, uses_text_output,
+)
 
 
 @dataclass(frozen=True)
@@ -132,10 +135,11 @@ class Supervisor:
             raise ProviderError("another supervisor reserved this provider dispatch")
         try:
             event = binding.provider.submit(request)
-        except NoSendError:
-            self.journal.release_unsent(key, binding.route, "submit", revision=revision)
+        except (NoSendError, SubmissionRejected):
+            self.journal.release_unprocessed(key, binding.route, "submit", revision=revision)
             raise
         except ProviderError as error:
+            self.journal.mark_submit_unknown(key, binding.route, revision=revision)
             raise ProviderError(f"provider submission outcome is unknown: {error}") from None
         if not self.journal.save(key, binding.route, event, action="submit", revision=revision):
             raise ProviderError("provider dispatch reservation changed before persistence")
@@ -274,11 +278,12 @@ class Supervisor:
                     event, _ = self._poll(binding, key, event, revision, timeout=20)
                     if event.state not in TERMINAL:
                         raise ProviderError("expired provider attempt remains active and cannot be cancelled")
-            if event is not None and event.state == "completed":
-                # The remote result is already terminal. Do not run it again, even
-                # if collecting required artifacts exceeded the local deadline.
+            if event is not None and event.state in {"completed", ABANDONED_SUBMISSION}:
+                # A finished remote task and an operator-abandoned submission
+                # must not be repeated when their local workflow deadline passes.
+                message = event.reason if event.state == ABANDONED_SUBMISSION else "deadline exceeded"
                 self.store.fail(
-                    run_id, dispatch.task_id, dispatch.attempt, "deadline exceeded",
+                    run_id, dispatch.task_id, dispatch.attempt, message,
                     retryable=False, compensation=dispatch.compensation,
                 )
                 continue
@@ -348,7 +353,7 @@ class Supervisor:
                 else:
                     update = binding.provider.approve(event.handle, approved, str(payload.get("reason", "")), timeout=120)
             except NoSendError:
-                self.journal.release_unsent(key, binding.route, capability, revision=checkpoint)
+                self.journal.release_unprocessed(key, binding.route, capability, revision=checkpoint)
                 raise
             self._check_handle(event, update)
             if not self.journal.save(key, binding.route, update, action=capability, revision=checkpoint):
@@ -358,10 +363,46 @@ class Supervisor:
             run_id, task_id, attempt, payload, approved=approval, checkpoint_revision=checkpoint,
         )
 
+    def _recovery_entry(self, run_id: str, task_id: str) -> tuple[Binding, Json, bool]:
+        binding, entry = self._pending(run_id, task_id)
+        compensation = entry.get("compensation")
+        if compensation and compensation["status"] in {"running", "waiting_input"}:
+            return binding, compensation, True
+        return binding, entry, False
+
+    def abandon_submission(self, run_id: str, task_id: str) -> Event:
+        """Close an unconfirmed submit locally without retrying or claiming remote cancellation."""
+        self._verify_run(run_id)
+        binding, entry, compensation = self._recovery_entry(run_id, task_id)
+        logical_key = entry.get("idempotency_key")
+        if not logical_key or entry["status"] != "running":
+            raise ProviderError("task has no active submission to abandon")
+        key = operation_key(logical_key, entry["attempt"])
+        event, action, revision = self.journal.read_revision(key, binding.route)
+        if event is None and action in {"submit", "submit_unknown"}:
+            self._require_submit_not_in_flight(entry, action)
+            event = Event(
+                ABANDONED_SUBMISSION, Handle(""),
+                reason="operator abandoned the submission; remote outcome remains unknown",
+            )
+            if not self.journal.save(key, binding.route, event, action=action, revision=revision):
+                raise ProviderError("provider submission changed before it could be abandoned")
+        elif event is None or event.state != ABANDONED_SUBMISSION:
+            raise ProviderError("task has no uncertain submission to abandon")
+        self.store.fail(
+            run_id, task_id, entry["attempt"], event.reason, retryable=False, compensation=compensation,
+        )
+        return event
+
+    def _require_submit_not_in_flight(self, entry: Json, action: str) -> None:
+        deadline = entry.get("deadline")
+        if action == "submit" and (deadline is None or deadline > self.store.clock()):
+            raise ProviderError("provider submission might still be in flight; wait for its deadline")
+
     def reconcile(self, run_id: str, task_id: str, native_id: str | None = None) -> Event:
         """Recover an interrupted operation by polling its known native handle."""
         self._verify_run(run_id)
-        binding, entry = self._pending(run_id, task_id)
+        binding, entry, compensation = self._recovery_entry(run_id, task_id)
         logical_key = entry.get("idempotency_key")
         if not logical_key:
             raise ProviderError("task has no provider attempt")
@@ -369,6 +410,7 @@ class Supervisor:
         event, action, revision = self.journal.read_revision(key, binding.route)
         if not action:
             raise ProviderError("task has no uncertain provider operation")
+        self._require_submit_not_in_flight(entry, action)
         if event is None and not native_id:
             raise ProviderError("supply the native provider handle found out of band")
         if event is not None and native_id and event.handle.native_id != native_id:
@@ -390,7 +432,7 @@ class Supervisor:
             self.store.provide_input(
                 run_id, task_id, entry["attempt"], {"reconciled": True},
                 approved=entry["waiting_kind"] == "approval",
-                checkpoint_revision=entry.get("checkpoint_revision", 0),
+                checkpoint_revision=entry.get("checkpoint_revision", 0), compensation=compensation,
             )
         return update
 
@@ -429,7 +471,7 @@ class Supervisor:
         try:
             stopped = binding.provider.cancel(event.handle, timeout=20)
         except NoSendError:
-            self.journal.release_unsent(key, binding.route, "cancel", revision=revision)
+            self.journal.release_unprocessed(key, binding.route, "cancel", revision=revision)
             raise
         self._check_handle(event, stopped)
         if not self.journal.save(key, binding.route, stopped, action="cancel", revision=revision):

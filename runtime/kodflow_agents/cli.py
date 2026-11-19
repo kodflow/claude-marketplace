@@ -120,7 +120,11 @@ def _run(supervisor: Supervisor, run_id: str, *, once: bool) -> int:
             if notice not in reported_prompts:
                 reported_prompts.add(notice)
                 print(f"Authorization required: {notice}", file=sys.stderr, flush=True)
-        if (delay := supervisor.next_poll_delay(run_id)) is not None and delay > 0:
+        delay = supervisor.next_poll_delay(run_id)
+        if delay is None:
+            _print(state)
+            return 0
+        if delay > 0:
             time.sleep(delay)
 
 
@@ -178,7 +182,12 @@ def parser() -> argparse.ArgumentParser:
             action.add_argument("decision", choices=("allow", "deny"))
             action.add_argument("--reason", required=True)
         if name == "reconcile":
-            action.add_argument("--native-id")
+            recovery = action.add_mutually_exclusive_group()
+            recovery.add_argument("--native-id")
+            recovery.add_argument(
+                "--abandon", action="store_true",
+                help="close an uncertain submission locally without resending or cancelling it remotely",
+            )
     return command
 
 
@@ -244,7 +253,10 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "cancel":
             supervisor.cancel(args.run_id)
         elif args.command == "reconcile":
-            _print(supervisor.reconcile(args.run_id, args.task_id, args.native_id))
+            if args.abandon:
+                _print(supervisor.abandon_submission(args.run_id, args.task_id))
+            else:
+                _print(supervisor.reconcile(args.run_id, args.task_id, args.native_id))
         return 0
     except (ProviderError, ValueError, KeyError, sqlite3.Error, OSError) as error:
         print(f"kodflow-agents: {error}", file=sys.stderr)

@@ -22,6 +22,7 @@ from pluginlib.workflows import (
     compile_projections,
     load_workflow,
     render_projection,
+    validate_value,
 )
 
 
@@ -100,6 +101,27 @@ class WorkflowCompilerTest(unittest.TestCase):
             path = Path(tmp) / "workflow.yaml"
             path.write_text(yaml.safe_dump(source), encoding="utf-8")
             self.assertEqual(load_workflow(path).tasks[0].input_schema["default"], literal)
+
+    def test_fragment_targets_under_annotations_are_checked_without_looping(self):
+        source = yaml.safe_load(TRANSACTION.read_text(encoding="utf-8"))
+        source["tasks"][0]["inputSchema"] = {
+            "$ref": "#/default",
+            "default": {"type": "object", "properties": {"next": {"$ref": "#"}}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workflow.yaml"
+            path.write_text(yaml.safe_dump(source), encoding="utf-8")
+            schema = load_workflow(path).tasks[0].input_schema
+            validate_value(schema, {"next": {"next": {}}}, "local recursive instance")
+
+            source["tasks"][0]["inputSchema"]["default"]["properties"]["next"]["$ref"] = "#/$defs/missing"
+            path.write_text(yaml.safe_dump(source), encoding="utf-8")
+            with self.assertRaisesRegex(WorkflowError, "unresolved local JSON Schema reference"):
+                load_workflow(path)
+
+    def test_value_validation_rejects_unregistered_resources(self):
+        with self.assertRaisesRegex(WorkflowError, "could not apply JSON Schema"):
+            validate_value({"$ref": "urn:kodflow:test:unregistered"}, {}, "local registry")
 
 
 class WorkflowStateTest(unittest.TestCase):

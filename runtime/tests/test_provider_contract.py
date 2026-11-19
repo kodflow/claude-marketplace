@@ -615,3 +615,114 @@ def test_computer_exposes_https_auth_prompt_and_reports_terminal_failure(monkeyp
     assert pending.prompt_url == "https://account.example/login" and pending.reason == "Sign in to continue"
     failure = provider.resume(pending.handle, timeout=1)
     assert failure.state == "failed" and failure.reason == "Computer reported a failed task"
+
+
+def test_anthropic_typed_rejection_preserves_distinction_from_no_send(monkeypatch):
+    from kodflow_agents.ports import SubmissionRejected
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-fixture")
+    rejected = ProviderHTTPError(429, error_type="rate_limit_error", request_id="req_fixture")
+    transport = RecordedTransport([rejected])
+    with pytest.raises(SubmissionRejected, match="429.*req_fixture") as caught:
+        Anthropic(transport).submit(REQUEST)
+    assert not isinstance(caught.value, NoSendError)
+    assert len(transport.calls) == 1
+
+    ambiguous = (
+        ProviderHTTPError(429),
+        ProviderHTTPError(429, error_type="timeout_error"),
+        ProviderHTTPError(504, error_type="timeout_error"),
+        ProviderHTTPError(529, error_type="overloaded_error"),
+    )
+    for response_error in ambiguous:
+        transport = RecordedTransport([response_error])
+        with pytest.raises(ProviderHTTPError) as caught:
+            Anthropic(transport).submit(REQUEST)
+        assert caught.value is response_error
+        assert len(transport.calls) == 1
+
+
+@pytest.mark.parametrize("failure", [
+    NoSendError("before sending the next request"), ProviderHTTPError(429, error_type="rate_limit_error"),
+])
+def test_anthropic_definite_continuation_failure_keeps_known_submission(monkeypatch, failure):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-fixture")
+    first = {
+        "id": "paused", "stop_reason": "pause_turn", "content": [{"type": "server_tool_use"}],
+        "usage": {"input_tokens": 6},
+    }
+    transport = RecordedTransport([first, failure])
+    event = Anthropic(transport).submit(REQUEST)
+    assert event.state == "failed" and event.handle.native_id == "paused"
+    assert event.usage == {"input_tokens": 6} and len(transport.calls) == 2
+
+
+def test_transport_classifies_connection_failure_only_before_wire_boundary_as_unsent(monkeypatch):
+    from urllib.error import URLError
+    from kodflow_agents.transport import ProviderConnectionError
+
+    class SocketFixture:
+        def settimeout(self, _):
+            pass
+
+    def opener_for(cross_wire):
+        def opener(_redirection, handler):
+            def open_request(*_, **__):
+                if cross_wire:
+                    handler.deadline.attach(SocketFixture())
+                raise URLError("PRIVATE")
+
+            return SimpleNamespace(open=open_request)
+
+        return opener
+
+    monkeypatch.setattr("kodflow_agents.transport.build_opener", opener_for(False))
+    with pytest.raises(NoSendError, match="before sending") as rejected:
+        Transport().request("POST", "https://service.example", {}, timeout=5)
+    assert "PRIVATE" not in str(rejected.value)
+
+    monkeypatch.setattr("kodflow_agents.transport.build_opener", opener_for(True))
+    with pytest.raises(ProviderConnectionError, match="may have been sent"):
+        Transport().request("POST", "https://service.example", {}, timeout=5)
+
+
+def test_transport_decodes_only_bounded_http_error_classification(monkeypatch):
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    headers = Message()
+    headers["Content-Type"] = "application/json"
+    headers["request-id"] = "req_test"
+    class FixedLengthBody(BytesIO):
+        def __init__(self, raw):
+            super().__init__(raw)
+            self.length = len(raw)
+
+        def read1(self, size):
+            data = super().read1(size)
+            self.length -= len(data)
+            return data
+
+        def isclosed(self):
+            return not self.length
+
+    body = FixedLengthBody(b'{"type":"error","error":{"type":"rate_limit_error","message":"do not log PRIVATE"}}')
+
+    class ResponseSocket:
+        def settimeout(self, _):
+            if body.isclosed():
+                raise OSError("the fixed-length response already closed the socket")
+
+    def opener(_, handler):
+        def opening(*_, **__):
+            handler.deadline.attach(ResponseSocket())
+            raise HTTPError("https://service.example", 429, "Too Many Requests", headers, body)
+
+        return SimpleNamespace(open=opening)
+
+    monkeypatch.setattr("kodflow_agents.transport.build_opener", opener)
+    with pytest.raises(ProviderHTTPError, match="429.*req_test") as failure:
+        Transport().request("POST", "https://service.example", {}, timeout=5)
+    assert failure.value.error_type == "rate_limit_error"
+    assert body.closed
+    assert "PRIVATE" not in str(failure.value)

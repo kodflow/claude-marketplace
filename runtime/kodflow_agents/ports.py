@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from typing import Any, Iterator
 
 Json = dict[str, Any]
-TERMINAL = frozenset({"completed", "failed", "cancelled"})
+ABANDONED_SUBMISSION = "abandoned_submission"
+TERMINAL = frozenset({"completed", "failed", "cancelled", ABANDONED_SUBMISSION})
 
 
 class ProviderError(RuntimeError):
@@ -16,6 +17,10 @@ class ProviderError(RuntimeError):
 
 class NoSendError(ProviderError):
     """The adapter can prove the requested provider action was never sent."""
+
+
+class SubmissionRejected(ProviderError):
+    """The request was sent but a documented provider response establishes rejection."""
 
 
 class UnsupportedOperation(NoSendError):
