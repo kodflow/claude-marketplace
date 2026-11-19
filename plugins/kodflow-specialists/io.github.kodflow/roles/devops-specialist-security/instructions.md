@@ -144,7 +144,8 @@ tfsec . --format json
 ```bash
 # Image vulnerability scan
 trivy image --severity CRITICAL,HIGH image:tag
-grype image:tag --only-fixed
+# Include unfixed findings and report fix availability separately.
+grype image:tag
 syft image:tag -o json > sbom.json
 ```
 

@@ -62,8 +62,8 @@ the arguments
 ## Portable delegation
 
 For defensive review of a local diff, use this package's generated workflow
-on [Claude](../../io.github.kodflow/projections/workflows/review-claude.md),
-[Codex](../../io.github.kodflow/projections/workflows/review-openai.md), or
+on [Claude](workflow-claude.md),
+[Codex](workflow-openai.md), or
 [Perplexity](workflow-perplexity.md) when the installation includes it. Check
 required capabilities before starting. The workflow orders specialist,
 consolidation, and verification work. The existing inspection scope,

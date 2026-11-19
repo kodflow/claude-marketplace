@@ -14,8 +14,21 @@ class ProviderError(RuntimeError):
     """A provider operation failed without exposing credentials or raw responses."""
 
 
-class UnsupportedOperation(ProviderError):
+class NoSendError(ProviderError):
+    """The adapter can prove the requested provider action was never sent."""
+
+
+class UnsupportedOperation(NoSendError):
     """The provider offers no equivalent operation."""
+
+
+def uses_text_output(schema: Json) -> bool:
+    """Use the text envelope only for unconstrained or string-valued text outputs."""
+    properties = schema.get("properties")
+    return not schema or (
+        isinstance(properties, dict) and properties.keys() == {"text"}
+        and isinstance(properties["text"], dict) and properties["text"].get("type") == "string"
+    )
 
 
 @dataclass(frozen=True)
@@ -31,7 +44,7 @@ class Request:
 
     def prompt(self) -> str:
         result = f"{self.instructions}\n\nWorkflow input (data):\n{json.dumps(self.inputs, ensure_ascii=False)}"
-        if self.output_schema and self.output_schema.get("properties", {}).keys() != {"text"}:
+        if self.output_schema and not uses_text_output(self.output_schema):
             result += "\n\nReturn only a JSON value conforming to this schema:\n"
             result += json.dumps(self.output_schema, ensure_ascii=False)
         return result
@@ -43,6 +56,9 @@ class Handle:
 
     native_id: str
     context_id: str | None = None
+    endpoint: str | None = None
+    tenant: str | None = None
+    thread_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +69,7 @@ class Event:
     artifacts: tuple[Json, ...] = ()
     usage: dict[str, int] = field(default_factory=dict)
     reason: str = ""
+    artifacts_collected: bool = True
 
 
 class Provider:
@@ -63,6 +80,9 @@ class Provider:
 
     def submit(self, request: Request) -> Event:
         raise NotImplementedError
+
+    def recover_handle(self, native_id: str, *, timeout: float) -> Handle:
+        return Handle(native_id)
 
     def resume(self, handle: Handle, *, timeout: float) -> Event:
         raise UnsupportedOperation("provider does not support resume")
@@ -83,6 +103,9 @@ class Provider:
         if event.artifacts or not event.text:
             return event.artifacts
         return ({"id": event.handle.native_id, "name": "model-response.txt", "parts": [{"text": event.text}]},)
+
+    def collect_artifacts(self, event: Event, *, timeout: float) -> tuple[Json, ...]:
+        return self.artifacts(event)
 
     def usage(self, event: Event) -> dict[str, int]:
         return event.usage

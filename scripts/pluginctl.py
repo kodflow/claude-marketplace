@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import ExitStack
+import json
 import os
 from pathlib import Path
 import stat
@@ -71,9 +72,18 @@ def _atomic_write(path: Path, data: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _publish(outputs: dict[Path, bytes]) -> None:
+def _projection_destination(path: Path) -> None:
+    try:
+        inside = path.parent.resolve().is_relative_to(ROOT.resolve())
+    except RuntimeError as error:
+        raise ValueError(f"projection destination cannot be resolved: {path}") from error
+    if not inside or path.is_symlink():
+        raise ValueError(f"projection destination escapes the repository or is a symlink: {path}")
+
+
+def _publish(outputs: dict[Path, bytes | None]) -> None:
     """Stage all outputs and prior bytes before the first replacement."""
-    staged: dict[Path, Path] = {}
+    staged: dict[Path, Path | None] = {}
     previous: dict[Path, Path | None] = {}
     retained: set[Path] = set()
 
@@ -82,27 +92,34 @@ def _publish(outputs: dict[Path, bytes]) -> None:
             path.unlink(missing_ok=True)
 
     with ExitStack() as clean:
+        for path in outputs:
+            _projection_destination(path)
         for path, data in outputs.items():
-            if not path.parent.resolve().is_relative_to(ROOT.resolve()) or path.is_symlink():
-                raise ValueError(f"projection destination escapes the repository or is a symlink: {path}")
-            staged[path] = _stage_write(path, data)
-            clean.callback(cleanup, staged[path])
+            current = _stage_write(path, data) if data is not None else None
+            staged[path] = current
+            if current is not None:
+                clean.callback(cleanup, current)
             old = _stage_write(path, path.read_bytes()) if path.exists() else None
             previous[path] = old
             if old is not None:
                 clean.callback(cleanup, old)
                 mode = stat.S_IMODE(path.stat().st_mode)
                 old.chmod(mode)
-                staged[path].chmod(mode)
+                if current is not None:
+                    current.chmod(mode)
         attempted = []
         try:
             for path, source in staged.items():
                 attempted.append(path)
-                os.replace(source, path)
+                if source is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    os.replace(source, path)
         except (OSError, KeyboardInterrupt) as error:
             failures = []
             for path in reversed(attempted):
-                if staged[path].exists():
+                source = staged[path]
+                if (source is not None and source.exists()) or (source is None and path.exists()):
                     continue  # Replacement did not consume the staged file.
                 backup = previous[path]
                 try:
@@ -294,23 +311,81 @@ def command_inventory(args: argparse.Namespace) -> int:
     return int(not _check_or_write(path, rendered, bool(args.check)))
 
 
+def _owned_path(kind: str, path: Path) -> bool:
+    if path.is_absolute() or ".." in path.parts or "\\" in path.as_posix():
+        return False
+    if kind == "roles":
+        return (
+            len(path.parts) == 4 and path.parts[0] == "plugins"
+            and path.parts[2] == "agents" and path.suffix == ".md"
+        ) or (
+            len(path.parts) == 3 and path.parts[:2] == ("codex", "agents") and path.suffix == ".toml"
+        ) or (
+            path.parts[:3] == ("dist", "roles", "openai") and len(path.parts) == 6
+            and path.parts[4] == "agents" and path.suffix == ".toml"
+        ) or (
+            path.parts[:3] == ("dist", "roles", "perplexity") and len(path.parts) == 7
+            and path.parts[4] == "skills" and path.name == "SKILL.md"
+        )
+    return (
+        len(path.parts) == 6 and path.parts[0] == "plugins" and path.suffix == ".md"
+        and path.parts[2:5] == ("io.github.kodflow", "projections", "workflows")
+    )
+
+
+def _compiled(
+    kind: str, tracked: dict[Path, bytes], artifacts: dict[Path, bytes], check: bool,
+) -> int:
+    ledger = ROOT / f"catalog/generated-{kind}.json"
+    try:
+        _projection_destination(ledger)
+        previous = set()
+        if ledger.is_file():
+            data = json.loads(ledger.read_text(encoding="utf-8"))
+            if not isinstance(data, list) or not all(isinstance(value, str) for value in data):
+                raise ValueError(f"invalid {kind} projection inventory")
+            previous = {Path(value) for value in data}
+        expected = set(tracked) | set(artifacts)
+        for path in previous | expected:
+            if not _owned_path(kind, path):
+                raise ValueError(f"invalid {kind} projection path: {path}")
+            _projection_destination(ROOT / path)
+        retired = sorted(previous - expected)
+        record = canonical_json(sorted(path.as_posix() for path in expected)).encode("utf-8")
+        if check:
+            for path in retired:
+                print(f"obsolete projection: {path}")
+            verified = [
+                _check_or_write(ROOT / path, content, True) for path, content in sorted(tracked.items())
+            ]
+            verified.extend(
+                _check_or_write(ROOT / path, content, True)
+                for path, content in sorted(artifacts.items()) if (ROOT / path).exists()
+            )
+            verified.append(_check_or_write(ledger, record, True))
+            return int(bool(retired) or not all(verified))
+        outputs = {ROOT / path: data for path, data in {**tracked, **artifacts}.items()}
+        outputs.update({ROOT / path: None for path in retired})
+        outputs[ledger] = record
+        _publish(outputs)
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"could not publish {kind}: {error}")
+        return 1
+    for path, data in outputs.items():
+        print(f"{'retired' if data is None else 'wrote'} projection: {_display_path(path)}")
+    return 0
+
+
 def command_roles(args: argparse.Namespace) -> int:
-    outputs = compile_roles(ROOT, SCHEMAS)
-    okay = all([
-        _check_or_write(ROOT / path, data, args.check)
-        for path, data in sorted(outputs.items())
-    ])
-    if not args.check:
-        for path, data in build_role_artifacts(ROOT, SCHEMAS).items():
-            _atomic_write(ROOT / "dist/roles" / path, data)
-    return int(not okay)
+    return _compiled(
+        "roles", compile_roles(ROOT, SCHEMAS),
+        {Path("dist/roles") / path: data for path, data in build_role_artifacts(ROOT, SCHEMAS).items()},
+        args.check,
+    )
 
 
 def command_workflows(args: argparse.Namespace) -> int:
-    return int(not all([
-        _check_or_write(ROOT / path, data, args.check)
-        for path, data in sorted(compile_projections(ROOT).items())
-    ]))
+    return _compiled("workflows", compile_projections(ROOT), {}, args.check)
 
 
 def parser() -> argparse.ArgumentParser:

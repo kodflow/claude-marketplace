@@ -72,7 +72,7 @@ the release notes for that exact version.
 memory:
   - "Every allocation names its allocator; no hidden global allocator"
   - "Every alloc has a matching defer/errdefer free in the SAME scope"
-  - "errdefer for cleanup on the error path, defer for the success path — mixing them leaks"
+  - "Use defer for cleanup on every scope exit, including success and errors. Use errdefer for error-only cleanup when success transfers ownership. A temporary buffer that must be freed on success needs defer."
   - "std.testing.allocator in tests: it fails the test on a leak, which is the point"
   - "Prefer an arena for phase-scoped work; free the arena, not each node"
 
@@ -118,8 +118,8 @@ what `zig fmt` produces is a nitpick, not a finding.
 
 | Defect | Why it matters |
 |--------|----------------|
-| `defer` where `errdefer` was meant | frees on the success path too, or fails to free on error |
-| `defer` inside a loop | fires at scope exit, not per iteration — unbounded growth |
+| `defer` where `errdefer` was meant | frees resources even when success transfers ownership |
+| Deferring per-iteration cleanup in an enclosing scope | a `defer` declared inside a braced loop body runs when that iteration exits its scope |
 | Returning a slice into a freed or stack buffer | use-after-free; the compiler will not catch it |
 | `catch unreachable` on a fallible I/O call | a panic in production, presented as an invariant |
 | Missing `errdefer` after a partially-built struct | leaks every field allocated before the failure |

@@ -55,6 +55,39 @@ outputSchema:
         type: string
   - type: string
     minLength: 1
+  - type: array
+    items:
+      type: object
+      required:
+      - severity
+      - claim
+      - evidence
+      - remedy
+      - consulted
+      - unverified
+      properties:
+        severity:
+          enum:
+          - blocking
+          - material
+          - minor
+        claim:
+          type: string
+          minLength: 1
+        evidence:
+          type: string
+          minLength: 1
+        remedy:
+          type: string
+          minLength: 1
+        consulted:
+          type: array
+          items:
+            type: string
+        unverified:
+          type: array
+          items:
+            type: string
 sideEffects: none
 claude:
   tools: Read, Glob, Grep, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs,

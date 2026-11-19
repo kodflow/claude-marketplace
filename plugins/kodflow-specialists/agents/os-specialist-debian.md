@@ -90,12 +90,15 @@ dpkg -S /path/to/file
 # Pin: version <version>
 # Pin-Priority: 1001
 
-# Backports
-apt -t bookworm-backports install <package>
-
-# Security updates only
-apt upgrade -y -o Dpkg::Options::="--force-confdef" --only-upgrade
+# Debian 13 backports (configure trixie-backports first)
+apt -t trixie-backports install <package>
 ```
+
+For a security-only upgrade, verify the effective unattended-upgrades origin
+policy permits only the configured Debian-Security source for this release.
+Review `unattended-upgrade --dry-run --debug` before applying it with
+`unattended-upgrade`. If ordinary Debian origins are also enabled by the
+policy, the run is not security-only.
 
 ## Init System (systemd)
 

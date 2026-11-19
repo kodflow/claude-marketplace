@@ -375,7 +375,7 @@ jobs:
       # that nobody regenerated, ships two versions of the same skill.
       - name: The codex tree matches its sources
         run: |
-          python3 scripts/build-codex.py
+          uv run --project scripts --locked python scripts/build-codex.py
           git diff --exit-code -- codex/ \
             || { echo "::error::codex/ is stale — run scripts/build-codex.py"; exit 1; }
 

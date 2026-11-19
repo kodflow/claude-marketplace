@@ -59,12 +59,17 @@ if [[ ${*: -1} == --help ]]; then
   exit $?
 fi
 printf '%s\n' "$*" >> "$CODEX_CALLS"
+if [[ ${DEMO_OTHER_SOURCE:-0} == 1 && "$1 $2 $3" == "plugin marketplace add" ]]; then
+  echo "marketplace 'kodflow' is already added from a different source" >&2
+  exit 1
+fi
 EOF
 chmod 755 "$T/bin/codex"
 export CODEX_CALLS="$T/codex-calls" CODEX_HOME="$T/custom-codex"
 out=$(bash "$T/repo/scripts/install.sh" --codex --check 2>&1); rc=$?
 [ "$rc" -eq 0 ] && [ ! -e "$CODEX_HOME" ] && [ ! -e "$CODEX_CALLS" ] &&
-  grep -q 'would: codex plugin marketplace add' <<<"$out" ||
+  grep -q 'would: codex plugin marketplace add' <<<"$out" &&
+  ok "native check reads capability without installing" ||
   bad "native check reads capability without installing" "$out"
 out=$(bash "$T/repo/scripts/install.sh" --codex 2>&1); rc=$?
 [ "$rc" -eq 0 ] && grep -qxF "plugin marketplace add $T/repo" "$CODEX_CALLS" &&
@@ -78,6 +83,11 @@ out=$(bash "$T/repo/scripts/install.sh" --codex --legacy 2>&1); rc=$?
 out=$(DEMO_NATIVE=0 CODEX_HOME="$T/old-codex" bash "$T/repo/scripts/install.sh" --codex 2>&1); rc=$?
 [ "$rc" -eq 0 ] && [ ! -e "$CODEX_CALLS" ] && [ -f "$T/old-codex/skills/demo/SKILL.md" ] &&
   ok "older client selects flat path" || bad "older client fallback" "$out"
+out=$(DEMO_OTHER_SOURCE=1 CODEX_CALLS="$T/conflict-calls" CODEX_HOME="$T/conflict-home" \
+  bash "$T/repo/scripts/install.sh" --codex 2>&1); rc=$?
+[ "$rc" -eq 1 ] && grep -Fq 'codex plugin marketplace remove kodflow' <<<"$out" &&
+  [ "$(wc -l < "$T/conflict-calls")" -eq 1 ] && [ ! -e "$T/conflict-home/agents" ] &&
+  ok "source conflicts leave the existing registration alone" || bad "different checkout" "$out"
 
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

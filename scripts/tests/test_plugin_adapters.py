@@ -108,6 +108,25 @@ class PluginAdapterTests(unittest.TestCase):
             self.assertEqual([], validate_archive(first))
         self.assertEqual(4, count)
 
+    def test_perplexity_report_and_archive_agree_on_workflow_companions(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = PluginPackage(root, self.catalog.packages()[0].manifest)
+            skill = root / "skills/investigate/SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text("# Investigate", encoding="utf-8")
+            projections = root / "io.github.kodflow/projections/workflows"
+            projections.mkdir(parents=True)
+            (projections / "investigate-perplexity.md").write_text("included", encoding="utf-8")
+            (projections / "unpackaged-perplexity.md").write_text("excluded", encoding="utf-8")
+            data = build_archive(package)
+            with ZipFile(BytesIO(data)) as archive:
+                self.assertEqual(b"included", archive.read("skills/investigate/workflow-perplexity.md"))
+                self.assertNotIn("skills/unpackaged/workflow-perplexity.md", archive.namelist())
+            report = compatibility_report(package, "perplexity", archive=data)
+            capability = next(item for item in report["capabilities"] if item["name"] == "multi-agent")
+            self.assertEqual("advisory-loss", capability["status"])
+
     def test_perplexity_limits_uncompressed_bytes(self) -> None:
         buffer = BytesIO()
         with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
@@ -222,6 +241,37 @@ class PluginAdapterTests(unittest.TestCase):
 
 
 class PluginCliTests(unittest.TestCase):
+    def test_compiler_retires_only_previously_owned_paths(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = Path("plugins/example/agents/first.md")
+            second = Path("plugins/example/agents/second.md")
+            manual = root / "plugins/example/agents/manual.md"
+            manual.parent.mkdir(parents=True)
+            manual.write_bytes(b"hand maintained")
+            with patch.object(pluginctl, "ROOT", root), redirect_stdout(StringIO()):
+                self.assertEqual(0, pluginctl._compiled("roles", {first: b"one"}, {}, False))
+                self.assertEqual(1, pluginctl._compiled("roles", {second: b"two"}, {}, True))
+                self.assertEqual(0, pluginctl._compiled("roles", {second: b"two"}, {}, False))
+                self.assertEqual(0, pluginctl._compiled("roles", {second: b"two"}, {}, True))
+            self.assertFalse((root / first).exists())
+            self.assertEqual(b"two", (root / second).read_bytes())
+            self.assertEqual(b"hand maintained", manual.read_bytes())
+
+    def test_compiler_rejects_escaped_companion_before_writing_anything(self) -> None:
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary) / "root"
+            outside = root.parent / "outside"
+            root.mkdir()
+            outside.mkdir()
+            (root / "dist").symlink_to(outside, target_is_directory=True)
+            tracked = Path("plugins/example/agents/first.md")
+            companion = Path("dist/roles/openai/example/agents/first.toml")
+            with patch.object(pluginctl, "ROOT", root), redirect_stdout(StringIO()):
+                self.assertEqual(1, pluginctl._compiled("roles", {tracked: b"one"}, {companion: b"two"}, False))
+            self.assertFalse((root / tracked).exists())
+            self.assertEqual([], list(outside.iterdir()))
+
     def test_fixture_discovery_ignores_legacy_projection_manifests(self) -> None:
         with TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -58,7 +58,7 @@ The plugin's reference defects, and the natures of constraint that may cover eac
 Unarmed specifics when you govern (the weapon is `none`; the striking surface is the weapon):
 
 - Name the **striking or gripping surface** (the knuckles of the first two fingers, the shin, the instep, the ball of the foot, the hip in a throw) and treat it as the weapon: its line, its orientation at contact, its velocity.
-- Describe the **kinetic chain**: push from the floor, hip rotation, trunk rotation, shoulder, elbow, wrist; or for a kick, the pivot of the supporting foot and the hip turn. The proximal-to-distal order is a well-supported heuristic contested for the arm's internal rotation (source-map, tier 3): propose a `phase_offset` on it as **soft** only.
+- For virtual rig motion, describe the avatar’s joint timing from the clip or its source. Use `phase_offset` only for a loop with a measurement window spanning whole cycles. For a one-shot, use supported frame or velocity measurements and flag event ordering as unverified when the validator cannot measure it.
 - For a throw, use the discipline's own phase vocabulary when its source has one (judo divides a throw into kuzushi 崩し, unbalancing; tsukuri 作り, entry; kake 掛け, execution, to confirm in a Kōdōkan source) and give the two bodies' contact points per phase.
 - For a fall, the landing order (which body part touches first, where the arm strikes the floor, the chin tucked) is the technique: a `frame_pose` of the head relative to the floor plane at impact is a natural hard candidate once sourced.
 - **Guard and recovery** are phases: a punch that does not return to guard, or a non-punching hand that drops, is a defect the sources of every striking discipline warn about (to confirm in the source you cite).
@@ -158,7 +158,7 @@ One JSON object per `panel-output.md`. Example, governing a boxing rear straight
   "techniques": [],
   "constraints": [],
   "remarks": [
-    {"text": "Once a source is read: a soft phase_offset with the rear hip turning before the rear shoulder, and the shoulder before the wrist reaches full extension (proximal-to-distal heuristic, source-map tier 3, contested for internal rotation)."},
+    {"text": "For this one-shot clip, mark the order of rig events as unverified unless the available measurements establish it."},
     {"text": "The lead hand stays at guard through the cross; a velocity of the lead wrist relative to the chest near zero during execution is a candidate soft constraint (guess)."}
   ],
   "sources": [],

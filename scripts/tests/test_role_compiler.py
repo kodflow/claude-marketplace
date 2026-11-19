@@ -5,6 +5,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import tomllib
@@ -18,11 +19,21 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from pluginlib.roles import build_role_artifacts, compile_roles, load_roles, perplexity_role_skills
+from pluginlib.codex_text import render_agent
 
 
 SCHEMAS = ROOT / "schemas"
 SPECIALISTS = ROOT / "plugins/kodflow-specialists"
 PILOT = "developer-executor-correctness"
+# CodeRabbit #168 identified these intentional changes to the migrated body.
+# Their historical hashes remain in the migration fixture.
+REVIEWED_INSTRUCTIONS = {
+    "asset-specialist-meshy", "martial-specialist-unarmed", "rig-specialist-ik",
+    "developer-commentator-worker", "developer-executor-correctness", "developer-executor-shell",
+    "developer-specialist-cpp", "developer-specialist-nodejs", "developer-specialist-react",
+    "developer-specialist-zig", "devops-executor-linux", "devops-specialist-docker",
+    "devops-specialist-infrastructure", "devops-specialist-security", "os-specialist-debian",
+}
 
 
 def digest(data: bytes) -> str:
@@ -33,12 +44,19 @@ class RoleCompilerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tracked = compile_roles(ROOT, SCHEMAS)
+        cls.roles = [
+            role
+            for package in (ROOT / "plugins").iterdir()
+            if package.is_dir()
+            for role in load_roles(package, SCHEMAS)
+        ]
 
-    def test_every_migrated_role_preserves_legacy_metadata_and_instructions(self):
+    def test_historical_roles_preserve_legacy_metadata_and_unedited_instructions(self):
         golden_path = ROOT / "scripts/tests/fixtures/roles/legacy-projections.json"
         batches = json.loads(golden_path.read_text(encoding="utf-8"))
         self.assertEqual([len(batch) for batch in batches.values()], [3, 9, 15, 8, 14])
-        verified = set()
+        historical_roles = set()
+        original_codex_count = 0
         for batch in batches.values():
             for name, expectations in batch.items():
                 with self.subTest(role=name):
@@ -48,24 +66,35 @@ class RoleCompilerTests(unittest.TestCase):
                     metadata = yaml.safe_load(header)
                     canonical = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
                     self.assertEqual(digest(canonical.encode("utf-8")), expectations["metadataSha256"])
-                    self.assertEqual(digest(body.encode("utf-8")), expectations["instructionsSha256"])
-                    verified.add(relative)
+                    if relative.stem not in REVIEWED_INSTRUCTIONS:
+                        self.assertEqual(digest(body.encode("utf-8")), expectations["instructionsSha256"])
+                    historical_roles.add(relative.stem)
                     if "codexSha256" in expectations:
-                        relative = Path("codex/agents") / f"{relative.stem}.toml"
-                        self.assertEqual(digest(self.tracked[relative]), expectations["codexSha256"])
-                        verified.add(relative)
-        self.assertEqual(verified, set(self.tracked))
-        self.assertEqual(sum(path.suffix == ".toml" for path in verified), 35)
+                        original_codex_count += 1
+                        if relative.stem not in REVIEWED_INSTRUCTIONS:
+                            generated = Path("codex/agents") / f"{relative.stem}.toml"
+                            self.assertEqual(digest(self.tracked[generated]), expectations["codexSha256"])
+        self.assertEqual(len(historical_roles), 49)
+        self.assertEqual(original_codex_count, 35)
+        self.assertTrue(REVIEWED_INSTRUCTIONS <= historical_roles)
 
     def test_tracked_projections_match_compiler(self):
+        excluded = {
+            line.split("#", 1)[0].strip()
+            for line in (ROOT / "scripts/install-exclude.txt").read_text(encoding="utf-8").splitlines()
+        }
+        expected = {Path(f"plugins/{role.package}/agents/{role.id}.md") for role in self.roles}
+        expected |= {Path(f"codex/agents/{role.id}.toml") for role in self.roles if role.package not in excluded}
+        self.assertEqual(expected, set(self.tracked))
         for relative, content in self.tracked.items():
             with self.subTest(path=relative):
                 self.assertEqual((ROOT / relative).read_bytes(), content)
 
     def test_host_companions_preserve_custom_agents_and_explain_advisory_skills(self):
         artifacts = build_role_artifacts(ROOT, SCHEMAS)
-        self.assertEqual(sum(path.suffix == ".toml" for path in artifacts), 49)
-        self.assertEqual(sum(path.name == "SKILL.md" for path in artifacts), 49)
+        expected = {Path(f"openai/{role.package}/agents/{role.id}.toml") for role in self.roles}
+        expected |= {Path(f"perplexity/{role.package}/skills/{role.id}/SKILL.md") for role in self.roles}
+        self.assertEqual(expected, set(artifacts))
         role_dir = Path("openai/kodflow-specialists/agents")
         role_ids = {
             tomllib.loads(artifacts[role_dir / f"developer-executor-{suffix}.toml"].decode("utf-8"))["name"]
@@ -76,7 +105,10 @@ class RoleCompilerTests(unittest.TestCase):
             "developer-executor-quality",
         })
         skills = perplexity_role_skills(SPECIALISTS, SCHEMAS)
-        self.assertEqual(len(skills), 35)
+        self.assertEqual(
+            {f"skills/{role.id}/SKILL.md" for role in self.roles if role.package == SPECIALISTS.name},
+            set(skills),
+        )
         skill_bytes = skills[f"skills/{PILOT}/SKILL.md"]
         self.assertIn(b"does not provide a separate sub-agent identity, sandbox", skill_bytes)
         self.assertIn(b"as read-only guidance", skill_bytes)
@@ -95,6 +127,28 @@ class RoleCompilerTests(unittest.TestCase):
         output = Draft202012Validator(role.output_schema)
         output.validate({"agent": "correctness-checker", "issues": [], "commendations": [], "metrics": {}})
         self.assertFalse(output.is_valid({"agent": "correctness-checker", "issues": "bad"}))
+        self.assertTrue(output.is_valid("No findings. Full report in the requested file."))
+        self.assertFalse(output.is_valid(""))
+
+    def test_plan_review_schemas_accept_objections_without_relaxing_normal_results(self):
+        objection = {
+            "severity": "material", "claim": "Missing domain fixture", "evidence": "plan.md:12",
+            "remedy": "Add coverage", "consulted": [], "unverified": [],
+        }
+        roles = {role.id: role for role in self.roles}
+        for name in ("developer-executor-security", "martial-specialist-unarmed"):
+            with self.subTest(role=name):
+                output = Draft202012Validator(roles[name].output_schema)
+                self.assertTrue(output.is_valid([objection]))
+                self.assertTrue(output.is_valid([]))
+                self.assertFalse(output.is_valid([{"claim": "Missing fields"}]))
+                self.assertFalse(output.is_valid({}))
+        self.assertTrue(Draft202012Validator(roles["developer-executor-security"].output_schema).is_valid("Report written"))
+        unarmed = Draft202012Validator(roles["martial-specialist-unarmed"].output_schema)
+        self.assertTrue(unarmed.is_valid({
+            "schema": "panel-member/v1", "agent": "martial-specialist-unarmed",
+            "role": "consulted", "status": "ok", "summary": "Rig timing checked.",
+        }))
 
     def test_reject_role_paths_outside_source_and_remote_schema_references(self):
         with TemporaryDirectory() as temp:
@@ -137,6 +191,77 @@ class RoleCompilerTests(unittest.TestCase):
                 data[field] = f"./{file}"
             descriptor.write_text(yaml.safe_dump(data), encoding="utf-8")
             self.assertEqual([inline], load_roles(package, SCHEMAS))
+
+    def test_schema_refs_are_checked_only_in_subschemas(self):
+        with TemporaryDirectory() as temp:
+            package = Path(temp) / "example"
+            role = package / "io.github.kodflow/roles" / PILOT
+            shutil.copytree(SPECIALISTS / "io.github.kodflow/roles" / PILOT, role)
+            descriptor = role / "role.yaml"
+            data = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
+            data["outputSchema"] = {
+                "type": "object",
+                "properties": {"$ref": {"type": "string"}, "$dynamicRef": {"type": "string"}},
+                "default": {"$ref": "https://example.invalid/document.json"},
+            }
+            descriptor.write_text(yaml.safe_dump(data), encoding="utf-8")
+            (compiled,) = load_roles(package, SCHEMAS)
+            self.assertEqual(data["outputSchema"], compiled.output_schema)
+            data["outputSchema"]["properties"]["$ref"]["$ref"] = "https://example.invalid/schema.json"
+            descriptor.write_text(yaml.safe_dump(data), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "stay in its document"):
+                load_roles(package, SCHEMAS)
+
+    def test_file_contracts_reject_non_finite_numbers(self):
+        with TemporaryDirectory() as temp:
+            package = Path(temp) / "example"
+            role = package / "io.github.kodflow/roles" / PILOT
+            shutil.copytree(SPECIALISTS / "io.github.kodflow/roles" / PILOT, role)
+            descriptor = role / "role.yaml"
+            data = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
+            data["outputSchema"] = "./output.schema.json"
+            descriptor.write_text(yaml.safe_dump(data), encoding="utf-8")
+            (role / "output.schema.json").write_text('{"default": NaN}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "must be JSON-compatible"):
+                load_roles(package, SCHEMAS)
+
+    def test_codex_toml_preserves_control_characters_and_markdown(self):
+        original = 'text\\t\nwith\tquotes """ and controls\f\r\x00\x1f\x7f here'
+        document = render_agent({"name": "demo"}, original, "demo.md")
+        self.assertEqual(original + "\n", tomllib.loads(document)["developer_instructions"])
+
+    def test_flat_generator_loads_portable_roles_and_stages_workflows(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            package = root / "plugins/example"
+            role = package / "io.github.kodflow/roles" / PILOT
+            shutil.copytree(SPECIALISTS / "io.github.kodflow/roles" / PILOT, role)
+            entry = package / "skills/review/SKILL.md"
+            entry.parent.mkdir(parents=True)
+            entry.write_text(
+                "---\nname: review\ndescription: Review a local change\n---\n\n"
+                "[Workflow](../../io.github.kodflow/projections/workflows/review-openai.md)\n",
+                encoding="utf-8",
+            )
+            projection = package / "io.github.kodflow/projections/workflows/review-openai.md"
+            projection.parent.mkdir(parents=True)
+            projection.write_text("# Review workflow\n", encoding="utf-8")
+            generator = [sys.executable, str(ROOT / "scripts/build-codex.py"), str(root)]
+            subprocess.run(generator, capture_output=True, check=True)
+            agent = root / "codex/agents" / f"{PILOT}.toml"
+            (expected,) = load_roles(package, SCHEMAS)
+            self.assertEqual(expected.render_codex(), agent.read_bytes())
+            skill = root / "codex/skills/review"
+            self.assertIn("[Workflow](workflow-openai.md)", (skill / "SKILL.md").read_text(encoding="utf-8"))
+            self.assertEqual(projection.read_bytes(), (skill / "workflow-openai.md").read_bytes())
+
+            descriptor = role / "role.yaml"
+            declaration = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
+            declaration["modelClass"] = "unknown"
+            descriptor.write_text(yaml.safe_dump(declaration), encoding="utf-8")
+            rejected = subprocess.run(generator, capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("'unknown' is not one of", rejected.stderr)
 
     def test_refuse_role_directory_mismatch_and_conflicting_capabilities(self):
         with TemporaryDirectory() as temp:

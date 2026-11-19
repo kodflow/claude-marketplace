@@ -28,30 +28,34 @@ outputSchema:
   title: developer-executor-correctness result
   description: The role instructions specify the applicable report format for the current
     host and mode.
-  type: object
-  required:
-  - agent
-  - issues
-  - commendations
-  - metrics
-  properties:
-    agent:
-      type: string
-      minLength: 1
-    issues:
-      type: array
-      items:
-        type: object
-    commendations:
-      type: array
-      items:
+  oneOf:
+  - type: object
+    required:
+    - agent
+    - issues
+    - commendations
+    - metrics
+    properties:
+      agent:
         type: string
-    metrics:
-      type: object
-    summary:
-      type: string
-    agent_feedback:
-      type: string
+        minLength: 1
+      issues:
+        type: array
+        items:
+          type: object
+      commendations:
+        type: array
+        items:
+          type: string
+      metrics:
+        type: object
+      summary:
+        type: string
+      agent_feedback:
+        type: string
+  - type: string
+    minLength: 1
+    description: Compact caller return when writing a separate JSON report.
 sideEffects: none
 claude:
   tools: Read, Glob, Grep, Write, Bash, mcp__context7__resolve-library-id, mcp__context7__query-docs,

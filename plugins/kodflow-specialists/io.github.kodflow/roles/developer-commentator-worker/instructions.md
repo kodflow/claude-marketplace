@@ -72,7 +72,8 @@ Return **only** valid JSON (no markdown fences, no explanation):
 }
 ```
 
-If no changes needed: return JSON with empty changes array and zero counts.
+If no changes are needed, return an empty `changes` array and report the actual
+audit counts, including the number of functions skipped.
 
 ---
 

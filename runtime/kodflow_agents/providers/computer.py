@@ -1,24 +1,74 @@
 """Perplexity Computer MCP with operator-provided OAuth bearer authentication."""
 
 from collections.abc import Callable
+from dataclasses import replace
 from threading import Lock
+import time
 from uuid import uuid4
 
-from ..ports import Event, Handle, Json, Provider, ProviderError, Request
-from ..transport import Transport, credential, objects
+from ..ports import Event, Handle, Json, NoSendError, Provider, ProviderError, Request
+from ..transport import ProviderHTTPError, Transport, credential, objects
 
 _ENDPOINT = "https://www.perplexity.ai/rest/computer/mcp"
-_VERSIONS = {"2025-03-26", "2025-06-18", "2025-11-25", "2026-07-28"}
+_TASKS_VERSION = "2026-07-28"
+_VERSIONS = {"2025-03-26", "2025-06-18", "2025-11-25", _TASKS_VERSION}
+_TASKS_META = {"io.modelcontextprotocol/clientCapabilities": {"extensions": {"io.modelcontextprotocol/tasks": {}}}}
+_THREAD_META = "ai.perplexity/threadId"
+
+
+def _remaining(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise NoSendError("Computer MCP deadline expired before sending the operation")
+    return remaining
+
+
+def _tool_content(result: Json) -> Json:
+    content = result.get("structuredContent")
+    if isinstance(content, dict):
+        return content
+    for item in objects(result.get("content")):
+        if item.get("type") == "text" and isinstance(item.get("text"), str):
+            try:
+                return Transport._object(item["text"].encode())
+            except ProviderError:
+                continue
+    raise ProviderError("Computer MCP did not return structured tool output")
+
+
+def _no_thread_error(body: Json) -> str:
+    if body.get("thread_id"):
+        return ""
+    interactive = body.get("interactive")
+    for code in (
+        body.get("event"), body.get("error_code"), interactive.get("type") if isinstance(interactive, dict) else None,
+    ):
+        if code in ("insufficient_credits", "access_denied"):
+            return code
+    return ""
+
+
+def _tool_result(result: Json) -> Json:
+    if result.get("isError") is True:
+        try:
+            error = _tool_content(result)
+        except ProviderError:
+            error = {}
+        if code := _no_thread_error(error):
+            raise NoSendError(f"Computer rejected the operation before starting a thread ({code})")
+        raise ProviderError("Computer MCP tool reported an error")
+    return _tool_content(result)
 
 
 class ComputerMcp:
-    """Minimal Streamable HTTP client for the synchronous Computer tools."""
+    """Streamable HTTP client with session rollover for Computer's tools and tasks."""
 
     def __init__(self, transport: Transport) -> None:
         self.transport = transport
         self.lock = Lock()
         self.session = ""
         self.version = ""
+        self.generation = 0
 
     @staticmethod
     def _headers() -> dict[str, str]:
@@ -39,107 +89,196 @@ class ComputerMcp:
             raise ProviderError("Computer MCP returned a JSON-RPC error or invalid response")
         return reply["result"]
 
-    def _initialize(self, timeout: float) -> None:
+    def _initialize(self, deadline: float) -> None:
+        identifier = uuid4().hex
+        reply = self.transport.request("POST", _ENDPOINT, {
+            "jsonrpc": "2.0", "id": identifier, "method": "initialize",
+            "params": {
+                "protocolVersion": _TASKS_VERSION, "capabilities": {},
+                "clientInfo": {"name": "kodflow-agents", "version": "0.1.0"},
+            },
+        }, headers=self._headers(), timeout=_remaining(deadline))
+        version = self._result(reply.body, identifier).get("protocolVersion")
+        if version not in _VERSIONS:
+            raise ProviderError("Computer MCP negotiated an unsupported protocol version")
+        self.version = version
+        self.session = reply.headers.get("mcp-session-id", "")
+        try:
+            self.transport.request(
+                "POST", _ENDPOINT, {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                headers=self._session_headers(), timeout=_remaining(deadline), allow_empty=True,
+            )
+        except ProviderError:
+            self.session = self.version = ""
+            raise
+        self.generation += 1
+
+    def _prepare(self, deadline: float, require_tasks: bool) -> tuple[dict[str, str], int]:
         with self.lock:
-            if self.version:
-                return
-            identifier = uuid4().hex
-            reply = self.transport.request("POST", _ENDPOINT, {
-                "jsonrpc": "2.0", "id": identifier, "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-11-25", "capabilities": {},
-                    "clientInfo": {"name": "kodflow-agents", "version": "0.1.0"},
-                },
-            }, headers=self._headers(), timeout=timeout)
-            version = self._result(reply.body, identifier).get("protocolVersion")
-            if version not in _VERSIONS:
-                raise ProviderError("Computer MCP negotiated an unsupported protocol version")
-            self.version = version
-            self.session = reply.headers.get("mcp-session-id", "")
             try:
-                self.transport.request(
-                    "POST", _ENDPOINT, {"jsonrpc": "2.0", "method": "notifications/initialized"},
-                    headers=self._session_headers(), timeout=timeout, allow_empty=True,
-                )
-            except ProviderError:
-                self.session = self.version = ""
+                if not self.version:
+                    self._initialize(deadline)
+            except ProviderError as error:
+                raise NoSendError(f"Computer MCP session could not be initialized: {error}") from None
+            if require_tasks and self.version != _TASKS_VERSION:
+                raise NoSendError("Computer MCP did not negotiate the version needed for task-specific results")
+            return self._session_headers(), self.generation
+
+    def _request(self, method: str, params: Json, timeout: float, *, require_tasks: bool = False) -> Json:
+        deadline = time.monotonic() + timeout
+        identifier = uuid4().hex
+        payload = {"jsonrpc": "2.0", "id": identifier, "method": method, "params": params}
+        headers, generation = self._prepare(deadline, require_tasks)
+        try:
+            response = self.transport.request(
+                "POST", _ENDPOINT, payload, headers=headers, timeout=_remaining(deadline),
+            )
+        except ProviderHTTPError as error:
+            if error.status != 404 or "MCP-Session-Id" not in headers:
                 raise
+            # The server rejected this invalid session without routing the tool.
+            # Retire only that generation so another request's fresh session remains usable.
+            with self.lock:
+                if self.generation == generation:
+                    self.session = self.version = ""
+            headers, _ = self._prepare(deadline, require_tasks)
+            try:
+                response = self.transport.request(
+                    "POST", _ENDPOINT, payload, headers=headers, timeout=_remaining(deadline),
+                )
+            except ProviderHTTPError as retry_error:
+                if retry_error.status == 404 and "MCP-Session-Id" in headers:
+                    raise NoSendError("Computer MCP rejected the replacement session") from None
+                raise
+        return self._result(response.body, identifier)
 
     def call(self, name: str, arguments: Json, timeout: float) -> Json:
-        self._initialize(timeout)
-        identifier = uuid4().hex
-        response = self.transport.request("POST", _ENDPOINT, {
-            "jsonrpc": "2.0", "id": identifier, "method": "tools/call",
-            "params": {"name": name, "arguments": arguments},
-        }, headers=self._session_headers(), timeout=timeout).body
-        result = self._result(response, identifier)
-        content = result.get("structuredContent")
-        if not isinstance(content, dict):
-            for item in objects(result.get("content")):
-                if item.get("type") == "text" and isinstance(item.get("text"), str):
-                    try:
-                        content = Transport._object(item["text"].encode())
-                    except ProviderError:
-                        continue
-                    break
-        if not isinstance(content, dict):
-            raise ProviderError("Computer MCP did not return structured tool output")
-        return content
+        return _tool_result(self._request("tools/call", {"name": name, "arguments": arguments}, timeout))
+
+    def tasks(self, method: str, params: Json, timeout: float) -> Json:
+        return self._request(method, {**params, "_meta": _TASKS_META}, timeout, require_tasks=True)
 
 
 class Computer(Provider):
-    def __init__(self, call_tool: Callable[[str, Json, float], Json]) -> None:
+    def __init__(
+        self, call_tool: Callable[[str, Json, float], Json],
+        call_tasks: Callable[[str, Json, float], Json] | None = None,
+    ) -> None:
         self.call_tool = call_tool
+        self.call_tasks = call_tasks
 
     def capabilities(self) -> frozenset[str]:
         return frozenset({"text", "resume", "cancel", "input", "approval", "artifacts"})
 
-    def _event(self, body: Json, timeout: float, existing: Handle | None = None) -> Event:
+    @staticmethod
+    def _thread_event(body: Json, existing: Handle | None = None) -> Event:
         identifier = body.get("thread_id") or (existing.native_id if existing else None)
         if not isinstance(identifier, str) or not identifier:
+            if code := _no_thread_error(body):
+                raise NoSendError(f"Computer rejected the operation before starting a thread ({code})")
             raise ProviderError("Computer did not return a thread id")
         if existing and identifier != existing.native_id:
             raise ProviderError("Computer returned a different thread id")
         handle = Handle(identifier)
         event = body.get("event")
-        web_state = body.get("web_state") or {}
+        web_state = body.get("web_state") if isinstance(body.get("web_state"), dict) else {}
         status = body.get("task_status") or web_state.get("task_status")
-        text = body.get("text") if isinstance(body.get("text"), str) else ""
         if status == "input_required":
-            interactive = body.get("interactive") or {}
-            checkpoint = event if event != "transcript" else self._waiting_kind(web_state)
+            interactive = body.get("interactive")
+            if isinstance(interactive, dict):
+                checkpoint = event
+                followup = interactive.get("followup_uuid")
+            else:
+                checkpoint, followup = Computer._thread_checkpoint(web_state)
             kind = "waiting_approval" if checkpoint == "confirm_action" else "waiting_input"
-            followup = interactive.get("followup_uuid")
-            return Event(kind, Handle(identifier, followup if isinstance(followup, str) else None),
+            if checkpoint in {"auth_required", "interaction_required", "two_factor_required"}:
+                kind = "waiting_auth"
+            return Event(kind, replace(handle, context_id=followup if isinstance(followup, str) else None),
                          reason=f"Computer is waiting ({checkpoint})")
         if status == "cancelled":
             return Event("cancelled", handle)
         if status == "failed":
             return Event("failed", handle, reason="Computer reported a failed task")
         if status == "completed":
-            return Event("completed", handle, text=text, artifacts=self._assets(handle, timeout))
+            # read_thread returns a combined transcript, not a task's result.
+            # Older non-Tasks sessions can recover status but cannot supply task output.
+            if event == "transcript":
+                return Event("failed", handle, reason="Computer completed without a task-specific result")
+            text = body.get("text") if isinstance(body.get("text"), str) else ""
+            return Event("completed", handle, text=text, artifacts_collected=False)
         if status == "working" or event in {"timeout", "sleep", "waiting"}:
             return Event("running", handle)
         raise ProviderError("Computer did not report an authoritative task status")
 
     @staticmethod
-    def _waiting_kind(web_state: Json) -> str:
-        entries = objects(web_state.get("entries"))
-        for entry in reversed(entries):
+    def _thread_checkpoint(web_state: Json) -> tuple[str, str | None]:
+        for entry in reversed(objects(web_state.get("entries"))):
             for interaction in objects(entry.get("interactions")):
-                if interaction.get("type") in {"confirm_action", "CONFIRM_ACTION"}:
-                    return "confirm_action"
-        return "input_required"
+                request = interaction.get("request")
+                kind = interaction.get("type")
+                if kind in {"confirm_action", "CONFIRM_ACTION", "ask_user_question", "ASK_USER_QUESTION"}:
+                    followup = request.get("answer_submission_uuid") if isinstance(request, dict) else None
+                    return kind.lower(), followup if isinstance(followup, str) else None
+        return "input_required", None
+
+    @staticmethod
+    def _task_event(body: Json, existing: Handle | None = None) -> Event:
+        identifier = body.get("taskId")
+        metadata = body.get("_meta")
+        thread = metadata.get(_THREAD_META) if isinstance(metadata, dict) else None
+        if existing:
+            if identifier != existing.native_id or (thread is not None and thread != existing.thread_id):
+                raise ProviderError("Computer returned a different task or thread id")
+            thread = existing.thread_id
+        if not isinstance(identifier, str) or not identifier or not isinstance(thread, str) or not thread:
+            raise ProviderError("Computer MCP did not return the task and thread identifiers")
+        handle = Handle(identifier, thread_id=thread)
+        status = body.get("status")
+        if status == "working":
+            return Event("running", handle)
+        if status == "cancelled":
+            return Event("cancelled", handle)
+        if status == "input_required":
+            requests = body.get("inputRequests")
+            if not isinstance(requests, dict) or not requests:
+                raise ProviderError("Computer did not return the waiting task's input requests")
+            for key, form in sorted(requests.items()):
+                params = form.get("params") if isinstance(form, dict) else None
+                if not isinstance(params, dict) or params.get("mode", "form") != "form":
+                    continue
+                schema = params.get("requestedSchema")
+                if not isinstance(schema, dict) or not isinstance(schema.get("properties", {}), dict):
+                    raise ProviderError("Computer returned a malformed input form")
+                state = "waiting_input" if schema.get("properties") else "waiting_approval"
+                reason = params.get("message") if isinstance(params.get("message"), str) else ""
+                return Event(state, replace(handle, context_id=key), reason=reason)
+            return Event("waiting_auth", handle, reason="Computer is waiting for an action in the Perplexity UI")
+        if status == "completed":
+            result = body.get("result")
+            if not isinstance(result, dict):
+                raise ProviderError("Computer did not return the completed task result")
+            if result.get("isError") is True:
+                return Event("failed", handle, reason="Computer reported a failed task")
+            outcome = Computer._thread_event(_tool_result(result), Handle(thread))
+            if outcome.state != "completed":
+                raise ProviderError("Computer returned an inconsistent completed task")
+            return replace(outcome, handle=handle)
+        raise ProviderError("Computer returned an unsupported task status")
+
+    def collect_artifacts(self, event: Event, *, timeout: float) -> tuple[Json, ...]:
+        artifacts = self._assets(event.handle, timeout)
+        return artifacts or self.artifacts(event)
 
     def _assets(self, handle: Handle, timeout: float) -> tuple[Json, ...]:
         assets = []
         cursor = None
         seen: set[str] = set()
+        deadline = time.monotonic() + timeout
         while True:
-            arguments = {"thread_id": handle.native_id}
+            arguments = {"thread_id": handle.thread_id or handle.native_id}
             if cursor:
                 arguments["cursor"] = cursor
-            body = self.call_tool("list_thread_assets", arguments, timeout)
+            body = self.call_tool("list_thread_assets", arguments, _remaining(deadline))
             assets.extend({
                 "id": asset["asset_id"],
                 "name": asset.get("filename") or asset["asset_id"],
@@ -156,17 +295,48 @@ class Computer(Provider):
         arguments = {"message": request.prompt()}
         if request.model:
             arguments["model"] = request.model
-        return self._event(self.call_tool("call_perplexity_computer", arguments, request.timeout), request.timeout)
+        if self.call_tasks is None:
+            return self._thread_event(self.call_tool("call_perplexity_computer", arguments, request.timeout))
+        body = self.call_tasks("tools/call", {"name": "call_perplexity_computer", "arguments": arguments}, request.timeout)
+        if body.get("resultType") == "task":
+            return self._task_event(body)
+        return self._thread_event(_tool_result(body))
+
+    def recover_handle(self, native_id: str, *, timeout: float) -> Handle:
+        if self.call_tasks is None:
+            return Handle(native_id)
+        body = self.call_tasks("tasks/get", {"taskId": native_id}, timeout)
+        event = self._task_event(body)
+        if event.handle.native_id != native_id:
+            raise ProviderError("Computer returned a different task id")
+        return event.handle
 
     def resume(self, handle: Handle, *, timeout: float) -> Event:
+        if handle.thread_id and self.call_tasks:
+            return self._task_event(self.call_tasks("tasks/get", {"taskId": handle.native_id}, timeout), handle)
         result = self.call_tool("read_thread", {"thread_id": handle.native_id}, timeout)
-        return self._event(result, timeout, handle)
+        return self._thread_event(result, handle)
 
     def cancel(self, handle: Handle, *, timeout: float) -> Event:
-        result = self.call_tool("cancel_task", {"thread_id": handle.native_id}, timeout)
-        return self._event(result, timeout, handle)
+        thread = handle.thread_id or handle.native_id
+        result = self.call_tool("cancel_task", {"thread_id": thread}, timeout)
+        event = self._thread_event(result, Handle(thread))
+        return replace(event, handle=handle)
+
+    def _answer_task(self, handle: Handle, response: Json, timeout: float) -> Event:
+        if not self.call_tasks or not handle.context_id:
+            raise NoSendError("Computer has no saved MCP task checkpoint")
+        self.call_tasks("tasks/update", {
+            "taskId": handle.native_id, "inputResponses": {handle.context_id: response},
+        }, timeout)
+        return Event("running", handle)
 
     def provide_input(self, handle: Handle, payload: Json, *, timeout: float) -> Event:
+        if handle.thread_id:
+            answers = payload.get("answers")
+            if not isinstance(answers, dict) or not answers:
+                raise NoSendError("Computer task input requires an answers object")
+            return self._answer_task(handle, {"action": "accept", "content": answers}, timeout)
         arguments: Json = {"thread_id": handle.native_id}
         if isinstance(payload.get("connector"), str):
             tool = "notify_connected"
@@ -177,15 +347,18 @@ class Computer(Provider):
             if handle.context_id:
                 arguments["followup_uuid"] = handle.context_id
         else:
-            raise ProviderError("Computer input requires answers or a connector name")
-        return self._event(self.call_tool(tool, arguments, timeout), timeout, handle)
+            raise NoSendError("Computer input requires answers or a connector name")
+        return self._thread_event(self.call_tool(tool, arguments, timeout), handle)
 
     def approve(self, handle: Handle, approved: bool, reason: str, *, timeout: float) -> Event:
+        if handle.thread_id:
+            return self._answer_task(handle, {"action": "accept" if approved else "decline"}, timeout)
         tool = "confirm_action_approve" if approved else "confirm_action_deny"
         arguments = {"thread_id": handle.native_id, "result": reason}
         if handle.context_id:
             arguments["followup_uuid"] = handle.context_id
-        return self._event(self.call_tool(tool, arguments, timeout), timeout, handle)
+        return self._thread_event(self.call_tool(tool, arguments, timeout), handle)
 
     def artifact_download(self, handle: Handle, asset_id: str, *, timeout: float) -> Json:
-        return self.call_tool("create_asset_download", {"thread_id": handle.native_id, "asset_id": asset_id}, timeout)
+        thread = handle.thread_id or handle.native_id
+        return self.call_tool("create_asset_download", {"thread_id": thread, "asset_id": asset_id}, timeout)

@@ -1,17 +1,17 @@
 """Offline contracts for provider requests, state mapping and credential handling."""
 
-import io
-import json
+from email.message import Message
+import time
 
 import pytest
 
-from kodflow_agents.ports import Handle, ProviderError, Request, UnsupportedOperation
+from kodflow_agents.ports import Handle, NoSendError, ProviderError, Request, UnsupportedOperation
 from kodflow_agents.providers.a2a import A2A
 from kodflow_agents.providers.anthropic import Anthropic
 from kodflow_agents.providers.computer import Computer, ComputerMcp
 from kodflow_agents.providers.openai import OpenAI
 from kodflow_agents.providers.perplexity import Perplexity
-from kodflow_agents.transport import Reply, Transport, https_origin
+from kodflow_agents.transport import ProviderHTTPError, Reply, Transport, https_origin
 
 REQUEST = Request("task", "Research one question", {"topic": "storage"}, "test-model", timeout=20)
 
@@ -24,6 +24,8 @@ class RecordedTransport:
     def request(self, method, url, payload=None, *, headers=None, timeout, **options):
         self.calls.append((method, url, payload, headers or {}, timeout, options))
         value = next(self.responses)
+        if isinstance(value, Exception):
+            raise value
         if callable(value):
             value = value(payload)
         return value if isinstance(value, Reply) else Reply(value, {})
@@ -62,7 +64,8 @@ def test_anthropic_messages_excludes_thinking_and_rejects_unavailable_interactio
     provider = Anthropic(transport)
     event = provider.submit(REQUEST)
     method, url, body, headers, timeout, _ = transport.calls[0]
-    assert (method, url, timeout) == ("POST", "https://api.anthropic.com/v1/messages", 20)
+    assert (method, url) == ("POST", "https://api.anthropic.com/v1/messages")
+    assert 0 < timeout <= 20
     assert body["messages"][0]["role"] == "user"
     assert headers["anthropic-version"] == "2023-06-01"
     assert event.text == "public answer"
@@ -150,6 +153,8 @@ def test_a2a_same_origin_agent_card_stream_artifact_and_cancel(monkeypatch):
     payload = transport.calls[1][2]
     assert payload["method"] == "SendMessage"
     assert payload["params"]["message"]["role"] == "ROLE_USER"
+    assert payload["params"]["configuration"] == {"returnImmediately": True}
+    assert event.handle.endpoint == "https://agent.example/rpc"
     assert transport.calls[1][3] == {"A2A-Version": "1.0", "Authorization": "Bearer agent-fixture"}
     events = list(provider.events(event.handle, timeout=20))
     assert [(item.state, item.text) for item in events] == [("completed", "a reply")]
@@ -186,8 +191,7 @@ def test_computer_uses_explicit_input_approval_poll_and_assets():
          "interactive": {"followup_uuid": "confirm-uuid"}},
         {"thread_id": "thread", "event": "ask_user_question", "task_status": "input_required"},
         {"thread_id": "thread", "event": "timeout", "task_status": "working"},
-        {"thread_id": "thread", "event": "transcript", "web_state": {"task_status": "completed"}, "text": "result"},
-        {"assets": [{"asset_id": "asset", "filename": "summary.md"}], "next_cursor": None},
+        {"thread_id": "thread", "event": "transcript", "web_state": {"task_status": "working"}},
         {"thread_id": "thread", "event": "cancelled", "task_status": "cancelled"},
     ))
 
@@ -203,12 +207,11 @@ def test_computer_uses_explicit_input_approval_poll_and_assets():
     third = provider.provide_input(second.handle, {"answers": {"format": "Markdown"}}, timeout=90)
     assert third.state == "running"
     fourth = provider.resume(third.handle, timeout=90)
-    assert fourth.state == "completed"
-    assert fourth.artifacts[0]["name"] == "summary.md"
+    assert fourth.state == "running"
     assert provider.cancel(fourth.handle, timeout=90).state == "cancelled"
     assert [name for name, _ in calls] == [
         "call_perplexity_computer", "confirm_action_approve", "answer_question",
-        "read_thread", "list_thread_assets", "cancel_task",
+        "read_thread", "cancel_task",
     ]
     assert calls[1][1]["followup_uuid"] == "confirm-uuid"
     assert all(args["thread_id"] == "thread" for _, args in calls[1:])
@@ -234,6 +237,244 @@ def test_unsafe_endpoints_rejected(url):
         https_origin(url)
 
 
+
 def test_sse_does_not_emit_comments_or_split_json():
-    source = io.BytesIO(b": heartbeat\n\ndata: {\"id\":1,\ndata: \"result\":2}\r\n\r\n")
-    assert list(Transport._sse(source, float("inf"))) == [{"id": 1, "result": 2}]
+    chunks = [b": heartbeat\n\ndata: {\"id\":", b"1,\ndata: \"result\":2}\r", b"\n\r\n"]
+    assert list(Transport._sse(chunks)) == [{"id": 1, "result": 2}]
+
+
+def test_anthropic_continues_paused_server_tools_with_same_context(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-fixture")
+    pause = [{"type": "server_tool_use", "id": "tool", "name": "web_search", "input": {"query": "q"}}]
+    transport = RecordedTransport([
+        {"id": "paused", "stop_reason": "pause_turn", "content": pause, "usage": {"output_tokens": 1}},
+        {"id": "done", "stop_reason": "end_turn", "content": [{"type": "text", "text": "result"}],
+         "usage": {"output_tokens": 4}},
+    ])
+    selected = Request("task", "Research", {}, "model", timeout=20, web_search=True)
+    outcome = Anthropic(transport).submit(selected)
+    assert outcome.text == "result"
+    assert outcome.usage["output_tokens"] == 5
+    first, second = transport.calls
+    assert second[2]["messages"] == first[2]["messages"] + [{"role": "assistant", "content": pause}]
+    assert second[2]["tools"] == first[2]["tools"]
+    assert 0 < second[4] <= first[4] <= 20
+
+
+def test_anthropic_exhausts_continuation_budget_and_rejects_nonterminal_output(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-fixture")
+    block = [{"type": "text", "text": "not a finished response"}]
+    repeated = RecordedTransport([{"id": "paused", "stop_reason": "pause_turn", "content": block}] * 4)
+    result = Anthropic(repeated).submit(REQUEST)
+    assert result.state == "failed"
+    assert "budget" in result.reason and not result.text
+    assert len(repeated.calls) == 4
+    for reason in ("max_tokens", "refusal"):
+        result = Anthropic(RecordedTransport([{"id": "msg", "stop_reason": reason, "content": block}])).submit(REQUEST)
+        assert result.state == "failed" and not result.text
+
+
+def test_a2a_refreshes_out_of_band_auth_and_rejects_changed_endpoint():
+    first_transport = RecordedTransport([
+        card(), rpc({"task": task("AUTH_REQUIRED")}), rpc(task("WORKING")),
+    ])
+    provider = A2A(first_transport, "https://agent.example/.well-known/agent-card.json")
+    provider.discover(timeout=1)
+    assert "stream" in provider.capabilities()
+    event = provider.submit(REQUEST)
+    assert event.state == "waiting_auth"
+    assert provider.resume(event.handle, timeout=1).state == "running"
+    assert first_transport.calls[-1][2]["method"] == "GetTask"
+
+    shifted = RecordedTransport([card("https://agent.example/different-rpc")])
+    reloaded = A2A(shifted, "https://agent.example/.well-known/agent-card.json")
+    with pytest.raises(NoSendError, match="differs"):
+        reloaded.resume(event.handle, timeout=1)
+    assert len(shifted.calls) == 1 and shifted.calls[0][0] == "GET"
+
+
+def test_computer_mcp_reinitializes_only_on_session_specific_404(monkeypatch):
+    monkeypatch.setenv("PERPLEXITY_COMPUTER_OAUTH_TOKEN", "oauth-fixture")
+
+    def initialize(session):
+        return lambda payload: Reply(rpc({"protocolVersion": "2025-11-25"})(payload), {"mcp-session-id": session})
+
+    valid = rpc({"structuredContent": {"value": 1}})
+    transport = RecordedTransport([initialize("old"), {}, ProviderHTTPError(404), initialize("new"), {}, valid])
+    assert ComputerMcp(transport).call("read_thread", {}, 20) == {"value": 1}
+    assert [item[3]["MCP-Session-Id"] for item in transport.calls if item[2]["method"] == "tools/call"] == ["old", "new"]
+
+    failed = RecordedTransport([initialize("old"), {}, ProviderHTTPError(500)])
+    with pytest.raises(ProviderHTTPError, match="500"):
+        ComputerMcp(failed).call("read_thread", {}, 20)
+    assert len(failed.calls) == 3
+
+
+def test_computer_handles_only_confirmed_no_thread_errors_as_unsent(monkeypatch):
+    monkeypatch.setenv("PERPLEXITY_COMPUTER_OAUTH_TOKEN", "oauth-fixture")
+    initial = rpc({"protocolVersion": "2025-11-25"})
+    declined = rpc({
+        "isError": True, "structuredContent": {"event": "error", "interactive": {"type": "insufficient_credits"}},
+    })
+    with pytest.raises(NoSendError, match="before starting a thread"):
+        ComputerMcp(RecordedTransport([initial, {}, declined])).call("call_perplexity_computer", {}, 20)
+    ambiguous = rpc({"isError": True, "structuredContent": {"event": "error", "text": "SECRET"}})
+    with pytest.raises(ProviderError, match="tool reported an error") as caught:
+        ComputerMcp(RecordedTransport([initial, {}, ambiguous])).call("call_perplexity_computer", {}, 20)
+    assert not isinstance(caught.value, NoSendError) and "SECRET" not in str(caught.value)
+
+
+def test_computer_tasks_resume_authoritative_result_and_defer_assets():
+    states = iter([
+        {"resultType": "task", "taskId": "opaque-task", "status": "working", "_meta": {"ai.perplexity/threadId": "thread"}},
+        {"resultType": "complete", "taskId": "opaque-task", "status": "input_required", "inputRequests": {
+            "approval:form-key": {"params": {"mode": "form", "requestedSchema": {"properties": {}}}},
+        }},
+        {"resultType": "complete"},
+        {"resultType": "complete", "taskId": "opaque-task", "status": "completed", "result": {
+            "structuredContent": {"thread_id": "thread", "task_status": "completed", "event": "complete",
+                                  "text": "task result only"},
+        }},
+    ])
+    tasks = []
+    calls = []
+
+    def task_rpc(method, arguments, timeout):
+        tasks.append((method, arguments))
+        return next(states)
+
+    def tool(name, arguments, timeout):
+        calls.append((name, arguments))
+        return {"assets": [{"asset_id": "asset", "filename": "brief.md"}]}
+
+    provider = Computer(tool, task_rpc)
+    first = provider.submit(REQUEST)
+    assert first.handle.native_id == "opaque-task" and first.handle.thread_id == "thread"
+    second = provider.resume(first.handle, timeout=5)
+    assert second.state == "waiting_approval"
+    assert second.handle.context_id == "approval:form-key"
+    running = provider.approve(second.handle, True, "operator", timeout=5)
+    outcome = provider.resume(running.handle, timeout=5)
+    assert outcome.state == "completed" and not outcome.artifacts_collected and outcome.text == "task result only"
+    assert not calls
+    assert provider.collect_artifacts(outcome, timeout=5)[0]["name"] == "brief.md"
+    assert calls == [("list_thread_assets", {"thread_id": "thread"})]
+    assert tasks[2] == ("tasks/update", {
+        "taskId": "opaque-task", "inputResponses": {"approval:form-key": {"action": "accept"}},
+    })
+
+
+def test_computer_read_thread_saves_form_uuid_without_using_transcript_as_answer():
+    replies = iter([
+        {"event": "transcript", "web_state": {"task_status": "input_required", "entries": [
+            {"interactions": [{"type": "ask_user_question", "request": {"answer_submission_uuid": "precise-form"}}]},
+        ]}},
+        {"event": "transcript", "text": "unrelated user and assistant messages",
+         "web_state": {"task_status": "completed"}},
+    ])
+    provider = Computer(lambda *args: next(replies))
+    first = provider.resume(Handle("thread"), timeout=1)
+    assert first.handle.context_id == "precise-form"
+    outcome = provider.resume(first.handle, timeout=1)
+    assert outcome.state == "failed" and not outcome.text
+
+
+@pytest.mark.parametrize("content_type", ["application/json", "text/event-stream"])
+def test_absolute_body_deadline_includes_open_time_and_closes_response(monkeypatch, content_type):
+    class Response:
+        closed = False
+
+        def __init__(self):
+            self.headers = Message()
+            self.headers["Content-Type"] = content_type
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            self.closed = True
+
+        def read1(self, size):
+            time.sleep(0.004)
+            return b" "
+
+    response = Response()
+    transport = Transport()
+    deadline_start = []
+
+    def opened(method, url, payload, headers, deadline):
+        deadline_start.append(deadline.remaining())
+        time.sleep(0.014)
+        return response
+
+    monkeypatch.setattr(transport, "_open", opened)
+    with pytest.raises(ProviderError, match="deadline exceeded"):
+        transport.request("GET", "https://service.example", timeout=0.025)
+    assert response.closed and 0 < deadline_start[0] <= 0.025
+
+
+def test_text_envelope_is_used_only_for_string_valued_outputs():
+    for schema in ({"properties": {"text": {"type": "string"}}}, {}):
+        assert "Return only a JSON value" not in Request("id", "prompt", {}, "model", 1, output_schema=schema).prompt()
+    schema = {"properties": {"text": {"type": "integer"}}}
+    assert "Return only a JSON value" in Request("id", "prompt", {}, "model", 1, output_schema=schema).prompt()
+
+
+def test_cli_validates_pending_bindings_and_reuses_original_default(tmp_path, monkeypatch, capsys):
+    from kodflow_agents import cli
+    from kodflow_agents.providers.fake import Fake
+    from kodflow_agents.supervisor import Binding
+
+    workflow = tmp_path / "pinned.yaml"
+    workflow.write_text("""apiVersion: io.github.kodflow/workflow/v1
+id: pinned
+description: Pending-route regression.
+inputSchema: {type: object}
+tasks:
+  - id: first
+    role: researcher
+    instructions: First.
+    inputSchema: {type: object}
+    outputSchema: {type: object, properties: {text: {type: string}}}
+  - id: later
+    role: researcher
+    instructions: Later.
+    needs: [first]
+    provider: openai
+    inputSchema: {type: object}
+    outputSchema: {type: object, properties: {text: {type: string}}}
+""", encoding="utf-8")
+
+    submissions = []
+    route = {"openai": "original-openai", "anthropic": "original-anthropic"}
+
+    class RecordingProvider(Fake):
+        def submit(self, request):
+            submissions.append(self.name)
+            return super().submit(request)
+
+    def providers(live, names):
+        assert not live
+        return {name: Binding(RecordingProvider(name), route[name]) for name in names}
+
+    monkeypatch.setattr(cli, "_provider_bindings", providers)
+    options = ["--database", str(tmp_path / "runs.sqlite")]
+    assert cli.main(options + [
+        "--default-provider", "anthropic", "run", str(workflow),
+        "--input", "{}", "--run-id", "routing", "--once",
+    ]) == 0
+    assert submissions == ["anthropic"]
+    capsys.readouterr()
+
+    route["openai"] = "changed-openai"
+    assert cli.main(options + ["resume", "routing", "--once"]) == 1
+    assert "pinned run bindings" in capsys.readouterr().err
+    assert submissions == ["anthropic"]
+
+    route["openai"] = "original-openai"
+    assert cli.main(options + ["--default-provider", "openai", "resume", "routing", "--once"]) == 1
+    assert "default provider" in capsys.readouterr().err
+    assert submissions == ["anthropic"]
+
+    assert cli.main(options + ["resume", "routing", "--once"]) == 0
+    assert submissions == ["anthropic", "openai"]

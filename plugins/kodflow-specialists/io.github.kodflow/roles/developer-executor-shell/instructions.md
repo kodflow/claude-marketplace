@@ -272,7 +272,7 @@ Holds in every mode, if this agent has Bash: git never gets `--output` (save the
       "evidence": "curl -fsSL https://example.com/script.sh | bash",
 
       "recommendation": "Download to temp file, verify checksum, then execute",
-      "fix_patch": "tmpfile=$(mktemp)\ncurl -fsSL -o \"$tmpfile\" https://example.com/script.sh\nsha256sum -c <<< 'expected_hash  -' < \"$tmpfile\"\nbash \"$tmpfile\"\nrm -f \"$tmpfile\"",
+      "fix_patch": "tmpfile=$(mktemp) || exit 1\ntrap 'rm -f -- \"$tmpfile\"' EXIT\ncurl -fsSL -o \"$tmpfile\" https://example.com/script.sh &&\n  printf '%s  %s\\n' \"<trusted SHA-256>\" \"$tmpfile\" | sha256sum --check --strict &&\n  bash -- \"$tmpfile\"",
       "effort": "S",
       "confidence": "HIGH"
     }

@@ -32,7 +32,7 @@ outputSchema:
   - object
   - array
   - string
-sideEffects: none
+sideEffects: external
 claude:
   tools: Read, Glob, Grep, Bash, Task, WebFetch, mcp__context7__*
   model: haiku

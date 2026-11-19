@@ -21,11 +21,24 @@ git clone https://github.com/kodflow/claude-marketplace.git kodflow-canary
 cd kodflow-canary
 git checkout --detach "$KODFLOW_CANARY_SHA"
 bash scripts/tests/smoke-hosts.sh --require-both
-./scripts/install.sh --checkout --check
+canary_home=$(mktemp -d)
+(
+  export HOME="$canary_home"
+  export CLAUDE_CONFIG_DIR="$canary_home/claude" CODEX_HOME="$canary_home/codex"
+  ./scripts/install.sh --checkout --check
+  ./scripts/install.sh --checkout
+)
 ```
 
 Keep the checkout at the selected commit while using its local marketplace.
 The smoke test creates and disposes of its own empty profiles.
+
+Codex accepts repeat registration from the same checkout. To use a different
+checkout with an existing Codex profile, inspect the current source with
+`codex plugin marketplace list`. Once you have verified the previous checkout
+is available for rollback, run `codex plugin marketplace remove kodflow` in
+that profile and rerun the installer from the new checkout. An isolated
+canary profile does not require removing any existing registration.
 
 ## Rollback
 

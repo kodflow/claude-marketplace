@@ -47,3 +47,8 @@ python3 scripts/stamp-versions.py --check
 
 Run `build` without `--check` to refresh committed host marketplaces and write
 Perplexity archives under ignored `dist/perplexity/`.
+
+Run `roles` and `workflows` to refresh their generated files and ownership
+inventories under `catalog/`. Their `--check` mode reports drift and obsolete
+owned files. Write mode can retire previously generated files using the
+inventory, while hand-maintained files outside it remain available.

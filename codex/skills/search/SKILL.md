@@ -93,8 +93,8 @@ Workflow:
 
 For a multi-agent research run, use this package's generated workflow as the
 delegation schedule when the current host exposes it:
-[Claude](../../io.github.kodflow/projections/workflows/search-claude.md),
-[Codex](../../io.github.kodflow/projections/workflows/search-openai.md), or
+[Claude](workflow-claude.md),
+[Codex](workflow-openai.md), or
 [Perplexity](workflow-perplexity.md). Apply the existing classification and
 freshness rules first, then dispatch the three read-only research tasks,
 validate their results, and synthesize once. Verify the host capabilities

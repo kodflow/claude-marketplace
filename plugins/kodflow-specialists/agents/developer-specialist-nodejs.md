@@ -89,7 +89,7 @@ before_approval:
   1_types: "tsc --noEmit passes with zero errors"
   2_lint: "eslint . --max-warnings 0"
   3_format: "prettier --check ."
-  4_tests: "vitest run --coverage >= 80%"
+  4_tests: "vitest run --coverage --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80"
   5_docs: "All exports have JSDoc"
 ```
 
@@ -129,9 +129,15 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   eslint.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
   {
+    files: ['src/**/*.{ts,tsx,mts,cts}'],
+    extends: [
+      ...tseslint.configs.strictTypeChecked,
+      ...tseslint.configs.stylisticTypeChecked,
+    ],
+    languageOptions: {
+      parserOptions: { projectService: true },
+    },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/explicit-function-return-type': 'error',

@@ -108,8 +108,9 @@ format is not — Codex custom agents are TOML with `developer_instructions`. To
 names that exist on one side only are rewritten rather than dropped, because an
 agent told to use a tool that is not there simply fails.
 
-Re-run the generator after changing anything under `plugins/`; CI checks the
-result parses and that no private detail survived.
+Re-run `uv run --project scripts --locked python scripts/build-codex.py` after
+changing plugin sources. CI verifies the generated files and scans for
+private details.
 
 During the portable-core canary, that flat export remains available. Claude
 loads `.claude-plugin/marketplace.json`, Codex discovers local packages through
@@ -160,9 +161,9 @@ detection pattern, so a security skill can ship the regexes it needs. CI also
 refuses machine paths and internal hostnames, validates every skill and agent
 against the documented frontmatter schema, checks that module links resolve, and
 parses every shell script. Run locally, the generators and validators that read
-YAML (`build-codex.py`, `validate-frontmatter.py`, `ci-gates-check.py`) need
-PyYAML, which `uv run --no-project --with pyyaml python3 scripts/<name>.py`
-provides without installing anything.
+YAML use the locked dependencies under `scripts/`. Run
+`uv run --project scripts --locked python scripts/<name>.py` to validate the
+inputs or regenerate projections in that environment.
 
 `mcp/mcp.example.json` references credentials as `${VAR}` and contains none. The
 installer seeds it **only when no config exists** — it never overwrites a file

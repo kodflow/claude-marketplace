@@ -14,6 +14,7 @@ not register these agents. Perplexity outputs are advisory skills. They inherit
 the current session and cannot enforce an independent identity, sandbox or
 tool list.
 
-The migration fixtures record the original Claude metadata and instructions
-along with the byte-exact Codex outputs. For an intentional role change,
-review and update the affected fixture entries with the generated files.
+The migration fixtures record the original Claude metadata, instructions and
+Codex outputs. Keep that snapshot intact. The tests track reviewed changes
+to historical instructions separately and check every current projection
+against its source declaration.

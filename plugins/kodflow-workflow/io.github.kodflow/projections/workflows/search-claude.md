@@ -28,6 +28,8 @@ Input JSON Schema:
 }
 ```
 
+Use the default input envelope: `inputs` contains the run input and `dependencies` maps prerequisite task IDs to their outputs.
+
 Output JSON Schema:
 
 ```json
@@ -83,6 +85,8 @@ Input JSON Schema:
   "type": "object"
 }
 ```
+
+Use the default input envelope: `inputs` contains the run input and `dependencies` maps prerequisite task IDs to their outputs.
 
 Output JSON Schema:
 
@@ -140,6 +144,8 @@ Input JSON Schema:
 }
 ```
 
+Use the default input envelope: `inputs` contains the run input and `dependencies` maps prerequisite task IDs to their outputs.
+
 Output JSON Schema:
 
 ```json
@@ -195,6 +201,8 @@ Input JSON Schema:
   "type": "object"
 }
 ```
+
+Use the default input envelope: `inputs` contains the run input and `dependencies` maps prerequisite task IDs to their outputs.
 
 Output JSON Schema:
 
@@ -258,6 +266,8 @@ Input JSON Schema:
   "type": "object"
 }
 ```
+
+Use the default input envelope: `inputs` contains the run input and `dependencies` maps prerequisite task IDs to their outputs.
 
 Output JSON Schema:
 

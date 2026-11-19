@@ -1,8 +1,8 @@
 # Kodflow agent runtime
 
 The runtime executes provider-backed workflow DAGs from a checkout containing
-the workflow engine and schemas. SQLite stores the pinned workflow, attempts,
-dependencies, user approvals, results and provider handles. The runtime needs no
+the workflow engine and schemas. SQLite stores the pinned workflow and provider routes, attempts, dependencies,
+user approvals, results and provider handles. The runtime needs no
 hosting service.
 
 Run the offline release witness with deterministic provider adapters:
@@ -42,7 +42,9 @@ each selected model service.
 | `a2a` | `KODFLOW_A2A_CARD_URL`, optional `KODFLOW_A2A_BEARER_TOKEN` | A2A 1.0 JSON-RPC messages, status, input, cancellation, artifacts and streaming when advertised |
 
 The Perplexity Computer token is an existing OAuth bearer token. The operator
-completes the account authorization separately. A2A uses an operator-trusted
+completes the account authorization separately. New Computer operations use
+MCP Tasks on protocol version 2026-07-28 to retrieve the exact task's result.
+A combined thread transcript cannot substitute for that result. A2A uses an operator-trusted
 HTTPS Agent Card and follows only its same-origin JSON-RPC 1.0 interface.
 Neither adapter forwards credentials across redirects.
 
@@ -64,16 +66,20 @@ no repository-write capability.
 ## Recovering or controlling a run
 
 - Use `status RUN` to inspect the local state, and `resume RUN` to continue
-  durable progress. Native handles are persisted before workflow task results.
+  durable progress in the original live or offline mode. The runtime reuses the
+  stored defaults and rejects differing provider settings before queueing work.
+  Native handles are persisted before workflow task results.
 - If a submission dropped its connection before the native handle was saved,
   use `reconcile RUN TASK --native-id ID` when the provider supports retrieving
   that handle. A worker with a synchronous-only API might require operator
   investigation instead. The runtime keeps an uncertain attempt visible.
-- For a task waiting for input, use `input RUN TASK --value JSON_OBJECT`. A2A
-  accepts a `text` field. Computer accepts an `answers` object or an explicitly
-  completed connector name in `connector`.
-- Use `approve RUN TASK allow|deny --reason MESSAGE` only after reviewing the
-  pending decision. Provider requests remain paused until that decision.
+- For input, use `input RUN TASK --attempt N --checkpoint N --value JSON_OBJECT`.
+  A2A accepts a `text` field. Computer accepts an `answers` object. Finish sign-ins
+  and other URL-based prompts in the provider UI, then resume polling.
+- Review the pending decision before calling
+  `approve RUN TASK allow|deny --attempt N --checkpoint N --reason MESSAGE`.
+  Read the attempt and checkpoint revision from `status RUN` before each
+  decision. A changed checkpoint requires a new decision.
 - Use `cancel RUN` to cancel all known active remote handles before changing the
   local run state. Providers that cannot confirm cancellation leave their
   attempts visible for reconciliation.

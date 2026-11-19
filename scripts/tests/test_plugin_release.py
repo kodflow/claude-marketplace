@@ -4,6 +4,8 @@ from hashlib import sha256
 from io import BytesIO
 import json
 from pathlib import Path
+import runpy
+from tempfile import TemporaryDirectory
 import unittest
 from zipfile import ZipFile
 
@@ -43,6 +45,9 @@ class ReleaseProfileTests(unittest.TestCase):
             self.assertIn("plugins/kodflow-hooks/.claude-plugin/plugin.json", claude.namelist())
         with ZipFile(BytesIO(self.profiles["openai-local.zip"])) as local:
             self.assertIn("codex/agents/developer-executor-correctness.toml", local.namelist())
+            for name in ("hunt-forge", "hunt-ledger"):
+                entry = local.getinfo("plugins/kodflow-workflow/bin/" + name)
+                self.assertTrue((entry.external_attr >> 16) & 0o111)
         with ZipFile(BytesIO(self.profiles["openai-public.zip"])) as public:
             self.assertTrue(all("/hooks/" not in name for name in public.namelist()))
             self.assertTrue(all(not name.startswith("codex/agents/") for name in public.namelist()))
@@ -51,3 +56,20 @@ class ReleaseProfileTests(unittest.TestCase):
             self.assertIn("kodflow-specialists-role-skills-1.zip", perplexity.namelist())
             with ZipFile(BytesIO(perplexity.read("kodflow-workflow.zip"))) as package:
                 self.assertIn("skills/search/workflow-perplexity.md", package.namelist())
+
+    def test_snapshot_uses_its_own_renderer(self) -> None:
+        render = runpy.run_path(str(ROOT / "scripts/plugin-release.py"))["_render_snapshot"]
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            snapshot = directory / "snapshot"
+            module = snapshot / "scripts/pluginlib"
+            module.mkdir(parents=True)
+            (module / "__init__.py").touch()
+            (module / "release.py").write_text(
+                "def render_profiles(root, commit):\n"
+                "    return {'snapshot.txt': (root.name + ':' + commit).encode()}\n",
+                encoding="utf-8",
+            )
+            staged = directory / "artifacts"
+            render(snapshot, SHA, staged)
+            self.assertEqual(f"snapshot:{SHA}", (staged / "snapshot.txt").read_text())

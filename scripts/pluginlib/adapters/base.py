@@ -9,7 +9,7 @@ import shlex
 from typing import Any
 
 from ..model import PluginPackage
-from .perplexity import build_archive, validate_archive
+from .perplexity import build_archive, validate_archive, workflow_advice_sources
 
 
 SUPPORT: dict[str, dict[str, tuple[str, str, str]]] = {
@@ -136,17 +136,6 @@ def _verify(verifier: str, package: PluginPackage, archive: bytes | None) -> boo
         return False
 
 
-def _workflow_advice(package: PluginPackage, target: str) -> bool:
-    directory = package.root / "io.github.kodflow/projections/workflows"
-    for path in directory.glob(f"*-{target}.md"):
-        try:
-            if _file(package, path):
-                return True
-        except (OSError, RuntimeError):
-            continue
-    return False
-
-
 def compatibility_report(
     package: PluginPackage, target: str, *, archive: bytes | None = None,
 ) -> dict[str, Any]:
@@ -157,7 +146,7 @@ def compatibility_report(
     compatible = enabled
     for name, policy in sorted(package.capabilities.items()):
         status, origin, verifier = SUPPORT[target].get(name, ("absent", "none", ""))
-        if name == "multi-agent" and not _workflow_advice(package, target):
+        if name == "multi-agent" and not workflow_advice_sources(package, target):
             status, origin, verifier = "absent", "none", ""
         if status == "equivalent" and (not enabled or not _verify(verifier, package, archive)):
             status, origin = "absent", "none"

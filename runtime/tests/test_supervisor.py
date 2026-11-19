@@ -1,21 +1,23 @@
 """Exercise real workflow persistence with deterministic provider ports."""
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import sys
+from threading import Event as Signal
 import time
 
 import pytest
 
 from kodflow_agents.cli import main
-from kodflow_agents.journal import Journal
-from kodflow_agents.ports import Event, Handle, Provider, ProviderError
+from kodflow_agents.journal import Journal, operation_key
+from kodflow_agents.ports import Event, Handle, NoSendError, Provider, ProviderError
 from kodflow_agents.providers.fake import Fake
 from kodflow_agents.supervisor import Binding, Supervisor
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from pluginlib.state import StateStore
+from pluginlib.state import StateError, StateStore
 from pluginlib.workflows import load_workflow
 
 
@@ -24,6 +26,7 @@ class SlowProvider(Provider):
         self.submissions = 0
         self.resumes = 0
         self.cancellations = 0
+        self.cancelled_handles = []
 
     def capabilities(self):
         return super().capabilities() | {"resume", "cancel"}
@@ -38,6 +41,7 @@ class SlowProvider(Provider):
 
     def cancel(self, handle, *, timeout):
         self.cancellations += 1
+        self.cancelled_handles.append(handle)
         return Event("cancelled", handle)
 
 
@@ -47,34 +51,36 @@ class DroppedProvider(SlowProvider):
         raise ProviderError("connection closed after send")
 
 
-def single_workflow(tmp_path):
+def single_workflow(tmp_path, *, retries=0, text_type="string"):
     path = tmp_path / "single.yaml"
-    path.write_text("""apiVersion: io.github.kodflow/workflow/v1
+    path.write_text(f"""apiVersion: io.github.kodflow/workflow/v1
 id: sample
 description: Provider test.
-inputSchema: {type: object}
+inputSchema: {{type: object}}
 tasks:
   - id: demo
     role: researcher
     instructions: Research.
-    inputSchema: {type: object}
+    inputSchema: {{type: object}}
+    retries: {retries}
+    idempotencyKey: stable
     outputSchema:
       type: object
       required: [text]
-      properties: {text: {type: string}}
+      properties: {{text: {{type: {text_type}}}}}
 """, encoding="utf-8")
     return load_workflow(path)
 
 
-def setup(tmp_path, provider, *, clock=time.time):
-    workflow = single_workflow(tmp_path)
+def setup(tmp_path, provider, *, clock=time.time, retries=0, text_type="string"):
+    workflow = single_workflow(tmp_path, retries=retries, text_type=text_type)
     database = tmp_path / "runs.sqlite"
     store = StateStore(database, clock=clock)
     journal = Journal(database)
     bindings = {"test": Binding(provider, "test-provider")}
     supervisor = Supervisor(store, journal, bindings, default_provider="test")
     supervisor.preflight(workflow)
-    run_id = store.create_run(workflow, {})
+    run_id = store.create_run(workflow, {}, execution=supervisor.execution_bindings(workflow, live=False))
     return run_id, store, journal, bindings, supervisor
 
 
@@ -111,10 +117,12 @@ def test_ambiguous_submit_never_dispatches_twice_and_can_reconcile(tmp_path):
 
 
 def test_cancel_confirms_existing_remote_handle(tmp_path):
-    run, store, _, _, supervisor = setup(tmp_path, SlowProvider())
+    remote = SlowProvider()
+    run, store, _, _, supervisor = setup(tmp_path, remote)
     supervisor.step(run)
     supervisor.cancel(run)
     assert store.snapshot(run)["status"] == "cancelled"
+    assert remote.cancelled_handles == [Handle("live-native-handle")]
 
 
 def test_route_is_pinned_and_offline_reference_recovers_artifacts(tmp_path, capsys):
@@ -148,3 +156,176 @@ def test_uncertain_submit_stays_visible_after_deadline(tmp_path):
         supervisor.step(run)
     assert store.snapshot(run)["status"] == "running"
     assert remote.submissions == 1
+
+
+def test_timeout_crossing_frontier_does_not_skip_remote_resolution(tmp_path, monkeypatch):
+    class Tracked(SlowProvider):
+        def __init__(self):
+            super().__init__()
+            self.request_keys = []
+
+        def submit(self, request):
+            self.request_keys.append(request.task_id)
+            return super().submit(request)
+
+    remote = Tracked()
+    now = [10.0]
+    run, store, journal, _, supervisor = setup(tmp_path, remote, clock=lambda: now[0], retries=1)
+    first = supervisor.step(run)["tasks"]["demo"]
+    advance = store.advance
+
+    def tick_then_advance(*args, **kwargs):
+        # Expire after the supervisor enumerated the remotely resolved attempts.
+        now[0] = first["deadline"]
+        return advance(*args, **kwargs)
+
+    monkeypatch.setattr(store, "advance", tick_then_advance)
+    assert supervisor.step(run)["tasks"]["demo"]["attempt"] == 1
+    assert remote.cancellations == 0 and remote.submissions == 1
+    second = supervisor.step(run)["tasks"]["demo"]
+    assert second["attempt"] == 2 and second["status"] == "running"
+    assert remote.cancellations == 1 and remote.submissions == 2
+    assert remote.request_keys[0] == remote.request_keys[1]
+    key = second["idempotency_key"]
+    assert journal.read(operation_key(key, 1), "test-provider")[0].state == "cancelled"
+    assert journal.read(operation_key(key, 2), "test-provider")[0].state == "running"
+
+
+def test_cancel_intent_blocks_a_claim_that_has_not_submitted(tmp_path):
+    remote = SlowProvider()
+    run, store, _, _, supervisor = setup(tmp_path, remote)
+    (dispatch,) = store.advance(run, store.definition(run).capabilities)
+    store.begin_cancel(run)
+    with pytest.raises(StateError, match="no longer has a live workflow attempt"):
+        supervisor._process(dispatch)
+    supervisor.cancel(run)
+    assert remote.submissions == 0
+    assert store.snapshot(run)["status"] == "cancelled"
+
+
+def test_cancel_waits_for_provider_submitting_after_reservation(tmp_path):
+    started = Signal()
+    release = Signal()
+
+    class ReservedProvider(SlowProvider):
+        def submit(self, request):
+            started.set()
+            assert release.wait(timeout=5)
+            return super().submit(request)
+
+    remote = ReservedProvider()
+    run, store, _, _, supervisor = setup(tmp_path, remote)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        inflight = executor.submit(supervisor.step, run)
+        try:
+            assert started.wait(timeout=5)
+            with pytest.raises(ProviderError, match="cancellation pending"):
+                supervisor.cancel(run)
+            assert store.snapshot(run)["cancellation_requested"]
+        finally:
+            release.set()
+        inflight.result(timeout=5)
+
+    assert supervisor.step(run)["status"] == "cancelled"
+    assert remote.submissions == 1
+    assert remote.cancelled_handles == [Handle("live-native-handle")]
+
+
+def test_no_send_clears_reservation_and_keeps_same_attempt(tmp_path):
+    class NoSendProvider(SlowProvider):
+        def submit(self, request):
+            if self.submissions == 0:
+                self.submissions += 1
+                raise NoSendError("provider rejected request before sending")
+            return super().submit(request)
+
+    remote = NoSendProvider()
+    run, store, journal, _, supervisor = setup(tmp_path, remote)
+    with pytest.raises(NoSendError, match="before sending"):
+        supervisor.step(run)
+    entry = store.snapshot(run)["tasks"]["demo"]
+    assert journal.read(entry["idempotency_key"], "test-provider") == (None, None)
+    assert supervisor.step(run)["tasks"]["demo"]["attempt"] == entry["attempt"]
+    assert remote.submissions == 2
+
+
+def test_operator_action_requires_current_attempt_and_checkpoint(tmp_path):
+    class Interactive(SlowProvider):
+        def __init__(self):
+            super().__init__()
+            self.replies = 0
+
+        def capabilities(self):
+            return super().capabilities() | {"input"}
+
+        def submit(self, request):
+            return Event("waiting_input", Handle("interactive", "question-a"))
+
+        def provide_input(self, handle, payload, *, timeout):
+            self.replies += 1
+            if self.replies == 1:
+                raise NoSendError("invalid local payload")
+            return Event("waiting_input", Handle("interactive", "question-b"))
+
+    remote = Interactive()
+    run, _, journal, _, supervisor = setup(tmp_path, remote)
+    first = supervisor.step(run)["tasks"]["demo"]
+    with pytest.raises(NoSendError, match="invalid local payload"):
+        supervisor.provide_input(
+            run, "demo", {}, attempt=first["attempt"], checkpoint=first["checkpoint_revision"],
+        )
+    assert journal.read(first["idempotency_key"], "test-provider")[1] is None
+    supervisor.provide_input(
+        run, "demo", {"text": "answer"}, attempt=first["attempt"], checkpoint=first["checkpoint_revision"],
+    )
+    second = supervisor.step(run)["tasks"]["demo"]
+    assert second["attempt"] == first["attempt"]
+    assert second["checkpoint_revision"] > first["checkpoint_revision"]
+    with pytest.raises(ProviderError, match="checkpoint is no longer current"):
+        supervisor.provide_input(
+            run, "demo", {"text": "delayed answer"}, attempt=first["attempt"], checkpoint=first["checkpoint_revision"],
+        )
+    assert remote.replies == 2
+    with pytest.raises(ProviderError, match="checkpoint changed"):
+        journal.begin_action(
+            first["idempotency_key"], "test-provider", "input", revision=first["checkpoint_revision"],
+        )
+
+
+def test_assets_can_be_retried_without_repeating_provider_work(tmp_path):
+    class AssetProvider(SlowProvider):
+        def __init__(self):
+            super().__init__()
+            self.collections = 0
+
+        def submit(self, request):
+            self.submissions += 1
+            return Event("completed", Handle("with-asset"), text="report", artifacts_collected=False)
+
+        def collect_artifacts(self, event, *, timeout):
+            self.collections += 1
+            if self.collections == 1:
+                raise ProviderError("asset listing failed")
+            return ({"id": "asset", "name": "report.md"},)
+
+    remote = AssetProvider()
+    run, store, journal, _, supervisor = setup(tmp_path, remote)
+    with pytest.raises(ProviderError, match="asset listing failed"):
+        supervisor.step(run)
+    key = store.snapshot(run)["tasks"]["demo"]["idempotency_key"]
+    saved, action = journal.read(key, "test-provider")
+    assert saved.state == "completed" and not saved.artifacts_collected and action is None
+    state = supervisor.step(run)
+    assert state["status"] == "completed"
+    assert state["tasks"]["demo"]["artifacts"] == [{"id": "asset", "name": "report.md"}]
+    assert remote.submissions == 1 and remote.collections == 2
+
+
+def test_non_string_text_field_uses_json_prompt_and_parser(tmp_path):
+    class NumericText(Provider):
+        def submit(self, request):
+            assert "Return only a JSON value" in request.prompt()
+            return Event("completed", Handle("integer"), text='{"text": 42}')
+
+    run, _, _, _, supervisor = setup(tmp_path, NumericText(), text_type="integer")
+    assert supervisor.step(run)["tasks"]["demo"]["result"] == {"text": 42}

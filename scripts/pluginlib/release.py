@@ -15,7 +15,7 @@ from .roles import perplexity_role_skills
 
 
 PROFILES = ("portable", "claude-full", "openai-local", "openai-public", "perplexity")
-PORTABLE = ("plugin.json", "mcp.json", "skills", "assets")
+PORTABLE = ("plugin.json", "mcp.json", "skills", "assets", "bin")
 LOCAL_OPENAI = (*PORTABLE, ".codex-plugin", "hooks", "io.github.kodflow")
 
 

@@ -1,16 +1,27 @@
 """A2A 1.0 JSON-RPC over HTTPS using an operator-configured Agent Card."""
 
+from dataclasses import replace
+from urllib.parse import urlsplit
 from uuid import uuid4
 
-from ..ports import Event, Handle, Json, Provider, ProviderError, Request, TERMINAL
+from ..ports import Event, Handle, Json, NoSendError, Provider, ProviderError, Request, TERMINAL
 from ..transport import Transport, credential, https_origin, objects
 
 _VERSION = "1.0"
+
+
+def _agent_origin(url: str) -> tuple[str, int]:
+    origin = https_origin(url)
+    if urlsplit(url).query:
+        raise NoSendError("A2A route URLs cannot carry query parameters")
+    return origin
+
+
 _STATES = {
     "TASK_STATE_SUBMITTED": "running",
     "TASK_STATE_WORKING": "running",
     "TASK_STATE_INPUT_REQUIRED": "waiting_input",
-    "TASK_STATE_AUTH_REQUIRED": "waiting_input",
+    "TASK_STATE_AUTH_REQUIRED": "waiting_auth",
     "TASK_STATE_COMPLETED": "completed",
     "TASK_STATE_FAILED": "failed",
     "TASK_STATE_REJECTED": "failed",
@@ -26,13 +37,13 @@ class A2A(Provider):
     def __init__(self, transport: Transport, card_url: str, *, credential_env: str | None = None) -> None:
         self.transport = transport
         self.card_url = card_url
-        self.origin = https_origin(card_url)
+        self.origin = _agent_origin(card_url)
         self.credential_env = credential_env
         self.endpoint = ""
         self.tenant = ""
         self.streaming = False
 
-    def _discover(self, timeout: float) -> None:
+    def discover(self, timeout: float) -> None:
         if self.endpoint:
             return
         card = self.transport.request("GET", self.card_url, timeout=timeout).body
@@ -44,7 +55,7 @@ class A2A(Provider):
         interface = next((
             item for item in objects(card.get("supportedInterfaces"))
             if item.get("protocolBinding") == "JSONRPC" and item.get("protocolVersion") == _VERSION
-            and isinstance(item.get("url"), str) and https_origin(item["url"]) == self.origin
+            and isinstance(item.get("url"), str) and _agent_origin(item["url"]) == self.origin
         ), None)
         if interface is None:
             raise ProviderError("A2A requires a same-origin JSON-RPC 1.0 interface")
@@ -79,6 +90,7 @@ class A2A(Provider):
         raise ProviderError("A2A Agent Card requires an unsupported authentication scheme")
 
     def capabilities(self) -> frozenset[str]:
+        self.discover(timeout=20)
         available = {"text", "resume", "cancel", "input", "artifacts"}
         if self.streaming:
             available.add("stream")
@@ -103,8 +115,22 @@ class A2A(Provider):
             raise ProviderError("A2A returned an invalid JSON-RPC response")
         return body["result"]
 
-    def _rpc(self, method: str, params: Json, timeout: float) -> Json:
-        self._discover(timeout)
+    def _check_handle(self, handle: Handle, timeout: float) -> None:
+        self.discover(timeout)
+        if (handle.endpoint, handle.tenant) != (self.endpoint, self.tenant):
+            raise NoSendError("A2A task endpoint or tenant differs from its persisted route")
+
+    def _pin(self, event: Event) -> Event:
+        return replace(event, handle=replace(event.handle, endpoint=self.endpoint, tenant=self.tenant))
+
+    def _rpc(self, method: str, params: Json, timeout: float, handle: Handle | None = None) -> Json:
+        try:
+            if handle is None:
+                self.discover(timeout)
+            else:
+                self._check_handle(handle, timeout)
+        except ProviderError as error:
+            raise NoSendError(f"A2A route could not be verified: {error}") from None
         payload = self._payload(method, params)
         reply = self.transport.request(
             "POST", self.endpoint, payload, headers=self._headers(), timeout=timeout,
@@ -136,7 +162,7 @@ class A2A(Provider):
         text = _text(message.get("parts")) if isinstance(message, dict) else ""
         artifact_text = "\n".join(filter(None, (_text(item["parts"]) for item in artifacts)))
         return Event(state, Handle(identifier, body.get("contextId")), text=artifact_text or text,
-                     artifacts=artifacts, reason=text if state == "waiting_input" else "")
+                     artifacts=artifacts, reason=text if state in {"waiting_input", "waiting_auth"} else "")
 
     @classmethod
     def _send_result(cls, result: Json) -> Event:
@@ -149,25 +175,34 @@ class A2A(Provider):
         raise ProviderError("A2A returned neither a task nor a message")
 
     def submit(self, request: Request) -> Event:
-        return self._send_result(self._rpc("SendMessage", {"message": self._message(request.prompt())}, request.timeout))
+        return self._pin(self._send_result(self._rpc("SendMessage", {
+            "message": self._message(request.prompt()),
+            "configuration": {"returnImmediately": True},
+        }, request.timeout)))
+
+    def recover_handle(self, native_id: str, *, timeout: float) -> Handle:
+        self.discover(timeout)
+        return Handle(native_id, endpoint=self.endpoint, tenant=self.tenant)
 
     def resume(self, handle: Handle, *, timeout: float) -> Event:
-        return self._task(self._rpc("GetTask", {"id": handle.native_id}, timeout))
+        return self._pin(self._task(self._rpc("GetTask", {"id": handle.native_id}, timeout, handle)))
 
     def cancel(self, handle: Handle, *, timeout: float) -> Event:
-        return self._task(self._rpc("CancelTask", {"id": handle.native_id}, timeout))
+        return self._pin(self._task(self._rpc("CancelTask", {"id": handle.native_id}, timeout, handle)))
 
     def provide_input(self, handle: Handle, payload: Json, *, timeout: float) -> Event:
         text = payload.get("text")
         if not isinstance(text, str) or not text.strip():
-            raise ProviderError("A2A interactive input requires nonempty text")
+            raise NoSendError("A2A interactive input requires nonempty text")
         message = {**self._message(text), "taskId": handle.native_id}
         if handle.context_id:
             message["contextId"] = handle.context_id
-        return self._send_result(self._rpc("SendMessage", {"message": message}, timeout))
+        return self._pin(self._send_result(self._rpc("SendMessage", {
+            "message": message, "configuration": {"returnImmediately": True},
+        }, timeout, handle)))
 
     def events(self, handle: Handle, *, timeout: float):
-        self._discover(timeout)
+        self._check_handle(handle, timeout)
         if not self.streaming:
             yield self.resume(handle, timeout=timeout)
             return
@@ -176,7 +211,7 @@ class A2A(Provider):
             result = self._result(frame, payload["id"])
             task = result.get("task")
             if isinstance(task, dict):
-                event = self._task(task)
+                event = self._pin(self._task(task))
                 yield event
                 if event.state in TERMINAL:
                     return

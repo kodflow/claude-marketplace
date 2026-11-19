@@ -46,6 +46,30 @@ def _files(package: PluginPackage) -> list[Path]:
     return files
 
 
+def workflow_advice_sources(package: PluginPackage, target: str) -> dict[str, Path]:
+    """Find contained workflow documents that have a corresponding skill."""
+    root = package.root.resolve()
+    directory = package.root / "io.github.kodflow/projections/workflows"
+    try:
+        contained = directory.resolve().is_relative_to(root)
+    except (OSError, RuntimeError):
+        return {}
+    if not contained:
+        return {}
+    suffix = f"-{target}.md"
+    skills = {path.name for path in package.skill_directories()}
+    sources = {}
+    for path in sorted(directory.glob(f"*{suffix}")):
+        workflow = path.name.removesuffix(suffix)
+        try:
+            file = path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if workflow in skills and file.is_relative_to(root) and file.is_file():
+            sources[workflow] = path
+    return sources
+
+
 def build_archive(package: PluginPackage) -> bytes:
     """Build byte-for-byte reproducible ZIP content."""
 
@@ -56,10 +80,7 @@ def build_archive(package: PluginPackage) -> bytes:
         files: dict[str, Path | None] = {
             path.relative_to(package.root).as_posix(): path for path in _files(package)
         }
-        for workflow in ("search", "review"):
-            source = package.root / f"io.github.kodflow/projections/workflows/{workflow}-perplexity.md"
-            if not source.is_file():
-                continue
+        for workflow, source in workflow_advice_sources(package, "perplexity").items():
             if f"skills/{workflow}/SKILL.md" not in files:
                 raise ValueError(f"workflow {workflow} has no skill in {package.name}")
             member = f"skills/{workflow}/workflow-perplexity.md"

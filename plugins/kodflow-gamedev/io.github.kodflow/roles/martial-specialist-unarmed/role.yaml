@@ -27,26 +27,60 @@ outputSchema:
   title: martial-specialist-unarmed result
   description: The role instructions specify the applicable report format for the current
     host and mode.
-  type: object
-  required:
-  - schema
-  - agent
-  - role
-  - status
-  - summary
-  properties:
-    schema:
-      const: panel-member/v1
-    agent:
-      const: martial-specialist-unarmed
-    role:
-      enum:
-      - governing
+  oneOf:
+  - type: object
+    required:
+    - schema
+    - agent
+    - role
+    - status
+    - summary
+    properties:
+      schema:
+        const: panel-member/v1
+      agent:
+        const: martial-specialist-unarmed
+      role:
+        enum:
+        - governing
+        - consulted
+      status:
+        type: string
+      summary:
+        type: string
+  - type: array
+    items:
+      type: object
+      required:
+      - severity
+      - claim
+      - evidence
+      - remedy
       - consulted
-    status:
-      type: string
-    summary:
-      type: string
+      - unverified
+      properties:
+        severity:
+          enum:
+          - blocking
+          - material
+          - minor
+        claim:
+          type: string
+          minLength: 1
+        evidence:
+          type: string
+          minLength: 1
+        remedy:
+          type: string
+          minLength: 1
+        consulted:
+          type: array
+          items:
+            type: string
+        unverified:
+          type: array
+          items:
+            type: string
 sideEffects: none
 claude:
   tools: Read, Glob, Grep, Bash, WebFetch

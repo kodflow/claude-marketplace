@@ -301,6 +301,21 @@ def render_projection(workflow: Workflow, host: str) -> bytes:
             json.dumps(task.input_schema, ensure_ascii=False, sort_keys=True, indent=2),
             "```",
             "",
+        ]
+        if task.bindings is None:
+            lines += ["Use the default input envelope: `inputs` contains the run input and `dependencies` maps prerequisite task IDs to their outputs.", ""]
+        else:
+            lines += [
+                "Resolve each `$from` in these bindings as a JSON Pointer against "
+                "the default envelope (`/inputs` for run input and "
+                "`/dependencies/<task>` for a prerequisite's output). Pass the resulting object as the task input.",
+                "",
+                "```json",
+                json.dumps(task.bindings, ensure_ascii=False, sort_keys=True, indent=2),
+                "```",
+                "",
+            ]
+        lines += [
             "Output JSON Schema:",
             "",
             "```json",

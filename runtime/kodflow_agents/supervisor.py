@@ -1,15 +1,15 @@
-"""Connect the workflow state port to provider operations without resubmission on restart."""
+"""Connect durable workflow attempts to provider operations."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import json
 from typing import Any
 
-from .journal import Journal
-from .ports import Event, Handle, Json, Provider, ProviderError, Request, TERMINAL
+from .journal import Journal, operation_key
+from .ports import Event, Json, NoSendError, Provider, ProviderError, Request, TERMINAL, uses_text_output
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,8 @@ class Supervisor:
     ) -> None:
         if not 1 <= max_parallel <= 16:
             raise ValueError("max_parallel must be between 1 and 16")
+        if state_store.database.resolve() != journal.database.resolve():
+            raise ValueError("the workflow store and provider journal must share a database")
         self.store = state_store
         self.journal = journal
         self.providers = dict(providers)
@@ -53,10 +55,30 @@ class Supervisor:
         if missing:
             raise ProviderError("missing workflow capabilities: " + ", ".join(sorted(missing)))
         for task in workflow.tasks:
+            if task.access != "read":
+                raise ProviderError(f"task {task.id} requires repository.write, which this runtime does not provide")
             binding = self._binding(task.provider)
             missing = task.required_capabilities - self._available_for(binding)
             if missing:
                 raise ProviderError(f"task {task.id} lacks provider capabilities: " + ", ".join(sorted(missing)))
+
+    def execution_bindings(self, workflow: Any, *, live: bool) -> Json:
+        """Capture provider settings for every task before any work can start."""
+        task_routes = {}
+        for task in workflow.tasks:
+            provider = task.provider or self.default_provider
+            binding = self._binding(provider)
+            task_routes[task.id] = {
+                "provider": provider, "route": binding.route,
+                "model": binding.model, "web_search": binding.web_search,
+            }
+        return {"default_provider": self.default_provider, "task_routes": task_routes, "live": live}
+
+    def _verify_run(self, run_id: str) -> None:
+        definition = self.store.definition(run_id)
+        execution = self.store.snapshot(run_id).get("execution")
+        if execution is not None and self.execution_bindings(definition, live=execution["live"]) != execution:
+            raise ProviderError("the run is pinned to a different provider route, model or configuration")
 
     @staticmethod
     def _available_for(binding: Binding) -> frozenset[str]:
@@ -68,47 +90,59 @@ class Supervisor:
             raise ProviderError("provider dispatch deadline expired")
         return min(remaining, 120.0)
 
-    def _provider_event(self, binding: Binding, dispatch: Any) -> Event:
-        key = dispatch.idempotency_key
-        event, action = self.journal.read(key, binding.route)
+    @staticmethod
+    def _check_handle(original: Event, update: Event) -> None:
+        if update.handle.native_id != original.handle.native_id:
+            raise ProviderError("provider returned a different native handle")
+
+    def _poll(self, binding: Binding, key: str, event: Event, revision: int, *, timeout: float) -> tuple[Event, int]:
+        try:
+            update = binding.provider.resume(event.handle, timeout=timeout)
+        except ProviderError:
+            # A failed poll says nothing about the remote task or its original submission.
+            raise ProviderError("provider poll failed; the existing handle can be resumed") from None
+        self._check_handle(event, update)
+        if not self.journal.save(key, binding.route, update, revision=revision):
+            raise ProviderError("provider attempt changed during poll")
+        return update, revision + 1
+
+    def _provider_event(self, binding: Binding, dispatch: Any, key: str) -> tuple[Event, int]:
+        event, action, revision = self.journal.read_revision(key, binding.route)
         if action:
             raise ProviderError("provider operation outcome is unknown; inspect or reconcile the attempt before retrying")
         if event is not None:
-            if event.state == "running":
-                try:
-                    update = binding.provider.resume(event.handle, timeout=self._timeout(dispatch))
-                except ProviderError:
-                    # A failed poll says nothing about the remote task or its original submission.
-                    raise ProviderError("provider poll failed; the existing handle can be resumed") from None
-                if update.handle.native_id != event.handle.native_id:
-                    raise ProviderError("provider changed the persisted task handle")
-                if not self.journal.save(key, binding.route, update, previous=event):
-                    raise ProviderError("provider attempt changed during poll")
-                return update
-            return event
-        if not self.journal.reserve(key, binding.route):
+            if event.state in {"running", "waiting_auth"}:
+                return self._poll(binding, key, event, revision, timeout=self._timeout(dispatch))
+            return event, revision
+
+        request = Request(
+            task_id=dispatch.idempotency_key,
+            instructions=dispatch.task.instructions,
+            inputs=dispatch.input,
+            model=binding.model,
+            timeout=self._timeout(dispatch),
+            web_search=binding.web_search,
+            output_schema=dispatch.task.output_schema,
+        )
+        if not self.journal.reserve(
+            key, binding.route, guard=lambda db: self.store.authorize_submission(db, dispatch),
+        ):
             raise ProviderError("another supervisor reserved this provider dispatch")
         try:
-            event = binding.provider.submit(Request(
-                task_id=key,
-                instructions=dispatch.task.instructions,
-                inputs=dispatch.input,
-                model=binding.model,
-                timeout=self._timeout(dispatch),
-                web_search=binding.web_search,
-                output_schema=dispatch.task.output_schema,
-            ))
+            event = binding.provider.submit(request)
+        except NoSendError:
+            self.journal.release_unsent(key, binding.route, "submit", revision=revision)
+            raise
         except ProviderError as error:
             raise ProviderError(f"provider submission outcome is unknown: {error}") from None
-        if not self.journal.save(key, binding.route, event, action="submit"):
+        if not self.journal.save(key, binding.route, event, action="submit", revision=revision):
             raise ProviderError("provider dispatch reservation changed before persistence")
-        return event
+        return event, revision + 1
 
     @staticmethod
     def _output(event: Event, dispatch: Any) -> Any:
         schema = dispatch.task.output_schema
-        properties = schema.get("properties", {})
-        if not schema or properties.keys() == {"text"}:
+        if uses_text_output(schema):
             return {"text": event.text}
         try:
             return json.loads(event.text)
@@ -119,67 +153,117 @@ class Supervisor:
         args = (dispatch.run_id, dispatch.task_id, dispatch.attempt)
         flags = {"compensation": dispatch.compensation}
         binding = self._binding(dispatch.task.provider)
-        if dispatch.task.access != "read":
-            raise ProviderError(f"task {dispatch.task_id} requires repository.write, which this runtime does not provide")
-        missing = dispatch.task.required_capabilities - self._available_for(binding)
-        if missing:
-            raise ProviderError(f"provider for {dispatch.task_id} lacks: " + ", ".join(sorted(missing)))
-        event = self._provider_event(binding, dispatch)
-        if event.state == "running":
+        key = operation_key(dispatch.idempotency_key, dispatch.attempt)
+        event, revision = self._provider_event(binding, dispatch, key)
+        if event.state in {"running", "waiting_auth"}:
             return
-        if event.state.startswith("waiting_"):
+        if event.state in {"waiting_input", "waiting_approval"}:
             kind = "approval" if event.state == "waiting_approval" else "input"
-            self.store.wait_for_input(*args, event.reason or "provider is waiting for operator input", kind, **flags)
+            self.store.wait_for_input(
+                *args, event.reason or "provider is waiting for operator input", kind,
+                checkpoint_revision=revision, **flags,
+            )
         elif event.state == "completed":
-            try:
-                result = self._output(event, dispatch)
-                self.store.complete(*args, result, binding.provider.artifacts(event), **flags)
-            except ValueError:
-                self.store.fail(*args, "provider result did not satisfy the workflow contract", retryable=False, **flags)
-            except ProviderError as error:
-                self.store.fail(*args, str(error), retryable=False, **flags)
+            if not event.artifacts_collected:
+                # Save the completed handle before fetching artifacts, so a transient
+                # asset error can be retried without submitting the provider task again.
+                artifacts = binding.provider.collect_artifacts(event, timeout=self._timeout(dispatch))
+                event = replace(event, artifacts=artifacts, artifacts_collected=True)
+                if not self.journal.save(key, binding.route, event, revision=revision):
+                    raise ProviderError("provider attempt changed during artifact collection")
+            self._complete(dispatch, event, binding)
         else:
             self.store.fail(*args, event.reason or f"provider task {event.state}", retryable=False, **flags)
 
+    def _complete(self, dispatch: Any, event: Event, binding: Binding) -> None:
+        args = (dispatch.run_id, dispatch.task_id, dispatch.attempt)
+        flags = {"compensation": dispatch.compensation}
+        try:
+            result = self._output(event, dispatch)
+        except ProviderError as error:
+            self.store.fail(*args, str(error), retryable=False, **flags)
+            return
+        try:
+            self.store.complete(
+                *args, result, binding.provider.artifacts(event), retry_expired=False, **flags,
+            )
+        except ValueError as error:
+            if not getattr(error, "transition_applied", False):
+                self.store.fail(*args, "provider result did not satisfy the workflow contract", retryable=False, **flags)
+
     def step(self, run_id: str) -> Json:
         """Dispatch one runnable frontier and poll existing handles once."""
-        self._resolve_expired(run_id)
-        self.store.advance(run_id, self._available())
-        dispatches = self.store.active(run_id)
+        self._verify_run(run_id)
+        if self.store.snapshot(run_id).get("cancellation_requested"):
+            self.cancel(run_id)
+            return self.store.snapshot(run_id)
+        self.preflight(self.store.definition(run_id))
+        resolved = self._resolve_expired(run_id)
+        self.store.advance(run_id, self._available(), resolved_expiry=resolved)
+        dispatches = [dispatch for dispatch in self.store.active(run_id) if dispatch.deadline > self.store.clock()]
         if dispatches:
             with ThreadPoolExecutor(max_workers=self.max_parallel) as pool:
                 tuple(pool.map(self._process, dispatches))
         return self.store.snapshot(run_id)
 
-    def _resolve_expired(self, run_id: str) -> None:
-        # The DAG may retry a timed-out step. Resolve its existing provider
-        # operation first so the retry cannot abandon work still running remotely.
+    def _resolve_expired(self, run_id: str) -> set[tuple[str, int, bool]]:
+        # A timeout only permits retry once the same attempt is resolved remotely.
+        now = self.store.clock()
+        resolved = set()
         for dispatch in self.store.active(run_id):
-            if dispatch.deadline > self.store.clock():
+            if dispatch.deadline > now:
                 continue
             binding = self._binding(dispatch.task.provider)
-            key = dispatch.idempotency_key
-            event, action = self.journal.read(key, binding.route)
+            key = operation_key(dispatch.idempotency_key, dispatch.attempt)
+            event, action, revision = self.journal.read_revision(key, binding.route)
             if action:
                 raise ProviderError("expired provider operation requires reconciliation before retry")
-            if event is None:
+            if event is not None and event.state not in TERMINAL:
+                if "cancel" in binding.capabilities():
+                    event = self._cancel_one(binding, key, event, revision)
+                else:
+                    event, _ = self._poll(binding, key, event, revision, timeout=20)
+                    if event.state not in TERMINAL:
+                        raise ProviderError("expired provider attempt remains active and cannot be cancelled")
+            if event is not None and event.state == "completed":
+                # The remote result is already terminal. Do not run it again, even
+                # if collecting required artifacts exceeded the local deadline.
+                self.store.fail(
+                    run_id, dispatch.task_id, dispatch.attempt, "deadline exceeded",
+                    retryable=False, compensation=dispatch.compensation,
+                )
                 continue
-            if event.state == "running":
-                self._cancel_one(binding, key, event)
-            elif event.state.startswith("waiting_") or event.state == "completed":
-                self._process(dispatch)
+            resolved.add((dispatch.task_id, dispatch.attempt, dispatch.compensation))
+        return resolved
 
-    def _pending(self, run_id: str, task_id: str) -> tuple[Binding, Json]:
+    def _task_entry(self, run_id: str, task_id: str) -> Json:
         tasks = self.store.snapshot(run_id)["tasks"]
         if task_id not in tasks:
             raise ProviderError("unknown workflow task")
-        entry = tasks[task_id]
+        return tasks[task_id]
+
+    def _pending(self, run_id: str, task_id: str) -> tuple[Binding, Json]:
+        entry = self._task_entry(run_id, task_id)
         return self._binding(entry["provider"]), entry
 
-    def provide_input(self, run_id: str, task_id: str, payload: Json, *, approved: bool | None = None) -> None:
+    def usage(self, run_id: str, task_id: str) -> dict[str, int]:
+        entry = self._task_entry(run_id, task_id)
+        if not entry["idempotency_key"]:
+            raise ProviderError("task has no provider attempt")
+        return self.journal.usage(operation_key(entry["idempotency_key"], entry["attempt"]))
+
+    def provide_input(
+        self, run_id: str, task_id: str, payload: Json, *, approved: bool | None = None,
+        attempt: int | None = None, checkpoint: int | None = None,
+    ) -> None:
+        self._verify_run(run_id)
         binding, entry = self._pending(run_id, task_id)
         if entry["status"] != "waiting_input":
             raise ProviderError("workflow task is not waiting for operator input")
+        attempt = entry["attempt"] if attempt is None else attempt
+        checkpoint = entry.get("checkpoint_revision", 0) if checkpoint is None else checkpoint
+        if attempt != entry["attempt"] or checkpoint != entry.get("checkpoint_revision", 0):
+            raise ProviderError("operator checkpoint is no longer current")
         approval = entry["waiting_kind"] == "approval"
         if approval != (approved is not None):
             raise ProviderError("operator input does not match the waiting operation")
@@ -187,91 +271,114 @@ class Supervisor:
             if not approved:
                 self.cancel(run_id)
                 return
-            self.store.provide_input(run_id, task_id, payload, approved=True)
+            self.store.provide_input(run_id, task_id, attempt, payload, approved=True, checkpoint_revision=checkpoint)
             return
 
-        key = entry["idempotency_key"]
-        event, action = self.journal.read(key, binding.route)
+        key = operation_key(entry["idempotency_key"], attempt)
+        event, action, revision = self.journal.read_revision(key, binding.route)
         if event is None or action:
             raise ProviderError("provider operation requires reconciliation")
+        capability = "approval" if approval else "input"
         expected = "waiting_approval" if approval else "waiting_input"
-        if event.state == expected:
-            capability = "approval" if approval else "input"
-            if capability not in binding.capabilities():
-                raise ProviderError(f"provider does not support {capability}")
-            self.journal.begin_action(key, binding.route, capability)
-            if approved is None:
-                update = binding.provider.provide_input(event.handle, payload, timeout=120)
-            else:
-                update = binding.provider.approve(event.handle, approved, str(payload.get("reason", "")), timeout=120)
-            if update.handle.native_id != event.handle.native_id:
-                raise ProviderError("provider returned a different native handle")
-            if not self.journal.save(key, binding.route, update, action=capability):
+        if revision != checkpoint:
+            if not self.journal.confirmed(key, binding.route, capability, revision=checkpoint + 1):
+                raise ProviderError("provider checkpoint changed; refresh the task before replying")
+            payload = {"reconciled": True}
+        else:
+            if event.state != expected or capability not in binding.capabilities():
+                raise ProviderError(f"provider does not accept {capability} at this checkpoint")
+            self.journal.begin_action(
+                key, binding.route, capability, revision=checkpoint,
+                guard=lambda db: self.store.authorize_interaction(db, run_id, task_id, attempt, checkpoint),
+            )
+            try:
+                if approved is None:
+                    update = binding.provider.provide_input(event.handle, payload, timeout=120)
+                else:
+                    update = binding.provider.approve(event.handle, approved, str(payload.get("reason", "")), timeout=120)
+            except NoSendError:
+                self.journal.release_unsent(key, binding.route, capability, revision=checkpoint)
+                raise
+            self._check_handle(event, update)
+            if not self.journal.save(key, binding.route, update, action=capability, revision=checkpoint):
                 raise ProviderError("provider operation changed during operator input")
-        # The explicit decision (including denial) was sent to the provider before advancing local state.
-        # The workflow's approval flag releases the checkpoint, not the remote action itself.
-        self.store.provide_input(run_id, task_id, payload, approved=approval)
+        # A denial is a valid response to a provider approval checkpoint.
+        self.store.provide_input(
+            run_id, task_id, attempt, payload, approved=approval, checkpoint_revision=checkpoint,
+        )
 
     def reconcile(self, run_id: str, task_id: str, native_id: str | None = None) -> Event:
         """Recover an interrupted operation by polling its known native handle."""
+        self._verify_run(run_id)
         binding, entry = self._pending(run_id, task_id)
-        key = entry.get("idempotency_key")
-        if not key:
+        logical_key = entry.get("idempotency_key")
+        if not logical_key:
             raise ProviderError("task has no provider attempt")
-        event, action = self.journal.read(key, binding.route)
+        key = operation_key(logical_key, entry["attempt"])
+        event, action, revision = self.journal.read_revision(key, binding.route)
         if not action:
             raise ProviderError("task has no uncertain provider operation")
         if event is None and not native_id:
             raise ProviderError("supply the native provider handle found out of band")
         if event is not None and native_id and event.handle.native_id != native_id:
             raise ProviderError("supplied native handle differs from the existing task")
-        handle = event.handle if event is not None else Handle(native_id or "")
+        handle = event.handle if event is not None else binding.provider.recover_handle(native_id or "", timeout=120)
         update = binding.provider.resume(handle, timeout=120)
         if update.handle.native_id != handle.native_id:
             raise ProviderError("provider returned a different native handle")
         interaction = action in {"input", "approval"}
-        if (
-            interaction and event is not None and update.state == event.state
-            and (not update.handle.context_id or update.handle.context_id == handle.context_id)
-        ):
+        if interaction and event is not None and update.state == event.state and update.handle == handle:
             raise ProviderError("provider has not confirmed a change at the waiting checkpoint")
-        if not self.journal.save(key, binding.route, update, action=action):
+        if not self.journal.save(key, binding.route, update, action=action, revision=revision):
             raise ProviderError("provider attempt changed during reconciliation")
         if interaction and entry["status"] == "waiting_input":
             self.store.provide_input(
-                run_id, task_id, {"reconciled": True}, approved=entry["waiting_kind"] == "approval",
+                run_id, task_id, entry["attempt"], {"reconciled": True},
+                approved=entry["waiting_kind"] == "approval",
+                checkpoint_revision=entry.get("checkpoint_revision", 0),
             )
         return update
 
+    @staticmethod
+    def _attempts(state: Json) -> Iterator[tuple[Json, str | None]]:
+        for entry in state["tasks"].values():
+            yield entry, entry["provider"]
+            if entry["compensation"] is not None:
+                yield entry["compensation"], entry["provider"]
+
     def cancel(self, run_id: str) -> None:
-        state = self.store.snapshot(run_id)
+        self._verify_run(run_id)
+        state = self.store.begin_cancel(run_id)
         if state["status"] in TERMINAL:
             return
         outstanding = []
-        for entry in state["tasks"].values():
-            key = entry["idempotency_key"]
-            if not key or entry["status"] not in {"running", "waiting_input"}:
+        for entry, provider in self._attempts(state):
+            logical_key = entry["idempotency_key"]
+            if not logical_key or entry["status"] not in {"running", "waiting_input"}:
                 continue
-            binding = self._binding(entry["provider"])
-            event, action = self.journal.read(key, binding.route)
-            if action or event is None:
-                raise ProviderError("a provider operation requires reconciliation before cancellation")
-            if event.state not in TERMINAL:
+            binding = self._binding(provider)
+            key = operation_key(logical_key, entry["attempt"])
+            event, action, revision = self.journal.read_revision(key, binding.route)
+            if action:
+                raise ProviderError("cancellation pending: wait for or reconcile the in-flight provider operation")
+            if event is not None and event.state not in TERMINAL:
                 if "cancel" not in binding.capabilities():
                     raise ProviderError("an active provider does not support cancellation")
-                outstanding.append((binding, key, event))
-        for binding, key, event in outstanding:
-            self._cancel_one(binding, key, event)
+                outstanding.append((binding, key, event, revision))
+        for binding, key, event, revision in outstanding:
+            self._cancel_one(binding, key, event, revision)
         self.store.cancel(run_id)
 
-    def _cancel_one(self, binding: Binding, key: str, event: Event) -> None:
-        if "cancel" not in binding.capabilities():
-            raise ProviderError("an active provider does not support cancellation")
-        self.journal.begin_action(key, binding.route, "cancel")
-        stopped = binding.provider.cancel(event.handle, timeout=20)
-        if stopped.handle.native_id != event.handle.native_id:
-            raise ProviderError("provider returned a different native handle")
-        if not self.journal.save(key, binding.route, stopped, action="cancel"):
+    def _cancel_one(self, binding: Binding, key: str, event: Event, revision: int) -> Event:
+        self.journal.begin_action(key, binding.route, "cancel", revision=revision)
+        try:
+            stopped = binding.provider.cancel(event.handle, timeout=20)
+        except NoSendError:
+            self.journal.release_unsent(key, binding.route, "cancel", revision=revision)
+            raise
+        self._check_handle(event, stopped)
+        if not self.journal.save(key, binding.route, stopped, action="cancel", revision=revision):
             raise ProviderError("provider attempt changed during cancellation")
         if stopped.state not in TERMINAL:
             raise ProviderError("provider cancellation is not yet confirmed")
+        return stopped

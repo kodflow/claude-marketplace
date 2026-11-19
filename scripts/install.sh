@@ -121,7 +121,11 @@ if [ "$DO_CODEX" -eq 1 ]; then
     # A checkout pinned to a Git SHA registers that checkout's marketplace.
     say "native marketplace ($HERE)"
     run mkdir -p "$codex_dir" || exit 1
-    run codex plugin marketplace add "$HERE" || exit 1
+    if ! run codex plugin marketplace add "$HERE"; then
+      echo "If Kodflow is registered from another checkout, inspect it with 'codex plugin marketplace list'." >&2
+      echo "To switch sources, remove that registration with 'codex plugin marketplace remove kodflow' and rerun the installer." >&2
+      exit 1
+    fi
     failed=0
     for p in $(plugin_names "$HERE/.agents/plugins/marketplace.json"); do
       run codex plugin add "$p@kodflow" || failed=1

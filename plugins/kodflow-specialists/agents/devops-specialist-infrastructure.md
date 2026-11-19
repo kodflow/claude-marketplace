@@ -52,7 +52,7 @@ validation:
   - "terraform fmt -check"
   - "terraform validate"
   - "tflint --recursive"
-  - "terraform-docs check"
+  - "terraform-docs markdown table --output-file README.md --output-check <module-path>"
 
 security:
   - "No hardcoded credentials"
@@ -60,6 +60,8 @@ security:
   - "Least privilege IAM"
   - "Network security groups restrictive"
 ```
+
+Use the formatter configured for the module in the terraform-docs freshness check.
 
 ## Best Practices Enforced
 

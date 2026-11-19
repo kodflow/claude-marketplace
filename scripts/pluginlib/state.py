@@ -24,6 +24,12 @@ class StateError(ValueError):
     """An operation conflicts with the persisted workflow state."""
 
 
+class CompletionRejected(StateError):
+    """A result was rejected and its failure transition is already durable."""
+
+    transition_applied = True
+
+
 @dataclass(frozen=True, slots=True)
 class Dispatch:
     """A claimed attempt. The key and original input survive a restart."""
@@ -59,11 +65,13 @@ def _new_attempt() -> dict:
         "artifacts": [],
         "error": None,
         "waiting_kind": None,
+        "checkpoint_revision": 0,
         "deadline": None,
         "idempotency_key": None,
         "input": None,
         "user_input": None,
         "approved": False,
+        "effect_applied": False,
     }
 
 
@@ -121,7 +129,10 @@ class StateStore:
             raise StateError(f"unknown workflow run {run_id!r}")
         return restore_workflow(row[0]), json.loads(row[1])
 
-    def create_run(self, workflow: Workflow, inputs: dict, run_id: str | None = None) -> str:
+    def create_run(
+        self, workflow: Workflow, inputs: dict, run_id: str | None = None, *,
+        execution: dict | None = None,
+    ) -> str:
         # Validate the pinned document too, avoiding discrepancies if a caller
         # mutated a nested dict on a workflow model after loading it.
         workflow = restore_workflow(workflow.document)
@@ -140,6 +151,8 @@ class StateStore:
             },
             "completion_order": [],
             "terminal_target": None,
+            "cancellation_requested": False,
+            "execution": execution,
         }
         with closing(self._connect()) as connection, connection:
             try:
@@ -154,6 +167,43 @@ class StateStore:
     def snapshot(self, run_id: str) -> dict:
         with closing(self._connect()) as connection:
             return self._load(connection, run_id)[1]
+
+    def definition(self, run_id: str) -> Workflow:
+        """Return the workflow that was pinned when this run was created."""
+        with closing(self._connect()) as connection:
+            return self._load(connection, run_id)[0]
+
+    def authorize_submission(self, connection: sqlite3.Connection, dispatch: Dispatch) -> None:
+        """Check attempt liveness inside the provider journal's write transaction."""
+        row = connection.execute("SELECT state FROM workflow_runs WHERE id = ?", (dispatch.run_id,)).fetchone()
+        if row is None:
+            raise StateError("unknown workflow run")
+        state = json.loads(row[0])
+        entry = state["tasks"][dispatch.task_id]
+        if dispatch.compensation:
+            entry = entry["compensation"]
+        if (
+            state.get("cancellation_requested")
+            or not entry
+            or entry["status"] != "running"
+            or entry["attempt"] != dispatch.attempt
+            or entry["idempotency_key"] != dispatch.idempotency_key
+            or entry["deadline"] <= self.clock()
+        ):
+            raise StateError("provider submission no longer has a live workflow attempt")
+
+    def authorize_interaction(
+        self, connection: sqlite3.Connection, run_id: str, task_id: str, attempt: int,
+        checkpoint_revision: int,
+    ) -> None:
+        """Prevent new operator actions from racing a cancellation or checkpoint change."""
+        row = connection.execute("SELECT state FROM workflow_runs WHERE id = ?", (run_id,)).fetchone()
+        if row is None:
+            raise StateError("unknown workflow run")
+        state = json.loads(row[0])
+        entry = state["tasks"][task_id]
+        if state.get("cancellation_requested") or not self._waiting_at(entry, attempt, checkpoint_revision):
+            raise StateError("operator checkpoint is no longer current")
 
     def _dispatch(self, state: dict, task: Task, entry: dict, compensation: bool = False) -> Dispatch:
         instructions = task.compensation if compensation else task.instructions
@@ -219,7 +269,10 @@ class StateStore:
                 _is_active(tasks[task.id])
                 or (
                     task.compensation is not None
-                    and tasks[task.id]["status"] == "completed"
+                        and (
+                            tasks[task.id]["status"] == "completed"
+                            or tasks[task.id].get("effect_applied")
+                        )
                     and (
                         tasks[task.id]["compensation"] is None
                         or tasks[task.id]["compensation"]["status"] not in TERMINAL
@@ -282,10 +335,13 @@ class StateStore:
                 return ()
         return ()
 
-    def advance(self, run_id: str, capabilities: Collection[str]) -> tuple[Dispatch, ...]:
+    def advance(
+        self, run_id: str, capabilities: Collection[str], *,
+        resolved_expiry: Collection[tuple[str, int, bool]] | None = None,
+    ) -> tuple[Dispatch, ...]:
         """Apply timeouts and atomically claim up to one eligible DAG frontier."""
         with self._edit(run_id) as (workflow, state):
-            if state["status"] in TERMINAL:
+            if state["status"] in TERMINAL or state.get("cancellation_requested"):
                 return ()
             missing = workflow.capabilities - set(capabilities)
             if missing:
@@ -293,7 +349,14 @@ class StateStore:
             now = self.clock()
             for task in workflow.tasks:
                 for compensation, attempt in self._entries(state, task):
-                    if attempt["status"] == "running" and attempt["deadline"] <= now:
+                    if (
+                        attempt["status"] == "running"
+                        and attempt["deadline"] <= now
+                        and (
+                            resolved_expiry is None
+                            or (task.id, attempt["attempt"], compensation) in resolved_expiry
+                        )
+                    ):
                         self._fail(state, task, attempt, "deadline exceeded", True, compensation)
             if state["terminal_target"] is not None:
                 dispatches = self._compensate(state, workflow)
@@ -301,18 +364,13 @@ class StateStore:
                 return dispatches
             entries = state["tasks"]
             running = [task for task in workflow.tasks if _is_active(entries[task.id])]
-            dispatches = []
+            ready = []
             for task in workflow.tasks:
                 entry = entries[task.id]
                 dependencies = {task_id: entries[task_id] for task_id in task.needs}
                 if entry["status"] != "pending" or any(
                     parent["status"] != "completed" for parent in dependencies.values()
                 ):
-                    continue
-                if task.approval and not entry["approved"]:
-                    entry.update(status="waiting_input", waiting_kind="approval")
-                    continue
-                if any(_write_conflict(task, other) for other in running):
                     continue
                 try:
                     inputs = task_input(
@@ -321,7 +379,19 @@ class StateStore:
                     )
                 except WorkflowError as error:
                     self._fail(state, task, entry, str(error), False, False)
-                    break
+                    self._refresh(state, workflow)
+                    return ()
+                ready.append((task, entry, inputs))
+            dispatches = []
+            for task, entry, inputs in ready:
+                if task.approval and not entry["approved"]:
+                    entry.update(
+                        status="waiting_input", waiting_kind="approval",
+                        checkpoint_revision=entry.get("checkpoint_revision", 0) + 1,
+                    )
+                    continue
+                if any(_write_conflict(task, other) for other in running):
+                    continue
                 dispatches.append(self._claim(state, task, entry, inputs))
                 running.append(task)
             self._refresh(state, workflow)
@@ -350,33 +420,73 @@ class StateStore:
         artifacts: Sequence[dict] = (),
         *,
         compensation: bool = False,
+        retry_expired: bool = True,
     ) -> None:
         """Record a result once and check the declared result/artifact contracts."""
+        rejected = None
         with self._edit(run_id) as (workflow, state):
             task, entry = self._find_attempt(state, workflow, task_id, attempt, compensation)
             if entry["status"] != "running":
                 raise StateError(f"task {task_id!r} must receive operator input before completion")
-            if not all(isinstance(item, dict) for item in artifacts):
-                raise StateError("artifacts must be JSON objects")
+            write_applied = not compensation and task.access == "write"
+            expired = entry["deadline"] <= self.clock()
+            try:
+                self._validate_completion(task, result, artifacts, compensation)
+            except (WorkflowError, StateError) as error:
+                if not expired and not write_applied:
+                    raise
+                rejected = str(error)
+            if expired:
+                rejected = "deadline exceeded"
+            if write_applied:
+                # A success event can describe an already-applied write even
+                # when its payload cannot feed the next workflow task.
+                try:
+                    _json([result, list(artifacts)])
+                except (TypeError, ValueError):
+                    result, artifacts = None, ()
+                entry.update(effect_applied=True, result=result, artifacts=list(artifacts))
+                if rejected is not None and task.compensation is None:
+                    entry["needs_reconciliation"] = True
             if not compensation:
-                validate_value(task.output_schema, result, f"task {task_id} output")
-                identifiers = {
-                    value for item in artifacts for key in ("path", "id", "name")
-                    if isinstance(value := item.get(key), str)
-                }
-                missing = set(task.artifacts) - identifiers
-                if missing:
-                    raise StateError("missing declared artifacts: " + ", ".join(sorted(missing)))
-                state["completion_order"].append(task_id)
-            entry.update(
-                status="completed",
-                result=result,
-                artifacts=list(artifacts),
-                error=None,
-                deadline=None,
-                waiting_kind=None,
-            )
+                if write_applied or rejected is None:
+                    state["completion_order"].append(task_id)
+            if rejected is not None:
+                self._fail(
+                    state, task, entry, rejected, expired and retry_expired and not write_applied,
+                    compensation,
+                )
+            else:
+                entry.update(
+                    status="completed",
+                    result=result,
+                    artifacts=list(artifacts),
+                    error=None,
+                    deadline=None,
+                    waiting_kind=None,
+                )
             self._refresh(state, workflow)
+        if rejected is not None:
+            raise CompletionRejected(rejected)
+
+    @staticmethod
+    def _validate_completion(task: Task, result: Any, artifacts: Sequence[dict], compensation: bool) -> None:
+        if not all(isinstance(item, dict) for item in artifacts):
+            raise StateError("artifacts must be JSON objects")
+        try:
+            _json([result, list(artifacts)])
+        except (TypeError, ValueError) as error:
+            raise StateError("result and artifacts must be JSON values") from error
+        if compensation:
+            return
+        validate_value(task.output_schema, result, f"task {task.id} output")
+        identifiers = {
+            value for item in artifacts for key in ("path", "id", "name")
+            if isinstance(value := item.get(key), str)
+        }
+        missing = set(task.artifacts) - identifiers
+        if missing:
+            raise StateError("missing declared artifacts: " + ", ".join(sorted(missing)))
 
     def fail(
         self,
@@ -402,22 +512,39 @@ class StateStore:
         kind: str = "input",
         *,
         compensation: bool = False,
+        checkpoint_revision: int | None = None,
     ) -> None:
         if kind not in {"input", "approval"}:
             raise StateError(f"unsupported waiting kind {kind!r}")
         with self._edit(run_id) as (workflow, state):
             _, entry = self._find_attempt(state, workflow, task_id, attempt, compensation)
-            entry.update(status="waiting_input", error=reason, waiting_kind=kind, deadline=None)
+            revision = checkpoint_revision
+            if revision is None:
+                revision = entry.get("checkpoint_revision", 0) + 1
+            entry.update(
+                status="waiting_input", error=reason, waiting_kind=kind, deadline=None,
+                checkpoint_revision=revision,
+            )
             self._refresh(state, workflow)
+
+    @staticmethod
+    def _waiting_at(entry: dict | None, attempt: int, checkpoint_revision: int | None) -> bool:
+        return bool(
+            entry is not None and entry["status"] == "waiting_input"
+            and entry["attempt"] == attempt
+            and (checkpoint_revision is None or entry.get("checkpoint_revision", 0) == checkpoint_revision)
+        )
 
     def provide_input(
         self,
         run_id: str,
         task_id: str,
+        attempt: int,
         payload: dict,
         approved: bool = False,
         *,
         compensation: bool = False,
+        checkpoint_revision: int | None = None,
     ) -> None:
         if not isinstance(payload, dict):
             raise StateError("operator input must be an object")
@@ -428,8 +555,8 @@ class StateStore:
             entry = state["tasks"][task.id]
             if compensation:
                 entry = entry["compensation"]
-            if entry is None or entry["status"] != "waiting_input":
-                raise StateError(f"task {task_id!r} is not waiting for operator input")
+            if not self._waiting_at(entry, attempt, checkpoint_revision):
+                raise StateError(f"task {task_id!r} is not waiting at this operator checkpoint")
             if entry["waiting_kind"] == "approval" and not approved:
                 raise StateError(f"task {task_id!r} requires explicit approval")
             dispatched = entry["attempt"] > 0
@@ -443,6 +570,13 @@ class StateStore:
             )
             self._refresh(state, workflow)
 
+    def begin_cancel(self, run_id: str) -> dict:
+        """Persist intent before the supervisor inspects or cancels provider operations."""
+        with self._edit(run_id) as (_, state):
+            if state["status"] not in TERMINAL:
+                state["cancellation_requested"] = True
+            return state
+
     def cancel(self, run_id: str) -> None:
         """Stop new work after the caller has cancelled outstanding provider handles."""
         with self._edit(run_id) as (workflow, state):
@@ -450,7 +584,9 @@ class StateStore:
                 return
             if state["terminal_target"] is None:
                 self._abort(state, "cancelled")
-            for entry in state["tasks"].values():
-                if _is_active(entry):
-                    entry.update(status="cancelled", waiting_kind=None, deadline=None)
+            for task in workflow.tasks:
+                for _, entry in self._entries(state, task):
+                    if _is_active(entry):
+                        entry.update(status="cancelled", waiting_kind=None, deadline=None)
+            state["cancellation_requested"] = False
             self._refresh(state, workflow)

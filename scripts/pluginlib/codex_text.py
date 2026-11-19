@@ -32,6 +32,7 @@ TIER = {
 }
 
 CODEX_EFFORTS = {"low", "medium", "high", "xhigh"}
+TOML_CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 CLASS_PRESETS = {
     "fast": ("haiku", "low"), "standard": ("sonnet", "medium"),
     "deep": ("opus", "medium"), "verify": ("opus", "xhigh"),
@@ -52,7 +53,8 @@ def neutralise(t):
     return t
 
 def toml_escape(s):
-    return s.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+    escaped = s.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
+    return TOML_CONTROLS.sub(lambda match: f"\\u{ord(match[0]):04x}", escaped)
 
 def render_agent(fm: dict, body: str, source_name: str) -> str:
     """Project the legacy TOML custom-agent contract without changing its format."""

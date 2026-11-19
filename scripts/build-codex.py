@@ -9,11 +9,7 @@ from drifting — a hand port is correct once.
 """
 import pathlib, re, sys, yaml
 
-from pluginlib.codex_text import neutralise, render_agent, role_agent_fields
-try:
-    import tomli_w
-except ImportError:
-    tomli_w = None
+from pluginlib.codex_text import neutralise, render_agent
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
 
@@ -56,6 +52,20 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
     entry = src / "SKILL.md"
     if entry.exists():
         fm, body = split(entry.read_text())
+        # The flat install has no package root, so these documents must
+        # travel with their skill rather than be linked by package path.
+        companions = pathlib.Path("io.github.kodflow/projections/workflows")
+        package = src.parent.parent
+        for host in ("claude", "openai", "perplexity"):
+            source = package / companions / f"{name}-{host}.md"
+            if not source.is_file():
+                continue
+            if not source.resolve().is_relative_to(package.resolve()):
+                raise ValueError(f"{source}: workflow companion leaves the package")
+            target = dst / f"workflow-{host}.md"
+            target.write_bytes(source.read_bytes())
+            written.add(target)
+            body = body.replace(f"../../{companions.as_posix()}/{source.name}", target.name)
         desc = " ".join(str(fm.get("description", "")).split())
         # when_to_use is free text that often already starts with "Use when":
         # strip that prefix so the join never reads "Use when when".
@@ -80,25 +90,35 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
 
 # ---- agents ---------------------------------------------------------------
 n_ag = 0
+portable_roles = set()
+schemas = pathlib.Path(__file__).resolve().parents[1] / "schemas"
+for package in sorted(ROOT.glob("plugins/*")):
+    if not package.is_dir() or package.name in EXCLUDE_PLUGINS:
+        continue
+    declarations = package / "io.github.kodflow" / "roles"
+    if not declarations.exists() and not declarations.is_symlink():
+        continue
+    from pluginlib.roles import load_roles
+
+    for role in load_roles(package, schemas):
+        target = agents_out / f"{role.id}.toml"
+        if target in written:
+            raise ValueError(f"duplicate portable role {role.id!r}")
+        target.write_bytes(role.render_codex())
+        written.add(target)
+        portable_roles.add((package.name, role.id))
+        n_ag += 1
 for src in sorted(ROOT.glob("plugins/*/agents/*.md")):
-    if plugin_of(src) in EXCLUDE_PLUGINS: continue
+    package_name = plugin_of(src)
+    if package_name in EXCLUDE_PLUGINS or (package_name, src.stem) in portable_roles:
+        continue
     fm, body = split(src.read_text())
-    package = src.parent.parent.resolve()
-    role = package / "io.github.kodflow" / "roles" / src.stem / "role.yaml"
-    if role.is_file():
-        if not role.resolve().is_relative_to(package):
-            raise ValueError(f"{role}: role leaves the package")
-        data = yaml.safe_load(role.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or data.get("id") != src.stem:
-            raise ValueError(f"{role}: role id must match {src.stem!r}")
-        instructions = (role.parent / data["instructions"]).resolve()
-        if not instructions.is_relative_to(role.parent.resolve()):
-            raise ValueError(f"{role}: instructions leave the role")
-        fm = role_agent_fields(data)
-        body = instructions.read_text(encoding="utf-8")
     name = fm.get("name", src.stem)
-    (agents_out / f"{name}.toml").write_text(render_agent(fm, body, src.name))
-    written.add(agents_out / f"{name}.toml")
+    target = agents_out / f"{name}.toml"
+    if target in written:
+        raise ValueError(f"duplicate custom agent {name!r}")
+    target.write_text(render_agent(fm, body, src.name), encoding="utf-8")
+    written.add(target)
     n_ag += 1
 
 # ---- prune ----------------------------------------------------------------

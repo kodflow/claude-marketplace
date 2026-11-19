@@ -11,6 +11,27 @@ inputSchema:
   additionalProperties: false
 requiredCapabilities: [parallel-delegation, structured-output, local-verifier, repository.read]
 tasks:
+  - id: capture-tiers
+    role: developer-executor-quality
+    access: read
+    timeout: 300
+    instructions: >-
+      Run the existing /review Phase 3 tool invocations from deterministic.md.
+      Use its scratch directory, capture each applicable invocation's .out file
+      and _table.tsv, and return paths to those captured files. Do not synthesize
+      captures or change repository files.
+    inputSchema: &task_input
+      type: object
+      required: [inputs, dependencies]
+    outputSchema: &tier_evidence
+      type: object
+      required: [directory, table, captures]
+      properties:
+        directory: {type: string, minLength: 1}
+        table: {type: string, minLength: 1}
+        captures:
+          type: object
+          additionalProperties: {type: string, minLength: 1}
   - id: correctness
     role: developer-executor-correctness
     access: read
@@ -19,14 +40,16 @@ tasks:
     instructions: >-
       Review the selected diff for correctness and regression risk. Cite source
       locations and concrete failure conditions using the existing /review
-      evidence rules. Do not modify code or publish comments.
-    inputSchema: &task_input
-      type: object
-      required: [inputs, dependencies]
+      evidence rules. Return your coverage records from passes.md. Do not modify
+      code or publish comments.
+    inputSchema: *task_input
     outputSchema: &specialist_findings
       type: object
-      required: [findings]
+      required: [findings, coverage]
       properties:
+        coverage:
+          type: object
+          description: Actual macro file and micro function or hunk inspection records from passes.md.
         findings:
           type: array
           items:
@@ -48,7 +71,8 @@ tasks:
       Perform a defensive source review of the diff for broken trust boundaries,
       unsafe defaults, secret exposure and permission regressions. Return source
       locations, impact, and remediation. Do not attempt exploitation or
-      reproduction of a vulnerability. Do not change files or publish comments.
+      reproduction of a vulnerability. Return your inspection coverage records.
+      Do not change files or publish comments.
     inputSchema: *task_input
     outputSchema: *specialist_findings
   - id: quality
@@ -58,27 +82,61 @@ tasks:
     retries: 1
     instructions: >-
       Review maintainability, API consistency, and missing tests on the selected
-      diff. Return concrete findings with source locations and evidence. Do not
-      modify the repository or publish comments.
+      diff. Return concrete findings with source locations, evidence, and
+      your inspection coverage records. Do not modify the repository or
+      publish comments.
     inputSchema: *task_input
     outputSchema: *specialist_findings
+  - id: assemble-evidence
+    role: developer-orchestrator
+    needs: [capture-tiers, correctness, defensive-security, quality]
+    access: read
+    timeout: 180
+    instructions: >-
+      Assemble the existing /review Phase 8 coverage manifest from the actual
+      specialist inspection records, the deterministic outputs captured by
+      capture-tiers, and canonical facts from review-verify-manifest.sh
+      --print-facts. Follow manifest.md and leave missing evidence unverified.
+      Return the manifest and the same capture references for verification.
+    inputSchema: *task_input
+    outputSchema:
+      type: object
+      required: [coverageManifest, deterministicTierOutput]
+      properties:
+        coverageManifest: {type: object}
+        deterministicTierOutput: *tier_evidence
   - id: consolidate
     role: developer-orchestrator
-    needs: [correctness, defensive-security, quality]
+    needs: [correctness, defensive-security, quality, assemble-evidence]
     access: read
     timeout: 180
     instructions: >-
       Merge duplicate findings that identify the same cause and source location.
       Preserve the strongest evidence, severity and confidence and keep
       unverified findings in the existing Needs Verification tier. Preserve
-      the existing coverage manifest and deterministic tier inputs to /review.
-    inputSchema: *task_input
+      the supplied coverage manifest and deterministic tier capture references
+      without changing their evidence.
+    with:
+      findings:
+        correctness: {$from: /dependencies/correctness/findings}
+        security: {$from: /dependencies/defensive-security/findings}
+        quality: {$from: /dependencies/quality/findings}
+      coverageManifest: {$from: /dependencies/assemble-evidence/coverageManifest}
+      deterministicTierOutput: {$from: /dependencies/assemble-evidence/deterministicTierOutput}
+    inputSchema:
+      type: object
+      required: [findings, coverageManifest, deterministicTierOutput]
+      properties:
+        findings: {type: object}
+        coverageManifest: {type: object}
+        deterministicTierOutput: *tier_evidence
     outputSchema:
       type: object
-      required: [findings, coverageManifest]
+      required: [findings, coverageManifest, deterministicTierOutput]
       properties:
         findings: {type: array, items: {type: object}}
         coverageManifest: {type: object}
+        deterministicTierOutput: *tier_evidence
   - id: verify-and-report
     role: developer-executor-correctness
     needs: [consolidate]
@@ -86,13 +144,27 @@ tasks:
     timeout: 180
     instructions: >-
       Run the repository's review-verify-manifest.sh against the requested
-      diff and coverage manifest. Treat a missing verifier, failed verification,
+      diff and supplied coverage manifest. Pass the captured evidence directory
+      as --det, and check the supplied table and .out file references. Treat a
+      missing verifier, missing captures, failed verification,
       or incomplete coverage as inconclusive. Render the existing /review
       report using skills/review/output.md and synthesis.md: walkthrough,
       verdict, findings by severity and confidence, Needs Verification,
       deterministic tier table from captured output, and verifier result.
       Return the report locally without posting any message.
-    inputSchema: *task_input
+    with:
+      inputs: {$from: /inputs}
+      findings: {$from: /dependencies/consolidate/findings}
+      coverageManifest: {$from: /dependencies/consolidate/coverageManifest}
+      deterministicTierOutput: {$from: /dependencies/consolidate/deterministicTierOutput}
+    inputSchema:
+      type: object
+      required: [inputs, findings, coverageManifest, deterministicTierOutput]
+      properties:
+        inputs: {type: object}
+        findings: {type: array, items: {type: object}}
+        coverageManifest: {type: object}
+        deterministicTierOutput: *tier_evidence
     outputSchema:
       type: object
       required: [report, verdict, verified]

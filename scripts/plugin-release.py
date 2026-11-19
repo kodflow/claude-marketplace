@@ -11,10 +11,26 @@ import sys
 import tarfile
 import tempfile
 
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _render_snapshot(source: Path, commit: str, staged: Path) -> None:
+    staged.mkdir()
+    subprocess.run([
+        sys.executable, "-I", "-c",
+        """
+import sys
+from pathlib import Path
+
+source = Path.cwd()
+sys.path.insert(0, str(source / "scripts"))
 from pluginlib.release import render_profiles
 
-
-ROOT = Path(__file__).resolve().parent.parent
+for name, data in render_profiles(source, sys.argv[1]).items():
+    (Path(sys.argv[2]) / name).write_bytes(data)
+""",
+        commit, str(staged),
+    ], cwd=source, check=True)
 
 
 def release_at(commit: str, output: Path) -> Path:
@@ -47,18 +63,16 @@ def release_at(commit: str, output: Path) -> Path:
                 [sys.executable, "scripts/pluginctl.py", *command], cwd=source, check=True,
                 stdout=subprocess.DEVNULL if command[0] == "compat" else None,
             )
-        files = render_profiles(source, commit)
+        staged = staging / "artifacts"
+        _render_snapshot(source, commit, staged)
+        files = list(staged.iterdir())
         if destination.exists():
             if (destination.is_symlink() or not destination.is_dir()
-                or {path.name for path in destination.iterdir()} != files.keys()
-                or any((destination / name).is_symlink() or (destination / name).read_bytes() != data
-                       for name, data in files.items())):
+                or {path.name for path in destination.iterdir()} != {path.name for path in files}
+                or any((destination / path.name).is_symlink() or
+                       (destination / path.name).read_bytes() != path.read_bytes() for path in files)):
                 raise ValueError(f"release output already exists with different contents: {destination}")
             return destination
-        staged = staging / "artifacts"
-        staged.mkdir()
-        for name, data in files.items():
-            (staged / name).write_bytes(data)
         staged.rename(destination)
     return destination
 

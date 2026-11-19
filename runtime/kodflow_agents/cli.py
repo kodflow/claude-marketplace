@@ -51,15 +51,19 @@ def _provider_bindings(live: bool, names: set[str]) -> dict[str, Binding]:
                 result[name] = Binding(constructors[name](transport), f"live:{name}", model, True)
         elif name == "computer":
             credential("PERPLEXITY_COMPUTER_OAUTH_TOKEN")
+            mcp = ComputerMcp(transport)
             result[name] = Binding(
-                Computer(ComputerMcp(transport).call), "live:computer", os.environ.get("KODFLOW_COMPUTER_MODEL", ""),
+                Computer(mcp.call, mcp.tasks), "live:computer", os.environ.get("KODFLOW_COMPUTER_MODEL", ""),
             )
         else:
             card = os.environ.get("KODFLOW_A2A_CARD_URL", "")
             if not card:
                 raise ProviderError("A2A requires KODFLOW_A2A_CARD_URL")
             token_ref = "KODFLOW_A2A_BEARER_TOKEN" if os.environ.get("KODFLOW_A2A_BEARER_TOKEN") else None
-            result[name] = Binding(A2A(transport, card, credential_env=token_ref), f"live:a2a:{card}")
+            agent = A2A(transport, card, credential_env=token_ref)
+            agent.discover(timeout=20)
+            route = json.dumps([card, agent.endpoint, agent.tenant, token_ref], separators=(",", ":"))
+            result[name] = Binding(agent, f"live:a2a:{route}")
     return result
 
 
@@ -126,7 +130,7 @@ def parser() -> argparse.ArgumentParser:
     command = argparse.ArgumentParser(description=__doc__)
     command.add_argument("--repository", type=Path, default=Path(__file__).resolve().parents[2])
     command.add_argument("--database", type=Path, default=Path("dist/kodflow-agents/runs.sqlite"))
-    command.add_argument("--default-provider", choices=_ALL, default="openai")
+    command.add_argument("--default-provider", choices=_ALL)
     command.add_argument("--live", action="store_true", help="permit credentialed, billable provider operations")
     subcommands = command.add_subparsers(dest="command", required=True)
 
@@ -145,6 +149,9 @@ def parser() -> argparse.ArgumentParser:
             action.add_argument("--once", action="store_true")
         if name in {"input", "approve", "reconcile", "artifacts", "usage"}:
             action.add_argument("task_id")
+        if name in {"input", "approve"}:
+            action.add_argument("--attempt", type=int, required=True)
+            action.add_argument("--checkpoint", type=int, required=True)
         if name == "input":
             action.add_argument("--value", required=True)
         if name == "approve":
@@ -168,10 +175,12 @@ def main(argv: list[str] | None = None) -> int:
         journal = Journal(args.database)
         if args.command == "run":
             workflow = load(args.workflow)
-            providers = _provider_bindings(args.live, _workflow_providers(workflow, args.default_provider))
-            supervisor = Supervisor(store, journal, providers, default_provider=args.default_provider)
+            default = args.default_provider or "openai"
+            providers = _provider_bindings(args.live, _workflow_providers(workflow, default))
+            supervisor = Supervisor(store, journal, providers, default_provider=default)
             supervisor.preflight(workflow)
-            run_id = store.create_run(workflow, _json_object(args.input), run_id=args.run_id)
+            execution = supervisor.execution_bindings(workflow, live=args.live)
+            run_id = store.create_run(workflow, _json_object(args.input), run_id=args.run_id, execution=execution)
             print(f"Run {run_id}", file=sys.stderr, flush=True)
             return _run(supervisor, run_id, once=args.once)
         state = store.snapshot(args.run_id)
@@ -181,25 +190,36 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command in {"artifacts", "usage"}:
             task = state["tasks"][args.task_id]
-            key = task["idempotency_key"]
-            if not key:
-                raise ProviderError("task has no provider attempt")
             if args.command == "artifacts":
                 _print(task["artifacts"])
             else:
-                _print(journal.usage(key))
+                supervisor = Supervisor(store, journal, {}, default_provider="openai")
+                _print(supervisor.usage(args.run_id, args.task_id))
             return 0
 
-        names = {task["provider"] or args.default_provider for task in state["tasks"].values()}
-        providers = _provider_bindings(args.live, names)
-        supervisor = Supervisor(store, journal, providers, default_provider=args.default_provider)
+        execution = state.get("execution")
+        if not execution:
+            raise ProviderError("this run has no pinned provider bindings")
+        if execution["live"] != args.live:
+            raise ProviderError("resume with the original live or offline execution mode")
+        default = execution["default_provider"]
+        if args.default_provider is not None and args.default_provider != default:
+            raise ProviderError("the default provider differs from the pinned run binding")
+        workflow = store.definition(args.run_id)
+        providers = _provider_bindings(args.live, _workflow_providers(workflow, default))
+        supervisor = Supervisor(store, journal, providers, default_provider=default)
+        if supervisor.execution_bindings(workflow, live=args.live) != execution:
+            raise ProviderError("provider configuration differs from the pinned run bindings")
         if args.command == "resume":
             return _run(supervisor, args.run_id, once=args.once)
         if args.command == "input":
-            supervisor.provide_input(args.run_id, args.task_id, _json_object(args.value))
+            supervisor.provide_input(
+                args.run_id, args.task_id, _json_object(args.value), attempt=args.attempt, checkpoint=args.checkpoint,
+            )
         elif args.command == "approve":
             supervisor.provide_input(
                 args.run_id, args.task_id, {"reason": args.reason}, approved=args.decision == "allow",
+                attempt=args.attempt, checkpoint=args.checkpoint,
             )
         elif args.command == "cancel":
             supervisor.cancel(args.run_id)
