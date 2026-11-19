@@ -36,8 +36,12 @@ _log() {
         local n=0; until mkdir "$dir/.lock.d" 2>/dev/null; do n=$((n+1)); [ $n -ge 10 ] && break; sleep 0.05; done
         # One generation kept: past 20 MB the log moves to session.jsonl.1.
         # wc -c reads the size from the inode (stat flags differ macOS/Linux).
-        local sz; sz=$(wc -c < "$dir/session.jsonl" 2>/dev/null)
-        [ "${sz:-0}" -gt 20971520 ] && mv -f "$dir/session.jsonl" "$dir/session.jsonl.1" 2>/dev/null
+        # Only under the lock: two unlocked writers could both rotate and the
+        # second would overwrite session.jsonl.1 with a near-empty file.
+        if [ $n -lt 10 ]; then
+            local sz; sz=$(wc -c < "$dir/session.jsonl" 2>/dev/null)
+            [ "${sz:-0}" -gt 20971520 ] && mv -f "$dir/session.jsonl" "$dir/session.jsonl.1" 2>/dev/null
+        fi
         printf '%s' "$INPUT" | jq -c --arg b "$BRANCH" -f "$LIB/event.jq" >> "$dir/session.jsonl" 2>/dev/null
         [ $n -lt 10 ] && rmdir "$dir/.lock.d" 2>/dev/null
     ) >/dev/null 2>&1 </dev/null &
