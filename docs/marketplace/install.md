@@ -54,33 +54,56 @@ canary profile does not require removing any existing registration.
 
 Pin the marketplace to the previous commit, then update each plugin. Never run
 `claude plugin marketplace remove kodflow`: it uninstalls every kodflow plugin
-with it.
+with it. The first step depends on whether `~/.claude/settings.json` already
+declares `extraKnownMarketplaces.kodflow` (it does once `install.sh` or a
+`marketplace add` has run):
 
 ```sh
 prev=<full sha of the previous good commit>
+# 1. Entry declared in settings.json: first set "ref": "<prev>" in
+#    extraKnownMarketplaces.kodflow.source by hand (url and "source" unchanged).
+#    No entry declared: skip this step.
 claude plugin marketplace add "https://github.com/kodflow/claude-marketplace.git#$prev"
 claude plugin list                       # the installed kodflow plugins and their scope
 claude plugin update --scope user kodflow-hooks@kodflow   # once per plugin and scope
 ```
 
-The `add` above writes `"ref": "<prev>"` into
-`extraKnownMarketplaces.kodflow.source` of `~/.claude/settings.json` and moves
-the marketplace clone to that commit; `plugin update` then reinstalls the
-plugin as it was there. A plugin installed at project or local scope is
-updated with that `--scope`. Restart open sessions to apply it.
+With a declared entry, `marketplace add "<url>#<sha>"` on its own fails ("its
+source doesn't match its extraKnownMarketplaces entry"): the `ref` written
+first makes both sources identical, and the `add` then moves the marketplace
+clone to that commit. Without a declared entry, the `add` writes the `ref`
+into `extraKnownMarketplaces.kodflow.source` itself. Either way,
+`plugin update` then reinstalls each plugin as it was at that commit. A
+plugin installed at project or local scope is updated with that `--scope`.
+Restart open sessions to apply it.
 
 To move forward again, delete the `"ref"` key from
 `extraKnownMarketplaces.kodflow.source`, run
 `claude plugin marketplace add https://github.com/kodflow/claude-marketplace.git`,
-then the same `plugin update` commands.
+then the same `plugin update` commands. Both steps are needed: a hand edit of
+`settings.json` alone is not picked up by `claude plugin marketplace update`
+(the CLI reports the marketplace as not found until the next `add`).
 
-Checked with Claude Code 2.1.328 in a throwaway profile: a `"ref"` added to
-`settings.json` by hand is not picked up by `claude plugin marketplace update`
-(the CLI then reports the marketplace as not found until the next `add`), so
-the `add` is the step that applies it. The rollback only works between commits
+Checked with Claude Code 2.1.328, in a throwaway profile and on a copy of a
+real profile that declares the entry. The rollback only works between commits
 whose `marketplace.json` uses relative sources (`./plugins/...`, #168 and
 later): before, each plugin pointed at the repository's default branch, which
 a marketplace `ref` does not move.
+
+#### Duplicate installs at project scope in the home directory
+
+A plugin installed at `project` scope while the project directory is `$HOME`
+shares its settings file with the user scope: `~/.claude/settings.json` is
+both. Removing that duplicate with
+`claude plugin uninstall --scope project <plugin>@kodflow` therefore also
+disables the user-scope install (`enabledPlugins` set to false). Enable it
+again afterwards:
+
+```sh
+claude plugin uninstall --scope project kodflow-hooks@kodflow
+claude plugin enable --scope user kodflow-hooks@kodflow
+claude plugin list        # the plugin is listed once, user scope, enabled
+```
 
 ### Codex
 
