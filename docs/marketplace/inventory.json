@@ -851,12 +851,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "5a65724892fd5cafb100bf37a673327c6b0b555cd0772f53d48a596e8cb5f5ff"
+          "sha256": "ec053629232ca04cab67eb169837a23a0aa343f59300301896b724ca87db995f"
         },
         {
           "class": "support",
           "path": "plugins/kodflow-hooks/README.md",
-          "sha256": "38f3ecd5e40c53956e84d3966d8301aef12e3c8de98fe51fda88d5a72d5e9d4c"
+          "sha256": "eb218f91a67fb9c606ce94c030509839df9465570cfe4da6087a3aee83f9f0c1"
         },
         {
           "class": "support",
@@ -1136,7 +1136,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-session.sh",
-          "sha256": "c759f40ccfe2456fe32b6c3703a4578388612592271293821c96becc47d4a3a2"
+          "sha256": "c6029db397bdfb59359b50c0fcdbf64744b785d9391eeaa8fbb2f962287d2d9b"
         },
         {
           "class": "host-extension",
@@ -1171,7 +1171,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "e662266e52343186c209af28733c6b9fb364c6844d76945973f581b7546800d3"
+          "sha256": "c9b63ef68a2ce309ec69ed01dc06798207724ec0fe791d06fc9ba14e0d3877e2"
         },
         {
           "class": "verification",
