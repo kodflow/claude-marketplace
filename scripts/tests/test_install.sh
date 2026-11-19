@@ -245,6 +245,79 @@ out=$(HOME=$(fresh_home) CODEX_HOME="$T/h/codex" CODEX_ROOT="$T/g" PATH="$T/only
   ok "a dirty checkout is never pinned" || bad "dirty checkout" "rc=$rc $out"
 rm -f "$T/g/untracked"
 
+# ---- moving a pinned Codex registration from one revision to another
+# A stateful fake: the registration is a root directory (a Git clone), `add`
+# refuses a different ref like the real CLI, `remove` forgets it, and a plugin
+# installed records the version derived from the root's HEAD.
+mkroot() { # dir origin rev
+  rm -rf "$1"; git clone -q "$T/g" "$1" && git -C "$1" remote set-url origin "$2" && git -C "$1" checkout -q "$3"
+}
+git -C "$T/g" -c user.name=t -c user.email=t@example.invalid commit -q --allow-empty -m second
+SHA2=$(git -C "$T/g" rev-parse HEAD)
+cat > "$T/bin/codex-state" <<'EOF'
+#!/bin/bash
+# state dir: $CS/root (registered clone), $CS/ver (installed version)
+[[ ${*: -1} == --help ]] && exit 0
+printf '%s\n' "$*" >> "$CODEX_CALLS"
+root=$(cat "$CS/root" 2>/dev/null)
+case "$1 $2 $3" in
+  "plugin marketplace list") [ -z "$root" ] || printf 'MARKETPLACE  ROOT\nkodflow      %s\n' "$root"; exit 0 ;;
+  "plugin marketplace remove") rm -f "$CS/root"; echo "Removed marketplace"; exit 0 ;;
+  "plugin marketplace add")
+    ref=$6
+    if [ -n "$root" ] && [ "$(git -C "$root" rev-parse HEAD)" != "$ref" ]; then
+      echo "Error: marketplace 'kodflow' is already added from a different source; remove it before adding this source" >&2; exit 1
+    fi
+    if [ "${DEMO_ADD_FAIL_REF:-}" = "$ref" ]; then echo "fatal: unable to fetch $ref" >&2; exit 1; fi
+    if [ -z "$root" ]; then
+      rm -rf "$CS/clone-$ref"
+      git clone -q "$T_G" "$CS/clone-$ref" && git -C "$CS/clone-$ref" checkout -q "$ref" &&
+        git -C "$CS/clone-$ref" remote set-url origin https://github.com/kodflow/claude-marketplace.git &&
+        echo "$CS/clone-$ref" > "$CS/root"
+    fi
+    echo "Added marketplace"; exit 0 ;;
+  "plugin add "*)
+    v="0.0.0-r$(git -C "$(cat "$CS/root")" rev-parse --short HEAD)"
+    echo "$v" > "$CS/ver"; echo "Installed plugin root: /cache/kodflow/${3%@*}/$v"; exit 0 ;;
+  "plugin list "*)
+    v=${DEMO_STALE_VER:-$(cat "$CS/ver")}
+    printf '{"installed":[{"pluginId":"kodflow-workflow@kodflow","version":"%s"},{"pluginId":"kodflow-review@kodflow","version":"%s"},{"pluginId":"kodflow-devops@kodflow","version":"%s"}]}\n' "$v" "$v" "$v"
+    exit 0 ;;
+esac
+exit 0
+EOF
+chmod 755 "$T/bin/codex-state"
+mkdir -p "$T/state-bin"; ln -sf "$T/bin/codex-state" "$T/state-bin/codex"
+# name origin rev [VAR=val...]: registers a clone at <rev>, runs the installer from $T/g (HEAD = $SHA2)
+state_run() {
+  local n=$1 o=$2 r=$3; shift 3
+  CS="$T/cs-$n"; rm -rf "$CS"; mkdir -p "$CS"; mkroot "$CS/old" "$o" "$r"; echo "$CS/old" > "$CS/root"
+  echo "0.0.0-r$(git -C "$CS/old" rev-parse --short HEAD)" > "$CS/ver"
+  no_state
+  out=$(env CS="$CS" T_G="$T/g" "$@" HOME="$(fresh_home)" CODEX_HOME="$T/h/codex" PATH="$T/state-bin:$T/tools" bash "$T/g/scripts/install.sh" --codex 2>&1); rc=$?
+}
+OURS=https://github.com/kodflow/claude-marketplace.git
+state_run up "$OURS" "$SHA" X=1
+rm_line=$(grep -n '^plugin marketplace remove kodflow$' "$CODEX_CALLS" | cut -d: -f1)
+add_line=$(grep -n "^plugin marketplace add kodflow/claude-marketplace --ref $SHA2\$" "$CODEX_CALLS" | tail -1 | cut -d: -f1)
+if [ "$rc" -eq 0 ] && [ -n "$rm_line" ] && [ -n "$add_line" ] && [ "$rm_line" -lt "$add_line" ] &&
+   [ "$(grep -c '^plugin add ' "$CODEX_CALLS")" -eq 3 ] && grep -q "kodflow-workflow@kodflow at 0.0.0-r$(git -C "$T/g" rev-parse --short HEAD)" <<<"$out"; then
+  ok "an older pinned registration of this repository is replaced and the plugins reinstalled"
+else bad "sha A to sha B" "rc=$rc $out $(cat "$CODEX_CALLS")"; fi
+state_run stale "$OURS" "$SHA" DEMO_STALE_VER=0.0.0-rold
+[ "$rc" -ne 0 ] && grep -q 'does not match' <<<"$out" && ok "a reinstalled version that is not the installed one is an error" || bad "version check" "rc=$rc $out"
+state_run foreign https://example.invalid/other.git "$SHA" X=1
+[ "$rc" -ne 0 ] && grep -q 'already added from a different source' <<<"$out" && grep -Fq 'codex plugin marketplace remove kodflow' <<<"$out" &&
+  ! grep -q '^plugin marketplace remove kodflow$' "$CODEX_CALLS" && ! grep -q '^plugin add' "$CODEX_CALLS" &&
+  ok "a foreign source keeps the error and is left alone" || bad "foreign source" "rc=$rc $out $(cat "$CODEX_CALLS")"
+state_run fail "$OURS" "$SHA" DEMO_ADD_FAIL_REF="$SHA2"
+[ "$rc" -ne 0 ] && [ "$(cat "$CS/root")" = "$CS/clone-$SHA" ] && grep -q 'previous registration' <<<"$out" && ! grep -q '^plugin add' "$CODEX_CALLS" &&
+  ok "a failed add restores the previous registration and exits non-zero" || bad "restore" "rc=$rc root=$(cat "$CS/root" 2>/dev/null) $out $(cat "$CODEX_CALLS")"
+CS="$T/cs-chk"; rm -rf "$CS"; mkdir -p "$CS"; mkroot "$CS/old" "$OURS" "$SHA"; echo "$CS/old" > "$CS/root"; no_state
+out=$(env CS="$CS" T_G="$T/g" HOME="$(fresh_home)" CODEX_HOME="$T/h/codex" PATH="$T/state-bin:$T/tools" bash "$T/g/scripts/install.sh" --codex --check 2>&1); rc=$?
+[ "$rc" -eq 0 ] && grep -q 'would: codex plugin marketplace remove kodflow' <<<"$out" && ! grep -Eq 'marketplace (add|remove)|^plugin add' "$CODEX_CALLS" &&
+  ok "--check announces the replacement and changes nothing" || bad "check replacement" "rc=$rc $out $(cat "$CODEX_CALLS")"
+
 # ---- --checkout in Claude switches a different registered source, and restores it on failure
 no_state
 JSON='[{"name":"kodflow","source":"github","repo":"kodflow/claude-marketplace"}]'
