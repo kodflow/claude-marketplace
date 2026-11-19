@@ -119,11 +119,14 @@ def serve(tree: Path, bare: Path, home: Path, commit: str = "HEAD") -> str:
     return sha
 
 
-def files_of(root: Path) -> dict[str, tuple[str, bool]]:
-    """Relative path -> (sha256, executable) of every regular file and link."""
+def files_of(root: Path, only: set[str] | None = None) -> dict[str, tuple[str, bool]]:
+    """Relative path -> (sha256, executable) of every regular file and link
+    (limited to ``only`` when given)."""
     out = {}
     for path in sorted(root.rglob("*")):
         if path.is_dir() and not path.is_symlink():
+            continue
+        if only is not None and path.relative_to(root).as_posix() not in only:
             continue
         rel = path.relative_to(root).as_posix()
         if path.is_symlink():
@@ -134,8 +137,17 @@ def files_of(root: Path) -> dict[str, tuple[str, bool]]:
     return out
 
 
+def served_files(source: Path) -> set[str] | None:
+    """The files of ``source`` the served commit holds: in a Git tree, what
+    it tracks (build leftovers such as __pycache__ are never served)."""
+    if not any((parent / ".git").exists() for parent in (source, *source.parents)):
+        return None
+    listed = git("ls-files", "-z", "--", ".", cwd=source)
+    return {name for name in listed.split("\0") if name}
+
+
 def same_tree(installed: Path, source: Path, label: str) -> None:
-    got, want = files_of(installed), files_of(source)
+    got, want = files_of(installed), files_of(source, served_files(source))
     missing, extra = sorted(set(want) - set(got)), sorted(set(got) - set(want))
     differ = sorted(p for p in set(want) & set(got) if want[p] != got[p])
     problems = [f"missing {p}" for p in missing[:10]] + [f"extra {p}" for p in extra[:10]] + \
