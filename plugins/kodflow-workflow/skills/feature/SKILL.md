@@ -94,7 +94,7 @@ Chain:  /feature → /search → /challenge → /goal
 ### 0 — Locate
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-tracker.sh
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Resolve the destination per `../_shared/tracker.md` §1, and check whether this

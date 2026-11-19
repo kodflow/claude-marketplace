@@ -1,0 +1,9 @@
+{"type":"status","phase":"connecting","status":"started"}
+{"type":"heartbeat"}
+{"type":"finding","severity":"critical","fileName":"src/auth/session.go","comment":"Session token compared with == instead of a constant-time comparison.","codegenInstructions":"In src/auth/session.go replace the == comparison with subtle.ConstantTimeCompare.","suggestions":["use crypto/subtle"]}
+{"type":"finding","severity":"major","fileName":"src/store/cache.go","comment":"Map written from two goroutines without a lock.","codegenInstructions":"Guard cache.entries with a sync.RWMutex.","suggestions":[]}
+not json: a stray line the parser must survive
+{"type":"finding","severity":"minor","fileName":"README.md","comment":"Install step misses the required Go version.","suggestions":["State Go 1.22 or later."]}
+{"type":"finding","severity":"trivial","fileName":"src/util/str.go","comment":"Exported helper has no doc comment."}
+{"type":"finding","severity":"none","fileName":"src/util/str.go","comment":"Looks fine."}
+{"type":"complete","status":"review_completed","findings":5}

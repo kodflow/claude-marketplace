@@ -19,6 +19,15 @@ jobs:
       - name: No credential may reach a public tree
         run: python3 scripts/sanitize.py .
 
+      # Claude Code substitutes only the exact token ${CLAUDE_PLUGIN_ROOT}; a
+      # ":-default" form is left verbatim in skills and in allowed-tools.
+      # Hooks are exempt: they run in a shell that expands the variable itself.
+      - name: Skills use the exact plugin-root token
+        run: |
+          if grep -rnE 'CLAUDE_PLUGIN_ROOT:-' plugins/*/skills; then
+            echo "::error::use the exact token \${CLAUDE_PLUGIN_ROOT} in skills"; exit 1
+          fi
+
       - name: No machine- or org-specific detail
         run: |
           set -e
@@ -186,6 +195,9 @@ jobs:
         env:
           COST_CHECKS_STRICT: model_effort
         run: python3 scripts/check-context-cost.py .
+
+      - name: The review triage maps CodeRabbit NDJSON as documented
+        run: python3 scripts/tests/test_coderabbit_ndjson.py
 
       - name: The usage report prices and counts what the transcripts say
         run: python3 scripts/tests/test_usage_report.py

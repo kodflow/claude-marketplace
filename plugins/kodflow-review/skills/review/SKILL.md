@@ -27,10 +27,10 @@ allowed-tools:
 - Bash(mktemp:*)
 - Bash(awk:*)
 - Bash(sha256sum:*)
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-context.sh:*)
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-verify-manifest.sh:*)
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-canary.sh:*)
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/route-agent.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/review-context.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/review-verify-manifest.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/review-canary.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/route-agent.sh:*)
 - Bash(date:*)
 - Bash(mkdir:*)
 - Bash(printf:*)
@@ -134,7 +134,7 @@ $ARGUMENTS
 For defensive review of a local diff, use this package's generated workflow
 on [Claude](../../io.github.kodflow/projections/workflows/review-claude.md),
 [Codex](../../io.github.kodflow/projections/workflows/review-openai.md), or
-[Perplexity](workflow-perplexity.md) when the installation includes it. Check
+[Perplexity](../../io.github.kodflow/projections/workflows/review-perplexity.md) when the installation includes it. Check
 required capabilities before starting. The workflow orders specialist,
 consolidation, and verification work. The existing inspection scope,
 coverage manifest, deterministic tiers, and local report still apply. When
@@ -219,7 +219,7 @@ Findings come from TWO producer classes, both real agents on disk:
 layer rather than a hand-maintained table that drifts:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
   --profile "$SCRATCH/repo-profile.json"               # reads _shared/routing-table.jsonl
 # --phase review = the /review rules (language fanout + react, postgres, protobuf); --profile = the file
 # Phase 0.5 wrote (.languages). A missing --phase or an absent profile exits 2/20 every run.
@@ -246,7 +246,7 @@ Per-extension correctness for the common stacks (corrected names — verified on
 
 Dispatch in parallel. **Execution mode**: read
 `../_shared/team-mode.md`; branch on `detect_runtime_mode` (from
-`"${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
+`"${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
 Teams) vs `SUBAGENTS` (Task tool). Both paths MUST be schema- and severity-equivalent.
 
 Each producer receives: the repo profile, the file's macro record, its changed
@@ -322,7 +322,7 @@ For high-stakes diffs run the ensemble: findings in >1 pass -> full confidence; 
 Write the coverage manifest, then hand it to the **non-LLM** verifier:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
      --base "$BASE" --head "$HEAD" --manifest "$MANIFEST"
 ```
 

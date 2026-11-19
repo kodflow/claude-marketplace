@@ -23,8 +23,8 @@ allowed-tools:
 - Write(.claude/contexts/*.md)
 - ExitPlanMode(*)
 - Skill(*)
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh:*)
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/detect-models.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/docs/scripts/docs.sh:*)
 - Bash(jq:*)
 ---
 
@@ -132,7 +132,7 @@ Examples:
 Before Phase 3.0 (Parallelize), determine runtime mode:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 
@@ -175,7 +175,7 @@ The plan file gives a short rationale for each choice, one or two lines, under a
 ## Project documents
 
 Before Phase 2, read the documents of `docs/manifest.json` (state:
-`bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute`,
+`bash "${CLAUDE_PLUGIN_ROOT}"/skills/docs/scripts/docs.sh compute`,
 the `ok` ones) that concern the subject, as well as the ADRs: requirements
 for a feature, data schema for storage, threat model for auth or secrets,
 quality and testing for the acceptance criteria. A plan that contradicts one
@@ -284,7 +284,7 @@ Read `../_shared/model-policy.md` and resolve the tiers **before** writing the
 plan:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/detect-models.sh
 ```
 
 Every plan carries the allocation, in one line under its constraints:

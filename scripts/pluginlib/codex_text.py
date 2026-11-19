@@ -17,7 +17,7 @@ NEUTRALISE = [
     (r"~/\.claude/agents/",        "~/.codex/agents/"),
     # Plugin-root resolution has no Codex equivalent: skills are installed flat
     # under ~/.codex/skills, so the fallback must point there, not at ~/.claude.
-    (r'\$\{CLAUDE_PLUGIN_ROOT:-\$HOME/\.claude\}', '${CODEX_HOME:-$HOME/.codex}'),
+    (r'\$\{CLAUDE_PLUGIN_ROOT(?::-\$HOME/\.claude)?\}(?="?/skills/)', '${CODEX_HOME:-$HOME/.codex}'),
     (r"\$ARGUMENTS",               "the arguments"),
 ]
 

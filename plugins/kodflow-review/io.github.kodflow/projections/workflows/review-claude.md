@@ -11,7 +11,7 @@ Preserve the existing skill's evidence and report format. Keep repository files 
 
 ## capture-tiers
 
-Assign role `developer-executor-quality` with `read` access. Prerequisites: none.
+Assign role `kodflow-specialists:developer-executor-quality` with `read` access. Prerequisites: none.
 Timeout: 9600 seconds. Retries: 0.
 
 Run the existing /review Phase 3 tool invocations from deterministic.md. Keep the default 180-second short and 600-second long caps or lower them so all captures fit the workflow deadline. Write only to its designated scratch directory and keep the repository read-only. Capture each applicable invocation's .out file and _table.tsv, and return paths to those captured files. Do not synthesize captures. Redirect build and cache output into the designated scratch directory, or record the tool's blocked invocation when it cannot run without writing elsewhere.
@@ -64,7 +64,7 @@ Allow writes only in the designated scratch directory. Keep the reviewed reposit
 
 ## correctness
 
-Assign role `developer-executor-correctness` with `read` access. Prerequisites: none.
+Assign role `kodflow-specialists:developer-executor-correctness` with `read` access. Prerequisites: none.
 Timeout: 300 seconds. Retries: 1.
 
 Review the selected diff for correctness and regression risk. Cite source locations and concrete failure conditions using the existing /review evidence rules. Return your coverage records from passes.md. Do not modify code or publish comments.
@@ -143,7 +143,7 @@ Output JSON Schema:
 
 ## defensive-security
 
-Assign role `developer-executor-security` with `read` access. Prerequisites: none.
+Assign role `kodflow-specialists:developer-executor-security` with `read` access. Prerequisites: none.
 Timeout: 300 seconds. Retries: 1.
 
 Perform a defensive source review of the diff for broken trust boundaries, unsafe defaults, secret exposure and permission regressions. Return source locations, impact, and remediation. Do not attempt exploitation or reproduction of a vulnerability. Return your inspection coverage records. Do not change files or publish comments.
@@ -222,7 +222,7 @@ Output JSON Schema:
 
 ## quality
 
-Assign role `developer-executor-quality` with `read` access. Prerequisites: none.
+Assign role `kodflow-specialists:developer-executor-quality` with `read` access. Prerequisites: none.
 Timeout: 240 seconds. Retries: 1.
 
 Review maintainability, API consistency, and missing tests on the selected diff. Return concrete findings with source locations, evidence, and your inspection coverage records. Do not modify the repository or publish comments.
@@ -301,7 +301,7 @@ Output JSON Schema:
 
 ## assemble-evidence
 
-Assign role `developer-orchestrator` with `read` access. Prerequisites: capture-tiers, correctness, defensive-security, quality.
+Assign role `kodflow-specialists:developer-orchestrator` with `read` access. Prerequisites: capture-tiers, correctness, defensive-security, quality.
 Timeout: 180 seconds. Retries: 0.
 
 Assemble the existing /review Phase 8 coverage manifest from the actual specialist inspection records, the deterministic outputs captured by capture-tiers, and canonical facts from review-verify-manifest.sh --print-facts. Follow manifest.md and leave missing evidence unverified. Return the manifest and the same capture references for verification.
@@ -364,7 +364,7 @@ Output JSON Schema:
 
 ## consolidate
 
-Assign role `developer-orchestrator` with `read` access. Prerequisites: correctness, defensive-security, quality, assemble-evidence.
+Assign role `kodflow-specialists:developer-orchestrator` with `read` access. Prerequisites: correctness, defensive-security, quality, assemble-evidence.
 Timeout: 180 seconds. Retries: 0.
 
 Merge duplicate findings that identify the same cause and source location. Preserve the strongest evidence, severity and confidence and keep unverified findings in the existing Needs Verification tier. Preserve the supplied coverage manifest and deterministic tier capture references without changing their evidence.
@@ -490,7 +490,7 @@ Output JSON Schema:
 
 ## verify-and-report
 
-Assign role `developer-executor-correctness` with `read` access. Prerequisites: consolidate.
+Assign role `kodflow-specialists:developer-executor-correctness` with `read` access. Prerequisites: consolidate.
 Timeout: 180 seconds. Retries: 0.
 
 Run the repository's review-verify-manifest.sh against the requested diff and supplied coverage manifest. Pass the captured evidence directory as --det, and check the supplied table and .out file references. Treat a missing verifier, missing captures, failed verification, or incomplete coverage as inconclusive. Render the existing /review report using skills/review/output.md and synthesis.md: walkthrough, verdict, findings by severity and confidence, Needs Verification, deterministic tier table from captured output, and verifier result. Return the report locally without posting any message.
