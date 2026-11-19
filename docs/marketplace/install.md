@@ -114,6 +114,9 @@ claude plugin enable --scope user kodflow-hooks@kodflow
 claude plugin list        # the plugin is listed once, user scope, enabled
 ```
 
+The #168 canary on two real profiles followed these steps: see
+[the canary report](canary-report.md).
+
 ### Codex
 
 Before a native install, keep the flat installation it may retire:
