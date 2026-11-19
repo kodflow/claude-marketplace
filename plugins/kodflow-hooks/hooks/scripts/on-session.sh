@@ -34,6 +34,10 @@ _log() {
         mkdir -p "$dir" 2>/dev/null || exit 0
         # mkdir is the lock: flock is absent on macOS.
         local n=0; until mkdir "$dir/.lock.d" 2>/dev/null; do n=$((n+1)); [ $n -ge 10 ] && break; sleep 0.05; done
+        # One generation kept: past 20 MB the log moves to session.jsonl.1.
+        # wc -c reads the size from the inode (stat flags differ macOS/Linux).
+        local sz; sz=$(wc -c < "$dir/session.jsonl" 2>/dev/null)
+        [ "${sz:-0}" -gt 20971520 ] && mv -f "$dir/session.jsonl" "$dir/session.jsonl.1" 2>/dev/null
         printf '%s' "$INPUT" | jq -c --arg b "$BRANCH" -f "$LIB/event.jq" >> "$dir/session.jsonl" 2>/dev/null
         [ $n -lt 10 ] && rmdir "$dir/.lock.d" 2>/dev/null
     ) >/dev/null 2>&1 </dev/null &
@@ -221,14 +225,12 @@ Context was compacted: verify the task state before continuing.'
     _log ;;
 
 SessionEnd)
-    _branch
-    local_log=$PROJECT_DIR/.claude/logs/$BRANCH_SAFE/session.jsonl
-    total=0; [ -f "$local_log" ] && total=$(grep -c "\"session_id\":\"$SID\"" "$local_log" 2>/dev/null)
-    INPUT=$(printf '%s' "$INPUT" | jq -c --argjson t "${total:-0}" '. + {total_events:$t}' 2>/dev/null)
+    # No scan of the log and no wait: the 1.5 s budget is shared, and the
+    # append runs in a detached subshell that outlives this process.
     # Session state lives in the scratchpad when Claude Code provides one; the
     # /tmp fallback is ours to remove.
     [ -z "$SCRATCH" ] && rm -rf -- "${TMPDIR:-/tmp}/claude-hooks-$SID" 2>/dev/null
-    _log; wait ;;
+    _log ;;
 
 PreCompact)
     _log ;;
