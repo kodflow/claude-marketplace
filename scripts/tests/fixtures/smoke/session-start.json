@@ -1,0 +1,7 @@
+{
+  "session_id": "smoke-plugins",
+  "transcript_path": "",
+  "cwd": "",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

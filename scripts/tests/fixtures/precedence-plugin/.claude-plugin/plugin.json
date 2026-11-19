@@ -1,0 +1,5 @@
+{
+  "name": "precedence-plugin",
+  "version": "0.0.1",
+  "description": "probe: the host manifest in .claude-plugin"
+}
