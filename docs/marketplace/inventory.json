@@ -851,7 +851,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "5b7a48811bd7e472bb413d2dd8cbe9e930b2c9ea74ea6a3cfd9b3341700ed809"
+          "sha256": "c524ffae1763d9b6d4fbc13e863edc157c79e66d65a942cc646939b9df5923f1"
         },
         {
           "class": "support",
@@ -1161,7 +1161,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/tier-table.tsv",
-          "sha256": "aa456323b784129b42759eba32f51de559c01bf28eb645e505c0bbfd0531092b"
+          "sha256": "51acf391a1fc5573e9a88031c63a1d5179fb0a56d5a37a3179fe4a63eb92af8e"
         },
         {
           "class": "host-extension",
@@ -1171,7 +1171,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "f411ea86741ce398428dae8fd63380248316f83bffe9170d59023e3a4ce1bcdb"
+          "sha256": "07889d6f7d3edb677a26458eeae52fd986a6b7acda6b2c30b94a6ccf9182eafe"
         },
         {
           "class": "verification",
@@ -2846,7 +2846,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-workflow/.claude-plugin/plugin.json",
-          "sha256": "28d69f84cee7597f0387a104b74b34c18f53ce3b1982740547ee8efb8a5c747d"
+          "sha256": "c9d9cae5b1a8c9691148252bd660418b4544ab415a9328112157188bcbfbb4a1"
         },
         {
           "class": "support",
@@ -2906,7 +2906,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/plugin.json",
-          "sha256": "2288ccaba9c03418f8a7e3094438ee7803d45f3ebc36f11eacf5ab3d972a57ea"
+          "sha256": "14f236111d91ad400fd72520e5f42c840a0d8f2bbf928f1cb1a6ffca3c007c4c"
         },
         {
           "class": "portable",
@@ -3021,7 +3021,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/_shared/tier-table.tsv",
-          "sha256": "aa456323b784129b42759eba32f51de559c01bf28eb645e505c0bbfd0531092b"
+          "sha256": "51acf391a1fc5573e9a88031c63a1d5179fb0a56d5a37a3179fe4a63eb92af8e"
         },
         {
           "class": "portable",

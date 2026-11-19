@@ -15,7 +15,7 @@ metadata:
   generated-from: plugins/*/skills/project
   argument-hint: '[name] | --constraint "<rule>" | --sync | --status | --owner <org>'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r39f283e5fec7`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re61d6d4f6f77`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /project — workspace resolution + constraint ledger
@@ -107,7 +107,7 @@ Run the locator once and keep its output; it answers both questions in one shot
 and is the only source of truth for paths.
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r39f283e5fec7"/skills/project/scripts/locate-code-home.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re61d6d4f6f77"/skills/project/scripts/locate-code-home.sh
 ```
 
 - `IN_REPO=1` and `REPO_CWD_IS_ROOT=1` → the workspace is `REPO_ROOT`. Go to
@@ -170,8 +170,8 @@ Then, on every case including ADOPT, the documents manifest (`docs/manifest.json
 the list of the project's documents, which ones live elsewhere or are ignored):
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r39f283e5fec7"/skills/docs/scripts/docs.sh init
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r39f283e5fec7"/skills/docs/scripts/docs.sh compute
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re61d6d4f6f77"/skills/docs/scripts/docs.sh init
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re61d6d4f6f77"/skills/docs/scripts/docs.sh compute
 ```
 
 `init` never touches an existing manifest. Keep the `missing` ids of `compute`
