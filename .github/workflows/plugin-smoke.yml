@@ -71,11 +71,16 @@ jobs:
           claude --version
           codex --version
 
-      - name: Every plugin passes the loader's strict validation
+      # Errors fail, warnings are shown. The strict reading (warnings as
+      # errors) belongs to the mod and mod-ktn jobs of ci.yml, at the floor the
+      # mods declare: on a newer engine its bundled types report the mods'
+      # TypeScript differently (TS5097, TS2345...), which is plugins-latest's
+      # to report, not a reason to block here.
+      - name: Every plugin passes the loader's validation
         run: |
           for p in plugins/*/; do
             echo "== $p"
-            claude plugin validate --strict "$p"
+            claude plugin validate "$p"
           done
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
