@@ -8,7 +8,7 @@ metadata:
   generated-from: plugins/*/skills/infra
   argument-hint: --init | --plan | --apply | --validate | --docs [--module <path>]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rf7baf4ef2fe9`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-r5c96de43c332`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /infra - Infrastructure Automation (Terraform/Terragrunt)
@@ -120,7 +120,7 @@ Safety:
 Before Phase 1.5 (agent dispatch), determine runtime mode:
 
 ```bash
-source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rf7baf4ef2fe9/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-r5c96de43c332/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 
@@ -142,7 +142,7 @@ TaskCreate × N (where N ≤ 5, only for present clouds):
 ```bash
 # apply goes to the infrastructure specialist, and to the Kubernetes one when
 # the profile has k8s: true (_shared/routing-table.jsonl)
-ROUTER="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rf7baf4ef2fe9"/skills/_shared/scripts/route-agent.sh
+ROUTER="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-r5c96de43c332"/skills/_shared/scripts/route-agent.sh
 DISPATCH=$(bash "$ROUTER" --skill /infra --phase apply \
   --profile .claude/state/profile.json)
 # Returns the Agent-tool arguments (subagent_type, resolved_model, effort) per specialist.

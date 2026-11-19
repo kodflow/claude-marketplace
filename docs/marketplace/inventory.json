@@ -6,12 +6,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-devops/.claude-plugin/plugin.json",
-          "sha256": "bad9c41aaabb0897c16becdbf498a276867581cea48997bcf6527997afa7d2b8"
+          "sha256": "abba49c14269e7b2181104bd1954faebd9f73c275f0375297b6649f8b2cb61d5"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/plugin.json",
-          "sha256": "d0a150cdd429a752afb2f9852ffcabd24f9d20468fdc872403fbe53f6c7211ab"
+          "sha256": "5421b1210ca35bce0b2df4915c228f368634db2553ba0cb5226ac10046ae436d"
         },
         {
           "class": "portable",
@@ -126,7 +126,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/_shared/tier-table.tsv",
-          "sha256": "aa456323b784129b42759eba32f51de559c01bf28eb645e505c0bbfd0531092b"
+          "sha256": "51acf391a1fc5573e9a88031c63a1d5179fb0a56d5a37a3179fe4a63eb92af8e"
         },
         {
           "class": "portable",
@@ -1866,7 +1866,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-review/.claude-plugin/plugin.json",
-          "sha256": "348b959774d65ed7bcd2ab1827b77dc49796a9dc2fe482de11afe26d3d2c628e"
+          "sha256": "afd54460c8cbe77546dc5ba164ae20b367e89a441be76bba629876cf1d9fdff9"
         },
         {
           "class": "support",
@@ -1891,7 +1891,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/plugin.json",
-          "sha256": "d25923f58c7d6db8ebaeaa134377f98d9e4cd69a4730cb2a7cf20e9c8a24966e"
+          "sha256": "40b8e94a6af6b10b1a9ffbd442ebc51e3992e055b154a3b2374c0cab1f2c233d"
         },
         {
           "class": "portable",
@@ -2006,7 +2006,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/_shared/tier-table.tsv",
-          "sha256": "aa456323b784129b42759eba32f51de559c01bf28eb645e505c0bbfd0531092b"
+          "sha256": "51acf391a1fc5573e9a88031c63a1d5179fb0a56d5a37a3179fe4a63eb92af8e"
         },
         {
           "class": "portable",

@@ -13,7 +13,7 @@ metadata:
   generated-from: plugins/*/skills/improve
   argument-hint: '[--session <id>] [--since <days>] [--agent <type>] [--target <prefix>] [--check]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rbe18cba939d1`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rba4d9f0187f5`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /improve — what the subagents said, turned into a reviewed change
@@ -57,7 +57,7 @@ Two things decide the run, and both outrank speed:
 The script and the ledger:
 
 ```bash
-COLLECT="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rbe18cba939d1/skills/improve/scripts/collect.py"
+COLLECT="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rba4d9f0187f5/skills/improve/scripts/collect.py"
 LEDGER="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/improve/handled.tsv"
 ```
 

@@ -12,7 +12,7 @@ metadata:
   generated-from: plugins/*/skills/ktn
   argument-hint: '[--check] [--phases <spec>] [--scope <diff|full|show>] [--restart] [--uninstall]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rf7baf4ef2fe9`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-r5c96de43c332`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /ktn — ktn-linter stack, checked and healed
