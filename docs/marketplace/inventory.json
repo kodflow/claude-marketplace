@@ -1456,12 +1456,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/.claude-plugin/plugin.json",
-          "sha256": "966492a2c17256bb9177e636cb19ee596a17ad7694f86b16382db257985cff39"
+          "sha256": "8fa1f237d45f0bf50a8ea55f6bcd1783a78785b50b61a872482cd321a59e2bc6"
         },
         {
           "class": "support",
           "path": "plugins/kodflow-hud/README.md",
-          "sha256": "689911493dac631dd2ae1ff742e30c97009f8a2603080b58e7f1ffc8b9f50fa7"
+          "sha256": "c275c11ec0c3caaffebb1c50432b49b323c1b2633b48cd2f838e756afeb20fe5"
         },
         {
           "class": "host-extension",
@@ -1556,7 +1556,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hud/plugin.json",
-          "sha256": "a90960b836ac6bad62ea11c870161997db2365b9e4479413f366221dd2cf92dc"
+          "sha256": "5507c23f53df552273194410b0083e4abdc66ed9e72b918fa5f1f1e3a2668698"
         },
         {
           "class": "verification",
@@ -1661,12 +1661,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-ktn/.claude-plugin/plugin.json",
-          "sha256": "1ea644fcba237e7fc1e5211e6655949892372d36cb03a26d9f21fb595ddd5fb2"
+          "sha256": "8e22e9ca2aa9e150af8e0fca93604abb941999310ef16e8c21c382d62f9d2277"
         },
         {
           "class": "support",
           "path": "plugins/kodflow-ktn/README.md",
-          "sha256": "592b7e45abb4eac3210c22c509564eab4cd364e4e4adeede04c6bb4065c8999f"
+          "sha256": "2418aecf928324c2092fcc703d9d9c689374cf28952691584a606df4ead8ae8a"
         },
         {
           "class": "host-extension",
@@ -1726,7 +1726,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-ktn/plugin.json",
-          "sha256": "d7b4786025b8bbd57af8af97d19b7c14dcd432a48cf4437cd7a98802f85d2af5"
+          "sha256": "de6111c70ad992790d427c2913337e453acf84026765c77f84da20d60a1f66aa"
         },
         {
           "class": "verification",
