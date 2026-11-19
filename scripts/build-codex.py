@@ -7,9 +7,9 @@ entirely: Codex custom agents are TOML with `developer_instructions`, not
 Markdown with YAML. Generating rather than hand-porting is what keeps the two
 from drifting — a hand port is correct once.
 """
-import pathlib, re, sys, yaml
+import pathlib, sys
 
-from pluginlib.codex_text import neutralise, render_agent
+from pluginlib.codex_text import neutralise, render_agent, render_skill, split_frontmatter as split
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
 
@@ -26,11 +26,6 @@ EXCLUDE_PLUGINS = excluded_plugins(ROOT)
 
 def plugin_of(path):
     return path.relative_to(ROOT).parts[1]
-
-def split(raw):
-    if not raw.startswith("---\n"): return {}, raw
-    e = raw.find("\n---\n", 4)
-    return (yaml.safe_load(raw[4:e+1]) or {}), raw[e+5:]
 
 skills_out = ROOT / "codex" / "skills"
 agents_out = ROOT / "codex" / "agents"
@@ -66,16 +61,7 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
             target.write_bytes(source.read_bytes())
             written.add(target)
             body = body.replace(f"../../{companions.as_posix()}/{source.name}", target.name)
-        desc = " ".join(str(fm.get("description", "")).split())
-        # when_to_use is free text that often already starts with "Use when":
-        # strip that prefix so the join never reads "Use when when".
-        wtu = re.sub(r"^(use\s+)?(when\s+)?", "", " ".join(str(fm.get("when_to_use", "")).split()), flags=re.I)
-        if wtu: desc = f"{desc} Use when {wtu}"
-        meta = {"short-description": desc.split(".")[0][:80], "generated-from": f"plugins/*/skills/{name}"}
-        if fm.get("argument-hint"): meta["argument-hint"] = fm["argument-hint"]
-        out = {"name": fm.get("name", name), "description": desc, "metadata": meta}
-        entry_text = ("---\n" + yaml.safe_dump(out, sort_keys=False, allow_unicode=True, width=88).rstrip("\n")
-                      + "\n---\n" + neutralise(body))
+        entry_text = render_skill(fm, neutralise(body), name)
         (dst / "SKILL.md").write_text(entry_text)
         written.add(dst / "SKILL.md")
         n_sk += 1

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..codex_package import CODEX_PACKAGES
 from ..model import Catalog, PluginPackage
 
 
@@ -15,7 +16,9 @@ def render_marketplace(catalog: Catalog, packages: list[PluginPackage] | None = 
             continue
         plugins.append({
             "name": entry["name"],
-            "source": {"source": "local", "path": f"./{entry['path']}"},
+            # The Codex package, not the Claude one: its skills carry paths
+            # Codex can resolve (see pluginlib/codex_package.py).
+            "source": {"source": "local", "path": f"./{CODEX_PACKAGES / entry['name']}"},
             "policy": {
                 "installation": "AVAILABLE",
                 "authentication": "ON_INSTALL",

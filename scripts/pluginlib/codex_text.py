@@ -2,6 +2,8 @@
 
 import re
 
+import yaml
+
 # Names that mean nothing on the other CLI. Rewritten, not deleted: an agent
 # told to "use mcp__context7__query-docs" on Codex would simply fail to find it.
 NEUTRALISE = [
@@ -46,6 +48,35 @@ def role_agent_fields(role: dict) -> dict[str, str]:
         "name": role["id"], "description": role["description"], "model": model,
         "effort": role.get("codexEffort", effort),
     }
+
+def split_frontmatter(raw: str) -> tuple[dict, str]:
+    """Split a Markdown document into its YAML frontmatter and its body."""
+    if not raw.startswith("---\n"):
+        return {}, raw
+    end = raw.find("\n---\n", 4)
+    return (yaml.safe_load(raw[4:end + 1]) or {}), raw[end + 5:]
+
+
+def render_skill(fm: dict, body: str, name: str) -> str:
+    """Render a Claude SKILL.md as the Codex skill entry.
+
+    Codex reads name, description and metadata only; allowed-tools and the
+    other Claude keys have no meaning there, so they are dropped. `body` is
+    written as given: the caller has already rewritten it for its layout.
+    """
+    desc = " ".join(str(fm.get("description", "")).split())
+    # when_to_use is free text that often already starts with "Use when":
+    # strip that prefix so the join never reads "Use when when".
+    wtu = re.sub(r"^(use\s+)?(when\s+)?", "", " ".join(str(fm.get("when_to_use", "")).split()), flags=re.I)
+    if wtu:
+        desc = f"{desc} Use when {wtu}"
+    meta = {"short-description": desc.split(".")[0][:80], "generated-from": f"plugins/*/skills/{name}"}
+    if fm.get("argument-hint"):
+        meta["argument-hint"] = fm["argument-hint"]
+    out = {"name": fm.get("name", name), "description": desc, "metadata": meta}
+    return ("---\n" + yaml.safe_dump(out, sort_keys=False, allow_unicode=True, width=88).rstrip("\n")
+            + "\n---\n" + body)
+
 
 def neutralise(t):
     for pat, rep in NEUTRALISE:

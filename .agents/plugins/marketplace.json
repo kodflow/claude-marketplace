@@ -9,7 +9,7 @@
         "installation": "AVAILABLE"
       },
       "source": {
-        "path": "./plugins/kodflow-workflow",
+        "path": "./codex/plugins/kodflow-workflow",
         "source": "local"
       }
     },
@@ -21,7 +21,7 @@
         "installation": "AVAILABLE"
       },
       "source": {
-        "path": "./plugins/kodflow-review",
+        "path": "./codex/plugins/kodflow-review",
         "source": "local"
       }
     },
@@ -33,7 +33,7 @@
         "installation": "AVAILABLE"
       },
       "source": {
-        "path": "./plugins/kodflow-devops",
+        "path": "./codex/plugins/kodflow-devops",
         "source": "local"
       }
     }

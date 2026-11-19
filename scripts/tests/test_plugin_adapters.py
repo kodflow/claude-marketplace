@@ -49,7 +49,7 @@ class PluginAdapterTests(unittest.TestCase):
         self.assertGreater(len(marketplace["plugins"]), 0)
         for plugin in marketplace["plugins"]:
             self.assertEqual("local", plugin["source"]["source"])
-            self.assertTrue(plugin["source"]["path"].startswith("./plugins/"))
+            self.assertEqual(f"./codex/plugins/{plugin['name']}", plugin["source"]["path"])
             self.assertEqual("AVAILABLE", plugin["policy"]["installation"])
             self.assertEqual("ON_INSTALL", plugin["policy"]["authentication"])
         names = {plugin["name"] for plugin in marketplace["plugins"]}
