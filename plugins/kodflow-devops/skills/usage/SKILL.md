@@ -11,7 +11,7 @@ argument-hint: '[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project FRAGMENT] [
 model: inherit
 effort: low
 allowed-tools:
-- Bash(python3 "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/usage/scripts/usage_report.py:*)
+- Bash(python3 "${CLAUDE_PLUGIN_ROOT}"/skills/usage/scripts/usage_report.py:*)
 - Read(**/*)
 ---
 
@@ -25,7 +25,7 @@ arithmetic over local files: no API key, no request, no upload, no account
 needed — and nothing it prints came from anywhere but this disk.
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/usage/scripts/usage_report.py --since 2026-09-01
+python3 "${CLAUDE_PLUGIN_ROOT}"/skills/usage/scripts/usage_report.py --since 2026-09-01
 ```
 
 Options: `--since YYYY-MM-DD`, `--until YYYY-MM-DD` (inclusive), `--project

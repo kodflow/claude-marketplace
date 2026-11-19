@@ -11,7 +11,7 @@ argument-hint: '[--loop [N] | --stop | --help]'
 model: inherit
 effort: low
 allowed-tools:
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/recap/scripts/recap.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/recap/scripts/recap.sh:*)
 - Bash(gh pr list:*)
 - Bash(gh pr view:*)
 - mcp__github__list_pull_requests
@@ -57,7 +57,7 @@ conversation is how a finished task stays "en cours" on screen.
 ### 1. The session's work
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/recap/scripts/recap.sh state "${CLAUDE_SESSION_ID}"
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/recap/scripts/recap.sh state "${CLAUDE_SESSION_ID}"
 ```
 
 One JSON document, read from `<config>/kodflow/sessions/<session>/`
@@ -170,7 +170,7 @@ If `CronCreate` is not available in this engine, schedule nothing and say:
 Gather, build the table, then pass it to `seen`:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/recap/scripts/recap.sh seen "${CLAUDE_SESSION_ID}" '<the table, exactly as it would be printed>'
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/recap/scripts/recap.sh seen "${CLAUDE_SESSION_ID}" '<the table, exactly as it would be printed>'
 ```
 
 The table goes in one single-quoted argument (a `'` in a cell written `'\''`),

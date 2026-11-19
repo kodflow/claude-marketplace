@@ -11,7 +11,7 @@ argument-hint: '[<id>[,<id>…]] [--mode ask|context|both] [--help]'
 model: inherit
 effort: medium
 allowed-tools:
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/docs/scripts/docs.sh:*)
 - Bash(git log:*)
 - Bash(git ls-files:*)
 - Bash(git rev-parse:*)
@@ -94,7 +94,7 @@ ignored.
 ## Phase 0 — State
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh state "${CLAUDE_SESSION_ID}"
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/docs/scripts/docs.sh state "${CLAUDE_SESSION_ID}"
 ```
 
 kodflow-hooks' `docs.json` when it exists for this repository, otherwise the
@@ -225,7 +225,7 @@ move a document; a run that only writes at default paths leaves no manifest.
 ## Phase 5 — Verify and hand off
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/docs/scripts/docs.sh compute
 ```
 
 Each written target must read `ok`, each ignored one `ignored`. Then print

@@ -128,7 +128,7 @@ Safety:
 Before Phase 1.5 (agent dispatch), determine runtime mode:
 
 ```bash
-source "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CLAUDE_PLUGIN_ROOT}/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 
@@ -150,7 +150,7 @@ TaskCreate × N (where N ≤ 5, only for present clouds):
 ```bash
 # apply goes to the infrastructure specialist, and to the Kubernetes one when
 # the profile has k8s: true (_shared/routing-table.jsonl)
-ROUTER="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/route-agent.sh
+ROUTER="${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/route-agent.sh
 DISPATCH=$(bash "$ROUTER" --skill /infra --phase apply \
   --profile .claude/state/profile.json)
 # Returns the Agent-tool arguments (subagent_type, resolved_model, effort) per specialist.
