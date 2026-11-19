@@ -851,12 +851,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "c524ffae1763d9b6d4fbc13e863edc157c79e66d65a942cc646939b9df5923f1"
+          "sha256": "5a65724892fd5cafb100bf37a673327c6b0b555cd0772f53d48a596e8cb5f5ff"
         },
         {
           "class": "support",
           "path": "plugins/kodflow-hooks/README.md",
-          "sha256": "fdf88388360dd9891aa46b56721d5dfa9f26ec897359e4ab6e84a3b013c3b27d"
+          "sha256": "38f3ecd5e40c53956e84d3966d8301aef12e3c8de98fe51fda88d5a72d5e9d4c"
         },
         {
           "class": "support",
@@ -936,7 +936,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/machine-guards.ts",
-          "sha256": "8b7d82e63d10c7679f88aa215021c19081817a715c7ec4cd1ab7c5e6edf33dc1"
+          "sha256": "7fadbf901f25c580571a1600392bde9ca514ce3c981001335822ac16bcae2c85"
         },
         {
           "class": "host-extension",
@@ -946,7 +946,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/modwall.ts",
-          "sha256": "52b74291792312ac0d8c65414de1375e4d911969ce8c2f8c4991003934e46f49"
+          "sha256": "ea82c5da38d5550d2175842533444e680f146f97b45d46d13e6a71e7385ba466"
         },
         {
           "class": "host-extension",
@@ -1171,7 +1171,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "07889d6f7d3edb677a26458eeae52fd986a6b7acda6b2c30b94a6ccf9182eafe"
+          "sha256": "e662266e52343186c209af28733c6b9fb364c6844d76945973f581b7546800d3"
         },
         {
           "class": "verification",
@@ -1331,7 +1331,7 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/mod/machine-guards.test.ts",
-          "sha256": "633751dd1de27689ab48c39d1521acf0a41c4b897eaab88fc635acf512507f68"
+          "sha256": "3819d820fb8e74a204748a3331085fd9fb31bf1305685d2fad05ba2b50e93774"
         },
         {
           "class": "verification",

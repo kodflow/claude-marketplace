@@ -87,7 +87,8 @@ let writing: Promise<unknown> = Promise.resolve();
 
 /**
  * modwall, on plugin.register: every module that joins after this one
- * passes here; only the user tier is judged, and only *@kodflow admitted.
+ * passes here; only the user tier is judged, and only the ALLOWED_MARKETPLACES of modwall.ts admitted
+ * (kodflow, claude-plugins-official, gitkraken).
  */
 export async function admit(
   p: GuardPort,
