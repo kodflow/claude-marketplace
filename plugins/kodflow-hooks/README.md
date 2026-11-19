@@ -35,7 +35,7 @@ register.ts.
 | `tool.call` on an `mcp__*` tool, after the veil | one line of shape and size in `mcp-shapes.jsonl` (`mcp-probe.ts`), below |
 | `prompt.submit` | remembers when the user last pressed Enter (`origin.kind` `composer`, `notePrompt` of machine-guards.ts, read through `lastComposerAt()`): the collision and gated-model questions are put only to someone who typed in the last 10 minutes |
 | `attribution.text` | `""` for `commit` and `pr`; `exemption` and `remedy` untouched |
-| `plugin.register` | **modwall**: refuses every user-tier hooks module whose provenance is not `*@kodflow` (the list is in `modwall.ts`, nothing the model writes widens it); built-in and managed tiers are not judged. Each decision goes to `$.store` (`modwall`, last 100) and the debug log; a refusal is toasted once the session binds |
+| `plugin.register` | **modwall**: refuses every user-tier hooks module whose provenance is not `*@kodflow`, `*@claude-plugins-official` or `*@gitkraken` (the list is in `modwall.ts`, nothing the model writes widens it); built-in and managed tiers are not judged. Each decision goes to `$.store` (`modwall`, last 100) and the debug log; a refusal is toasted once the session binds |
 | `command.run` · `/kodflow-mods` | the modules judged at this load, and the refusals on record |
 | `session.start` | **zsh-safe**: `ZDOTDIR` → `hooks/zsh`, the user's own in `KODFLOW_USER_ZDOTDIR` (`""` when unset); `hooks/zsh/.zshenv` gives ZDOTDIR back, sources the user's `.zshenv`, then `setopt nonomatch noequals`: `echo *.none` prints `*.none` instead of failing |
 | `tool.call` on `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | **collision-guard**: when another session of this machine, beating within 30 min, wrote the same file within 30 min (its `edits.tsv`), asks Continue / Move to a worktree (the model is told to call `EnterWorktree`) / Cancel, but only when the user typed a prompt at the terminal (`origin.kind` `composer`, noted by `prompt.submit`) in the last 10 minutes (the presence rule): otherwise it journals the collision to the debug log and lets the edit through, so a night run never waits on a question; once written, notes `<seconds>\t<path>` in `<config>/kodflow/sessions/<session>/edits.tsv` (no prompt, no content); `<config>/projects` is never checked |
@@ -702,7 +702,7 @@ past that cap and nothing on any other caller. Tested by `tests/test_scope.sh`.
 | The model picker, and `set_model` from the SDK | not recorded (only `/model`, `source: command`); handled by the type's documented values |
 | A fork (`subagent_type: fork`) | not recorded: the recorded build had no fork type. Judged on `parentModel`, which the types say a fork always inherits |
 | The resume of an agent granted earlier | not recorded; judged as a spawn, so a resume in another session asks again |
-| `turn.step` or another plugin rewriting a spawn's model after this mod | not judged; modwall refuses user-tier modules from outside kodflow, a managed one is not judged |
+| `turn.step` or another plugin rewriting a spawn's model after this mod | not judged; modwall refuses user-tier modules from outside its three marketplaces, a managed one is not judged |
 | A `Skill` called from inside a subagent | not recorded; judged as from the main thread |
 | `[general-purpose-ok]` | written by the model as easily as by a skill: the routing gate steers |
 | The isolation gate | reads paths written out in the prompt only: a repository named by a relative path, a variable or a remote URL is not seen; `[isolation-ok]` is written by the model as easily |

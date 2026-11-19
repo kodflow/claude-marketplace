@@ -1,13 +1,18 @@
 // modwall.ts — which hooks modules may join the chain. Pure.
 //
 // A mod a person installs runs in the user tier, beside kodflow-hooks: it
-// could approve what the shell guards refuse. Only the kodflow marketplace's
-// own plugins are admitted there. The list lives here, in the code, so
-// nothing the model can write widens it. Built-ins and the organisation's
+// could approve what the shell guards refuse. Only three marketplaces are
+// admitted there: kodflow's own, Anthropic's official one
+// (claude-plugins-official) and GitKraken's (gitkraken). The list lives here,
+// in the code, so nothing the model can write widens it. Built-ins and the organisation's
 // managed tiers are not judged.
 
 /** The marketplaces whose plugins a user-tier module may come from. */
-export const ALLOWED_MARKETPLACES: readonly string[] = ["kodflow"];
+export const ALLOWED_MARKETPLACES: readonly string[] = [
+  "kodflow",
+  "claude-plugins-official",
+  "gitkraken",
+];
 
 export type Registration = {
   name: string;
@@ -43,7 +48,7 @@ export function judge(
   if (ALLOWED_MARKETPLACES.includes(marketplaceOf(r.provenance)))
     return { allow: true };
   return {
-    refuse: `modwall: ${r.provenance} is not from the kodflow marketplace; only *@kodflow mods load in the user tier`,
+    refuse: `modwall: ${r.provenance} is not from an admitted marketplace; only *@kodflow, *@claude-plugins-official and *@gitkraken mods load in the user tier`,
   };
 }
 

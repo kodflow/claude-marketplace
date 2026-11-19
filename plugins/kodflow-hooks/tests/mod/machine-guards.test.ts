@@ -260,7 +260,7 @@ test(
       (err: Error) => err.message,
     );
     expect(failed).toContain("rogue: refused by kodflow-hooks: modwall: rogue@");
-    expect(failed).toContain("only *@kodflow mods load in the user tier");
+    expect(failed).toContain("only *@kodflow, *@claude-plugins-official and *@gitkraken mods load in the user tier");
     expect(h.toasts).not.toContain("rogue loaded");
     const journal = h.store.get("modwall") as any[];
     expect(journal.at(-1)).toEqual(expect.objectContaining({ name: "rogue", tier: "user", verdict: "refused" }));
@@ -314,6 +314,15 @@ test("modwall: judged by provenance, the user tier only", () => {
   expect(judge({ name: "x", tier: "user", provenance: "x@kodflow" })).toEqual({
     allow: true,
   });
+  expect(
+    judge({ name: "gopls-lsp", tier: "user", provenance: "gopls-lsp@claude-plugins-official" }),
+  ).toEqual({ allow: true });
+  expect(
+    judge({ name: "gitkraken-hooks", tier: "user", provenance: "gitkraken-hooks@gitkraken" }),
+  ).toEqual({ allow: true });
+  expect(
+    judge({ name: "x", tier: "user", provenance: "x@claude-plugins-official-fork" }),
+  ).toHaveProperty("refuse");
   expect(judge({ name: "x", tier: "append", provenance: "x@corp" })).toEqual({
     skip: true,
   });
