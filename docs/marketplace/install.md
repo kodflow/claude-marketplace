@@ -71,7 +71,15 @@ claude plugin update --scope user kodflow-hooks@kodflow   # once per plugin and 
 With a declared entry, `marketplace add "<url>#<sha>"` on its own fails ("its
 source doesn't match its extraKnownMarketplaces entry"): the `ref` written
 first makes both sources identical, and the `add` then moves the marketplace
-clone to that commit. Without a declared entry, the `add` writes the `ref`
+clone to that commit. The argument of `add` takes the exact form of the
+declared source:
+
+| Declared `extraKnownMarketplaces.kodflow.source` | `add` argument |
+|---|---|
+| `{"source": "git", "url": "https://github.com/kodflow/claude-marketplace.git"}` | `"https://github.com/kodflow/claude-marketplace.git#$prev"` |
+| `{"source": "github", "repo": "kodflow/claude-marketplace"}` | `"kodflow/claude-marketplace#$prev"` |
+
+The same holds going forward: `add` with the declared form, without `#`. Without a declared entry, the `add` writes the `ref`
 into `extraKnownMarketplaces.kodflow.source` itself. Either way,
 `plugin update` then reinstalls each plugin as it was at that commit. A
 plugin installed at project or local scope is updated with that `--scope`.
@@ -80,12 +88,13 @@ Restart open sessions to apply it.
 To move forward again, delete the `"ref"` key from
 `extraKnownMarketplaces.kodflow.source`, run
 `claude plugin marketplace add https://github.com/kodflow/claude-marketplace.git`,
-then the same `plugin update` commands. Both steps are needed: a hand edit of
+(or `kodflow/claude-marketplace` for a `github` source), then the same
+`plugin update` commands. Both steps are needed: a hand edit of
 `settings.json` alone is not picked up by `claude plugin marketplace update`
 (the CLI reports the marketplace as not found until the next `add`).
 
-Checked with Claude Code 2.1.328, in a throwaway profile and on a copy of a
-real profile that declares the entry. The rollback only works between commits
+Checked with Claude Code 2.1.328, in a throwaway profile and on copies of real
+profiles declaring a `git` and a `github` entry. The rollback only works between commits
 whose `marketplace.json` uses relative sources (`./plugins/...`, #168 and
 later): before, each plugin pointed at the repository's default branch, which
 a marketplace `ref` does not move.
