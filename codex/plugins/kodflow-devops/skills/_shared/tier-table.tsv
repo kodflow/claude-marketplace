@@ -1,0 +1,19 @@
+# sha256 2062daae78027fb8f0a28423afc5ffd2307ec245595f20ab07547406e92c9721
+# Model and effort of every delegation (Agent call or Workflow agent()).
+# This table is the instruction that explicitly asks for an effort: pass on the call the model and the effort of the row that matches the role, unless the agent definition pins them.
+# For agent() in a Workflow, this rule replaces the built-in guidance to omit model and effort.
+# `-` means no value claimed by the policy; it appears only in exempt, fork and mode rows and in the model of the Orchestrator row.
+role	Orchestrator	-	medium
+role	Code worker, well specified	sonnet	medium
+role	Code worker, defect in existing code	sonnet	medium
+role	Code worker, several modules, concurrency or a protocol	opus	medium
+role	Review / verify worker	opus	high
+role	Correctness and security executors	opus	xhigh
+role	Autonomous run over 30 minutes	opus	medium
+role	Mechanical worker	sonnet	low
+role	Bulk / triage worker	haiku	low
+exempt	claude-code-guide	haiku	-
+exempt	statusline-setup	sonnet	-
+exempt	web-fetch	-	-
+fork	fork	-	-
+mode	plan	-	-

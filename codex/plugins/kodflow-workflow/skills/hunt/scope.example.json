@@ -1,0 +1,146 @@
+{
+  "_doc": {
+    "_": "Example scope for /hunt. Root writes ~/.local/state/hunt/<slug>/scope.json in this shape and the user approves it once. Every value below is a neutral example. Keys starting with _ are documentation and are ignored.",
+    "slug": "[a-z0-9-]{1,40}; names the state directory, branches (hunt/<slug>, hunt-fix/<slug>/<N>, hunt-w/<slug>/<N>) and the label hunt:<slug>.",
+    "topic": "The topic as the user stated it.",
+    "queue.tmp_env": "Variables hunt-queue sets, for each job, to that job's own temporary directory (also exported as HUNT_JOB_TMP), removed when the job ends. Go: [\"GOTMPDIR\"].",
+    "repos": "Map of repository key -> repository. The key is the REPO_KEY argument of hunt-forge and hunt-git.",
+    "repos.*.path": "Absolute path of the main checkout. Never modified: the hunt works in worktrees under ~/Projects/.worktrees.",
+    "repos.*.forge": "github | gitlab | forgejo | local (file-backed fake, tests only).",
+    "repos.*.api_url": "Forge API base URL (GitLab v4, Forgejo v1). Ignored for github (gh is used).",
+    "repos.*.project": "Full project path with every subgroup, unencoded; hunt-forge URL-encodes it.",
+    "repos.*.ca_file": "Optional CA bundle for a forge behind a private PKI; null otherwise.",
+    "repos.*.token_env": "NAME of the environment variable holding the token, never the token. One variable per forge: GITLAB_PERSONAL_ACCESS_TOKEN (same as tracker.md), FORGEJO_TOKEN; null for github.",
+    "repos.*.owned": "true: issues and fixes here. false: read-only; an issue is filed there and the hunt waits.",
+    "repos.*.base": "Branch hunt/<slug> is cut from, and fetched again at the freeze.",
+    "repos.*.mr_target": "Branch the MR/PR targets; its description carries every Closes #N.",
+    "repos.*.remote": "Git remote hunt-push pushes hunt/<slug> to (default origin); <remote>/<base> is where the autosquash starts.",
+    "repos.*.globs.in": "Paths a fix may touch. Root checks every integration's changed files against them.",
+    "repos.*.globs.out": "Paths a fix must never touch, even if an in glob matches.",
+    "repos.*.lock": "Exclusive project lock taken by hunt-queue --exclusive, under ~/.cache.",
+    "repos.*.image": "Optional container image used by witnesses: env variable that names it, and the tag template; teardown removes *:hunt-<slug>-*.",
+    "repos.*.lang": "Selects the adapter: adapters/<lang>.md.",
+    "repos.*.env": "Environment applied to every build, test, vet and list command of this repository. GOTOOLCHAIN=local is mandatory for go. LD_*, DYLD_*, BASH_ENV, ENV, BASH_FUNC_*, PATH, IFS, PS4, PROMPT_COMMAND, SHELLOPTS, BASHOPTS, HOME and HUNT_* are ignored.",
+    "repos.*.witness_tags": "Build tag sets the witnesses use; one build and one static check per set (the empty set included).",
+    "repos.*.exclusive": "Packages or tag sets whose witnesses start containers: their jobs run hunt-queue --exclusive.",
+    "repos.*.depends_on": "Keys of owned repositories this one depends on: pushed first, then this one is re-pinned.",
+    "repos.*.repin": "How hunt-push re-pins this repository on a dependency: {cmd: [argv...], env: {...}}, run in the integration worktree with this repository's env plus repin.env, then committed. Placeholders in cmd: {sha} (the dependency's pushed or merge SHA), {dep} (its key), {dep.<field>.<field>} (a field of its scope entry). null when depends_on is empty.",
+    "repos.*.go": "Go adapter fields: module path (for re-pins) and race_denylist (packages or tests never run with -race).",
+    "imported_issues": "Open issues on the topic that existed before the hunt: never refiled; they count toward the cap only when labelled hunt:<slug>.",
+    "matrix": "Coverage matrix: one cell per behaviour x condition. A pass is complete when every cell has a verdict at the frozen SHA; hunt-push needs the latest verdict of every cell in the last pass to be clean.",
+    "matrix.*.id": "The cell's identifier: the `cell` field of verdict and finding events.",
+    "matrix.*.witness": "How the cell is played: package, test (name, or a template the hunter fills), tags, race, n (runs per play).",
+    "matrix.*.expect": "Expected polarity on a correct implementation: green.",
+    "thresholds.cap": "Maximum hunt issues open at once (outside fixed-local, needs-decision, off-topic, duplicates).",
+    "thresholds.resume_at": "The hunter is woken again when the counter falls to this value.",
+    "thresholds.max_passes": "Stop with a report after this many passes without convergence.",
+    "thresholds.max_hours": "Stop with a report after this wall-clock time.",
+    "thresholds.stall_ms": "A hunt in an active state whose beat is older than this, and not busy, is reported stalled. Must exceed the longest queue wait.",
+    "thresholds.disk_min_gib": "Preflight refuses below this; during the hunt it raises pause: disk.",
+    "thresholds.witness_timeout_s": "Per-run timeout of one witness process.",
+    "thresholds.integration_budget_s": "Time an integration may spend verifying one issue; N_fix x duration above it makes the issue needs-decision.",
+    "thresholds.codex_defer_s": "A Codex review still pending after this is abandoned, so the freeze can proceed.",
+    "budget": "Computed by preflight from nproc and MemAvailable, fixers first; tokens is exported as HUNT_TOKENS to hunt-queue.",
+    "stopped_by_preflight": "What preflight stopped (clusters, containers); teardown restarts it."
+  },
+  "slug": "payments-ledger",
+  "topic": "Find and fix every defect in the payments ledger",
+  "queue": { "tmp_env": ["GOTMPDIR"] },
+  "repos": {
+    "core": {
+      "path": "/path/to/payments-core",
+      "forge": "gitlab",
+      "api_url": "https://gitlab.example.com/api/v4",
+      "project": "acme/backend/payments-core",
+      "ca_file": null,
+      "token_env": "GITLAB_PERSONAL_ACCESS_TOKEN",
+      "owned": true,
+      "base": "develop",
+      "mr_target": "main",
+      "remote": "origin",
+      "globs": {
+        "in": ["internal/ledger/**", "internal/settlement/**"],
+        "out": ["internal/ledger/migrations/**", "vendor/**"]
+      },
+      "lock": "~/.cache/hunt/locks/payments-core.lock",
+      "image": {
+        "var": "PAYMENTS_TEST_IMAGE",
+        "tag_template": "<image>:hunt-<slug>-<sha12>"
+      },
+      "lang": "go",
+      "env": {
+        "GOTOOLCHAIN": "local",
+        "GOEXPERIMENT": "",
+        "GOPRIVATE": "gitlab.example.com/acme/*",
+        "GONOSUMDB": "gitlab.example.com/acme/*"
+      },
+      "witness_tags": ["", "integration"],
+      "exclusive": ["tags:integration"],
+      "depends_on": ["sdk"],
+      "repin": { "cmd": ["go", "get", "{dep.go.module}@{sha}"], "env": { "GOWORK": "off" } },
+      "go": {
+        "module": "gitlab.example.com/acme/backend/payments-core",
+        "race_denylist": ["./internal/settlement/bench"]
+      }
+    },
+    "sdk": {
+      "path": "/path/to/payments-sdk",
+      "forge": "github",
+      "api_url": null,
+      "project": "acme/payments-sdk",
+      "ca_file": null,
+      "token_env": null,
+      "owned": true,
+      "base": "main",
+      "mr_target": "main",
+      "remote": "origin",
+      "globs": { "in": ["ledger/**"], "out": [] },
+      "lock": "~/.cache/hunt/locks/payments-sdk.lock",
+      "image": null,
+      "lang": "go",
+      "env": { "GOTOOLCHAIN": "local" },
+      "witness_tags": [""],
+      "exclusive": [],
+      "depends_on": [],
+      "repin": null,
+      "go": { "module": "github.com/acme/payments-sdk", "race_denylist": [] }
+    }
+  },
+  "imported_issues": [
+    { "repo": "core", "issue": 412, "title": "Double debit when a retry crosses a settlement cut-off" }
+  ],
+  "matrix": [
+    {
+      "id": "post-retry-idempotent",
+      "repo": "core",
+      "title": "A retried posting is applied exactly once",
+      "witness": { "package": "./internal/ledger", "test": "TestHuntPostRetryIdempotent", "tags": "", "race": true, "n": 20 },
+      "expect": "green"
+    },
+    {
+      "id": "settle-crash-recovery",
+      "repo": "core",
+      "title": "Settlement resumes after a crash between debit and credit",
+      "witness": { "package": "./internal/settlement", "test": "TestHuntSettleCrashRecovery", "tags": "integration", "race": false, "n": 3 },
+      "expect": "green"
+    }
+  ],
+  "thresholds": {
+    "cap": 10,
+    "resume_at": 7,
+    "max_passes": 6,
+    "max_hours": 48,
+    "stall_ms": 5400000,
+    "disk_min_gib": 10,
+    "witness_timeout_s": 600,
+    "integration_budget_s": 5400,
+    "codex_defer_s": 7200
+  },
+  "budget": {
+    "computed_from": { "nproc": 4, "mem_available_gib": 9 },
+    "hunters": 1,
+    "fixers": 2,
+    "tokens": 2
+  },
+  "stopped_by_preflight": []
+}

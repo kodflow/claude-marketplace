@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016  # jq programs are single-quoted on purpose
+# hunt-status — read a hunt's state; never writes an event of progress.
+#
+#   hunt-status SLUG             table, in French, from status.json
+#   hunt-status SLUG --json      status.json as is
+#   hunt-status SLUG --watch     for Monitor: one line per new ledger event, plus
+#                                one `stall` line when `beat` is older than
+#                                scope.thresholds.stall_ms in an active state and
+#                                no queued job is live; silent otherwise. Ends
+#                                when the hunt directory disappears.
+#   hunt-status --watchdog       for the systemd user timer: for each hunt of
+#                                active.json, rebuild a lagging status.json,
+#                                stamp `watch`, append a `stall` event (which
+#                                notifies) for a stalled hunt or a dead owner,
+#                                retry a failed notification. Never touches `beat`.
+#   hunt-status --install-watchdog   write and start the systemd user timer
+#                                (hunt-watchdog.timer, every 5 min) running
+#                                `hunt-status --watchdog`
+#   hunt-status --remove-watchdog    stop and remove it
+#
+# HUNT_NO_SYSTEMCTL=1 writes or removes the unit files without calling
+# systemctl (tests). Re-run --install-watchdog after a plugin update: the unit
+# names this script by its absolute path.
+#
+# Active states: hunting, frozen, final-pass, pushing. "figée" (stalled) and
+# "orpheline" (owner process gone) are only judged in those states.
+# stall_ms defaults to 7500000 (2 h 05: longer than the default queue wait).
+# HUNT_WATCH_INTERVAL (seconds, default 2) paces --watch.
+#
+# Exit: 0 ok · 1 unreadable or unknown format · 2 usage.
+set -euo pipefail
+
+readonly ME=hunt-status
+readonly ROOT="$HOME/.local/state/hunt"
+readonly STATUS_V=1
+readonly ACTIVE='["hunting","frozen","final-pass","pushing"]'
+SELF_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+readonly SELF_DIR
+
+die() { local c=$1; shift; printf '%s: %s\n' "$ME" "$*" >&2; exit "$c"; }
+usage() { awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit "${1:-0}"; }
+now_ms() { date +%s%3N; }
+check_slug() { [[ ${1:-} =~ ^[a-z0-9-]{1,40}$ ]] || die 2 "slug invalide: '${1:-}'"; }
+
+proc_starttime() {
+  local s
+  s=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+  s=${s##*) }
+  # shellcheck disable=SC2086
+  set -- $s
+  printf '%s\n' "${20}"
+}
+boot_id() { cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo unknown; }
+proc_alive() { # JSON {pid,starttime,boot_id}
+  local pid st b
+  read -r pid st b < <(jq -r '"\(.pid // 0) \(.starttime // 0) \(.boot_id // "-")"' <<<"${1:-null}" 2>/dev/null || echo "0 0 -")
+  [[ $pid -gt 0 && $b == "$(boot_id)" ]] || return 1
+  [[ $(proc_starttime "$pid" 2>/dev/null) == "$st" ]]
+}
+
+active_entry() { # SLUG -> its active.json entry or nothing
+  jq -c --arg s "$1" '.hunts[]? | select(.slug == $s)' "$ROOT/active.json" 2>/dev/null | head -n 1 || true
+}
+
+stall_ms() { # SLUG
+  local v
+  v=$(jq -r '.thresholds.stall_ms // empty | numbers' "$ROOT/$1/scope.json" 2>/dev/null || true)
+  printf '%s\n' "${v:-7500000}"
+}
+
+# Loads status.json; refuses a torn file or an unknown version.
+load_status() { # SLUG -> JSON
+  local f="$ROOT/$1/status.json" st v
+  [[ -r $f ]] || die 1 "$f absent"
+  st=$(jq -c 'objects' "$f" 2>/dev/null) || die 1 "état illisible ($f tronqué ?) : hunt-ledger rebuild $1"
+  [[ -n $st ]] || die 1 "état illisible ($f)"
+  v=$(jq -r '.v // "?"' <<<"$st")
+  [[ $v == "$STATUS_V" ]] || die 1 "format v$v non lu par cette version de hunt-status (v$STATUS_V)"
+  printf '%s\n' "$st"
+}
+
+# 0 if SLUG is in an active state, stalled (old beat, no live job).
+is_stalled() { # STATUS_JSON STALL_MS NOW
+  jq -e --argjson a "$ACTIVE" --argjson lim "$2" --argjson now "$3" '
+    .state as $st | ($a | index($st)) != null
+    and .beat != null and (.beat < ($now - $lim))
+    and (.busy == null or (.busy.deadline != null and .busy.deadline < $now))' >/dev/null <<<"$1"
+}
+
+render() { # SLUG
+  local slug=$1 st now lim entry owner_dead=false stalled=false
+  st=$(load_status "$slug"); now=$(now_ms); lim=$(stall_ms "$slug")
+  entry=$(active_entry "$slug")
+  if jq -e --argjson a "$ACTIVE" '.state as $st | ($a | index($st)) != null' >/dev/null <<<"$st"; then
+    if [[ -n $entry ]] && ! proc_alive "$(jq -c '.owner.proc' <<<"$entry")"; then owner_dead=true; fi
+    is_stalled "$st" "$lim" "$now" && stalled=true
+  fi
+  jq -r --argjson now "$now" --argjson dead "$owner_dead" --argjson stalled "$stalled" '
+    def hm: if . == null then "—" else (./1000 | strflocaltime("%d/%m %H:%M")) end;
+    def ago: if . == null then "jamais"
+             else (($now - .) / 60000 | floor) as $m
+               | if $m < 1 then "à l'\''instant" elif $m < 120 then "il y a \($m) min"
+                 else "il y a \($m / 60 | floor) h \($m % 60) min" end end;
+    def short: if . == null then "—" else tostring | .[0:12] end;
+    def fr: {"hunting":"chasse","frozen":"gel","final-pass":"passe finale","pushing":"push",
+             "awaiting-merge":"attente du merge","paused":"pause","done":"terminée"}[.] // .;
+    def row($k; $v): "  \($k | . + (" " * (14 - length)))\($v)";
+    [ "Chasse « \(.slug) » — état : \(.state | fr)"
+        + (if $stalled then " — FIGÉE" else "" end)
+        + (if $dead then " — ORPHELINE" else "" end),
+      row("Compteur"; "\(.counter.open)/\(.counter.cap) ouvertes (reprise à \(.counter.resume_at))"),
+      row("Passe"; "n°\(.pass.n) · SHA \(.pass.sha | short) · \(.pass.cells_done)/\(.pass.cells_total) cases"),
+      row("File lourde"; "\(.queue.tokens_total) jetons · "
+          + (if (.queue.holders | length) == 0 then "aucun job"
+             else "en cours : " + ([.queue.holders[] | "\(if .slug == "" then "hors chasse" else .slug end)\(if .label == "" then "" else " « \(.label) »" end)"
+                                    + (if .exclusive then " (exclusif)" else "" end)] | join(", ")) end)
+          + (if (.queue.waiting | length) > 0 then " · \(.queue.waiting | length) en attente" else "" end)),
+      row("Bout"; "\(.tip.sha | short) · bundle \(.tip.bundle_at | hm)"),
+      row("Codex"; "\(.codex.pending) en attente · \(.codex.done) faites · \(.codex.skipped) sautées · \(.codex.abandoned) abandonnées"),
+      row("Décisions"; if (.decisions | length) == 0 then "aucune"
+                       else ([.decisions[] | "\(.repo // "")#\(.issue) \(.title)"] | join(" | ")) end),
+      (if .pause != null then row("Pause"; "\(.pause.reason) depuis \(.pause.since | hm)") else empty end),
+      row("Battement"; (.beat | ago) + (if .busy != null then " · job en cours depuis \(.busy.since | hm)" else "" end)),
+      (if .notify_failed then row("Notification"; "en échec (le watchdog réessaie)") else empty end),
+      row("Évènements"; if (.events | length) == 0 then "aucun" else "" end),
+      (.events[-8:][] | "    #\(.seq) \(.kind) \(.text)")
+    ] | .[]' <<<"$st"
+}
+
+ledger_size() { stat -c %s "$ROOT/$1/ledger.jsonl" 2>/dev/null || echo 0; }
+
+watch() { # SLUG
+  local slug=$1 d last size prev_size="" st lim stall_beat="" beat
+  d="$ROOT/$slug"
+  [[ -d $d ]] || die 1 "chasse inconnue: $slug"
+  last=$("$SELF_DIR/hunt-ledger" read "$slug" | tail -n 1 | jq -r '.seq // 0')
+  [[ -n $last ]] || last=0
+  lim=$(stall_ms "$slug")
+  while [[ -d $d ]]; do
+    size=$(ledger_size "$slug")
+    if [[ $size != "$prev_size" ]]; then
+      prev_size=$size
+      while IFS= read -r line; do
+        [[ -n $line ]] || continue
+        jq -r '"#\(.seq) \(.kind) " + ([(.repo // empty | tostring), (if .issue != null then "#\(.issue)" else empty end),
+               (.text // .title // .summary // .question // .reason // .label // .to // .url // .outcome // "" | tostring),
+               (.detail // empty | tostring)]
+               | map(select(. != "")) | join(" "))' <<<"$line"
+        last=$(jq -r .seq <<<"$line")
+      done < <("$SELF_DIR/hunt-ledger" read "$slug" --since "$last" 2>/dev/null || true)
+    fi
+    st=$(jq -c 'objects' "$d/status.json" 2>/dev/null || true)
+    if [[ -n $st ]] && is_stalled "$st" "$lim" "$(now_ms)"; then
+      beat=$(jq -r '.beat // 0' <<<"$st")
+      if [[ $beat != "$stall_beat" ]]; then
+        stall_beat=$beat
+        printf 'stall %s : aucun évènement de progrès depuis %s min (état %s)\n' "$slug" \
+          "$(( ($(now_ms) - beat) / 60000 ))" "$(jq -r .state <<<"$st")"
+      fi
+    fi
+    sleep "${HUNT_WATCH_INTERVAL:-2}"
+  done
+}
+
+watchdog() {
+  local slugs slug d st lastseq now entry reason lastkind afd
+  [[ -r $ROOT/active.json ]] || return 0
+  slugs=$(jq -r '.hunts[]?.slug | strings' "$ROOT/active.json" 2>/dev/null || true)
+  for slug in $slugs; do
+    [[ $slug =~ ^[a-z0-9-]{1,40}$ ]] || continue
+    d="$ROOT/$slug"
+    [[ -d $d ]] || continue
+    lastseq=$("$SELF_DIR/hunt-ledger" read "$slug" 2>/dev/null | tail -n 1 | jq -r '.seq // 0')
+    [[ -n $lastseq ]] || lastseq=0
+    st=$(jq -c 'objects' "$d/status.json" 2>/dev/null || true)
+    if [[ -z $st ]] || ! jq -e --argjson v "$STATUS_V" --argjson n "$lastseq" '.v == $v and .seq >= $n' >/dev/null <<<"$st"; then
+      st=$("$SELF_DIR/hunt-ledger" rebuild "$slug" 2>/dev/null) || { printf '%s: %s: reconstruction en échec\n' "$ME" "$slug" >&2; continue; }
+    fi
+    now=$(now_ms)
+    exec {afd}>>"$ROOT/.active.lock"
+    if flock -o -E 75 -w 30 "$afd"; then
+      local out tmp
+      out=$(jq -c --arg s "$slug" --argjson now "$now" '.hunts |= map(if .slug == $s then .watch = $now else . end)' "$ROOT/active.json")
+      tmp=$(mktemp "$ROOT/.active.json.XXXXXX"); printf '%s\n' "$out" >"$tmp"; mv -f "$tmp" "$ROOT/active.json"
+    fi
+    exec {afd}>&-
+    reason=""
+    if jq -e --argjson a "$ACTIVE" '.state as $st | ($a | index($st)) != null' >/dev/null <<<"$st"; then
+      entry=$(active_entry "$slug")
+      if [[ -n $entry ]] && ! proc_alive "$(jq -c '.owner.proc' <<<"$entry")"; then
+        reason=owner-dead
+      elif is_stalled "$st" "$(stall_ms "$slug")" "$now"; then
+        reason=beat
+      fi
+    fi
+    if [[ -n $reason ]]; then
+      lastkind=$("$SELF_DIR/hunt-ledger" read "$slug" --since $(( lastseq > 0 ? lastseq - 1 : 0 )) | tail -n 1 | jq -r '.kind // ""')
+      if [[ $lastkind != stall ]]; then
+        local text
+        if [[ $reason == owner-dead ]]; then text="propriétaire mort : /hunt --resume $slug"
+        else text="aucun évènement de progrès (état $(jq -r .state <<<"$st"))"; fi
+        "$SELF_DIR/hunt-ledger" append "$slug" stall "$(jq -cn --arg r "$reason" --arg t "$text" '{reason:$r, text:$t}')" >/dev/null || true
+        st=$(jq -c 'objects' "$d/status.json" 2>/dev/null || echo '{}')
+      fi
+    fi
+    if jq -e '.notify_failed == true' >/dev/null 2>&1 <<<"$st"; then
+      "$SELF_DIR/hunt-ledger" notify "$slug" >/dev/null 2>&1 || true
+    fi
+  done
+}
+
+unit_dir() { printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"; }
+
+install_watchdog() {
+  local d self
+  d=$(unit_dir); self="$SELF_DIR/hunt-status"
+  mkdir -p "$d"
+  cat >"$d/hunt-watchdog.service" <<UNIT
+[Unit]
+Description=hunt watchdog: stalled hunts, dead owners, lagging status.json
+
+[Service]
+Type=oneshot
+ExecStart=$self --watchdog
+UNIT
+  cat >"$d/hunt-watchdog.timer" <<'UNIT'
+[Unit]
+Description=Run the hunt watchdog every 5 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+UNIT
+  if [[ ${HUNT_NO_SYSTEMCTL:-} != 1 ]]; then
+    systemctl --user daemon-reload
+    systemctl --user enable --now hunt-watchdog.timer
+  fi
+  printf '%s\n' "$d/hunt-watchdog.timer"
+}
+
+remove_watchdog() {
+  local d; d=$(unit_dir)
+  if [[ ${HUNT_NO_SYSTEMCTL:-} != 1 ]]; then
+    systemctl --user disable --now hunt-watchdog.timer 2>/dev/null || true
+  fi
+  rm -f "$d/hunt-watchdog.timer" "$d/hunt-watchdog.service"
+  if [[ ${HUNT_NO_SYSTEMCTL:-} != 1 ]]; then systemctl --user daemon-reload || true; fi
+}
+
+command -v jq >/dev/null 2>&1 || die 1 "jq absent"
+case ${1:-} in
+  -h|--help) usage 0 ;;
+  --install-watchdog) install_watchdog ;;
+  --remove-watchdog) remove_watchdog ;;
+  --watchdog) [[ $# -eq 1 ]] || usage 2; watchdog ;;
+  "") usage 2 ;;
+  *)
+    slug=$1; check_slug "$slug"
+    case ${2:-} in
+      "") render "$slug" ;;
+      --json) load_status "$slug" >/dev/null; cat "$ROOT/$slug/status.json" ;;
+      --watch) watch "$slug" ;;
+      *) usage 2 ;;
+    esac ;;
+esac

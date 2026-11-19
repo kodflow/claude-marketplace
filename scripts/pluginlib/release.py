@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from .adapters import build_archive, compatibility_report, validate_archive
+from .codex_package import CODEX_PACKAGES
 from .inventory import canonical_json
 from .model import Catalog, PluginPackage
 from .roles import perplexity_role_skills
@@ -17,7 +18,6 @@ from .roles import perplexity_role_skills
 PROFILES = ("portable", "claude-full", "openai-local", "openai-public", "perplexity")
 # The projections travel with the skills: their SKILL.md links them by package path.
 PORTABLE = ("plugin.json", "mcp.json", "skills", "assets", "bin", "io.github.kodflow/projections")
-LOCAL_OPENAI = (*PORTABLE, ".codex-plugin", "hooks", "io.github.kodflow")
 
 
 def _bytes(data: object) -> bytes:
@@ -127,7 +127,9 @@ def render_profiles(root: Path, commit: str) -> dict[str, bytes]:
             elif profile == "claude-full":
                 _package(files, package, tuple(path.name for path in package.root.iterdir()))
             else:
-                _package(files, package, LOCAL_OPENAI if profile == "openai-local" else PORTABLE)
+                # The Codex index points at the generated Codex package, so the
+                # archive carries that package at the same relative path.
+                _add(files, root, root / CODEX_PACKAGES / package.name)
                 if profile == "openai-public":
                     for capability in report["capabilities"]:
                         if capability["name"] not in {"skills", "mcp"} and capability["status"] == "equivalent":

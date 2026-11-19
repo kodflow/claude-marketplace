@@ -1,0 +1,10 @@
+# Models never reached by default (_shared/model-policy.md §6).
+#
+# One token a line, matched case-insensitively as a substring of the model id
+# or alias: `fable` covers `fable`, `claude-fable-5-1` and `claude-fable-5-1[1m]`.
+# Blank lines and lines starting with # are skipped.
+#
+# Read by detect-models.sh (CLAUDE_TOP_UNGATED), validate-frontmatter.py (no
+# agent pins one) and kodflow-hooks (the session grant), which ships its own
+# copy: CI holds the two files byte-identical.
+fable

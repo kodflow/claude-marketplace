@@ -46,7 +46,7 @@ class ReleaseProfileTests(unittest.TestCase):
         with ZipFile(BytesIO(self.profiles["openai-local.zip"])) as local:
             self.assertIn("codex/agents/developer-executor-correctness.toml", local.namelist())
             for name in ("hunt-forge", "hunt-ledger"):
-                entry = local.getinfo("plugins/kodflow-workflow/bin/" + name)
+                entry = local.getinfo("codex/plugins/kodflow-workflow/bin/" + name)
                 self.assertTrue((entry.external_attr >> 16) & 0o111)
         with ZipFile(BytesIO(self.profiles["openai-public.zip"])) as public:
             self.assertTrue(all("/hooks/" not in name for name in public.namelist()))

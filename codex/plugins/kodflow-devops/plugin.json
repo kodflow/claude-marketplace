@@ -1,0 +1,48 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kodflow-devops",
+  "version": "0.0.0-rf7baf4ef2fe9",
+  "description": "Infrastructure, environment health and template sync — Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "repository": "https://github.com/kodflow/claude-marketplace.git",
+  "license": "MIT",
+  "keywords": [
+    "devops",
+    "terraform",
+    "infrastructure"
+  ],
+  "extensions": {
+    "io.github.kodflow": {
+      "schemaVersion": 1,
+      "installByDefault": true,
+      "scope": "user",
+      "dependencies": [
+        {
+          "plugin": "kodflow-specialists",
+          "required": false
+        }
+      ],
+      "capabilities": {
+        "skills": "required"
+      },
+      "targets": {
+        "claude": {
+          "enabled": true,
+          "profile": "native"
+        },
+        "openai": {
+          "enabled": true,
+          "profile": "generated"
+        },
+        "perplexity": {
+          "enabled": true,
+          "profile": "portable"
+        }
+      }
+    }
+  }
+}

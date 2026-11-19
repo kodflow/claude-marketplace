@@ -19,6 +19,7 @@ from pluginlib.adapters import (
     render_openai_marketplace,
     validate_archive,
 )
+from pluginlib.codex_package import CODEX_PACKAGES, render_packages as render_codex_packages
 from pluginlib.externals import BumpError, bump_external
 from pluginlib.inventory import build_inventory, canonical_json
 from pluginlib.manifest import CLAUDE_MANIFEST, render_claude_manifest
@@ -257,8 +258,9 @@ def command_build(args: argparse.Namespace) -> int:
     catalog, packages = snapshot
     targets = _targets(args.targets)
     okay = True
-    outputs: dict[Path, bytes] = {}
+    outputs: dict[Path, bytes | None] = {}
     archives: dict[str, bytes] = {}
+    executables: dict[Path, bool] = {}
     if "claude" in targets:
         outputs[ROOT / ".claude-plugin/marketplace.json"] = canonical_json(
             render_claude_marketplace(catalog, packages),
@@ -272,6 +274,21 @@ def command_build(args: argparse.Namespace) -> int:
         outputs[ROOT / ".agents/plugins/marketplace.json"] = canonical_json(
             render_openai_marketplace(catalog, packages),
         ).encode("utf-8")
+        try:
+            codex_files = render_codex_packages(ROOT, catalog, packages)
+        except (OSError, ValueError, KeyError) as error:
+            print(f"could not render Codex packages: {error}")
+            return 1
+        for relative, codex_file in codex_files.items():
+            outputs[ROOT / relative] = codex_file.data
+            executables[ROOT / relative] = codex_file.executable
+        # A file left in codex/plugins whose source is gone would still be
+        # installed by Codex: it is removed here and reported by --check.
+        packages_dir = ROOT / CODEX_PACKAGES
+        if packages_dir.is_dir():
+            for path in sorted(packages_dir.rglob("*")):
+                if (path.is_file() or path.is_symlink()) and path not in executables:
+                    outputs[path] = None
     if "perplexity" in targets:
         for package in packages:
             if package.target("perplexity").get("enabled") is not True:
@@ -298,19 +315,41 @@ def command_build(args: argparse.Namespace) -> int:
     if args.check:
         for name in archives:
             print(f"valid deterministic Perplexity archive: {name}")
-        return int(not all([_check_or_write(path, data, True) for path, data in outputs.items()]))
+        verified = []
+        for path, data in outputs.items():
+            if data is None:
+                print(f"obsolete projection: {_display_path(path)}")
+                verified.append(False)
+                continue
+            current = _check_or_write(path, data, True)
+            if current and path in executables and bool(path.stat().st_mode & 0o111) != executables[path]:
+                print(f"stale projection mode: {_display_path(path)}")
+                current = False
+            verified.append(current)
+        return int(not all(verified))
     for name, data in archives.items():
         outputs[ROOT / "dist/perplexity" / f"{name}.zip"] = data
     for report in reports:
         outputs[ROOT / "dist/reports" / f"{report['plugin']}-{report['target']}.json"] = canonical_json(report).encode("utf-8")
     try:
         _publish(outputs)
+        for path, executable in executables.items():
+            path.chmod(0o755 if executable else 0o644)
+        _prune_empty(ROOT / CODEX_PACKAGES)
     except (OSError, ValueError) as error:
         print(f"could not publish projections: {error}")
         return 1
-    for path in outputs:
-        print(f"wrote projection: {_display_path(path)}")
+    for path, data in outputs.items():
+        print(f"{'retired' if data is None else 'wrote'} projection: {_display_path(path)}")
     return 0
+
+
+def _prune_empty(directory: Path) -> None:
+    if not directory.is_dir():
+        return
+    for path in sorted(directory.rglob("*"), reverse=True):
+        if path.is_dir() and not path.is_symlink() and not any(path.iterdir()):
+            path.rmdir()
 
 
 def command_inventory(args: argparse.Namespace) -> int:
