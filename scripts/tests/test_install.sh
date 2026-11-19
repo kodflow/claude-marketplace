@@ -32,7 +32,12 @@ EOF
 chmod 755 "$T/bin/claude"
 export CLAUDE_CALLS=$T/calls HOME=$T/home PATH="$T/bin:$PATH"
 
-excluded=$(sed -e 's/#.*//' -e 's/[[:space:]]//g' "$ROOT/scripts/install-exclude.txt" | grep .)
+excluded=$(
+    sed -e 's/#.*//' -e 's/[[:space:]]//g' "$ROOT/scripts/install-exclude.txt" | grep .
+    # Opt-in entries (installByDefault: false) are never installed by default either.
+    python3 -c 'import json,sys; [print(p["name"]) for p in json.load(open(sys.argv[1]))["plugins"] if p.get("installByDefault") is False]' \
+        "$ROOT/.claude-plugin/marketplace.json"
+)
 all=$(python3 -c 'import json,sys; [print(p["name"]) for p in json.load(open(sys.argv[1]))["plugins"]]' \
     "$ROOT/.claude-plugin/marketplace.json")
 [ -n "$excluded" ] && ok "the exclusion file names at least one plugin" || bad "exclusion file" "empty"
