@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-devops",
-  "version": "0.0.0-r9dedfa01e68d",
+  "version": "0.0.0-rf7baf4ef2fe9",
   "description": "Infrastructure, environment health and template sync — Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
   "author": {
     "name": "kodflow",

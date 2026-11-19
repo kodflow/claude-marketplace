@@ -6,12 +6,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-devops/.claude-plugin/plugin.json",
-          "sha256": "3c843e5deadc4dc10e280ca8bf6925d75dd81b02ec33889f3a7ac61b83e38566"
+          "sha256": "bad9c41aaabb0897c16becdbf498a276867581cea48997bcf6527997afa7d2b8"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/plugin.json",
-          "sha256": "6121be7ac109f251a6cf60b8d2e21027987a70e2a400d4808571aefd0591d1c8"
+          "sha256": "d0a150cdd429a752afb2f9852ffcabd24f9d20468fdc872403fbe53f6c7211ab"
         },
         {
           "class": "portable",
@@ -21,7 +21,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/_shared/model-policy.md",
-          "sha256": "2062daae78027fb8f0a28423afc5ffd2307ec245595f20ab07547406e92c9721"
+          "sha256": "087d24d343c82f1ed1eb2133914fd57fdbd829c4907cd78037d2e5b66d765387"
         },
         {
           "class": "portable",
@@ -121,7 +121,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/_shared/team-mode.md",
-          "sha256": "128b58f17bf245e481430bd00f0d269206bef1fbe1e373201e2ca73962a4ce07"
+          "sha256": "92376d5c9b8623e878c5dc05c33a3dd7b371404a7d9393fd393597949d583675"
         },
         {
           "class": "portable",
@@ -131,7 +131,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/_shared/tracker.md",
-          "sha256": "1ffaf2acbec71ef1805c78d3219658401486b2feac2a07a4d7da22777d14bd38"
+          "sha256": "98c8876deec9fcd431ea34957e7ca265fc10e6eefb75f26df885affdad8552f1"
         },
         {
           "class": "portable",
@@ -141,7 +141,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/infra/SKILL.md",
-          "sha256": "824107fff9ae6a9b31251067f842bacb236d6acf7290fa56874b3c7dd79b539d"
+          "sha256": "f5021073ea0772bdbf6b986afc2f1d5dade2c4ed7fb628482f7e10269df0505f"
         },
         {
           "class": "portable",
@@ -186,7 +186,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/update/detect.md",
-          "sha256": "d35082be3678141fdf28207b95da563e72e34bfe9c40eec15d46c29707038ed3"
+          "sha256": "e2b548b83fd1cdca51177becdb7cf8fd19e0056750e12504bdf8aaee19f36d77"
         },
         {
           "class": "portable",
@@ -201,7 +201,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/usage/SKILL.md",
-          "sha256": "3513b5743d8f4407ede3534e0c27b38d948097899e8ead886f3abe04b2c28335"
+          "sha256": "be5a4b1bb38c873ccdcc4e3c6caeef1c085db997072a2244997282002045649b"
         },
         {
           "class": "portable",
@@ -231,7 +231,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/.claude-plugin/plugin.json",
-          "sha256": "71b795155c10cc2c11e72c73c196111d24f4426ac4eb2a3efb058a85470f8ae6"
+          "sha256": "a6d820f37a4a178b694046e159127e9d9ed37df7f8e4e75dbdc228538464db6f"
         },
         {
           "class": "support",
@@ -471,7 +471,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-gamedev/plugin.json",
-          "sha256": "45f5b77968b50238026672d6aab981c4bfd71d1e11e0d50ba3949d3a418abca2"
+          "sha256": "d9e096d530a22c8fc2acf44fc7cd930694968bf56531aa60b03efdb42993b879"
         },
         {
           "class": "support",
@@ -851,7 +851,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "f640272b909c904e54a3add50ed072031076c5edb5f1677f152f4521a49259b3"
+          "sha256": "5b7a48811bd7e472bb413d2dd8cbe9e930b2c9ea74ea6a3cfd9b3341700ed809"
         },
         {
           "class": "support",
@@ -1171,7 +1171,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "64927e77ffebd769d7aedd079e258beba008868b8390289b8db91c133ffb5274"
+          "sha256": "f411ea86741ce398428dae8fd63380248316f83bffe9170d59023e3a4ce1bcdb"
         },
         {
           "class": "verification",
@@ -1456,7 +1456,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/.claude-plugin/plugin.json",
-          "sha256": "f92bbfef6bb6ca5348fc6822ab659ab84a9e024c824ad231ab3476c7e3d19327"
+          "sha256": "966492a2c17256bb9177e636cb19ee596a17ad7694f86b16382db257985cff39"
         },
         {
           "class": "support",
@@ -1556,7 +1556,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hud/plugin.json",
-          "sha256": "895d2a240880771c3f9d7b1d11a62004763d67c2438ec4757450748138f7f896"
+          "sha256": "a90960b836ac6bad62ea11c870161997db2365b9e4479413f366221dd2cf92dc"
         },
         {
           "class": "verification",
@@ -1661,7 +1661,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-ktn/.claude-plugin/plugin.json",
-          "sha256": "3beac63517a55577139750ca7485c0e1c2b0de340afc9cfb73aef90c1fd19c8e"
+          "sha256": "1ea644fcba237e7fc1e5211e6655949892372d36cb03a26d9f21fb595ddd5fb2"
         },
         {
           "class": "support",
@@ -1726,7 +1726,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-ktn/plugin.json",
-          "sha256": "57f08a22be2cbe870f30140007bf4d0fa31131755b8c0c066d3ffb1eee03a2d8"
+          "sha256": "d7b4786025b8bbd57af8af97d19b7c14dcd432a48cf4437cd7a98802f85d2af5"
         },
         {
           "class": "verification",
@@ -1866,12 +1866,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-review/.claude-plugin/plugin.json",
-          "sha256": "612e4472382a467effd11eea2f471ee1c39a04677a93299fec6b930c8fa7156f"
+          "sha256": "348b959774d65ed7bcd2ab1827b77dc49796a9dc2fe482de11afe26d3d2c628e"
         },
         {
           "class": "support",
           "path": "plugins/kodflow-review/io.github.kodflow/projections/workflows/review-claude.md",
-          "sha256": "6b2ae398480fc093d0c16f26d118c5bf2850de4f9456b24bba050fa383569798"
+          "sha256": "8862eaa1ac5849b9c60e0c168bf4a045ba2a9d8c23efe10facbd7a276265e0de"
         },
         {
           "class": "support",
@@ -1891,7 +1891,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/plugin.json",
-          "sha256": "189625f79a74cb0decde186e169b4702d8522d4291dda42d3180fb749f5bd80a"
+          "sha256": "d25923f58c7d6db8ebaeaa134377f98d9e4cd69a4730cb2a7cf20e9c8a24966e"
         },
         {
           "class": "portable",
@@ -1901,7 +1901,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/_shared/model-policy.md",
-          "sha256": "2062daae78027fb8f0a28423afc5ffd2307ec245595f20ab07547406e92c9721"
+          "sha256": "087d24d343c82f1ed1eb2133914fd57fdbd829c4907cd78037d2e5b66d765387"
         },
         {
           "class": "portable",
@@ -2001,7 +2001,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/_shared/team-mode.md",
-          "sha256": "128b58f17bf245e481430bd00f0d269206bef1fbe1e373201e2ca73962a4ce07"
+          "sha256": "92376d5c9b8623e878c5dc05c33a3dd7b371404a7d9393fd393597949d583675"
         },
         {
           "class": "portable",
@@ -2011,7 +2011,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/_shared/tracker.md",
-          "sha256": "1ffaf2acbec71ef1805c78d3219658401486b2feac2a07a4d7da22777d14bd38"
+          "sha256": "98c8876deec9fcd431ea34957e7ca265fc10e6eefb75f26df885affdad8552f1"
         },
         {
           "class": "portable",
@@ -2026,7 +2026,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/improve/SKILL.md",
-          "sha256": "5bc047fa7ebc05b2ac6af3f7c64949e8618b758ba75c7e889f3b385cb780092a"
+          "sha256": "62895bff83aa4e1041398b1ad83bf4717d3a23271367520ef5edebf4ebb01d81"
         },
         {
           "class": "portable",
@@ -2071,7 +2071,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/lint/SKILL.md",
-          "sha256": "d9bde8bde47d97ceb45d721eed4ed8e07be9879b343facb88132eb861e184f2e"
+          "sha256": "25679e7f3bf40906bb1e2e1a08f2a500bfd7182b4a284c82764a7323449cb7a7"
         },
         {
           "class": "portable",
@@ -2101,7 +2101,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/SKILL.md",
-          "sha256": "41fd52e11c737b6724ea7c0ce971111716232e0216193caf3df954ec364f49bb"
+          "sha256": "9387fd07c7822274c909f3852cffcbe04267e4658cfe63454f20824ecee6c567"
         },
         {
           "class": "portable",
@@ -2121,12 +2121,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/dimensions.md",
-          "sha256": "f34c69373922fb608dd03999dc084601e39eafb4d13ef64bd1f994da5bd46d5e"
+          "sha256": "e7f67902441e6b1918ae0156227343124f19fa515e4f923b52d8d69c4318975d"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/dispatch.md",
-          "sha256": "3a533cfbd7b44745f4737e6c09799b401b7fe038b9e8eba757a6625f69ab95d5"
+          "sha256": "d5d16c15a9ee5d82f135ac390206d5bfda03b6fe4362a8babb0d983f9e3de4d5"
         },
         {
           "class": "portable",
@@ -2136,7 +2136,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/manifest.md",
-          "sha256": "474784efe3c447c3f4fae608405a6b3925b2dc5882084fc4f12c018802eba2c9"
+          "sha256": "b9a101b923fd2f9db264348515d823177e3b53a6c9bbb4e53b13831bc07c5e16"
         },
         {
           "class": "portable",
@@ -2176,7 +2176,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/setup.md",
-          "sha256": "748d329dbe0b3acba0168216986fc2d4cb3b3432401c7ae0133f418a4414741e"
+          "sha256": "29b6fd2939abaf327cd24ec26712e2bef1891c134616649f6842d337ce6f9f47"
         },
         {
           "class": "portable",
@@ -2186,12 +2186,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/tiers.md",
-          "sha256": "4ab24f5a650f51b22c00d37b63e8b221ea097ba17c01b7cba48ab046603296c5"
+          "sha256": "6cd021ae6f377e9dc9a913f01ec12b68ded0e9d6144446aabcbb8a9402eb37ea"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/triage.md",
-          "sha256": "aca396c8f2ee7651f3e998edbe4d99d0e4b5f22e4756329cee97c733d167d838"
+          "sha256": "36338af63c6134e7a582d134998c784b508afdcf3fc05b5401cc5c7f186474c3"
         },
         {
           "class": "verification",
@@ -2216,7 +2216,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-shell/.claude-plugin/plugin.json",
-          "sha256": "85a82afa9cd38b114d9f5e991e1bb9e85b3dfda639f18efdadde2a6f31ae99e8"
+          "sha256": "a82a08244f5136d6a794d37a77c5b152058cb43409cc44d387874e57f509ec37"
         },
         {
           "class": "support",
@@ -2266,7 +2266,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-shell/plugin.json",
-          "sha256": "afd79c38f21aa167c211b732b466345e60fd65f536a4976dec95a5bd26708748"
+          "sha256": "6c415e671927bc5ecf15fd01f995268cb90ac8e9202b84771c23917fd363c6df"
         },
         {
           "class": "support",
@@ -2296,7 +2296,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/.claude-plugin/plugin.json",
-          "sha256": "3318d4fc44ff834b43d5ec92a2fbecb060ff2e4d8ccaf1402e464b7931f63142"
+          "sha256": "2e847d623e573cc514a01f4d253b3c62b529fc6ec4b4c479c98f2a8c783cc1e2"
         },
         {
           "class": "host-extension",
@@ -2831,7 +2831,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-specialists/plugin.json",
-          "sha256": "4abc5bd60ebdaa7f5e107860ef4389f386a0e809b53846f1ccb5b579cb640930"
+          "sha256": "9b037250fca7f358cff27eda3ce8f82ced34c62e6326dd3702e2c8036b8c658f"
         }
       ],
       "dependencies": [],
@@ -2846,7 +2846,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-workflow/.claude-plugin/plugin.json",
-          "sha256": "3aa453a8cb3d73bbc4949cd6ce5b71794431dd81197ce87b1562887ee708b93b"
+          "sha256": "28d69f84cee7597f0387a104b74b34c18f53ce3b1982740547ee8efb8a5c747d"
         },
         {
           "class": "support",
@@ -2886,7 +2886,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-workflow/io.github.kodflow/projections/workflows/search-claude.md",
-          "sha256": "006ce153db6142e10485b5698139ad16a250c28b85351c01ee5f56f778d3aaba"
+          "sha256": "70ede12aaacbdf0395a7af14a5cdbcead9c7084218b86d61d82e3c9ccdf5adf6"
         },
         {
           "class": "support",
@@ -2906,7 +2906,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/plugin.json",
-          "sha256": "1c1e8e038a17674589159baeb3221740a8a103455324aea0f21609ded326be24"
+          "sha256": "2288ccaba9c03418f8a7e3094438ee7803d45f3ebc36f11eacf5ab3d972a57ea"
         },
         {
           "class": "portable",
@@ -2916,7 +2916,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/_shared/model-policy.md",
-          "sha256": "2062daae78027fb8f0a28423afc5ffd2307ec245595f20ab07547406e92c9721"
+          "sha256": "087d24d343c82f1ed1eb2133914fd57fdbd829c4907cd78037d2e5b66d765387"
         },
         {
           "class": "portable",
@@ -3016,7 +3016,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/_shared/team-mode.md",
-          "sha256": "128b58f17bf245e481430bd00f0d269206bef1fbe1e373201e2ca73962a4ce07"
+          "sha256": "92376d5c9b8623e878c5dc05c33a3dd7b371404a7d9393fd393597949d583675"
         },
         {
           "class": "portable",
@@ -3026,12 +3026,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/_shared/tracker.md",
-          "sha256": "1ffaf2acbec71ef1805c78d3219658401486b2feac2a07a4d7da22777d14bd38"
+          "sha256": "98c8876deec9fcd431ea34957e7ca265fc10e6eefb75f26df885affdad8552f1"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/challenge/SKILL.md",
-          "sha256": "5f438a627bdb8b8b80bc11f4bb82e973004071156bf6c10a1abfd2915a379f72"
+          "sha256": "291e601cd2045d712d268a24b0f59d2eff41c79e0ba5afa407edb6b1c5432668"
         },
         {
           "class": "portable",
@@ -3041,7 +3041,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/challenge/prompt.md",
-          "sha256": "b00a6c8b7be1ce2b590a610846ea3fa49fc9ea0210ef26357f50e3e1c5cdbdcf"
+          "sha256": "da2cf3d6dd971b7e68d6ee3a1a6158f6d21e6a068a94ca05e85020f988ab2852"
         },
         {
           "class": "portable",
@@ -3051,7 +3051,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/docs/SKILL.md",
-          "sha256": "aa9851f1741850ba68d4970d1fcc428ea55296b480060ee91e8ee430ae8c25e9"
+          "sha256": "a6c52768b1704c4db917696e3d1b7a7023d2d66811488bb140540b9774107c5c"
         },
         {
           "class": "portable",
@@ -3071,17 +3071,17 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/feature/SKILL.md",
-          "sha256": "0ed81709ae52c247f018d21fe79285526fdd0a8a095dd8d546d613aab9e91230"
+          "sha256": "f908ec6af2ed5eed91d49dc4a12a4b899630626e5d7a7f60bf8a8785e760f69d"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/fix/SKILL.md",
-          "sha256": "cd78a0faf1db47a3fccb02f05a8a4096a3dcf3f59007fe085b39d4b889899b69"
+          "sha256": "2b49bc763e5a745da06ae0dd5d225eb87ea6756777b779b9fb9c9134213048f8"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/flow/SKILL.md",
-          "sha256": "7a9cae42fb0e726632709cd777d7c99bb4676fa68d22e19ca35f83aeea5a0559"
+          "sha256": "b4d0a739bbf5d029d4003657164c1c6b5945bf10fefdeefac3917cedd42392f7"
         },
         {
           "class": "portable",
@@ -3096,7 +3096,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/flow/scripts/flow-inventory.sh",
-          "sha256": "52add7839ef8d4b9000c0faab20cea8474d6aa69248dfb92f5ff1cf026b364e3"
+          "sha256": "b94d0ce55e98eee58b21a2c4f32822718b39f8727b35c1d176d0bc38abfbf47c"
         },
         {
           "class": "portable",
@@ -3181,7 +3181,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/plan/SKILL.md",
-          "sha256": "5f254169e4e3fa9e13aa107b849f1fbe62a69618d905a9ea2b6e7fda948e8904"
+          "sha256": "d1461599d4624516f97461a6cbe4025307f27a2822f1ff763bd2abc051220ce5"
         },
         {
           "class": "portable",
@@ -3201,7 +3201,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/project/SKILL.md",
-          "sha256": "e004d2af58ce2a4f50b43a3b16c9d51660277b133e69a3f24d35e3c8217545cb"
+          "sha256": "b776d7f36a5b5a3858e0078c01e309bb777a71b040364bf613bf435d31cdee36"
         },
         {
           "class": "portable",
@@ -3221,7 +3221,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/project/locate.md",
-          "sha256": "d8b9ba35f7c428b8a5a51490a2ab519a01645a35b4390a610f531615fad24ec1"
+          "sha256": "06177d0394b34b9a6b20115b6d91ffaa3d1d092945b60bf0fd2fd4bc27330734"
         },
         {
           "class": "portable",
@@ -3231,7 +3231,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/recap/SKILL.md",
-          "sha256": "6193c36df7e6defa84e6ffb300152dbabb676e28b25163d88f276d6edf86c7d4"
+          "sha256": "fdb0260eb1a041b26b342dfee632720aa1ab883eaeb46a01597032587b27e039"
         },
         {
           "class": "portable",
@@ -3241,17 +3241,17 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/refine/SKILL.md",
-          "sha256": "061b2805a32c26f64261b30f96aad506a2c38f1ff736b8b3dedaafff7c8f4ea9"
+          "sha256": "0abffe2166b682be9df37dde838d7558086af2b560865b34dad572bd679f15fb"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/refine/auto.md",
-          "sha256": "69ee8059e70e3d8c971e7e8065c3c491052d2e765fea44b18dd25bae76e4aa58"
+          "sha256": "bfd19138c01f51b9041950adbf0f603fb2c771d03b09c64ee3a3ddac98ddb8bc"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/refine/dispatch.md",
-          "sha256": "80c6e7090a981309d28e6d297f8e5b2fc4f55c505e8ddce269322d83dac5500f"
+          "sha256": "328b086a22b689f69ed9e70beac2c25fbb8fa659b7c4e9641b05737edd689fb1"
         },
         {
           "class": "portable",
@@ -3266,7 +3266,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/search/SKILL.md",
-          "sha256": "582f3c5364012aa75bfec35ce671306dc307ec2976d27c978810c88271f6de9a"
+          "sha256": "da24b41a38a739351f7c83ba4d5bda4861969f486f76b9d480b946ce215aa9f5"
         },
         {
           "class": "portable",
@@ -3281,7 +3281,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/search/parallel.md",
-          "sha256": "2325cab291cab68eb8451de1ab5bbff9888cc72809a92c3f0b07b0735b402d4a"
+          "sha256": "56524ee20c2239fd5431b36b982514bc73598cb4496853ac683967aa47127cc7"
         },
         {
           "class": "portable",
