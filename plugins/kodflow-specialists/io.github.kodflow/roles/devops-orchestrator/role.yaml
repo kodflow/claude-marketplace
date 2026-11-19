@@ -1,0 +1,44 @@
+apiVersion: io.github.kodflow/role/v1
+id: devops-orchestrator
+description: DevOps/DevSecOps/FinOps orchestrator using RLM decomposition — coordinates sub-agents
+  for infrastructure, security, cost, sysadmin and cloud, on GitHub PRs and GitLab MRs. Use
+  when a task spans containers, clusters, IaC and CI at once.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+  - agents.delegate
+  - forge.access
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: devops-orchestrator task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: devops-orchestrator result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: external
+claude:
+  tools: Read, Glob, Grep, SendMessage, Task, TaskCreate, TaskUpdate, TaskList, Bash, WebFetch,
+    mcp__github__pull_request_read, mcp__github__create_pull_request, mcp__github__list_pull_requests,
+    mcp__github__add_issue_comment, mcp__gitlab__get_merge_request, mcp__gitlab__get_merge_request_changes,
+    mcp__gitlab__create_merge_request, mcp__gitlab__list_merge_requests, mcp__gitlab__create_merge_request_note,
+    mcp__gitlab__list_pipelines
+  model: opus
+  effort: medium
+  color: orange

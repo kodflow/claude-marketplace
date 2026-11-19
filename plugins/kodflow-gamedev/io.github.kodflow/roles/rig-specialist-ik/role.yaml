@@ -1,0 +1,39 @@
+apiVersion: io.github.kodflow/role/v1
+id: rig-specialist-ik
+description: 'Rigging and IK for combat moves: skeleton hierarchy, bone rolls and local axes,
+  swing/twist, Euler orders, two-bone IK and poles, hand and finger rigs, weapon sockets and
+  grip axis, retargeting pitfalls, and the rig map of bones, props and mesh landmarks. Called
+  by the kodflow-gamedev skills; returns panel-member/v1 JSON with a grip block.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: rig-specialist-ik task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: rig-specialist-ik result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: opus
+  effort: medium
+  color: cyan

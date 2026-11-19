@@ -1,9 +1,9 @@
 ---
 name: developer-executor-quality
 description: Code quality executor — complexity, code smells, style violations and maintainability;
-  returns condensed JSON with commendations. Use when a review needs a fast mechanical pass for
-  function length, nesting, duplication or naming. Escalate to sonnet/medium when findings need
-  judgement beyond pattern matching or are ambiguous.
+  returns condensed JSON with commendations. Use when a review needs a fast mechanical pass
+  for function length, nesting, duplication or naming. Escalate to sonnet/medium when findings
+  need judgement beyond pattern matching or are ambiguous.
 tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
 model: haiku
 effort: low

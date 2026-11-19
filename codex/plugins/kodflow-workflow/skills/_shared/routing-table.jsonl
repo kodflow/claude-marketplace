@@ -1,0 +1,20 @@
+{"id":"refine-lens-01","skill":"/refine","phase":"lens-1-correctness","agent":"developer-executor-correctness","priority":10}
+{"id":"refine-lens-02","skill":"/refine","phase":"lens-2-security","agent":"developer-executor-security","priority":10}
+{"id":"refine-lens-03","skill":"/refine","phase":"lens-3-edge-cases","agent":"developer-executor-correctness","priority":10}
+{"id":"refine-lens-04","skill":"/refine","phase":"lens-4-rollback","agent":"devops-executor-linux","priority":10}
+{"id":"refine-lens-05","skill":"/refine","phase":"lens-5-testability","agent":"developer-executor-quality","priority":10}
+{"id":"refine-lens-06","skill":"/refine","phase":"lens-6-dependency","agent":"devops-specialist-security","priority":10}
+{"id":"refine-lens-07","skill":"/refine","phase":"lens-7-performance","agent":"developer-executor-design","priority":10}
+{"id":"refine-lens-08","skill":"/refine","phase":"lens-8-observability","agent":"developer-executor-shell","priority":10}
+{"id":"refine-lens-09","skill":"/refine","phase":"lens-9-scope","agent":"developer-orchestrator","priority":10}
+{"id":"refine-lens-10","skill":"/refine","phase":"lens-10-goal-detect","agent":"developer-specialist-review","priority":10}
+{"id":"refine-correctness-pass","skill":"/refine","phase":"refine-correctness-pass","agent":"developer-executor-correctness","priority":10}
+{"id":"refine-scope-pass","skill":"/refine","phase":"refine-scope-pass","agent":"developer-orchestrator","priority":10}
+{"id":"refine-density-pass","skill":"/refine","phase":"refine-density-pass","agent":"developer-executor-quality","priority":10}
+{"id":"review-lang","skill":"/review","phase":"review","agent_template":"developer-specialist-{language}","expand_from":".languages // [] | .[] | (if type == \"object\" then .name else . end) | if . == \"typescript\" then \"nodejs\" elif . == \"c_cpp\" then (\"c\", \"cpp\") else . end","fanout":true,"priority":10}
+{"id":"search-external-lang","skill":"/search","phase":"external","agent_template":"developer-specialist-{language}","expand_from":".languages // [] | .[] | (if type == \"object\" then .name else . end) | if . == \"typescript\" then \"nodejs\" elif . == \"c_cpp\" then (\"c\", \"cpp\") else . end","fanout":true,"priority":10}
+{"id":"review-react","skill":"/review","phase":"review","agent":"developer-specialist-react","guard":".tools.react == true","fanout":true,"priority":10}
+{"id":"review-postgres","skill":"/review","phase":"review","agent":"data-specialist-postgres","guard":".tools.psql == true or .tools.postgres == true","fanout":true,"priority":10}
+{"id":"review-protobuf","skill":"/review","phase":"review","agent":"developer-specialist-protobuf","guard":"any(.languages // [] | .[]; (if type == \"object\" then .name else . end) == \"protobuf\")","fanout":true,"priority":10}
+{"id":"infra-apply","skill":"/infra","phase":"apply","agent":"devops-specialist-infrastructure","priority":10}
+{"id":"infra-apply-k8s","skill":"/infra","phase":"apply","agent":"devops-specialist-kubernetes","guard":".k8s == true","fanout":true,"priority":10}

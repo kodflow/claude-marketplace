@@ -2,11 +2,12 @@
 #
 # The mod is a plugin of this marketplace, never an artefact of ktn-linter: no
 # Go tag, no Go release waits on it, and nothing here can redden one. A
-# consumer gets it by commit (git-subdir, the default) or pins one of these
+# consumer gets it at the marketplace commit or pins one of these
 # tags in its own settings ("ref": "kodflow-ktn/v0.1.0").
 #
 # The gate is the pinned lane itself: the tag's commit passes `make mod-check`
-# on the engine ci.yml pins before a release names it. The advisory latest lane
+# on the engine mod-ktn of ci.yml runs, kodflow-ktn's declared floor
+# (targets.claude.minimumVersion), before a release names it. The advisory latest lane
 # (mod-latest.yml) is in no `needs` here, and never will be: a new Claude Code
 # release must not hold up — or take back — a published version.
 name: kodflow-ktn-release
@@ -21,15 +22,16 @@ permissions:
 jobs:
   gate:
     runs-on: ubuntu-latest
-    env:
-      CLAUDE_CODE_VERSION: 2.1.301
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with: { persist-credentials: false }
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
-      - name: Claude Code, pinned as in ci.yml
-        run: npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+      - name: Claude Code, at kodflow-ktn's floor as in ci.yml
+        run: |
+          floor=$(jq -er '.extensions["io.github.kodflow"].targets.claude.minimumVersion' plugins/kodflow-ktn/plugin.json)
+          npm install -g "@anthropic-ai/claude-code@${floor}"
       - name: The tag passes the mod's lanes
         run: make mod-check
 

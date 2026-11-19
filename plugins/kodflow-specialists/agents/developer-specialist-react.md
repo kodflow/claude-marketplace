@@ -1,8 +1,8 @@
 ---
 name: developer-specialist-react
 description: React 19 specialist — JSX/TSX, hooks, React Server Components, Suspense boundaries,
-  Concurrent Mode. Use when a change touches .jsx or .tsx files, or a node project declares a react
-  dependency. Escalate to opus/medium when the change spans several modules, server/client
+  Concurrent Mode. Use when a change touches .jsx or .tsx files, or a node project declares
+  a react dependency. Escalate to opus/medium when the change spans several modules, server/client
   boundaries, or concurrent rendering.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
 model: sonnet
@@ -29,12 +29,13 @@ patterns (e.g. mutating state in render, missing keys in lists).
 - Hooks live at the top level of a component, never inside loops or
   conditionals.
 - `useEffect` dependencies are exhaustive (rely on `react-hooks/exhaustive-deps`).
-- Server components default; mark client components with `"use client"`
-  only when interactivity is required.
+- Verify that the framework and the relevant route support React Server
+  Components before applying the server-component default. In an RSC tree,
+  add a `"use client"` boundary when client capabilities are required.
 - `key` prop required for list children; never the array index unless
   the list is provably static.
-- Suspense boundaries wrap any data-fetching child to localise loading
-  states.
+- Use Suspense boundaries where the data source can suspend. For fetching in
+  `useEffect`, use explicit loading and error states.
 
 ## Plan review mode
 

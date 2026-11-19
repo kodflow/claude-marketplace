@@ -1,0 +1,50 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kodflow-gamedev",
+  "version": "0.0.0-r34733b2fd450",
+  "description": "Combat animation that is anatomically and martially right, for game projects that enable it. /move briefs a panel (director, anatomy, six martial areas, animation craft, rig, imagery, Godot and three.js) and turns its sourced proposals into measurable constraints; /anim-review measures a sampled clip against them and asks the owner's verdict; /anim-feedback records that verdict as an ADR that every later run reads first; /reference fetches licensed reference images; /meshy generates characters, weapons and props with Meshy, fetches them with their licence and judges them against the rig. Enabled per project, never installed by the user installer.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "repository": "https://github.com/kodflow/claude-marketplace.git",
+  "license": "MIT",
+  "keywords": [
+    "game-development",
+    "animation",
+    "rigging"
+  ],
+  "extensions": {
+    "io.github.kodflow": {
+      "schemaVersion": 1,
+      "installByDefault": false,
+      "scope": "project",
+      "dependencies": [
+        {
+          "plugin": "kodflow-specialists",
+          "required": false
+        }
+      ],
+      "capabilities": {
+        "skills": "required",
+        "agents": "required",
+        "hooks": "optional"
+      },
+      "targets": {
+        "claude": {
+          "enabled": true,
+          "profile": "native"
+        },
+        "openai": {
+          "enabled": false,
+          "profile": "requires-portable-roles"
+        },
+        "perplexity": {
+          "enabled": false,
+          "profile": "requires-portable-roles"
+        }
+      }
+    }
+  }
+}

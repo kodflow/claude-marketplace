@@ -1,0 +1,39 @@
+apiVersion: io.github.kodflow/role/v1
+id: domain-specialist-telecom
+description: Mobile core and lawful-interception specialist (public standards only) for 3GPP
+  EPC and 5GC functions, Diameter, GTP, PFCP, SBI, NAS and ETSI X1/X2/X3 handover. Use when
+  code or logs mention MME, AMF, SMF, UPF, UDM, NRF, S6a, IMSI or SUPI.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: domain-specialist-telecom task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: domain-specialist-telecom result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: workspace
+claude:
+  tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
+  model: opus
+  effort: medium
+  color: purple

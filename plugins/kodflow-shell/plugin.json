@@ -1,0 +1,45 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "kodflow-shell",
+  "version": "0.0.0-r177b81ebc222",
+  "description": "The shell side of the harness: super-claude on PATH instead of an alias, a session picker on TAB that lists only conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell.",
+  "author": {
+    "name": "kodflow",
+    "url": "https://github.com/kodflow"
+  },
+  "homepage": "https://github.com/kodflow/claude-marketplace",
+  "repository": "https://github.com/kodflow/claude-marketplace.git",
+  "license": "MIT",
+  "keywords": [
+    "shell",
+    "sessions",
+    "zsh"
+  ],
+  "extensions": {
+    "io.github.kodflow": {
+      "schemaVersion": 1,
+      "installByDefault": true,
+      "scope": "user",
+      "dependencies": [],
+      "capabilities": {
+        "skills": "required",
+        "hooks": "optional",
+        "shell-integration": "optional"
+      },
+      "targets": {
+        "claude": {
+          "enabled": true,
+          "profile": "native"
+        },
+        "openai": {
+          "enabled": false,
+          "profile": "requires-hook-free-staging"
+        },
+        "perplexity": {
+          "enabled": true,
+          "profile": "portable"
+        }
+      }
+    }
+  }
+}

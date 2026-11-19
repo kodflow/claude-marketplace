@@ -1,9 +1,9 @@
 ---
 name: os-specialist-ubuntu
-description: Ubuntu specialist — apt/snap, systemd, PPAs, Ubuntu Pro and LTS release cycles, checked
-  against official documentation; returns JSON. Use when a task touches Ubuntu packages, snaps, PPAs
-  or LTS upgrade behaviour. Escalate to sonnet/medium when the answer needs judgement beyond pattern
-  matching or the findings are ambiguous.
+description: Ubuntu specialist — apt/snap, systemd, PPAs, Ubuntu Pro and LTS release cycles,
+  checked against official documentation; returns JSON. Use when a task touches Ubuntu packages,
+  snaps, PPAs or LTS upgrade behaviour. Escalate to sonnet/medium when the answer needs judgement
+  beyond pattern matching or the findings are ambiguous.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: haiku
 effort: medium

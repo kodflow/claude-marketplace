@@ -1,0 +1,38 @@
+apiVersion: io.github.kodflow/role/v1
+id: devops-specialist-infrastructure
+description: Infrastructure-as-code specialist — Terraform, OpenTofu and cloud provisioning;
+  returns JSON with plans and warnings. Use when a task touches .tf or .tfvars files, terragrunt.hcl,
+  a terraform plan, or cloud resource provisioning.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: standard
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: devops-specialist-infrastructure task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: devops-specialist-infrastructure result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: sonnet
+  effort: medium
+  color: orange

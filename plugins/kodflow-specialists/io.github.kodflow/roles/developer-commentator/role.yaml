@@ -1,0 +1,39 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-commentator
+description: Comment audit orchestrator — dispatches Haiku workers per file so comments explain
+  WHY not WHAT, functions carry docstrings and language conventions hold. Use when comments
+  or docstrings must be audited across a project or directory, not a single file.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+  - agents.delegate
+modelClass: standard
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-commentator task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-commentator result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, Agent, TaskCreate, TaskUpdate, TaskList, WebFetch, mcp__context7__*
+  model: sonnet
+  effort: medium
+  color: blue

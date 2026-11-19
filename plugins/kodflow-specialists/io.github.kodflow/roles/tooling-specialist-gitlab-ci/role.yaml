@@ -1,0 +1,40 @@
+apiVersion: io.github.kodflow/role/v1
+id: tooling-specialist-gitlab-ci
+description: GitLab CI/CD specialist for pipeline definitions, includes, rules, DAG and runner
+  behaviour. Use when .gitlab-ci.yml or an included CI template is present, or the task mentions
+  needs, extends, artifacts, caches, environments or masked variables.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+  - forge.access
+modelClass: standard
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: tooling-specialist-gitlab-ci task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: tooling-specialist-gitlab-ci result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: workspace
+claude:
+  tools: Read, Glob, Grep, Edit, Write, Bash, mcp__gitlab__*, mcp__context7__*, WebFetch
+  model: sonnet
+  effort: medium
+  color: yellow

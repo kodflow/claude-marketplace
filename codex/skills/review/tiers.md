@@ -25,9 +25,10 @@ external_tiers:
         fi
       command: |
         # Only runs when bootstrap set CODERABBIT_OK=1 (binary present AND auth status OK).
-        coderabbit review --plain --no-color --type committed \
-          --base "{base_branch}" --cwd /workspace \
-          > /tmp/coderabbit-review-{timestamp}.md 2>&1
+        # --agent emits NDJSON (one JSON event per line); stderr stays apart so a
+        # warning can never corrupt the stream. Run from the repository root.
+        coderabbit review --agent --committed --base "{base_branch}" \
+          > /tmp/coderabbit-review-{timestamp}.ndjson 2> /tmp/coderabbit-review-{timestamp}.err
       timeout: 120000  # 2 minutes max
       fallback: "skip-with-note (T2 unavailable: binary absent OR unauthenticated) — does NOT fail the run"
 ```

@@ -1,6 +1,9 @@
 ---
 name: asset-specialist-meshy
-description: "Meshy-generated 3D assets for the game: writes the Meshy request (prompt and parameters) for a character, weapon or prop that fits the art direction and the rig, judges the result (topology, scale, orientation, pivot, grip axis, polycount) and prepares the retarget of Meshy's auto-rig to the project rig. Called by /meshy; returns panel-member/v1."
+description: 'Meshy-generated 3D assets for the game: writes the Meshy request (prompt and
+  parameters) for a character, weapon or prop that fits the art direction and the rig, judges
+  the result (topology, scale, orientation, pivot, grip axis, polycount) and prepares the
+  retarget of Meshy''s auto-rig to the project rig. Called by /meshy; returns panel-member/v1.'
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
 effort: medium
@@ -95,7 +98,7 @@ Holds in every mode, if this agent has Bash: git never gets `--output` (save the
   "role": "asset",
   "status": "ok",
   "mode": "brief",
-  "summary": "image-to-3d, smart topology at 12,000 triangles, PBR 2K, a-pose; 30 credits, then rigging 5",
+  "summary": "image-to-3d, smart topology at 12,000 triangles, PBR 2K, a-pose, followed by rigging",
   "rules_applied": [],
   "techniques": [],
   "constraints": [],
@@ -108,13 +111,8 @@ Holds in every mode, if this agent has Bash: git never gets `--output` (save the
     "credits": {"total": 20, "per_step": {"image-to-3d": 15, "rigging": 5}, "source": "meshy-api.md, Credits per request"},
     "budget_source": "guess: 12,000 triangles for a hero character, no budget in the project"
   },
-  "judgement": {"verdict": "repair", "checks": [
-    {"check": "orientation", "measured": "height axis y, front not measurable from bounds", "expected": "+Y up, +Z front", "result": "unknown"},
-    {"check": "pivot", "measured": [0.0, 0.0, 0.01], "expected": "[0, 0, 0] within 2 cm", "result": "pass"}]},
-  "retarget": {"source_joints": ["<from inspect>"],
-               "mapping": [{"meshy": "<joint>", "logical": "forearm.R", "project": "RightForeArm"}],
-               "unmapped_meshy": [], "unmapped_project": ["index.mid.R"],
-               "questions_for_rig": ["rest pose: Meshy A-pose arms at about 45 degrees, project rig rest unknown"]},
+  "judgement": null,
+  "retarget": null,
   "remarks": [],
   "sources": [{"url": "https://docs.meshy.ai/api/image-to-3d", "fetched": "2026-10-31", "http_status": 200,
                "excerpt": "<the exact sentence relied on>", "sha256": null, "tier": 2, "read": "full"}],
@@ -124,6 +122,22 @@ Holds in every mode, if this agent has Bash: git never gets `--output` (save the
 ```
 
 In `brief` mode `judgement` and `retarget` are `null`; in `judge` mode `meshy_request` is `null` unless the verdict is `regenerate`.
+
+Judge-mode additions to the panel output:
+
+```json
+{
+  "mode": "judge",
+  "meshy_request": null,
+  "judgement": {"verdict": "repair", "checks": [
+    {"check": "orientation", "measured": "height axis y, front not measurable from bounds", "expected": "+Y up, +Z front", "result": "unknown"},
+    {"check": "pivot", "measured": [0.0, 0.0, 0.01], "expected": "[0, 0, 0] within 2 cm", "result": "pass"}]},
+  "retarget": {"source_joints": ["<from inspect>"],
+               "mapping": [{"meshy": "<joint>", "logical": "forearm.R", "project": "RightForeArm"}],
+               "unmapped_meshy": [], "unmapped_project": ["index.mid.R"],
+               "questions_for_rig": ["rest pose: Meshy A-pose, project rig rest unknown"]}
+}
+```
 
 ## Out of scope
 

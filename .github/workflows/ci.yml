@@ -1,12 +1,25 @@
 name: ci
-on: [push, pull_request]
+# Pushes to main and pull requests; workflow_dispatch so another workflow
+# (external-bump.yml) can run the checks on a branch it opened, without a PAT.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with: { python-version: '3.13' }
 
       # The repository is public. This is the gate, and it runs before anything
@@ -18,6 +31,15 @@ jobs:
 
       - name: No credential may reach a public tree
         run: python3 scripts/sanitize.py .
+
+      # Claude Code substitutes only the exact token ${CLAUDE_PLUGIN_ROOT}; a
+      # ":-default" form is left verbatim in skills and in allowed-tools.
+      # Hooks are exempt: they run in a shell that expands the variable itself.
+      - name: Skills use the exact plugin-root token
+        run: |
+          if grep -rnE 'CLAUDE_PLUGIN_ROOT:-' plugins/*/skills; then
+            echo "::error::use the exact token \${CLAUDE_PLUGIN_ROOT} in skills"; exit 1
+          fi
 
       - name: No machine- or org-specific detail
         run: |
@@ -35,12 +57,26 @@ jobs:
       - name: Manifests parse and reference real paths
         run: |
           python3 - <<'PY'
-          import json, pathlib, sys
+          import json, pathlib, re, sys
           root = pathlib.Path(".")
           mk = json.loads((root/".claude-plugin/marketplace.json").read_text())
           bad = []
           for p in mk["plugins"]:
-              sub = root / p["source"]["path"]
+              source = p["source"]
+              if isinstance(source, dict) and source.get("source") == "url":
+                  # A pinned external entry (catalog externals[]): opt-in only.
+                  if (not source.get("url", "").startswith("https://")
+                          or not re.fullmatch(r"[0-9a-f]{40}", source.get("sha", ""))
+                          or p.get("installByDefault") is not False):
+                      bad.append(f"{p['name']}: external source must be https, pinned by sha, installByDefault false")
+                  continue
+              if not isinstance(source, str) or not source.startswith("./"):
+                  bad.append(f"{p['name']}: source must resolve inside the marketplace checkout")
+                  continue
+              sub = (root / source).resolve()
+              if not sub.is_relative_to(root.resolve()):
+                  bad.append(f"{p['name']}: source is outside the marketplace checkout")
+                  continue
               if not (sub/".claude-plugin"/"plugin.json").exists():
                   bad.append(f"{p['name']}: no plugin.json at {sub}")
               else:
@@ -53,6 +89,30 @@ jobs:
         run: |
           pip install --quiet pyyaml
           python3 scripts/validate-frontmatter.py .
+
+      - name: The portable marketplace contracts hold
+        run: |
+          pip install --quiet uv==0.13.9
+          uv lock --project scripts --check
+          uv sync --project scripts --frozen
+          uv run --project scripts python scripts/tests/run_plugin_tests.py
+          uv run --project scripts python scripts/pluginctl.py validate --all --mode publisher-strict
+          uv run --project scripts python scripts/pluginctl.py build --targets all --check
+          uv run --project scripts python scripts/pluginctl.py compat --targets all --fail-required-loss >/dev/null
+          uv run --project scripts python scripts/pluginctl.py roles --check
+          uv run --project scripts python scripts/pluginctl.py workflows --check
+          python3 scripts/plugin-inventory.py --check docs/marketplace/inventory.json
+          python3 scripts/stamp-versions.py --check
+          bash scripts/tests/test_install.sh
+
+      - name: The multi-provider runtime works offline
+        run: |
+          uv lock --project runtime --check
+          uv run --project runtime --locked pytest runtime/tests
+          uv run --project runtime --locked kodflow-agents doctor --offline
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '24' }
 
       # The mod lanes' wiring (kodflow/ktn-linter#788), read from the
       # workflows as YAML: every GATES target run by a blocking job here,
@@ -142,6 +202,9 @@ jobs:
         env:
           COST_CHECKS_STRICT: model_effort
         run: python3 scripts/check-context-cost.py .
+
+      - name: The review triage maps CodeRabbit NDJSON as documented
+        run: python3 scripts/tests/test_coderabbit_ndjson.py
 
       - name: The usage report prices and counts what the transcripts say
         run: python3 scripts/tests/test_usage_report.py
@@ -338,7 +401,7 @@ jobs:
       # that nobody regenerated, ships two versions of the same skill.
       - name: The codex tree matches its sources
         run: |
-          python3 scripts/build-codex.py
+          uv run --project scripts --locked python scripts/build-codex.py
           git diff --exit-code -- codex/ \
             || { echo "::error::codex/ is stale — run scripts/build-codex.py"; exit 1; }
 
@@ -347,7 +410,7 @@ jobs:
   hooks-bash32:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: bash-guard corpus and hook suite under /bin/bash 3.2
         run: |
           /bin/bash --version | head -1
@@ -375,21 +438,29 @@ jobs:
       - name: kodflow-gamedev's suite under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-gamedev/tests/run-tests.sh
 
+  # The marketplace installed from Git in throwaway homes, Claude and Codex,
+  # at the versions .github/versions.env pins (plugin-smoke.yml).
+  plugin-smoke:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/plugin-smoke.yml
+
   # kodflow-hooks' mod (hooks/mod/): function hooks the engine loads, so they
-  # are checked by the engine itself, at the version the README names as
-  # tested. Bumped by hand: a new release can move the plugin API.
+  # are checked by the engine itself, at the oldest version the mods support:
+  # targets.claude.minimumVersion of plugins/kodflow-hud (kodflow-hooks' mod
+  # has the same floor). Raising the floor there moves this job with it.
   mod:
     runs-on: ubuntu-latest
-    env:
-      CLAUDE_CODE_VERSION: 2.1.296
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
 
-      - name: Claude Code, pinned
+      - name: Claude Code, at the mods' floor
         run: |
-          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          floor=$(jq -er '.extensions["io.github.kodflow"].targets.claude.minimumVersion' plugins/kodflow-hud/plugin.json)
+          npm install -g "@anthropic-ai/claude-code@${floor}"
           claude --version
 
       # Every warning and every error fails the job, the missing-version one
@@ -482,19 +553,18 @@ jobs:
       - name: The conformance corpus, a real disk, several processes (node)
         run: node plugins/kodflow-hooks/tests/mod/run-node.ts
 
-  # kodflow-ktn: ktn-linter's mod. Its floor is Claude Code 2.1.299, the
-  # oldest version kodflow/ktn-linter#774 measured, above the engine the job
-  # above pins: it gets an engine of its own, pinned and bumped by hand.
+  # kodflow-ktn: ktn-linter's mod. Its floor is the oldest version
+  # kodflow/ktn-linter#774 measured, above the job above's: it gets an engine
+  # of its own, read from targets.claude.minimumVersion of plugins/kodflow-ktn.
   # Nothing here can redden ktn-linter's release: this repository publishes
-  # the plugin, by commit (git-subdir) and by its own kodflow-ktn/v* tags
+  # the plugin, by marketplace commit and by its own kodflow-ktn/v* tags
   # (kodflow-ktn-release.yml), and ktn-linter does not depend on it. The
   # latest engine is mod-latest.yml's, scheduled and advisory (#788).
   mod-ktn:
     runs-on: ubuntu-latest
-    env:
-      CLAUDE_CODE_VERSION: 2.1.301
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
 
@@ -505,9 +575,10 @@ jobs:
       - name: kodflow-ktn's pure modules (node --test)
         run: make mod-pure
 
-      - name: Claude Code, pinned
+      - name: Claude Code, at kodflow-ktn's floor
         run: |
-          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+          floor=$(jq -er '.extensions["io.github.kodflow"].targets.claude.minimumVersion' plugins/kodflow-ktn/plugin.json)
+          npm install -g "@anthropic-ai/claude-code@${floor}"
           claude --version
 
       # make mod-check (the gate GATES names): the pure modules again, the

@@ -1,0 +1,41 @@
+{
+  "name": "kodflow",
+  "plugins": [
+    {
+      "category": "workflow",
+      "name": "kodflow-workflow",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./codex/plugins/kodflow-workflow",
+        "source": "local"
+      }
+    },
+    {
+      "category": "review",
+      "name": "kodflow-review",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./codex/plugins/kodflow-review",
+        "source": "local"
+      }
+    },
+    {
+      "category": "devops",
+      "name": "kodflow-devops",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./codex/plugins/kodflow-devops",
+        "source": "local"
+      }
+    }
+  ]
+}

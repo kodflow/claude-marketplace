@@ -1,0 +1,39 @@
+apiVersion: io.github.kodflow/role/v1
+id: asset-specialist-meshy
+description: 'Meshy-generated 3D assets for the game: writes the Meshy request (prompt and
+  parameters) for a character, weapon or prop that fits the art direction and the rig, judges
+  the result (topology, scale, orientation, pivot, grip axis, polycount) and prepares the
+  retarget of Meshy''s auto-rig to the project rig. Called by /meshy; returns panel-member/v1.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: asset-specialist-meshy task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: asset-specialist-meshy result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: opus
+  effort: medium
+  color: green

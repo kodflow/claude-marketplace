@@ -1,41 +1,41 @@
 {
-  "name": "kodflow-ktn",
-  "version": "0.0.0-r39cc3410ee0d",
-  "description": "ktn-linter's findings beside the prompt, as a mod (function hooks, Claude Code 2.1.299 or later). It completes the hooks ktn-linter installs and replaces none: they keep delivering the findings to the model, this mod only shows them. Active in a Go project only (the same predicate as ktn-linter's own resolver); inert where nothing draws (-p, the Agent SDK, Kepler).",
   "author": {
     "name": "kodflow",
     "url": "https://github.com/kodflow"
   },
+  "description": "ktn-linter's findings beside the prompt, as a mod (function hooks, Claude Code 2.1.299 or later). It completes the hooks ktn-linter installs and replaces none: they keep delivering the findings to the model, this mod only shows them. Active in a Go project only (the same predicate as ktn-linter's own resolver); inert where nothing draws (-p, the Agent SDK, Kepler).",
   "homepage": "https://github.com/kodflow/claude-marketplace",
   "license": "MIT",
+  "name": "kodflow-ktn",
   "types": "./types/index.d.ts",
   "userConfig": {
     "activation": {
-      "type": "string",
-      "title": "Activation",
+      "default": "auto",
       "description": "auto: in a Go project only, as ktn-linter resolves one. always: in every project (the safety net when the probe says undetermined). off: never.",
       "options": [
         "auto",
         "always",
         "off"
       ],
-      "default": "auto"
+      "title": "Activation",
+      "type": "string"
     },
     "autoOpen": {
-      "type": "boolean",
-      "title": "Open the pane at start",
+      "default": false,
       "description": "Open the ktn pane when a Go session starts. Off by default: the engine seats a pane nobody asked for only from 144 columns, and once you have opened it with /ktn-view it seats it again from 110, in every later session.",
-      "default": false
+      "title": "Open the pane at start",
+      "type": "boolean"
     },
     "scrolling": {
-      "type": "string",
-      "title": "Scrolling",
+      "default": "window",
       "description": "window: the pane scrolls a window of the tree the daemon serves in slices, the wheel and the arrows moving it (kodflow/ktn-linter#787). native: the engine scrolls the whole tree the daemon serves (the way back).",
       "options": [
         "window",
         "native"
       ],
-      "default": "window"
+      "title": "Scrolling",
+      "type": "string"
     }
-  }
+  },
+  "version": "0.0.0-r15bab1797379"
 }

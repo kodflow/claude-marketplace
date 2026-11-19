@@ -1,6 +1,9 @@
 ---
 name: rig-specialist-ik
-description: "Rigging and IK for combat moves: skeleton hierarchy, bone rolls and local axes, swing/twist, Euler orders, two-bone IK and poles, hand and finger rigs, weapon sockets and grip axis, retargeting pitfalls, and the rig map of bones, props and mesh landmarks. Called by the kodflow-gamedev skills; returns panel-member/v1 JSON with a grip block."
+description: 'Rigging and IK for combat moves: skeleton hierarchy, bone rolls and local axes,
+  swing/twist, Euler orders, two-bone IK and poles, hand and finger rigs, weapon sockets and
+  grip axis, retargeting pitfalls, and the rig map of bones, props and mesh landmarks. Called
+  by the kodflow-gamedev skills; returns panel-member/v1 JSON with a grip block.'
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
 effort: medium
@@ -118,10 +121,20 @@ Other kinds you propose: `joint_angle` (with the axis and order you vouch for), 
 ```
 
 ```json
-{"id": "sword-in-palm-frame", "kind": "frame_pose", "severity": "soft", "status": "proposed",
- "target": "sword.guard", "ref": "hand_r", "component": "distance", "unit": "m",
- "test": {"stat": "peak_to_peak", "max": 0.01}, "observable": {"3d": true, "iso": false, "profile": false},
- "rationale": "a socketed prop does not drift in the hand frame; 1 cm drift ceiling is a guess", "proposed_by": "rig-specialist-ik"}
+[
+  {"id": "sword-in-palm-x", "kind": "frame_pose", "severity": "soft", "status": "proposed",
+   "target": "sword.guard", "ref": "hand_r", "component": "x", "unit": "m",
+   "test": {"stat": "peak_to_peak", "max": 0.01}, "observable": {"3d": true, "iso": false, "profile": false},
+   "rationale": "1 cm local x drift ceiling is a guess", "proposed_by": "rig-specialist-ik"},
+  {"id": "sword-in-palm-y", "kind": "frame_pose", "severity": "soft", "status": "proposed",
+   "target": "sword.guard", "ref": "hand_r", "component": "y", "unit": "m",
+   "test": {"stat": "peak_to_peak", "max": 0.01}, "observable": {"3d": true, "iso": false, "profile": false},
+   "rationale": "1 cm local y drift ceiling is a guess", "proposed_by": "rig-specialist-ik"},
+  {"id": "sword-in-palm-z", "kind": "frame_pose", "severity": "soft", "status": "proposed",
+   "target": "sword.guard", "ref": "hand_r", "component": "z", "unit": "m",
+   "test": {"stat": "peak_to_peak", "max": 0.01}, "observable": {"3d": true, "iso": false, "profile": false},
+   "rationale": "1 cm local z drift ceiling is a guess", "proposed_by": "rig-specialist-ik"}
+]
 ```
 
 ## Plan review mode

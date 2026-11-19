@@ -1,8 +1,8 @@
 ---
 name: devops-specialist-kubernetes
-description: Kubernetes specialist — K8s, K3s, minikube, Helm, operators and GitOps; returns JSON
-  with manifests and recommendations. Use when a task touches Kubernetes manifests, Helm charts,
-  kustomize, kubectl output or an Argo CD or Flux setup.
+description: Kubernetes specialist — K8s, K3s, minikube, Helm, operators and GitOps; returns
+  JSON with manifests and recommendations. Use when a task touches Kubernetes manifests, Helm
+  charts, kustomize, kubectl output or an Argo CD or Flux setup.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: medium

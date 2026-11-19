@@ -1,0 +1,38 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-commentator-worker
+description: Comment auditor for a single file — comments explain WHY not WHAT, functions
+  carry docstrings with params, types and return; returns JSON. Use when one source file needs
+  its comments or docstrings audited or fixed. Escalate to sonnet/medium when the WHY cannot
+  be inferred from the code and needs judgement.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - repository.write
+modelClass: fast
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-commentator-worker task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-commentator-worker result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: workspace
+claude:
+  tools: Read, Edit, Grep
+  model: haiku
+  effort: low
+  color: blue

@@ -3,10 +3,24 @@
 An opinionated agent configuration for **Claude Code** and **Codex**, installed
 from one place instead of copied by hand.
 
+The repository also exposes an [Agent Plugins 1.0](https://agent-plugins.org/)
+portable core. One logical catalog generates the Claude marketplace, the Codex
+local marketplace, and importable Perplexity ZIP files. Host-only mechanics are
+reported explicitly instead of silently disappearing during projection; see
+[`docs/marketplace/compatibility.md`](docs/marketplace/compatibility.md).
+
 ```bash
 git clone https://github.com/kodflow/claude-marketplace
 cd claude-marketplace && ./scripts/install.sh
 ```
+
+Codex uses the checkout's native marketplace when the client supports plugin
+installation. Custom roles are installed through Codex's agent directory. Use
+`./scripts/install.sh --legacy` to select the versioned flat Codex installation.
+For an isolated canary pinned to a Git SHA, see
+[`docs/marketplace/install.md`](docs/marketplace/install.md). The five
+release profiles and their acceptance checks are documented in
+[`docs/marketplace/publish.md`](docs/marketplace/publish.md).
 
 `--check` reports what it would do and writes nothing. Re-running is safe.
 
@@ -94,8 +108,24 @@ format is not — Codex custom agents are TOML with `developer_instructions`. To
 names that exist on one side only are rewritten rather than dropped, because an
 agent told to use a tool that is not there simply fails.
 
-Re-run the generator after changing anything under `plugins/`; CI checks the
-result parses and that no private detail survived.
+Re-run `uv run --project scripts --locked python scripts/build-codex.py` after
+changing plugin sources. CI verifies the generated files and scans for
+private details.
+
+During the portable-core canary, that flat export remains available. Claude
+loads `.claude-plugin/marketplace.json`, Codex discovers local packages through
+`.agents/plugins/marketplace.json`, and Perplexity imports the generated
+`dist/perplexity/*.zip` archives. Every package also keeps its portable root
+`plugin.json`. The universal gates are:
+
+```bash
+uv sync --project scripts --frozen
+uv run --project scripts python scripts/pluginctl.py validate --all --mode publisher-strict
+uv run --project scripts python scripts/pluginctl.py build --targets all --check
+uv run --project scripts python scripts/pluginctl.py compat --targets all --fail-required-loss
+uv run --project scripts python scripts/pluginctl.py roles --check
+uv run --project scripts python scripts/pluginctl.py workflows --check
+```
 
 ## What a session pays to have this installed
 
@@ -131,9 +161,9 @@ detection pattern, so a security skill can ship the regexes it needs. CI also
 refuses machine paths and internal hostnames, validates every skill and agent
 against the documented frontmatter schema, checks that module links resolve, and
 parses every shell script. Run locally, the generators and validators that read
-YAML (`build-codex.py`, `validate-frontmatter.py`, `ci-gates-check.py`) need
-PyYAML, which `uv run --no-project --with pyyaml python3 scripts/<name>.py`
-provides without installing anything.
+YAML use the locked dependencies under `scripts/`. Run
+`uv run --project scripts --locked python scripts/<name>.py` to validate the
+inputs or regenerate projections in that environment.
 
 `mcp/mcp.example.json` references credentials as `${VAR}` and contains none. The
 installer seeds it **only when no config exists** — it never overwrites a file

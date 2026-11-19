@@ -1,0 +1,40 @@
+apiVersion: io.github.kodflow/role/v1
+id: devops-executor-linux
+description: Linux administration router — reads /etc/os-release, dispatches to the matching
+  os-specialist-<distro> agent, with a generic fallback. Use when a task concerns a Linux
+  host, systemd units, packages or sysadmin commands and the distro is not pinned. Escalate
+  to sonnet/medium when the distro is unknown or the diagnosis is ambiguous.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+  - agents.delegate
+modelClass: fast
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: devops-executor-linux task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: devops-executor-linux result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: external
+claude:
+  tools: Read, Glob, Grep, Bash, Task, WebFetch, mcp__context7__*
+  model: haiku
+  effort: low
+  color: orange

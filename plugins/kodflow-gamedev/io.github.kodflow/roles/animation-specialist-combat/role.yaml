@@ -1,0 +1,39 @@
+apiVersion: io.github.kodflow/role/v1
+id: animation-specialist-combat
+description: 'Combat animation craft: key poses, anticipation, timing under frame budgets,
+  arcs, follow-through, hit-stop, silhouette and readability in 3D, iso and profile views,
+  foot sliding and jerk, weapon secondary motion, cut versus thrust tip paths. Called by the
+  kodflow-gamedev skills; returns panel-member/v1 JSON.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: animation-specialist-combat task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: animation-specialist-combat result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch
+  model: opus
+  effort: medium
+  color: orange

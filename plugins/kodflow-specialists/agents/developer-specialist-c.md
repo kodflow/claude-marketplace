@@ -1,8 +1,8 @@
 ---
 name: developer-specialist-c
-description: C specialist — analyses C but has no Write tool and does not create worktrees, commit,
-  or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a change
-  touches .c/.h files or Makefile/CMake C targets.
+description: C specialist — analyses C but has no Write tool and does not create worktrees,
+  commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when
+  a change touches .c/.h files or Makefile/CMake C targets.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: opus
 effort: medium

@@ -1,10 +1,11 @@
 ---
 name: developer-executor-shell
 description: Shell script, Dockerfile and CI/CD safety analyzer — dangerous patterns, missing
-  safeguards, config issues, via deterministic pattern matching; returns JSON. Use when a change
-  touches .sh files, Dockerfiles or CI pipeline files. Escalate to sonnet/medium when findings need
-  judgement beyond pattern matching or are ambiguous.
-tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet, WebFetch, mcp__context7__*
+  safeguards, config issues, via deterministic pattern matching; returns JSON. Use when a
+  change touches .sh files, Dockerfiles or CI pipeline files. Escalate to sonnet/medium when
+  findings need judgement beyond pattern matching or are ambiguous.
+tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet,
+  WebFetch, mcp__context7__*
 model: haiku
 effort: low
 color: blue
@@ -63,7 +64,7 @@ download_safety:
       severity: "HIGH"
 
     - name: "Cleanup on failure"
-      good: "trap 'rm -rf $tmpdir' EXIT"
+      good: "trap 'rm -rf -- \"$tmpdir\"' EXIT"
       bad: "No trap"
       severity: "MEDIUM"
 
@@ -236,7 +237,10 @@ directory, and nothing else: never a file inside the reviewed repository, never 
 file the brief supplies, never through the shell (redirection, heredoc, `tee`, `cp`), save the tree archive of Plan review mode below. With no
 report-file path in the brief, write nothing.
 
-Then return at most ~1500 characters to the caller: the summary line your brief specifies,
+Without a report-file path, return the JSON object documented below.
+
+When the requested report file holds the full result, return the summary
+line from your brief in a response of at most ~1500 characters by default,
 followed by one line per finding as `SEVERITY | file:line | expected fix`, and nothing else
 — no reasoning, no restated diff. If the finding lines would overflow, keep the summary
 line plus the highest-severity ones and leave the rest in the report file. A brief that sets
@@ -283,7 +287,7 @@ Holds in every mode, if this agent has Bash: git never gets `--output` (save the
       "evidence": "curl -fsSL https://example.com/script.sh | bash",
 
       "recommendation": "Download to temp file, verify checksum, then execute",
-      "fix_patch": "tmpfile=$(mktemp)\ncurl -fsSL -o \"$tmpfile\" https://example.com/script.sh\nsha256sum -c <<< 'expected_hash  -' < \"$tmpfile\"\nbash \"$tmpfile\"\nrm -f \"$tmpfile\"",
+      "fix_patch": "tmpfile=$(mktemp) || exit 1\ntrap 'rm -f -- \"$tmpfile\"' EXIT\ncurl -fsSL -o \"$tmpfile\" https://example.com/script.sh &&\n  printf '%s  %s\\n' \"<trusted SHA-256>\" \"$tmpfile\" | sha256sum --check --strict &&\n  bash -- \"$tmpfile\"",
       "effort": "S",
       "confidence": "HIGH"
     }

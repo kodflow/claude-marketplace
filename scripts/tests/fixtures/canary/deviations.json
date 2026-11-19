@@ -1,0 +1,125 @@
+{
+  "from": "847a1a4be0b830992eecc7cc6717487981ba6e04",
+  "note": "Intended differences of #168 against main@847a1a4b, read only by the canary (scripts/tests/canary_golden.py). The exact CLAUDE_PLUGIN_ROOT token rewrite is not listed: canary_golden.py applies it on both sides.",
+  "deviations": [
+    {
+      "plugin": "kodflow-gamedev",
+      "kind": "agents",
+      "name": "asset-specialist-meshy",
+      "part": "body",
+      "reason": "example request and judgement rewritten (#168 review)"
+    },
+    {
+      "plugin": "kodflow-gamedev",
+      "kind": "agents",
+      "name": "martial-specialist-unarmed",
+      "part": "body",
+      "reason": "rig motion described from the clip, not from an assumed kinetic chain (#168 review)"
+    },
+    {
+      "plugin": "kodflow-gamedev",
+      "kind": "agents",
+      "name": "rig-specialist-ik",
+      "part": "body",
+      "reason": "the socketed-prop constraint split per axis (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "developer-commentator-worker",
+      "part": "body",
+      "reason": "empty result reports the real audit counts (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "developer-executor-correctness",
+      "part": "body",
+      "reason": "output follows the brief's schema; search workflow claims/gaps (#168)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "developer-executor-shell",
+      "part": "body",
+      "reason": "quoted trap example; output without a report file (#168)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "developer-specialist-cpp",
+      "part": "body",
+      "reason": "C++ examples corrected (const T&, std::ranges::to) (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "developer-specialist-nodejs",
+      "part": "body",
+      "reason": "vitest coverage flags and flat-config file globs corrected (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "developer-specialist-react",
+      "part": "body",
+      "reason": "RSC default applied only where the framework supports it (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "developer-specialist-zig",
+      "part": "body",
+      "reason": "defer/errdefer guidance corrected (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "devops-executor-linux",
+      "part": "body",
+      "reason": "fallback inspection-only commands listed (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "devops-specialist-docker",
+      "part": "body",
+      "reason": "npm ci/prune example corrected (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "devops-specialist-infrastructure",
+      "part": "body",
+      "reason": "terraform-docs --output-check invocation corrected (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "devops-specialist-security",
+      "part": "body",
+      "reason": "secret scanners and grype example corrected (#168 review)"
+    },
+    {
+      "plugin": "kodflow-specialists",
+      "kind": "agents",
+      "name": "os-specialist-debian",
+      "part": "body",
+      "reason": "examples moved to Debian 13 (trixie) (#168 review)"
+    },
+    {
+      "plugin": "kodflow-review",
+      "kind": "skills",
+      "name": "review",
+      "part": "body",
+      "reason": "Portable delegation section linking the generated review workflows (#168, T2)"
+    },
+    {
+      "plugin": "kodflow-workflow",
+      "kind": "skills",
+      "name": "search",
+      "part": "body",
+      "reason": "generated search workflows linked as the delegation schedule (#168, T2)"
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 ---
 name: devops-specialist-security
-description: DevSecOps scanning specialist — vulnerability detection, compliance checking and
-  secrets scanning; returns JSON with findings and remediation. Use when a task asks for a
-  vulnerability, CVE, compliance or leaked-secret scan of images, dependencies or infrastructure.
+description: DevSecOps scanning specialist — vulnerability detection, compliance checking
+  and secrets scanning; returns JSON with findings and remediation. Use when a task asks for
+  a vulnerability, CVE, compliance or leaked-secret scan of images, dependencies or infrastructure.
   Escalate to opus/medium when findings span several components or an exploit chain.
 tools: Read, Glob, Grep, SendMessage, TaskUpdate, Bash, WebFetch, mcp__context7__*
 model: sonnet
@@ -35,7 +35,7 @@ Specialized security scanning and compliance. Return **condensed JSON only**.
 |--------|-------|-------|
 | **IaC** | trivy, checkov, tfsec | Misconfigurations |
 | **Containers** | trivy, grype | CVEs, base images |
-| **Secrets** | gitleaks, trufflehog | Leaked credentials |
+| **Secrets** | gitleaks | Leaked credentials |
 | **Code** | semgrep, bandit | SAST, OWASP Top 10 |
 | **K8s** | kubesec, kube-bench | CIS Benchmarks |
 | **SBOM** | syft, trivy | Supply chain |
@@ -155,16 +155,21 @@ tfsec . --format json
 ```bash
 # Image vulnerability scan
 trivy image --severity CRITICAL,HIGH image:tag
-grype image:tag --only-fixed
+# Include unfixed findings and report fix availability separately.
+grype image:tag
 syft image:tag -o json > sbom.json
 ```
 
 ### Secrets
 
+Use Gitleaks v8.19.0 or later for the `git` and `dir` subcommands.
+
 ```bash
-# Secret detection
-gitleaks detect --source . --verbose
-trufflehog filesystem . --json
+# Git history
+gitleaks git --redact --verbose .
+
+# Working tree, including uncommitted and untracked files
+gitleaks dir --redact --verbose .
 ```
 
 ### Kubernetes

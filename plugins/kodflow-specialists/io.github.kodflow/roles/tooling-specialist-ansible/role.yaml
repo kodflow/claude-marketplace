@@ -1,0 +1,39 @@
+apiVersion: io.github.kodflow/role/v1
+id: tooling-specialist-ansible
+description: Ansible specialist for playbooks, roles, inventories, collections and idempotence.
+  Use when ansible.cfg, playbooks or roles/ are present, or the task mentions ansible-lint,
+  molecule or vault-encrypted vars.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+modelClass: standard
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: tooling-specialist-ansible task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: tooling-specialist-ansible result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: workspace
+claude:
+  tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
+  model: sonnet
+  effort: medium
+  color: yellow

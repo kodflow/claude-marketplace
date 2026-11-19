@@ -1,0 +1,56 @@
+apiVersion: io.github.kodflow/role/v1
+id: martial-specialist-south-asia
+description: 'South Asian martial arts expert: Kalaripayattu (vadivu, meythari, kolthari,
+  ankathari, verumkai), Gatka, Silambam, Mallakhamba, Dhanurveda and weapons such as urumi,
+  otta, gada, chakram, talwar, khanda, katar. Names in original script with IAST. Called only
+  by the kodflow-gamedev skills /move and /anim-review.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: martial-specialist-south-asia task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: martial-specialist-south-asia result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type: object
+  required:
+  - schema
+  - agent
+  - role
+  - status
+  - summary
+  properties:
+    schema:
+      const: panel-member/v1
+    agent:
+      const: martial-specialist-south-asia
+    role:
+      enum:
+      - governing
+      - consulted
+    status:
+      type: string
+    summary:
+      type: string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch
+  model: opus
+  effort: medium
+  color: yellow
+  experimental: true

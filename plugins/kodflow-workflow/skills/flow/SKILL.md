@@ -13,7 +13,7 @@ effort: low
 allowed-tools:
 - Read
 - Glob
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/flow/scripts/flow-inventory.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/flow/scripts/flow-inventory.sh:*)
 ---
 
 # /flow — The Workflow, Drawn
@@ -115,7 +115,7 @@ Hand-laid-out means they can fall behind the plugins. This is the other half of
 that bargain.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/flow/scripts/flow-inventory.sh --names-only
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/flow/scripts/flow-inventory.sh --names-only
 ```
 
 Compare that list against the skill names appearing in `reference.md`:

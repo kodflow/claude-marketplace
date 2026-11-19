@@ -1,0 +1,40 @@
+apiVersion: io.github.kodflow/role/v1
+id: tooling-specialist-github-actions
+description: GitHub Actions specialist — workflows, composite and reusable actions, matrix
+  builds, supply-chain hardening (pinned SHAs, OIDC, least-privilege tokens). Use when a task
+  touches .github/workflows files, action.yml, or a GitHub CI failure.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+  - forge.access
+modelClass: standard
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: tooling-specialist-github-actions task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: tooling-specialist-github-actions result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: workspace
+claude:
+  tools: Read, Glob, Grep, Edit, Write, Bash, mcp__github__*, mcp__context7__*, WebFetch
+  model: sonnet
+  effort: medium
+  color: yellow

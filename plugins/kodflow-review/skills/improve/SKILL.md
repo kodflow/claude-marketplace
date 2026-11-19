@@ -64,7 +64,7 @@ Two things decide the run, and both outrank speed:
 The script and the ledger:
 
 ```bash
-COLLECT="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/skills/improve/scripts/collect.py"
+COLLECT="${CLAUDE_PLUGIN_ROOT}/skills/improve/scripts/collect.py"
 LEDGER="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/kodflow/improve/handled.tsv"
 ```
 

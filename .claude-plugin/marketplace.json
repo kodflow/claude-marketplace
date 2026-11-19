@@ -1,127 +1,102 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "description": "Portable Kodflow agent plugins with verified projections for Claude, OpenAI Codex, and Perplexity.",
   "name": "kodflow",
-  "description": "An opinionated Claude Code configuration: a work loop that leaves a trail, evidence-bound review, and specialists that check the documentation before they assert anything.",
   "owner": {
     "name": "kodflow",
     "url": "https://github.com/kodflow"
   },
   "plugins": [
     {
-      "name": "kodflow-workflow",
-      "description": "The work loop: open a tracked piece of work, research it, plan it, argue the plan, turn it into an executable contract, ship it. Each skill hands the next exactly what it needs, and every step leaves a trail the next session can read.",
       "author": {
         "name": "kodflow"
       },
       "category": "workflow",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-workflow"
-      }
+      "description": "The work loop: open a tracked piece of work, research it, plan it, argue the plan, turn it into an executable contract, ship it. Each skill hands the next exactly what it needs, and every step leaves a trail the next session can read.",
+      "name": "kodflow-workflow",
+      "source": "./plugins/kodflow-workflow"
     },
     {
-      "name": "kodflow-review",
-      "description": "Evidence-bound review and debugging. Findings cite real code and a counterexample; deterministic scanners run for real and their exit codes populate the report; an external non-LLM verifier can invalidate the whole run. Root-cause-first debugging refuses a fix nobody proved.",
       "author": {
         "name": "kodflow"
       },
       "category": "review",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-review"
-      }
+      "description": "Evidence-bound review and debugging. Findings cite real code and a counterexample; deterministic scanners run for real and their exit codes populate the report; an external non-LLM verifier can invalidate the whole run. Root-cause-first debugging refuses a fix nobody proved.",
+      "name": "kodflow-review",
+      "source": "./plugins/kodflow-review"
     },
     {
-      "name": "kodflow-devops",
+      "author": {
+        "name": "kodflow"
+      },
+      "category": "devops",
       "description": "Infrastructure, environment health and template sync — Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
+      "name": "kodflow-devops",
+      "source": "./plugins/kodflow-devops"
+    },
+    {
       "author": {
         "name": "kodflow"
       },
       "category": "devops",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-devops"
-      }
-    },
-    {
+      "description": "The shell side of the harness: super-claude on PATH instead of an alias, a session picker on TAB that lists only conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell.",
       "name": "kodflow-shell",
-      "description": "The shell side of the harness: super-claude as a real command on PATH instead of an alias, a TAB session picker that only offers conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell. The same hook installs the status-line binary from its releases when it is missing, so a marketplace update is all it takes to get it.",
+      "source": "./plugins/kodflow-shell"
+    },
+    {
       "author": {
         "name": "kodflow"
       },
-      "category": "devops",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-shell"
-      }
-    },
-    {
-      "name": "kodflow-specialists",
+      "category": "agents",
       "description": "Language, platform and concern specialists that routing dispatches to. Each verifies an API, a default, a limit or a deprecation against documentation before asserting it, returns what it consulted and what it could not confirm, and tries to break its own finding before reporting it.",
+      "name": "kodflow-specialists",
+      "source": "./plugins/kodflow-specialists"
+    },
+    {
       "author": {
         "name": "kodflow"
       },
-      "category": "agents",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-specialists"
-      }
-    },
-    {
+      "category": "hooks",
+      "description": "The lifecycle machinery the other plugins assume: shell-output compression that never rewrites a read whose bytes matter, a git guard, a delegation gate (code in a git repository is produced by subagents, the main thread reviews and merges), session context, a formatter, a turn-end quality gate, one structured log, the state of the project documents, a journal of refusals, and the session task list as five tools served by a mod (function hooks, Claude Code 2.1.293 or later) that keeps each agent's tasks apart for the status line. One script per event (16 events, 5 scripts), each a fixed sequence — gate, block, transform, observe — because hooks on the same event run in parallel and only a single script can order them. Every path that is not a deliberate block exits 0.",
       "name": "kodflow-hooks",
-      "description": "The lifecycle machinery the other plugins assume: shell-output compression that never rewrites a read whose bytes matter, a git guard, session context loading, quality gates, and structured logging. Wired across 18 events; every hook fails open, because a PreToolUse hook that exits non-zero blocks every shell call in the session.",
+      "source": "./plugins/kodflow-hooks"
+    },
+    {
       "author": {
         "name": "kodflow"
       },
       "category": "hooks",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-hooks"
-      }
-    },
-    {
+      "description": "Optional heads-up display beside the status line, as a mod (function hooks, Claude Code 2.1.293 or later): a Tasks pane with the open epics of kodflow-hooks' task list as a tree (subtasks, blockers, the critical path, the worker, model and effort on each task, the time since it last moved, a silent flag, the tasks waiting on the person) or as a graph by state, driven by keys and clicks, a clicked row or tab never moving from under the pointer; the only pane, so always the first tab and the one shown, its title counting the tasks left (the subagents are Claude Code's own list under the prompt); toasts for a task done, blocked or gone silent; a few words of each reply drawn in colour where the model marks them ({{r:…}} red, {{o:…}} orange, {{v:…}} green, {{p:…}} pink), the convention given in one system prompt section. Two more views beside the tree and the graph: « Refus », what kodflow-hooks refused (blocks.jsonl), newest first, the counts of the last hour and of the session, and a rule the person confirms with a click added to the project's .claude/settings.local.json; « Documents », the project's documents (docs.json) present, missing or ignored, a click ignoring or bringing one back in docs/manifest.json, « Créer » drafting the docs prompt in the prompt box, never sent. A last one, « Chasse », only while /hunt lists a run: each hunt's state, counter, pass, heavy queue, tip, Codex, pending decisions and the events since the view was last left, « figée » or « orpheline probable » when its beat is old, « reprendre » drafting /hunt --resume, never sent. No tool, no refusal; KODFLOW_COLORS=off turns off the colours and the section.",
       "name": "kodflow-hud",
-      "description": "Optional heads-up display beside the status line, as a mod: a Tasks pane (open epics, the worker on each task and how it stands, time since it moved, silent tasks, the person's tasks apart), its tab counting the open tasks, the only pane so always the first tab and the one shown (the subagents are Claude Code's own list under the prompt), a click on a task row never landing on something that moved, two more views (« Refus »: what kodflow-hooks refused, counted by the hour and the session, a rule confirmed by a click added to the project's .claude/settings.local.json; « Documents »: the project's documents present, missing or ignored, a click toggling docs/manifest.json, « Créer » drafting the docs prompt, never sent), toasts for a task done, blocked or gone silent, and a few words of a reply drawn in colour (red blocking, orange attention, green waiting on you, pink a decision you made). Refuses nothing; its one prompt section is the colour convention (KODFLOW_COLORS=off removes it). Needs Claude Code 2.1.293 or later, and kodflow-hooks for the task list.",
+      "source": "./plugins/kodflow-hud"
+    },
+    {
       "author": {
         "name": "kodflow"
       },
       "category": "hooks",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-hud"
-      }
-    },
-    {
+      "description": "ktn-linter's findings beside the prompt, as a mod (function hooks, Claude Code 2.1.299 or later). It completes the hooks ktn-linter installs and replaces none: they keep delivering the findings to the model, this mod only shows them. Active in a Go project only (the same predicate as ktn-linter's own resolver); inert where nothing draws (-p, the Agent SDK, Kepler).",
       "name": "kodflow-ktn",
-      "description": "ktn-linter's findings beside the prompt, as a mod (Claude Code 2.1.299 or later). Active in a Go project only, by the same predicate as ktn-linter's own resolver, and inert where nothing draws (-p, the Agent SDK, Kepler). It completes the hooks ktn-linter installs and replaces none: they keep delivering the findings to the model, this mod only shows them.",
-      "author": {
-        "name": "kodflow"
-      },
-      "category": "hooks",
-      "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-ktn"
-      }
+      "source": "./plugins/kodflow-ktn"
     },
     {
-      "name": "kodflow-gamedev",
-      "description": "Combat animation that is anatomically and martially right, for a game project that enables it in its own settings (never installed by install.sh). /move briefs a panel — anatomy, six martial areas with the declared tradition governing, animation craft, rig, Godot and three.js — and writes measurable constraints with their sources; /anim-review measures sampled clips against them and asks the owner's verdict; /anim-feedback keeps every verdict as an ADR that later runs read first; /reference fetches reference images with their licence; /meshy generates characters, weapons and props with Meshy, fetches them with their licence and judges them against the rig.",
       "author": {
         "name": "kodflow"
       },
       "category": "agents",
+      "description": "Combat animation that is anatomically and martially right, for game projects that enable it. /move briefs a panel (director, anatomy, six martial areas, animation craft, rig, imagery, Godot and three.js) and turns its sourced proposals into measurable constraints; /anim-review measures a sampled clip against them and asks the owner's verdict; /anim-feedback records that verdict as an ADR that every later run reads first; /reference fetches licensed reference images; /meshy generates characters, weapons and props with Meshy, fetches them with their licence and judges them against the rig. Enabled per project, never installed by the user installer.",
+      "name": "kodflow-gamedev",
+      "source": "./plugins/kodflow-gamedev"
+    },
+    {
+      "category": "review",
+      "description": "CodeRabbit review and autofix skills with its hosted MCP server (OAuth sign-in), pinned to an upstream commit. Opt-in: not part of the default installation.",
+      "installByDefault": false,
+      "name": "coderabbit",
       "source": {
-        "source": "git-subdir",
-        "url": "https://github.com/kodflow/claude-marketplace.git",
-        "path": "plugins/kodflow-gamedev"
+        "sha": "d8e182b7e7c5128e354fd7ff335286cf157cb500",
+        "source": "url",
+        "url": "https://github.com/coderabbitai/skills.git"
       }
     }
   ]

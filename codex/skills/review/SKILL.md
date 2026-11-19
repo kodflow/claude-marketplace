@@ -59,6 +59,19 @@ the arguments
 
 ---
 
+## Portable delegation
+
+For defensive review of a local diff, use this package's generated workflow
+on [Claude](workflow-claude.md),
+[Codex](workflow-openai.md), or
+[Perplexity](workflow-perplexity.md) when the installation includes it. Check
+required capabilities before starting. The workflow orders specialist,
+consolidation, and verification work. The existing inspection scope,
+coverage manifest, deterministic tiers, and local report still apply. When
+there is no packaged workflow, the steps below remain the native entry point.
+
+---
+
 ## Library facts
 
 Resolve a library's real API with the library-documentation tool +

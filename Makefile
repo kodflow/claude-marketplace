@@ -8,7 +8,7 @@
 # both, reading the workflows as YAML.
 
 GATES := mod-check
-ADVISORY := mod-latest.yml
+ADVISORY := mod-latest.yml plugins-latest.yml
 
 KTN := plugins/kodflow-ktn
 

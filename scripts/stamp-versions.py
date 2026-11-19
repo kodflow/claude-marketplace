@@ -1,81 +1,125 @@
 #!/usr/bin/env python3
-"""Stamp every plugin with a version derived from its own content.
+"""Stamp the root manifest of each plugin from a cycle-free content digest.
 
-Why a version at all: `claude plugin validate --strict` fails on "No version
-specified", and a plain strict run is the bar. Why not a hand-bumped one:
-`claude plugin update` detects an update by comparing the computed version, and
-a `version` in plugin.json wins over the commit SHA
-(https://code.claude.com/docs/en/plugins/loading.md#versions-and-updates), so a
-version nobody remembers to bump would freeze every user on their cached copy.
+The digest covers canonical plugin sources, including untracked files during a
+build, but excludes host projections and distribution output. The manifest
+version is removed before hashing, so one stamp followed by repeated checks is
+stable.
 
-The version is therefore a pure function of what the plugin ships: it changes
-exactly when a file under the plugin changes, and not otherwise. It is
-`0.0.0-r<12 hex>` over the git index entries of the plugin directory (mode,
-blob id, path), with plugin.json taken as canonical JSON minus its own
-`version` key, so stamping the version does not change the version.
-
-    scripts/stamp-versions.py            rewrite plugin.json where stale
-    scripts/stamp-versions.py --check    exit 1 and list stale plugins
+Only the root plugin.json is written. The Claude manifest
+(.claude-plugin/plugin.json) is a projection of it: run this script first, then
+`scripts/pluginctl.py build`. `--check` also reports a Claude manifest that is
+not the projection of the stamped root.
 """
-import hashlib, json, pathlib, re, subprocess, sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-MANIFEST = ".claude-plugin/plugin.json"
+from __future__ import annotations
 
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
 
-def git(*args, raw=False):
-    out = subprocess.run(["git", "-C", str(ROOT), *args], check=True,
-                         capture_output=True).stdout
-    return out if raw else out.decode()
-
-
-def compute(plugin):
-    h = hashlib.sha256()
-    prefix = f"plugins/{plugin}/"
-    entries = git("ls-files", "-s", "-z", "--", prefix).split("\0")
-    for entry in sorted((e for e in entries if e), key=lambda e: e.split("\t", 1)[1]):
-        meta, path = entry.split("\t", 1)
-        mode, blob, _stage = meta.split()
-        if path == prefix + MANIFEST:
-            doc = json.loads(git("cat-file", "blob", blob, raw=True))
-            doc.pop("version", None)
-            blob = hashlib.sha256(
-                json.dumps(doc, sort_keys=True, ensure_ascii=False).encode()
-            ).hexdigest()
-        h.update(f"{mode} {blob} {path}\n".encode())
-    return "0.0.0-r" + h.hexdigest()[:12]
+from pluginlib.manifest import CLAUDE_MANIFEST, render_claude_manifest
+from pluginlib.sources import source_files, trust_executable_mode
 
 
-def stamp(text, version):
-    line = f'"version": "{version}"'
-    if re.search(r'^\s*"version"\s*:', text, re.M):
-        return re.sub(r'("version"\s*:\s*)"[^"]*"', rf'\g<1>"{version}"', text, count=1)
-    return re.sub(r'(^\s*"name"\s*:\s*"[^"]*",?)(\n)',
-                  lambda m: m.group(1).rstrip(",") + ",\n  " + line + ("," if m.group(1).endswith(",") else "") + m.group(2),
-                  text, count=1, flags=re.M)
+EXCLUDED_PARTS = {".claude-plugin", ".codex-plugin", "dist", "__pycache__"}
+MANIFESTS = ("plugin.json",)
 
 
-def main():
-    check = "--check" in sys.argv
-    stale = []
-    for d in sorted((ROOT / "plugins").iterdir()):
-        mf = d / MANIFEST
-        if not mf.is_file():
+def _canonical_bytes(data: bytes, relative: str) -> bytes:
+    if relative in MANIFESTS:
+        document = json.loads(data.decode("utf-8"))
+        document.pop("version", None)
+        return json.dumps(
+            document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    return data
+
+
+def _generated(plugin: Path, relative: Path) -> bool:
+    if any(part in EXCLUDED_PARTS for part in relative.parts) and relative.as_posix() not in MANIFESTS:
+        return True
+    if relative.parts[:2] == ("io.github.kodflow", "projections"):
+        return True
+    return (
+        len(relative.parts) == 2
+        and relative.parts[0] == "agents"
+        and relative.suffix == ".md"
+        and (plugin / "io.github.kodflow" / "roles" / relative.stem / "role.yaml").is_file()
+    )
+
+
+def compute(root: Path, plugin: str) -> str:
+    digest = hashlib.sha256()
+    package = Path("plugins") / plugin
+    trust_executable = trust_executable_mode(root)
+    for source in source_files(root, package.as_posix()):
+        relative = source.path.relative_to(package)
+        if _generated(root / package, relative):
             continue
-        want = compute(d.name)
-        text = mf.read_text()
-        have = json.loads(text).get("version")
-        if have == want:
+        name = relative.as_posix()
+        mode = source.mode(root, trust_executable)
+        content = hashlib.sha256(_canonical_bytes(source.content(root), name)).hexdigest()
+        digest.update(f"{mode} {content} ".encode("ascii") + os.fsencode(name) + b"\n")
+    return "0.0.0-r" + digest.hexdigest()[:12]
+
+
+def _render(path: Path, version: str) -> str:
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["version"] = version
+    return json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+
+
+def main() -> int:
+    arguments = argparse.ArgumentParser()
+    arguments.add_argument("--check", action="store_true")
+    arguments.add_argument(
+        "--root", type=Path, default=Path(__file__).resolve().parent.parent
+    )
+    args = arguments.parse_args()
+    root = args.root.resolve()
+    stale: list[str] = []
+    projections: list[str] = []
+    for directory in sorted((root / "plugins").iterdir()):
+        if directory.is_symlink() or not directory.is_dir() or not (directory / "plugin.json").is_file():
             continue
-        stale.append(f"{d.name}: {have} -> {want}")
-        if not check:
-            mf.write_text(stamp(text, want))
-            assert json.loads(mf.read_text())["version"] == want
-    for s in stale:
-        print(("stale " if check else "stamped ") + s)
-    if check and stale:
-        print("run scripts/stamp-versions.py and commit the result", file=sys.stderr)
-        sys.exit(1)
+        path = directory / "plugin.json"
+        claude = directory / CLAUDE_MANIFEST
+        if any(item.is_symlink() for item in (path, path.parent, claude, claude.parent)):
+            print(f"cannot stamp linked manifest: {path.relative_to(root)}", file=sys.stderr)
+            return 1
+        version = compute(root, directory.name)
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        current = manifest.get("version")
+        if current != version:
+            stale.append(f"{path.relative_to(root)}: {current} -> {version}")
+            if not args.check:
+                path.write_bytes(_render(path, version).encode("utf-8"))
+        if claude.is_file():
+            try:
+                expected = render_claude_manifest({**manifest, "version": version})
+            except ValueError as error:
+                print(f"invalid Claude overlay in {path.relative_to(root)}: {error}", file=sys.stderr)
+                return 1
+            # A CRLF checkout of the generated file is still the projection.
+            if claude.read_bytes().replace(b"\r\n", b"\n") != expected:
+                projections.append(claude.relative_to(root).as_posix())
+    for item in stale:
+        print(("stale " if args.check else "stamped ") + item)
+    for item in projections:
+        print(f"{'stale' if args.check else 'regenerate'} projection {item}")
+    if args.check and (stale or projections):
+        print(
+            "run scripts/stamp-versions.py, then scripts/pluginctl.py build, and commit the result",
+            file=sys.stderr,
+        )
+    elif projections:
+        print("now run scripts/pluginctl.py build to regenerate the Claude manifests", file=sys.stderr)
+    return int(args.check and bool(stale or projections))
 
 
-main()
+if __name__ == "__main__":
+    raise SystemExit(main())

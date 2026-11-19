@@ -1,8 +1,8 @@
 ---
 name: tooling-specialist-github-actions
-description: GitHub Actions specialist — workflows, composite and reusable actions, matrix builds,
-  supply-chain hardening (pinned SHAs, OIDC, least-privilege tokens). Use when a task touches
-  .github/workflows files, action.yml, or a GitHub CI failure.
+description: GitHub Actions specialist — workflows, composite and reusable actions, matrix
+  builds, supply-chain hardening (pinned SHAs, OIDC, least-privilege tokens). Use when a task
+  touches .github/workflows files, action.yml, or a GitHub CI failure.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__github__*, mcp__context7__*, WebFetch
 model: sonnet
 effort: medium

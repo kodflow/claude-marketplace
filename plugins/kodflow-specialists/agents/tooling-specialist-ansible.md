@@ -1,8 +1,8 @@
 ---
 name: tooling-specialist-ansible
-description: Ansible specialist for playbooks, roles, inventories, collections and idempotence. Use
-  when ansible.cfg, playbooks or roles/ are present, or the task mentions ansible-lint, molecule or
-  vault-encrypted vars.
+description: Ansible specialist for playbooks, roles, inventories, collections and idempotence.
+  Use when ansible.cfg, playbooks or roles/ are present, or the task mentions ansible-lint,
+  molecule or vault-encrypted vars.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
 model: sonnet
 effort: medium

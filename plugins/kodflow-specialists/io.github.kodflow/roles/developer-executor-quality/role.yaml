@@ -1,0 +1,59 @@
+apiVersion: io.github.kodflow/role/v1
+id: developer-executor-quality
+description: Code quality executor — complexity, code smells, style violations and maintainability;
+  returns condensed JSON with commendations. Use when a review needs a fast mechanical pass
+  for function length, nesting, duplication or naming. Escalate to sonnet/medium when findings
+  need judgement beyond pattern matching or are ambiguous.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - repository.write
+  - shell.execute
+modelClass: fast
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-executor-quality task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: developer-executor-quality result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type: object
+  required:
+  - agent
+  - issues
+  - commendations
+  - metrics
+  properties:
+    agent:
+      type: string
+      minLength: 1
+    issues:
+      type: array
+      items:
+        type: object
+    commendations:
+      type: array
+      items:
+        type: string
+    metrics:
+      type: object
+    summary:
+      type: string
+    agent_feedback:
+      type: string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Write, Bash, SendMessage, TaskCreate, TaskUpdate, TaskList, TaskGet
+  model: haiku
+  effort: low
+  color: blue

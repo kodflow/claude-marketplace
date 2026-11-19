@@ -38,7 +38,8 @@ if [ ${#roots[@]} -eq 0 ]; then
     # CLAUDE_PLUGIN_ROOT points at ONE plugin; its siblings live two or three
     # levels up. Walking up and globbing covers clone and cache without
     # encoding either layout.
-    seed="${CLAUDE_PLUGIN_ROOT:-$(cd "$self_dir/../../../.." && pwd)}"
+    seed="${CLAUDE_PLUGIN_ROOT-}"
+    [ -n "$seed" ] || seed="$(cd "$self_dir/../../../.." && pwd)"
     d="$seed"
     for _ in 1 2 3 4; do
         d="$(dirname "$d")"

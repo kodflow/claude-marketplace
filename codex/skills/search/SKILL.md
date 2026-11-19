@@ -91,6 +91,17 @@ Workflow:
 
 ## Phase map
 
+For a multi-agent research run, use this package's generated workflow as the
+delegation schedule when the current host exposes it:
+[Claude](workflow-claude.md),
+[Codex](workflow-openai.md), or
+[Perplexity](workflow-perplexity.md). Apply the existing classification and
+freshness rules first, then dispatch the three read-only research tasks,
+validate their results, and synthesize once. Verify the host capabilities
+before dispatch. When the installation has no generated workflow, follow the
+phase map below. The context artifact and local knowledge base keep the
+existing format and update rules.
+
 | Phase | Action | Module |
 |-------|--------|--------|
 | 0 | Classify the query — decides whether the web is mandatory | this file |

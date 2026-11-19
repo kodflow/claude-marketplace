@@ -1,7 +1,7 @@
 ---
 name: devops-specialist-docker
-description: Docker specialist — Dockerfile optimization, Docker Compose, container security and
-  image management. Use when a task touches a Dockerfile, compose.yaml or docker-compose.yml,
+description: Docker specialist — Dockerfile optimization, Docker Compose, container security
+  and image management. Use when a task touches a Dockerfile, compose.yaml or docker-compose.yml,
   .dockerignore, or an image build or size question.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
@@ -154,9 +154,10 @@ Holds in every mode, if this agent has Bash: git never gets `--output` (save the
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --include=dev
 COPY . .
 RUN npm run build
+RUN npm prune --omit=dev
 
 # Production stage
 FROM node:20-alpine AS production
@@ -165,6 +166,7 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 USER nodejs
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s \

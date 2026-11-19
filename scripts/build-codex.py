@@ -7,44 +7,11 @@ entirely: Codex custom agents are TOML with `developer_instructions`, not
 Markdown with YAML. Generating rather than hand-porting is what keeps the two
 from drifting — a hand port is correct once.
 """
-import pathlib, re, sys, yaml
-try:
-    import tomli_w
-except ImportError:
-    tomli_w = None
+import pathlib, sys
+
+from pluginlib.codex_text import neutralise, render_agent, render_skill, split_frontmatter as split
 
 ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".")
-
-# Names that mean nothing on the other CLI. Rewritten, not deleted: an agent
-# told to "use mcp__context7__query-docs" on Codex would simply fail to find it.
-NEUTRALISE = [
-    (r"`mcp__context7__resolve-library-id`\s*then\s*`mcp__context7__query-docs`",
-     "the library-documentation tool available to you"),
-    (r"`mcp__context7__[a-z_-]+`", "the library-documentation tool"),
-    (r"`mcp__github__[a-z_*]+`",   "the GitHub tool"),
-    (r"`mcp__gitlab__[a-z_*]+`",   "the GitLab tool"),
-    (r"`AskUserQuestion`",         "a multiple-choice question to the user"),
-    (r"`Agent\(\*\)`|the `Agent` tool", "a subagent"),
-    (r'Skill\(skill="([a-z-]+)"[^)]*\)', r"the /\1 skill"),
-    (r"~/\.claude/skills/",        "~/.codex/skills/"),
-    (r"~/\.claude/agents/",        "~/.codex/agents/"),
-    # Plugin-root resolution has no Codex equivalent: skills are installed flat
-    # under ~/.codex/skills, so the fallback must point there, not at ~/.claude.
-    (r'\$\{CLAUDE_PLUGIN_ROOT:-\$HOME/\.claude\}', '${CODEX_HOME:-$HOME/.codex}'),
-    (r"\$ARGUMENTS",               "the arguments"),
-]
-
-# Claude tier -> Codex model + effort. Verified current 2026-09: GPT-6 Astra is
-# the flagship; the 5.6 family covers the tiers below it. Confirm before
-# trusting: this mapping is a starting point, not a measurement.
-TIER = {
-    "opus":   ("gpt-6-astra",   "high"),
-    "sonnet": ("gpt-5.6-sol",   "medium"),
-    "haiku":  ("gpt-5.6-luna",  "low"),
-    "fable":  ("gpt-6-astra",   "xhigh"),
-}
-
-CODEX_EFFORTS = {"low", "medium", "high", "xhigh"}
 
 # Plugins a project enables for itself and nobody installs for the user
 # (scripts/install-exclude.txt, which install.sh reads too): their skills and
@@ -59,19 +26,6 @@ EXCLUDE_PLUGINS = excluded_plugins(ROOT)
 
 def plugin_of(path):
     return path.relative_to(ROOT).parts[1]
-
-def neutralise(t):
-    for pat, rep in NEUTRALISE:
-        t = re.sub(pat, rep, t)
-    return t
-
-def split(raw):
-    if not raw.startswith("---\n"): return {}, raw
-    e = raw.find("\n---\n", 4)
-    return (yaml.safe_load(raw[4:e+1]) or {}), raw[e+5:]
-
-def toml_escape(s):
-    return s.replace("\\", "\\\\").replace('"""', '\\"\\"\\"')
 
 skills_out = ROOT / "codex" / "skills"
 agents_out = ROOT / "codex" / "agents"
@@ -93,16 +47,21 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
     entry = src / "SKILL.md"
     if entry.exists():
         fm, body = split(entry.read_text())
-        desc = " ".join(str(fm.get("description", "")).split())
-        # when_to_use is free text that often already starts with "Use when":
-        # strip that prefix so the join never reads "Use when when".
-        wtu = re.sub(r"^(use\s+)?(when\s+)?", "", " ".join(str(fm.get("when_to_use", "")).split()), flags=re.I)
-        if wtu: desc = f"{desc} Use when {wtu}"
-        meta = {"short-description": desc.split(".")[0][:80], "generated-from": f"plugins/*/skills/{name}"}
-        if fm.get("argument-hint"): meta["argument-hint"] = fm["argument-hint"]
-        out = {"name": fm.get("name", name), "description": desc, "metadata": meta}
-        entry_text = ("---\n" + yaml.safe_dump(out, sort_keys=False, allow_unicode=True, width=88).rstrip("\n")
-                      + "\n---\n" + neutralise(body))
+        # The flat install has no package root, so these documents must
+        # travel with their skill rather than be linked by package path.
+        companions = pathlib.Path("io.github.kodflow/projections/workflows")
+        package = src.parent.parent
+        for host in ("claude", "openai", "perplexity"):
+            source = package / companions / f"{name}-{host}.md"
+            if not source.is_file():
+                continue
+            if not source.resolve().is_relative_to(package.resolve()):
+                raise ValueError(f"{source}: workflow companion leaves the package")
+            target = dst / f"workflow-{host}.md"
+            target.write_bytes(source.read_bytes())
+            written.add(target)
+            body = body.replace(f"../../{companions.as_posix()}/{source.name}", target.name)
+        entry_text = render_skill(fm, neutralise(body), name)
         (dst / "SKILL.md").write_text(entry_text)
         written.add(dst / "SKILL.md")
         n_sk += 1
@@ -117,31 +76,35 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
 
 # ---- agents ---------------------------------------------------------------
 n_ag = 0
+portable_roles = set()
+schemas = pathlib.Path(__file__).resolve().parents[1] / "schemas"
+for package in sorted(ROOT.glob("plugins/*")):
+    if not package.is_dir() or package.name in EXCLUDE_PLUGINS:
+        continue
+    declarations = package / "io.github.kodflow" / "roles"
+    if not declarations.exists() and not declarations.is_symlink():
+        continue
+    from pluginlib.roles import load_roles
+
+    for role in load_roles(package, schemas):
+        target = agents_out / f"{role.id}.toml"
+        if target in written:
+            raise ValueError(f"duplicate portable role {role.id!r}")
+        target.write_bytes(role.render_codex())
+        written.add(target)
+        portable_roles.add((package.name, role.id))
+        n_ag += 1
 for src in sorted(ROOT.glob("plugins/*/agents/*.md")):
-    if plugin_of(src) in EXCLUDE_PLUGINS: continue
+    package_name = plugin_of(src)
+    if package_name in EXCLUDE_PLUGINS or (package_name, src.stem) in portable_roles:
+        continue
     fm, body = split(src.read_text())
     name = fm.get("name", src.stem)
-    model, effort = TIER.get(str(fm.get("model", "sonnet")), TIER["sonnet"])
-    # The agent's own effort wins over the tier's default. Codex agent TOML
-    # takes low/medium/high/xhigh; `max` is model-dependent there, so it is
-    # written as the highest level every Codex model accepts.
-    if str(fm.get("effort", "")) in CODEX_EFFORTS:
-        effort = str(fm["effort"])
-    elif str(fm.get("effort", "")) == "max":
-        effort = "xhigh"
-    desc = " ".join(str(fm.get("description", "")).split())
-    instr = neutralise(body).strip()
-    (agents_out / f"{name}.toml").write_text(
-        # The marker is what lets the installer tell a file it produced from a
-        # file the user wrote, so it can retire the first and never the second.
-        f'# generated-from: plugins/*/agents/{src.name}\n'
-        f'name = "{name}"\n'
-        f'description = """{toml_escape(desc)}"""\n'
-        f'model = "{model}"\n'
-        f'model_reasoning_effort = "{effort}"\n\n'
-        f'developer_instructions = """\n{toml_escape(instr)}\n"""\n'
-    )
-    written.add(agents_out / f"{name}.toml")
+    target = agents_out / f"{name}.toml"
+    if target in written:
+        raise ValueError(f"duplicate custom agent {name!r}")
+    target.write_text(render_agent(fm, body, src.name), encoding="utf-8")
+    written.add(target)
     n_ag += 1
 
 # ---- prune ----------------------------------------------------------------

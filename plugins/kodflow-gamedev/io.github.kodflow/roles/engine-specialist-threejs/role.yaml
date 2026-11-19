@@ -1,0 +1,39 @@
+apiVersion: io.github.kodflow/role/v1
+id: engine-specialist-threejs
+description: 'three.js r186 animation engineering: SkinnedMesh, Skeleton and Bone, world transforms,
+  AnimationMixer time control, GLTFLoader and GLTFExporter, procedural rigs, headless sampling
+  in Node, and the project adapter (clips, sampleWorld) behind the plugin''s three.js sampler.
+  Called by the kodflow-gamedev skills.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: engine-specialist-threejs task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: engine-specialist-threejs result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: opus
+  effort: medium
+  color: purple

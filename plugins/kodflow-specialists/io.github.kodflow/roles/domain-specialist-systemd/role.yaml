@@ -1,0 +1,39 @@
+apiVersion: io.github.kodflow/role/v1
+id: domain-specialist-systemd
+description: systemd semantics reviewer — unit-file directives and sections, Exec prefixes,
+  sd_notify, readiness and watchdog — checked against raw freedesktop.org man pages, never
+  a summary. Use when a plan or code writes or relies on unit files or sd_notify.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+codexEffort: high
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: domain-specialist-systemd task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: domain-specialist-systemd result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
+  model: opus
+  effort: high
+  color: purple

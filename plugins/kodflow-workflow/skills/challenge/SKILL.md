@@ -36,7 +36,7 @@ allowed-tools:
 - AskUserQuestion
 - mcp__context7__*
 - WebFetch(*)
-- Bash(bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh:*)
+- Bash(bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/detect-models.sh:*)
 - Bash(codex exec:*)
 - Bash(codex doctor:*)
 ---
@@ -131,7 +131,7 @@ Resolve the argument to a plan. Read the project's constraint ledger too
 (`CLAUDE.md` and `.claude/constraints.md`) — a plan that violates a recorded
 `MUST` is wrong before any reviewer opens it, and that check costs nothing.
 Same for the project's documents (the `ok` entries of
-`bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute`)
+`bash "${CLAUDE_PLUGIN_ROOT}"/skills/docs/scripts/docs.sh compute`)
 and the ADRs that concern the plan, each checked for a later ADR that amends or
 supersedes it. A superseded ADR is replaced by the one in force; a partly
 amended one is handed with its amendment, naming what of the earlier text still

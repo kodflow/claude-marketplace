@@ -1,0 +1,56 @@
+apiVersion: io.github.kodflow/role/v1
+id: martial-specialist-southeast-asia
+description: 'Southeast Asian martial arts expert: Filipino Arnis, Eskrima and Kali, Pencak
+  silat, Krabi-krabong, Muay Thai (Mae Mai, Look Mai), Bokator and Vietnamese arts. Names
+  in Thai, Khmer or Vietnamese script with a named romanization. Called only by the kodflow-gamedev
+  skills /move and /anim-review.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: martial-specialist-southeast-asia task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: martial-specialist-southeast-asia result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type: object
+  required:
+  - schema
+  - agent
+  - role
+  - status
+  - summary
+  properties:
+    schema:
+      const: panel-member/v1
+    agent:
+      const: martial-specialist-southeast-asia
+    role:
+      enum:
+      - governing
+      - consulted
+    status:
+      type: string
+    summary:
+      type: string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch
+  model: opus
+  effort: medium
+  color: green
+  experimental: true

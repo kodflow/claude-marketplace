@@ -89,6 +89,17 @@ issue "$work/gap2" 2.1.402 >/dev/null
 issue "$work/gap0" 2.1.403 >/dev/null
 [ "$(opened)" -eq 0 ] && ok "no gap closes the rolling issue" || ko "no gap: opened=$(opened)"
 
+# --- plugins-latest-issue.sh: the same rolling issue, its own label ----------
+rm -rf "$work/gh"; mkdir -p "$work/gh"
+pissue() { GH_BIN="$work/fakegh" FAKE_GH_DIR="$work/gh" bash "$root/scripts/plugins-latest-issue.sh" "$@"; }
+printf 'smoke: failure\n' > "$work/pgap1"
+pissue "$work/pgap1" "claude 2.1.400, codex 0.200.0" >/dev/null && pissue "$work/pgap1" "claude 2.1.401, codex 0.200.0" >/dev/null
+[ "$(opened)" -eq 1 ] && [ "$(created)" -eq 1 ] && grep -q -- '--label plugins-latest' "$work/gh/calls.log" && ! grep -q '^issue edit' "$work/gh/calls.log" \
+  && ok "plugins-latest: two runs on the same gap, one issue under its own label" || ko "plugins-latest dedup: opened=$(opened) created=$(created)"
+: > "$work/pgap0"
+pissue "$work/pgap0" "claude 2.1.402, codex 0.200.0" >/dev/null
+[ "$(opened)" -eq 0 ] && ok "plugins-latest: no gap closes the rolling issue" || ko "plugins-latest no gap: opened=$(opened)"
+
 # --- the gap compares the surface, the findings and the verdict, nothing else --
 cat > "$work/report.json" <<'EOF'
 {"manifest": {"errors": [], "warnings": [{"path": "version", "message": "No version"}], "notes": []},

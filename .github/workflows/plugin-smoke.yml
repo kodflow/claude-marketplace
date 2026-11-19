@@ -1,0 +1,108 @@
+# plugin-smoke — the marketplace installed the way a user installs it, in
+# throwaway homes, and compared with the tree (scripts/tests/smoke_plugins.py).
+#
+# Reusable: ci.yml calls it on every push to main and every pull request (it
+# blocks), marketplace-canary.yml on a release artifact, plugins-latest.yml with
+# the latest CLIs (advisory). workflow_dispatch runs it on a fresh runner.
+# The CLI versions default to .github/versions.env, their only pin.
+name: plugin-smoke
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to check out (default the caller's)
+        type: string
+        default: ''
+      claude-version:
+        description: Claude Code version (default .github/versions.env)
+        type: string
+        default: ''
+      codex-version:
+        description: Codex version (default .github/versions.env)
+        type: string
+        default: ''
+      artifact:
+        description: A marketplace-<sha> artifact of this run whose claude-full profile is served instead of the checkout
+        type: string
+        default: ''
+  workflow_dispatch:
+    inputs:
+      claude-version:
+        description: Claude Code version (default .github/versions.env)
+        type: string
+        default: ''
+      codex-version:
+        description: Codex version (default .github/versions.env)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: '3.13' }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '24' }
+
+      - name: Host CLI versions
+        env:
+          CLAUDE_INPUT: ${{ inputs.claude-version }}
+          CODEX_INPUT: ${{ inputs.codex-version }}
+        run: |
+          grep -E '^[A-Z_]+=[0-9A-Za-z.-]+$' .github/versions.env >> "$GITHUB_ENV"
+          [ -z "$CLAUDE_INPUT" ] || echo "CLAUDE_CODE_VERSION=$CLAUDE_INPUT" >> "$GITHUB_ENV"
+          [ -z "$CODEX_INPUT" ] || echo "CODEX_VERSION=$CODEX_INPUT" >> "$GITHUB_ENV"
+
+      - name: Install the marketplace loaders
+        run: |
+          npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}"
+          claude --version
+          codex --version
+
+      # Errors fail, warnings are shown. The strict reading (warnings as
+      # errors) belongs to the mod and mod-ktn jobs of ci.yml, at the floor the
+      # mods declare: on a newer engine its bundled types report the mods'
+      # TypeScript differently (TS5097, TS2345...), which is plugins-latest's
+      # to report, not a reason to block here.
+      - name: Every plugin passes the loader's validation
+        run: |
+          for p in plugins/*/; do
+            echo "== $p"
+            claude plugin validate "$p"
+          done
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: inputs.artifact != ''
+        with:
+          name: ${{ inputs.artifact }}
+          path: ${{ runner.temp }}/release
+
+      # The claude-full profile must hold the commit's plugins byte for byte
+      # (its lock's digests first); it is then served as the marketplace.
+      - name: The release artifact is the checked-out commit
+        if: inputs.artifact != ''
+        env:
+          RELEASE: ${{ runner.temp }}/release
+        run: |
+          python3 scripts/tests/release_tree.py "$RELEASE" "$RUNNER_TEMP/claude-full"
+          echo "SMOKE_TREE=$RUNNER_TEMP/claude-full" >> "$GITHUB_ENV"
+
+      - name: Claude and Codex install the marketplace as the tree says
+        run: |
+          bash scripts/tests/smoke-plugins.sh --claude ${SMOKE_TREE:+--tree "$SMOKE_TREE"} --work "$RUNNER_TEMP/smoke"
+          bash scripts/tests/smoke-plugins.sh --codex --work "$RUNNER_TEMP/smoke"
+
+      - name: Both hosts load the checkout as a local marketplace
+        run: bash scripts/tests/smoke-hosts.sh --require-both

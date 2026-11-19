@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https:[masked:entropy]",
+  "title": "Kodflow canonical plugin catalog",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "repository": { "type": "string" },
+    "owner": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string" }
+      },
+      "required": ["name", "url"],
+      "additionalProperties": false
+    },
+    "plugins": {
+      "description": "Local packages. Name, version and description live in each package's root plugin.json.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "path": { "type": "string", "pattern": "^plugins/[a-z0-9.-]+$" },
+          "category": { "type": "string" }
+        },
+        "required": ["name", "path", "category"],
+        "additionalProperties": false
+      }
+    },
+    "externals": {
+      "description": "Third-party plugins pinned to an exact upstream commit. Rendered only into the Claude marketplace, never packaged, stamped, inventoried or released.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$" },
+          "description": { "type": "string", "minLength": 1 },
+          "category": { "type": "string", "minLength": 1 },
+          "source": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string", "pattern": "^[a-z][a-z0-9+.-]*://\\S+$" },
+              "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+            },
+            "required": ["url", "sha"],
+            "additionalProperties": false
+          },
+          "installByDefault": { "const": false },
+          "targets": {
+            "type": "array",
+            "items": { "const": "claude" },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "required": ["name", "description", "category", "source", "installByDefault", "targets"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["$schema", "schemaVersion", "name", "description", "repository", "owner", "plugins"],
+  "additionalProperties": false
+}

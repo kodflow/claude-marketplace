@@ -1,8 +1,8 @@
 ---
 name: devops-specialist-infrastructure
-description: Infrastructure-as-code specialist — Terraform, OpenTofu and cloud provisioning; returns
-  JSON with plans and warnings. Use when a task touches .tf or .tfvars files, terragrunt.hcl, a
-  terraform plan, or cloud resource provisioning.
+description: Infrastructure-as-code specialist — Terraform, OpenTofu and cloud provisioning;
+  returns JSON with plans and warnings. Use when a task touches .tf or .tfvars files, terragrunt.hcl,
+  a terraform plan, or cloud resource provisioning.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: medium
@@ -52,7 +52,7 @@ validation:
   - "terraform fmt -check"
   - "terraform validate"
   - "tflint --recursive"
-  - "terraform-docs check"
+  - 'terraform-docs --config "$module_config" --output-check "$module_path"'
 
 security:
   - "No hardcoded credentials"
@@ -60,6 +60,10 @@ security:
   - "Least privilege IAM"
   - "Network security groups restrictive"
 ```
+
+Choose the module's actual terraform-docs configuration file for `module_config`.
+It supplies the formatter, output file, and output mode. If the project
+configures these in CI flags, use those same flags with `--output-check`.
 
 ## Best Practices Enforced
 

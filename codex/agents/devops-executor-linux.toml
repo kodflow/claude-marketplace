@@ -29,6 +29,11 @@ Restrict shell usage to these command families; anything outside is out of scope
 - `Bash(yum:*)`
 - `Bash(pacman:*)`
 
+For fallback diagnostics, also allow these inspection-only invocations:
+`getenforce`, `sestatus`, `systemd-analyze blame`, `systemd-analyze critical-chain`,
+`resolvectl status`, `vmstat 1 5`, and `iostat -x 1 5`. Keep other subcommands
+in these families out of scope.
+
 ## Role
 
 **Router + fallback executor** for Linux systems. Return **condensed JSON only**.
@@ -41,7 +46,7 @@ systemd semantics are not this agent's: whether a directive exists, what a unit-
 
 ```yaml
 detect_distro:
-  command: "cat /etc/os-release 2>/dev/null | grep -E '^ID=' | cut -d= -f2 | tr -d '\\"'"
+  method: "Read /etc/os-release and extract the ID field"
 
   routing_table:
     debian: os-specialist-debian

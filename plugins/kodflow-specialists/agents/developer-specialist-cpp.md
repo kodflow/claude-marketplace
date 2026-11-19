@@ -1,9 +1,9 @@
 ---
 name: developer-specialist-cpp
 description: C++ specialist — analyses C++ but has no Write tool and does not create worktrees,
-  commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when a
-  change touches .cpp, .hpp or .cc files, or CMakeLists.txt. Escalate to opus/medium when it spans
-  several modules, threads or atomics, or a wire protocol.
+  commit, or use gh; a fix brief goes to general-purpose with [general-purpose-ok]. Use when
+  a change touches .cpp, .hpp or .cc files, or CMakeLists.txt. Escalate to opus/medium when
+  it spans several modules, threads or atomics, or a wire protocol.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: sonnet
 effort: medium
@@ -172,9 +172,9 @@ CheckOptions:
  * @brief Concept for types that can be serialized to string.
  */
 template <typename T>
-concept Stringifiable = requires(T t) {
+concept Stringifiable = requires(const T& t) {
     { std::to_string(t) } -> std::convertible_to<std::string>;
-} || requires(T t) {
+} || requires(const T& t) {
     { t.to_string() } -> std::convertible_to<std::string>;
 };
 
@@ -271,7 +271,7 @@ template <typename T>
         | rv::transform([](const T& x) { return x * T{2}; })
         | rv::take(10);
 
-    return std::vector<T>(result.begin(), result.end());
+    return std::ranges::to<std::vector<T>>(result);
 }
 
 /**
@@ -328,11 +328,9 @@ public:
         }
     }
 
-    // Rule of Five: Non-copyable, movable
+    // The owning unique_ptr can move without moving the live connection.
     DatabaseConnection(const DatabaseConnection&) = delete;
     DatabaseConnection& operator=(const DatabaseConnection&) = delete;
-    DatabaseConnection(DatabaseConnection&&) noexcept = default;
-    DatabaseConnection& operator=(DatabaseConnection&&) noexcept = default;
 
 private:
     explicit DatabaseConnection(std::string_view conn_str)

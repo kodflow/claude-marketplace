@@ -15,7 +15,7 @@ reports. Neither shows in the output.
 ## 1. Resolve, never hardcode
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/_shared/scripts/detect-models.sh
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/_shared/scripts/detect-models.sh
 ```
 
 **A hardcoded top model is wrong the day a better one ships**, and on the current

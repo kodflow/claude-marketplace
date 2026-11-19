@@ -89,7 +89,7 @@ before_approval:
   1_types: "tsc --noEmit passes with zero errors"
   2_lint: "eslint . --max-warnings 0"
   3_format: "prettier --check ."
-  4_tests: "vitest run --coverage >= 80%"
+  4_tests: "vitest run --coverage.enabled --coverage.thresholds.lines=80 --coverage.thresholds.functions=80 --coverage.thresholds.branches=80 --coverage.thresholds.statements=80"
   5_docs: "All exports have JSDoc"
 ```
 
@@ -127,11 +127,26 @@ before_approval:
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
+const typescriptFiles = ['**/*.{ts,tsx,mts,cts}'];
+// Match files included by the actual tsconfig files. This example's
+// tsconfig includes src/. Add tests and scripts when their projects include them.
+const projectFiles = ['src/**/*.{ts,tsx,mts,cts}'];
+
 export default tseslint.config(
   eslint.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
   {
+    files: typescriptFiles,
+    extends: tseslint.configs.recommended,
+  },
+  {
+    files: projectFiles,
+    extends: [
+      ...tseslint.configs.strictTypeChecked,
+      ...tseslint.configs.stylisticTypeChecked,
+    ],
+    languageOptions: {
+      parserOptions: { projectService: true },
+    },
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/explicit-function-return-type': 'error',

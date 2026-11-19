@@ -1,9 +1,9 @@
 ---
 name: developer-commentator-worker
-description: Comment auditor for a single file — comments explain WHY not WHAT, functions carry
-  docstrings with params, types and return; returns JSON. Use when one source file needs its
-  comments or docstrings audited or fixed. Escalate to sonnet/medium when the WHY cannot be inferred
-  from the code and needs judgement.
+description: Comment auditor for a single file — comments explain WHY not WHAT, functions
+  carry docstrings with params, types and return; returns JSON. Use when one source file needs
+  its comments or docstrings audited or fixed. Escalate to sonnet/medium when the WHY cannot
+  be inferred from the code and needs judgement.
 tools: Read, Edit, Grep
 model: haiku
 effort: low
@@ -83,7 +83,8 @@ Return **only** valid JSON (no markdown fences, no explanation):
 }
 ```
 
-If no changes needed: return JSON with empty changes array and zero counts.
+If no changes are needed, return an empty `changes` array and report the actual
+audit counts, including the number of functions skipped.
 
 ---
 

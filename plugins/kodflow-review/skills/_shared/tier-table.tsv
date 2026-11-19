@@ -1,4 +1,4 @@
-# sha256 2062daae78027fb8f0a28423afc5ffd2307ec245595f20ab07547406e92c9721
+# sha256 087d24d343c82f1ed1eb2133914fd57fdbd829c4907cd78037d2e5b66d765387
 # Model and effort of every delegation (Agent call or Workflow agent()).
 # This table is the instruction that explicitly asks for an effort: pass on the call the model and the effort of the row that matches the role, unless the agent definition pins them.
 # For agent() in a Workflow, this rule replaces the built-in guidance to omit model and effort.

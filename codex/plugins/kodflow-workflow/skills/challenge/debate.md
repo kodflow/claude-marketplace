@@ -1,0 +1,473 @@
+# /challenge — Phases 1-2: the panel and the rounds
+
+## Phase 1 — who is actually on the panel
+
+The panel is **never three generic reviewers**. It is three lenses *plus every
+installed specialist whose domain the plan touches*, and the specialists are the
+half that catches the errors a generalist cannot see.
+
+### 1.1 What does the plan touch?
+
+Read the plan and the files it names. Do not guess from the prose alone — open
+what it points at.
+
+```bash
+ls ~/.codex/agents/*.md | xargs -n1 basename | sed 's/\.md$//'
+```
+
+Route on evidence using the shared table in `../_shared/specialists.md` — one
+specialist per matched domain. That file is the single source of truth for the
+routing, so `/challenge`, `/feature` and `/fix` never disagree about who reviews
+what.
+
+**Every match is dispatched.** A plan touching Go and Kubernetes gets both, and
+the panel is six reviewers, not three. Skipping a matched specialist because the
+panel "feels big enough" is exactly how a plan ships with a defect the installed
+specialist would have named on sight.
+
+**No match at all** — a pure prose, process or documentation plan — is the only
+case where the panel is the three lenses alone. Say so explicitly; do not let it
+pass as normal.
+
+### 1.2 The full panel
+
+Every lens reviewer is a **review worker** under `../_shared/model-policy.md`,
+so all three take that role's tier and effort — not a cheaper one because the
+lens sounds lighter. An operator lens that misses a rollback hazard costs
+exactly what a correctness lens missing a race costs.
+
+| Reviewer | Lens | Model | Availability |
+|----------|------|-------|--------------|
+| **architect** | Is the shape right? Boundaries, coupling, what this makes hard later. | review-worker tier | always |
+| **sceptic** | What is assumed and unproven? Where does this fail? | review-worker tier | always |
+| **operator** | What happens at 3am? Rollback, migration, blast radius, observability. | review-worker tier | always |
+| **`<specialist>`** | Is this correct *in this technology*? Idiom, footgun, version reality. | its own frontmatter — a specialist's model is part of its definition, and the policy does not override it | one per matched domain |
+| **codex** | An outside-the-family read of the same plan. | — | only when the CLI answers and not `--no-codex` |
+
+The three lenses are chosen to *conflict*: the architect wants the boundary, the
+operator wants the smallest deployable change, the sceptic wants evidence for
+both. Specialists conflict with all three, because a language's actual
+constraints do not care what shape anyone wanted.
+
+### 1.3 Every specialist must cite what it checked
+
+`../_shared/specialists.md` defines what a specialist owes back: `consulted`
+(the sources actually checked, per claim that needed it: a documentation URL, a
+source file read at a named revision as `path@rev`, or a scratch measurement with
+its command and result) and `unverified` (what it could not confirm). Put that
+requirement in every specialist brief.
+
+In a technology objection, `consulted` cites at least one entry of the
+brief's **reference sources** (Phase 2) that substantiates the claim — a cited
+entry that does not say what the objection says is no evidence — or an
+authoritative source outside that list that substantiates it (the vendor's
+documentation, a raw manual page, the source read at a revision), with the
+topic it settles, whether the list already covers that topic or not. A `path@rev` read and a scratch
+measurement stay valid evidence beside it.
+
+**A technology objection with an empty `consulted` list is a memory claim.**
+Route it to *needs the user* or send it back for verification — do not accept it
+as evidence. That is the whole reason for dispatching a specialist rather than
+reasoning about the technology yourself: not that it knows more, but that it
+goes and checks.
+
+### 1.4 Codex
+
+Verified working on this machine with CLI 0.153.4 and ChatGPT-token auth. Probe
+first — the panel must never claim a reviewer that did not run:
+
+```bash
+command -v codex >/dev/null 2>&1 && codex doctor 2>&1 | grep -q "auth is configured"
+```
+
+Invoke it as a structured panel member, not as a chat. `$SCHEMA` is
+`$SCRATCH/codex-schema-r$ROUND.json`: every file named `codex-*` is for the
+external CLI alone, and the other briefs say so.
+
+```bash
+codex exec --skip-git-repo-check --ephemeral -s read-only \
+  -m "$CODEX_MODEL" \
+  -c model_reasoning_effort="high" \
+  --output-schema  "$SCHEMA"   \
+  -o               "$OUT"      \
+  "Follow the reviewer brief on stdin. Return objections only." \
+  < "$SCRATCH/codex-brief-r$ROUND.md"
+```
+
+Why each flag earns its place:
+
+| Flag | Why |
+|------|-----|
+| `--output-schema` | the six fields the Claude reviewers answer in prose, given as JSON, so triage reads every panel member by the same fields; the objections come back as an array, and its order gives their local numbers; from round 2 the schema adds a `prior` array, one `{id, verdict, reason, evidence, remedy}` per row of Codex's triage-ID table (evidence and remedy filled on a reopen), or its verdicts on prior objections have no field to land in |
+| `-o <file>` | the verdict lands in a file rather than being scraped out of progress output |
+| `-s read-only` | a reviewer has no business writing; the sandbox makes that structural rather than a request |
+| `--ephemeral` | no session state for a one-shot review |
+| `-c model_reasoning_effort=` | effort is a config key on this CLI, not a flag |
+| `-m <model>` | set it from `../_shared/model-policy.md`, resolved — never hardcoded |
+
+The **complete reviewer brief** goes in on **stdin**, never `plan.md` alone: the
+brief 2.1 builds for every reviewer, opening with `Plan review mode` like a
+specialist's, argued from the outside-the-Claude-family lens, with the plan
+inline, the constraints, the project records, the reference sources, the
+scratch directory and, from round 2, the prior objections and Codex's own
+triage-ID table. Write it to `$SCRATCH/codex-brief-r$ROUND.md`, `ROUND` being
+the round number, when the round's briefs are built. Fed the plan alone,
+Codex has neither the sources its objections must cite nor the mapping its
+prior-objection verdicts answer. A prompt argument and stdin are both
+accepted, and stdin arrives as a `<stdin>` block.
+
+A non-zero exit, a timeout, an empty output file or output that does not validate
+against the schema all mean the same thing: **Codex did not review.** Say so in
+the panel line and continue with the Claude reviewers. Never fabricate its
+verdict, and never let its absence quietly shrink the panel to two.
+
+### 1.5 Announce the panel
+
+Every run, before the first round:
+
+```
+Plan touches: Go · Kubernetes · GitHub Actions
+Panel (6): architect · sceptic · operator   [review-worker tier, resolved]
+         + developer-specialist-go · devops-specialist-kubernetes
+         + tooling-specialist-github-actions
+         codex: absent (CLI not installed)
+```
+
+If a domain matched but its specialist is not installed, say that too — it is a
+gap in the panel, and the user should know the plan went unreviewed from that
+angle rather than assume it passed.
+
+## Phase 2 — the rounds
+
+`N = --concurrency` (default 3, hard max 6). Each round is four steps.
+
+Before round 1, create one scratch directory for the whole run, outside the
+project, and name it in every brief:
+
+```bash
+TS="$(date +%Y%m%d-%H%M%S)"
+SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/challenge-${TS}.XXXXXX")"
+```
+
+Its top level holds the round records only (the briefs, Codex's `codex-*`
+brief and schema, `plan-r$ROUND.md`, `triage-r$ROUND.md`). Each reviewer gets a subdirectory of its own, created
+before dispatch (`mkdir "$SCRATCH/<reviewer>"`, the lens or agent name), so
+reviewers running in parallel never overwrite or read each other's files. That
+subdirectory is the only place a reviewer may write (a throwaway measurement, a
+fetched source file, a patched copy), and only where its own Command scope
+allows it. A brief that names
+no scratch directory leaves the reviewer read-only everywhere: the claim it could
+have measured goes under `unverified`.
+
+Gather the **project records** once too: the documents and ADRs Phase 0 already
+hands to reviewers, the threat model when the repository keeps one (what is
+public, who may attack it), the verification scripts the plan cites (a dependency or
+layering check, a lint gate), and the benchmark methodology file when the plan
+makes a performance claim. When the plan edits a file the repository keeps in
+several copies or generates, name the canonical source and the check that
+holds the others (a CI diff, a sync or build script), so no reviewer argues
+from a copy. Find them in the repository and the plan; each goes
+in the brief as a path with a one-line purpose, so a specialist reads the
+domain's founding decisions instead of rediscovering them.
+
+Build the **reference sources** once too, and before round 1. Walk the plan
+section by section and list every technology topic it touches — a socket unit,
+a service unit, kill behaviour, a notify protocol, an API at a named version —
+using the same evidence that routed the specialists in 1.1, so the topic list
+and the panel agree. For each topic record at least one source, found in the
+order "What every specialist owes back" in `../_shared/specialists.md` sets.
+Each entry is a topic, a URL or a path, and a one-line purpose; a page already
+downloaded as plain text into `$SCRATCH` is cited by its scratch path and its
+URL. A topic settled by reading upstream source names the exact tag the project
+deploys, taken from its version pin (a lock file, a versions file), so the
+specialist reads that revision rather than looking it up. **A topic with no entry blocks dispatch**: fill the gap first, or a missing
+page (the `systemd.socket(5)` the plan relied on) surfaces only in round 2.
+
+### 2.1 Argue — all reviewers, one message, in parallel
+
+Each reviewer gets the **plan text inline**, not a path. A reviewer that has to
+go fetch the plan spends its turns fetching instead of judging.
+
+The brief, per reviewer. Every brief opens with the literal marker `Plan review
+mode` and carries the same six-field contract: that marker is what switches a
+specialist from the output format of its own definition to this one, and the
+caller's format wins over the agent's, always (see "Plan review mode" in
+`../_shared/specialists.md`). The three lenses run on `general-purpose` by
+design, each call passing `model: "opus"` and `effort: "high"` (review worker,
+model-policy §2: a built-in agent pins neither), so their brief opens with `[general-purpose-ok]`, the marker the
+kodflow-hooks routing gate reads as a deliberate dispatch, then the line
+`Plan review mode`; a specialist's brief starts with `Plan review mode` alone.
+
+```
+[general-purpose-ok]
+Plan review mode
+Here is a plan. Argue against it from the <lens> lens.
+
+<the full plan>
+
+Constraints this project has already accepted:
+<the MUST/MUST NOT constraints from the ledger, verbatim>
+
+Decisions the user made on this plan (settled; an objection to one names a
+failure the user did not weigh, and triage puts it to the user):
+<question — answer, per decision, or "none">
+Everything else in the plan is the plan's own choice, open to objection.
+
+Project records:
+<path — one-line purpose, per record>
+
+Reference sources:
+<topic — URL or path (and its scratch copy, if downloaded) — one-line purpose, per entry>
+
+Scratch directory: <$SCRATCH>/<reviewer>
+Yours alone, and the only place you may write, and only what your Command scope allows; never
+write in the repository. Scratch scripts import the project's dependencies by
+absolute path. To test a patch to the code under review, copy the source
+directory into the scratch directory, symlink node_modules (or the equivalent)
+to the repository's, and patch the copy; never install through that link.
+
+Revision: review the WORKING TREE as it is on disk; when it differs from
+HEAD, say which one each file:line cites (path@HEAD or path@worktree).
+<the files that differ from HEAD, or "none">
+(Or, when the plan is judged against a commit: Revision: <ref> — read files
+as git show <ref>:<path> and cite path@<ref>.)
+
+Reading order: <the files in the order to read them: base plan, amendments, triage>
+
+Measurements: <per figure the plan or this brief states: figure — command → result>
+A description of the code or of a file in the plan or this brief is a claim:
+compare each change it proposes with the current text before objecting.
+
+Measurement: tools outside your Command scope (docker, image tools…) are
+not yours to run; name the exact command that would settle the claim under
+unverified, so the caller can run it.
+
+Previous round (round 2 on; omit in round 1): the plan you reviewed last round
+is <$SCRATCH>/plan-r<N-1>.md, its triage <$SCRATCH>/triage-r<N-1>.md. Judge
+from these and the prior objections below, never from your memory of earlier
+rounds.
+
+Prior objections (round 2 on; omit in round 1):
+<per objection: ID, claim verbatim, remedy, disposition (accepted / rejected /
+needs the user / unverified), and the rejection proof or the plan location where
+the fix was applied>
+
+Your objections by triage ID (round 2 on; omit in round 1):
+| triage ID | your local number | round |
+<one row per triage ID that carries an objection of yours, merged ones included;
+one local objection split across two IDs is a row for each ID>
+Before any new objection, under a heading "Prior objections", give
+one verdict per triage ID: whether the fix is correct, or why the rejection is
+wrong, one line each as `<ID> — fixed | reopen — <reason>` (fixed: nothing is
+left to do on that ID, the fix holds or the rejection stands). A reopen adds
+two lines under it: `evidence:` (file:line, or the plan line) and `remedy:`
+(the change that closes it). A defect
+introduced BY an accepted fix is a reopen of that ID, not a new objection.
+A negative verdict reopens that
+ID; do not raise it again as a new objection. These verdicts do not count
+against the budget below.
+How to rule, case by case:
+- remedy right but mis-scoped → reopen, and say the right scope;
+- fix right in one part, wrong in another → reopen, naming the part that fails;
+- fix recorded as applied in the triage but absent from the plan text → reopen;
+- a new fact on an ID you reopen → in that verdict's reason, not a new objection;
+- a defect born where a later plan step meets a fix → reopen if that step is
+  the fix of that ID (your own remedy included), else a new objection;
+- a defect one ID's fix makes in text another ID's remedy owns → reopen the ID
+  whose fix made the change, and name the other ID in the reason.
+Your objections go in your answer, never in a file of the scratch directory.
+
+Return objections only, in prose, each field labelled; the output format of
+your own definition does not apply here, and an output schema replaces this
+layout only where the caller enforces one (the external CLI): the `codex-*`
+files of the scratch directory bind no other reviewer, and another reviewer's
+subdirectory is not yours to read. Number your new
+objections 1, 2, 3… (a label, not a field). One objection holds one claim; two
+findings with one remedy may share it, each claim stated. At most 8 objections, each with the six fields:
+severity (blocking / material / minor), claim, evidence (file:line, or the plan
+line it contradicts), remedy, consulted (the sources you checked, one entry per
+source: a URL, a file read at a revision as path@rev, or a scratch measurement
+with its command and result), unverified (what you could not confirm, and what
+you tried). A technology objection cites in consulted at least one reference
+source that substantiates the claim, or an authoritative outside source that
+does, naming the topic it settles.
+With more than 8, keep the most severe; never shorten a field to fit more. An
+objection with no concrete failure behind it is noise — leave it out. If the
+plan is sound from your lens, say so and stop; do not manufacture an objection
+to look useful.
+```
+
+Every `<…>` above is filled before dispatch: the scratch directory and the
+previous-round files are given as literal absolute paths, and the Revision line
+lists what `git status --short` shows, or says none. A brief still carrying a
+placeholder such as `<$SCRATCH>` or `<scratch>` is not dispatched: the reviewer
+would spend its turns looking for the path.
+
+Structured return per objection: `severity`, `claim`, `evidence`, `remedy`,
+`consulted`, `unverified` — the six fields of the contract, the same for the
+lenses, the specialists and Codex.
+
+**The budget is a count, never a length.** Every brief states "at most 8
+objections, each with the six fields", and no brief sets a word or character
+limit on the response: under a word limit, eight objections fit only by
+compressing the very fields triage needs. A reviewer's local number is a label
+on the objection, not a seventh field; it restarts at 1 in every round, and
+each later round's new objections are mapped exactly like round 1's.
+
+### 2.2 Triage — you, not a reviewer
+
+Give each objection a stable ID, `R<round>-<n>`, kept for the rest of the run,
+and record against it the reviewer, the round and that reviewer's local
+number. When objections from several reviewers are merged into one triage ID,
+the ID keeps every contributing reviewer and local number, and the claim text
+of each. That mapping is what each reviewer's table in the next brief is cut
+from, so no reviewer has to rebuild it from summaries.
+
+**A reply cut short is read in full, not re-asked.** kodflow-hooks keeps
+each subagent's whole last message at SubagentStop in
+`${CLAUDE_CONFIG_DIR:-~/.claude}/kodflow/sessions/<session id>/agents/<agent id>.md`:
+when a reviewer's answer arrives truncated, triage from that file. Codex's
+verdict is already in its `-o` file.
+
+**Negative verdicts reopen, under their existing IDs.** From round 2, read
+every reviewer's "Prior objections" verdicts before the new objections. A
+verdict that an accepted objection's fix is wrong or missing, or that a
+rejection is wrong, reopens that objection under its existing ID, never a new
+one: judge it again below, with the reviewer's reason as fresh evidence and the
+contributing reviewer added to its record. A reopened objection judged
+accepted is an accepted objection of this round for the stopping rule, so a
+round cannot converge while an accepted defect is reported unfixed.
+
+A reviewer that cites an authoritative source outside the reference sources
+has found a gap or a better source, whether the list covers that topic or not
+(the raw freedesktop.org page where the list named a Context7 entry): when it
+substantiates the claim, take it as evidence and add that source to the list for
+the next round. A technology objection citing no source, listed or outside,
+that substantiates it falls under the empty-`consulted` rule of 1.3.
+
+A verdict line `<ID> — reopen — <reason>` is that negative verdict, and so is
+a defect a reviewer reports as introduced by an accepted fix, under whatever
+heading it arrives: it reopens that ID, it never opens a new one. `<ID> — fixed`
+leaves the ID as it was judged.
+
+**A measurement named under `unverified` may be yours to run.** Where its
+output goes is not enough. Run it during triage only when all three hold — it
+writes nothing outside `$SCRATCH`, changes nothing in the repository or on the
+host (no install, no container mounting the repository read-write), and makes
+no network request that changes state (no push, no publish, no remote API
+write) — and it runs either in an enforced read-only sandbox or with the
+user's explicit approval of that command, within your own Command scope. Then
+take its result as evidence, with the command. Anything else stays
+`unverified` with the command in the record, or goes to the user in 2.3 when
+the claim decides the plan.
+
+Then judge each objection against the plan and the codebase, opening every
+`file:line` it rests on first: a cited line that does not say what the claim
+says is no evidence.
+
+| Verdict | Meaning | Effect |
+|---------|---------|--------|
+| **accepted** | It is right; the plan changes | rewrite in 2.4 |
+| **rejected** | Provably wrong — cite what proves it | recorded, never silently dropped |
+| **needs the user** | A real choice only the user can make — a trade-off, a priority, a scope call | phase 2.3 |
+| **unverified** | Nobody could reach the documentation that would settle it | recorded as an open uncertainty, **not** put to the user |
+
+A reviewer contradicting another is normal and often the most useful signal.
+Do not average them: pick, and say why.
+
+**Rejected objections are recorded in the output.** A reviewer that was wrong
+about something specific is information for the next round.
+
+The next round's briefs carry every objection so far **with its text**, not its
+ID alone: a reviewer handed `R1-3: fixed` cannot tell whether the fix answers
+the claim or misreads it.
+
+### 2.3 Ask — the moment a difficulty appears
+
+Any objection landing in *needs the user* stops the round and becomes a question
+**immediately**. Not batched to the end, not resolved by assumption.
+
+a multiple-choice question to the user, one question per genuine difficulty, and each question:
+
+- offers exactly **3 options**
+- marks **one as recommended** — put it first and append `(Recommended)` to its
+  label. **This is mandatory.** A question with no recommendation pushes the
+  decision back without the analysis that earned it.
+- the free-text answer is always available (the tool adds it), so a fourth path
+  is never blocked
+
+Each option's description says what it costs, not just what it is. "Simpler, but
+you cannot add per-tenant limits later without a migration" is useful; "simpler
+approach" is not.
+
+Cap: **4 questions per round.** Beyond that the plan is too unformed to debate —
+say so and send it back to `/plan`.
+
+Answers become **constraints for every later round**. A reviewer that re-opens a
+settled question is answered with the decision, not re-argued.
+
+### 2.4 Rewrite — the plan changes, not its defence
+
+Apply every accepted objection and every answer to the plan text itself. The
+rewritten plan is what round N+1 argues with.
+
+Before the next round's briefs are built, write the plan this round reviewed to
+`$SCRATCH/plan-r$ROUND.md` and this round's triage (every ID with its claim,
+remedy, disposition and reviewers) to `$SCRATCH/triage-r$ROUND.md`: the
+"Previous round" line of the next brief names both, so no reviewer rebuilds the
+earlier state from its own history.
+
+**Do not defend the plan.** If an objection is accepted, the plan was wrong; say
+what changed. Arguing back is how three rounds produce zero improvement.
+
+### Stopping
+
+Stop at the first of:
+
+- a round produces **no accepted objection**, new or reopened, *and* the plan
+  was not rewritten during it — only then is it converged. A round where the user's answers
+  changed the plan ends with a version nobody reviewed; that is not
+  convergence, and calling it so is how an unreviewed rewrite ships.
+- `N` rounds are done
+- the user answers a question in a way that invalidates the plan's premise —
+  stop and say the plan needs redoing, do not patch around it
+
+Report the round count and **which of three states the plan ended in**:
+
+| State | Means |
+|-------|-------|
+| `converged` | last round raised no accepted objection and changed nothing |
+| `rewritten-unreviewed` | the last round changed the plan; no reviewer has seen that version |
+| `review-incomplete` | the round cap was reached with objections still open |
+
+Never report the last two as convergence. A run that converged in one round is a
+better result than one that used all three; a run that hit the cap is not a
+result at all, it is a plan that needs another pass.
+
+## Recording
+
+Per round, keep: objections raised, the triage ID ↔ reviewer local number
+mapping, verdict on each, the verdicts on prior objections and the IDs they
+reopened, questions asked and answered, what changed in the
+plan, and any source added to the reference sources. This becomes the *What
+changed* / *What you decided* / *What is still open* sections of the handover,
+and — when the plan belongs to a `/feature` or `/fix` subject — the comment posted on its issue.
+
+## Guardrails
+
+| Action | Status |
+|--------|--------|
+| Name a reviewer that did not run | **FORBIDDEN** |
+| Fabricate a Codex verdict when the CLI is absent | **FORBIDDEN** |
+| Manufacture an objection to fill a round | **FORBIDDEN** |
+| Batch a difficulty to the end instead of asking when it appears | **FORBIDDEN** |
+| Ask without marking one option recommended | **FORBIDDEN** |
+| Ask more than 4 questions in a round | **FORBIDDEN** — send it back to `/plan` |
+| Drop a rejected objection from the record | **FORBIDDEN** |
+| Defend the plan instead of rewriting it | **FORBIDDEN** |
+| Re-argue a question the user already answered | **FORBIDDEN** |
+| Run past `--concurrency` | **FORBIDDEN** |
+| Dispatch a brief with a technology topic missing from its reference sources | **FORBIDDEN** |
+| Set a word or character limit on a reviewer's response | **FORBIDDEN** — the budget is at most 8 objections, each with the six fields |
+| Hand a reviewer prior objections without its own triage ID table | **FORBIDDEN** |
+| Dispatch a brief that still carries a placeholder path | **FORBIDDEN** — give the literal path |

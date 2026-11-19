@@ -132,7 +132,7 @@ Run the locator once and keep its output; it answers both questions in one shot
 and is the only source of truth for paths.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/project/scripts/locate-code-home.sh
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/project/scripts/locate-code-home.sh
 ```
 
 - `IN_REPO=1` and `REPO_CWD_IS_ROOT=1` → the workspace is `REPO_ROOT`. Go to
@@ -195,8 +195,8 @@ Then, on every case including ADOPT, the documents manifest (`docs/manifest.json
 the list of the project's documents, which ones live elsewhere or are ignored):
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh init
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}"/skills/docs/scripts/docs.sh compute
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/docs/scripts/docs.sh init
+bash "${CLAUDE_PLUGIN_ROOT}"/skills/docs/scripts/docs.sh compute
 ```
 
 `init` never touches an existing manifest. Keep the `missing` ids of `compute`

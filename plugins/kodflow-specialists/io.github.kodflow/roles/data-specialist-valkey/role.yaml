@@ -1,0 +1,40 @@
+apiVersion: io.github.kodflow/role/v1
+id: data-specialist-valkey
+description: Valkey specialist, including Redis-protocol compatibility, covering data structures,
+  persistence, replication and failover. Use when valkey.conf, sentinel.conf, a Valkey or
+  Redis client or Lua scripts are present. Escalate to opus/medium when failover, consistency
+  or several services interact, such as replica lag, split brain or client reconnects.
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - repository.write
+  - shell.execute
+modelClass: standard
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: data-specialist-valkey task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: data-specialist-valkey result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  type:
+  - object
+  - array
+  - string
+sideEffects: workspace
+claude:
+  tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
+  model: sonnet
+  effort: medium
+  color: cyan

@@ -1,12 +1,13 @@
 ---
 name: devops-orchestrator
 description: DevOps/DevSecOps/FinOps orchestrator using RLM decomposition — coordinates sub-agents
-  for infrastructure, security, cost, sysadmin and cloud, on GitHub PRs and GitLab MRs. Use when a
-  task spans containers, clusters, IaC and CI at once.
-tools: Read, Glob, Grep, SendMessage, Task, TaskCreate, TaskUpdate, TaskList, Bash, WebFetch, mcp__github__pull_request_read,
-  mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__add_issue_comment, mcp__gitlab__get_merge_request,
-  mcp__gitlab__get_merge_request_changes, mcp__gitlab__create_merge_request, mcp__gitlab__list_merge_requests,
-  mcp__gitlab__create_merge_request_note, mcp__gitlab__list_pipelines
+  for infrastructure, security, cost, sysadmin and cloud, on GitHub PRs and GitLab MRs. Use
+  when a task spans containers, clusters, IaC and CI at once.
+tools: Read, Glob, Grep, SendMessage, Task, TaskCreate, TaskUpdate, TaskList, Bash, WebFetch,
+  mcp__github__pull_request_read, mcp__github__create_pull_request, mcp__github__list_pull_requests,
+  mcp__github__add_issue_comment, mcp__gitlab__get_merge_request, mcp__gitlab__get_merge_request_changes,
+  mcp__gitlab__create_merge_request, mcp__gitlab__list_merge_requests, mcp__gitlab__create_merge_request_note,
+  mcp__gitlab__list_pipelines
 model: opus
 effort: medium
 color: orange

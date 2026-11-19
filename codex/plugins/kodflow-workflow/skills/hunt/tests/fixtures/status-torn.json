@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "slug": "payments-ledger",
+  "seq": 412,
+  "state": "hunting",
+  "pause": null,
+  "counter": {
+    "open": 7,
+    "cap": 10,
+    "resume_at": 7,
+    "issues": ["core#101", "core#102", "core#104", "core#107", "core#108", "sdk#12"],
+    "reserved": 1
+  },
+  "pass": {
+    "n": 2,
+    "sha": "3f9c2e1a7b4d",
+    "cells_done": 3,
+    "cells_total": 8,
+    "cells": ["post-retry-idempotent", "settle-crash-recovery", "cutoff-boundary"]
+  },
+  "queue": {
+    "tokens_total": 2,
+    "holders": [
+      { "slug": "payments-ledger", "pid": 48211, "label": "witness post-retry-idempotent x20", "since": 1793019600000, "exclusive": false },
+      { "slug": "", "pid": 48302, "label": "", "since": 

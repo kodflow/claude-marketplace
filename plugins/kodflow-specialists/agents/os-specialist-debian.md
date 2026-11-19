@@ -2,8 +2,8 @@
 name: os-specialist-debian
 description: Debian specialist — apt/dpkg, systemd, stable/testing/unstable branches and Debian
   policy, checked against official documentation; returns JSON. Use when a task touches Debian
-  packages, .deb files, apt sources or Debian release behaviour. Escalate to sonnet/medium when the
-  answer needs judgement beyond pattern matching or findings are ambiguous.
+  packages, .deb files, apt sources or Debian release behaviour. Escalate to sonnet/medium
+  when the answer needs judgement beyond pattern matching or findings are ambiguous.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: haiku
 effort: medium
@@ -90,12 +90,15 @@ dpkg -S /path/to/file
 # Pin: version <version>
 # Pin-Priority: 1001
 
-# Backports
-apt -t bookworm-backports install <package>
-
-# Security updates only
-apt upgrade -y -o Dpkg::Options::="--force-confdef" --only-upgrade
+# Debian 13 backports (configure trixie-backports first)
+apt -t trixie-backports install <package>
 ```
+
+For a security-only upgrade, verify the effective unattended-upgrades origin
+policy permits only the configured Debian-Security source for this release.
+Review `unattended-upgrade --dry-run --debug` before applying it with
+`unattended-upgrade`. If ordinary Debian origins are also enabled by the
+policy, the run is not security-only.
 
 ## Init System (systemd)
 

@@ -1,0 +1,90 @@
+apiVersion: io.github.kodflow/role/v1
+id: martial-specialist-unarmed
+description: 'Unarmed combat expert across cultures: boxing, wrestling under UWW rules, judo,
+  jujutsu, grappling, kicks, strikes and falls, described as a fighter performs them, cited
+  from rulebooks and primary texts. Names the technique, describes it in joint terms, proposes
+  constraints. Called only by the kodflow-gamedev skills /move and /anim-review.'
+instructions: ./instructions.md
+capabilities:
+  required:
+  - repository.read
+  optional:
+  - web.official-docs
+  - shell.execute
+modelClass: deep
+inputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: martial-specialist-unarmed task brief
+  description: The role receives a textual brief or the host's structured brief. The instructions
+    define the domain-specific request.
+  oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+outputSchema:
+  $schema: https://json-schema.org/draft/2020-12/schema
+  title: martial-specialist-unarmed result
+  description: The role instructions specify the applicable report format for the current
+    host and mode.
+  oneOf:
+  - type: object
+    required:
+    - schema
+    - agent
+    - role
+    - status
+    - summary
+    properties:
+      schema:
+        const: panel-member/v1
+      agent:
+        const: martial-specialist-unarmed
+      role:
+        enum:
+        - governing
+        - consulted
+      status:
+        type: string
+      summary:
+        type: string
+  - type: array
+    items:
+      type: object
+      required:
+      - severity
+      - claim
+      - evidence
+      - remedy
+      - consulted
+      - unverified
+      properties:
+        severity:
+          enum:
+          - blocking
+          - material
+          - minor
+        claim:
+          type: string
+          minLength: 1
+        evidence:
+          type: string
+          minLength: 1
+        remedy:
+          type: string
+          minLength: 1
+        consulted:
+          type: array
+          items:
+            type: string
+        unverified:
+          type: array
+          items:
+            type: string
+sideEffects: none
+claude:
+  tools: Read, Glob, Grep, Bash, WebFetch
+  model: opus
+  effort: medium
+  color: cyan
+  experimental: true

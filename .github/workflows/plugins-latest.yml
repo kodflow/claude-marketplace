@@ -1,0 +1,97 @@
+# plugins-latest — the marketplace against the LATEST Claude Code and Codex.
+#
+# ADVISORY: scheduled and on demand only, never on a push or a pull request,
+# and in no other workflow's `needs` (`make ci-gates-check` holds both, ADVISORY
+# of the Makefile). The blocking smoke runs on the versions .github/versions.env
+# pins; this lane runs the same plugin-smoke.yml on @latest, plus a probe of
+# which manifest Claude reads when a plugin's two disagree (a fixture plugin
+# outside plugins/: scripts/tests/fixtures/precedence-plugin). A gap is kept in
+# ONE rolling issue labelled plugins-latest, deduplicated by its signature
+# (scripts/plugins-latest-issue.sh): two runs on the same gap write nothing, a
+# run with no gap closes it.
+name: plugins-latest
+
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: plugins-latest
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/plugin-smoke.yml
+    with:
+      claude-version: latest
+      codex-version: latest
+
+  # Records and goes on: the verdict is the issue's to carry.
+  precedence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      verdict: ${{ steps.probe.outputs.verdict }}
+      versions: ${{ steps.engine.outputs.versions }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: '3.13' }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '24' }
+      - name: Claude Code, latest
+        id: engine
+        run: |
+          npm install -g "@anthropic-ai/claude-code@latest"
+          claude_v=$(claude --version | cut -d' ' -f1)
+          codex_v=$(npm view @openai/codex@latest version)
+          echo "versions=Claude Code ${claude_v}, Codex ${codex_v}" >> "$GITHUB_OUTPUT"
+      - name: Which manifest Claude reads
+        id: probe
+        run: |
+          set +e
+          bash scripts/tests/smoke-plugins.sh --precedence-probe --work "$RUNNER_TEMP/probe" > probe.log 2>&1
+          rc=$?
+          cat probe.log
+          if [ "$rc" -eq 0 ]; then echo "verdict=ok" >> "$GITHUB_OUTPUT"
+          else echo "verdict=$(grep -m1 '^precedence:' probe.log || echo "probe exited $rc")" >> "$GITHUB_OUTPUT"; fi
+
+  issue:
+    needs: [smoke, precedence]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with: { persist-credentials: false }
+      - name: The gap
+        env:
+          SMOKE: ${{ needs.smoke.result }}
+          PRECEDENCE: ${{ needs.precedence.result }}
+          VERDICT: ${{ needs.precedence.outputs.verdict }}
+        run: |
+          : > gap.txt
+          [ "$SMOKE" = success ] || echo "plugin-smoke on latest: $SMOKE" >> gap.txt
+          if [ "$PRECEDENCE" != success ]; then echo "precedence probe job: $PRECEDENCE" >> gap.txt
+          elif [ "$VERDICT" != ok ]; then echo "$VERDICT" >> gap.txt; fi
+          cat gap.txt
+          # No run URL in the gap: the gap is the issue's signature, and a URL
+          # differs on every run.
+      - name: One rolling issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSIONS: ${{ needs.precedence.outputs.versions || 'latest' }}
+        run: bash scripts/plugins-latest-issue.sh gap.txt "$VERSIONS"

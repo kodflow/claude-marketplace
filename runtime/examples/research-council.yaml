@@ -1,0 +1,50 @@
+apiVersion: io.github.kodflow/workflow/v1
+id: research-council
+description: Compare three independent research briefs and verify one synthesis.
+inputSchema:
+  type: object
+  required: [query]
+  properties:
+    query: {type: string, minLength: 1, maxLength: 4096}
+  additionalProperties: false
+requiredCapabilities: [parallel-delegation, structured-output]
+tasks:
+  - id: anthropic-research
+    role: research-analyst
+    provider: anthropic
+    instructions: Investigate the question using authoritative public sources. Report findings, source URLs and uncertain points.
+    requiredCapabilities: [official-web]
+    inputSchema: &task_input
+      type: object
+      required: [inputs, dependencies]
+      properties:
+        inputs: {type: object}
+        dependencies: {type: object}
+    outputSchema: &brief
+      type: object
+      required: [text]
+      properties:
+        text: {type: string, minLength: 1}
+      additionalProperties: false
+  - id: openai-research
+    role: research-analyst
+    provider: openai
+    instructions: Develop an independent evidence-based brief. Include URLs for sources and describe what they establish.
+    requiredCapabilities: [official-web]
+    inputSchema: *task_input
+    outputSchema: *brief
+  - id: perplexity-research
+    role: research-analyst
+    provider: perplexity
+    instructions: Find authoritative primary sources and investigate plausible counterexamples. Cite URLs and flag unresolved points.
+    requiredCapabilities: [official-web]
+    inputSchema: *task_input
+    outputSchema: *brief
+  - id: verify
+    role: research-verifier
+    provider: openai
+    needs: [anthropic-research, openai-research, perplexity-research]
+    instructions: Verify the three briefs against their sources, resolve disagreements using primary evidence, and write a concise synthesis with source URLs and remaining uncertainty.
+    requiredCapabilities: [official-web]
+    inputSchema: *task_input
+    outputSchema: *brief

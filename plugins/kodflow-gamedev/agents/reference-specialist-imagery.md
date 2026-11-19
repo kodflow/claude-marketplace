@@ -1,6 +1,9 @@
 ---
 name: reference-specialist-imagery
-description: "Licensed reference imagery for combat moves: finds candidate images in museum open-access collections, Wikimedia Commons and Wiktenauer, with licence evidence read from the source, and flags mocap datasets whose licence forbids commercial use. Called by the kodflow-gamedev skills; returns panel-member/v1 JSON."
+description: 'Licensed reference imagery for combat moves: finds candidate images in museum
+  open-access collections, Wikimedia Commons and Wiktenauer, with licence evidence read from
+  the source, and flags mocap datasets whose licence forbids commercial use. Called by the
+  kodflow-gamedev skills; returns panel-member/v1 JSON.'
 tools: Read, Glob, Grep, Bash, WebFetch
 model: sonnet
 effort: medium

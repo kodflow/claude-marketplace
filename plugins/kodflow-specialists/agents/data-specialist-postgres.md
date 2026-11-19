@@ -1,9 +1,9 @@
 ---
 name: data-specialist-postgres
-description: PostgreSQL specialist — schema design, query optimisation, EXPLAIN analysis, index
-  selection and migration safety. Use when a task touches .sql files, migrations, psql output,
-  EXPLAIN plans or PostgreSQL syntax. Escalate to opus/medium when the change spans several tables
-  or services, locking and concurrency, or a replication protocol.
+description: PostgreSQL specialist — schema design, query optimisation, EXPLAIN analysis,
+  index selection and migration safety. Use when a task touches .sql files, migrations, psql
+  output, EXPLAIN plans or PostgreSQL syntax. Escalate to opus/medium when the change spans
+  several tables or services, locking and concurrency, or a replication protocol.
 tools: Read, Glob, Grep, Edit, Write, Bash, mcp__context7__*, WebFetch
 model: sonnet
 effort: medium

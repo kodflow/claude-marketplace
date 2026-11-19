@@ -1,0 +1,8 @@
+[
+  "plugins/kodflow-review/io.github.kodflow/projections/workflows/review-claude.md",
+  "plugins/kodflow-review/io.github.kodflow/projections/workflows/review-openai.md",
+  "plugins/kodflow-review/io.github.kodflow/projections/workflows/review-perplexity.md",
+  "plugins/kodflow-workflow/io.github.kodflow/projections/workflows/search-claude.md",
+  "plugins/kodflow-workflow/io.github.kodflow/projections/workflows/search-openai.md",
+  "plugins/kodflow-workflow/io.github.kodflow/projections/workflows/search-perplexity.md"
+]

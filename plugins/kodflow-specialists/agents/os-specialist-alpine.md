@@ -1,9 +1,9 @@
 ---
 name: os-specialist-alpine
 description: Alpine Linux specialist — apk, OpenRC/s6, musl libc, BusyBox and minimal images,
-  checked against the official Alpine wiki; returns JSON. Use when a task touches Alpine, apk,
-  musl-specific behaviour or an alpine base image. Escalate to sonnet/medium when the answer needs
-  judgement beyond pattern matching or the findings are ambiguous.
+  checked against the official Alpine wiki; returns JSON. Use when a task touches Alpine,
+  apk, musl-specific behaviour or an alpine base image. Escalate to sonnet/medium when the
+  answer needs judgement beyond pattern matching or the findings are ambiguous.
 tools: Read, Glob, Grep, Bash, WebFetch, mcp__context7__*
 model: haiku
 effort: medium
