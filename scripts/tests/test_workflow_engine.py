@@ -1,6 +1,7 @@
 """Workflow compiler and durable scheduler tests using a local fake clock."""
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 import sys
@@ -41,6 +42,10 @@ class WorkflowCompilerTest(unittest.TestCase):
         for host in HOSTS:
             self.assertIn(b"Confirm each required capability", render_projection(search, host))
         self.assertIn(b"review-verify-manifest.sh", render_projection(review, "claude"))
+        native = render_projection(review, "openai")
+        self.assertIn(b"Timeout: 9600 seconds", native)
+        self.assertIn(b"writes only in the designated scratch directory", native)
+        self.assertIn(b"developer-executor-quality` with `read` access", native)
         blocked = render_projection(review, "perplexity")
         self.assertIn(b"Stop before starting any task", blocked)
         self.assertNotIn(b"## defensive-security", blocked)
@@ -67,6 +72,7 @@ class WorkflowCompilerTest(unittest.TestCase):
                 ({"ownedPaths": ["../outside"]}, "invalid ownedPaths"),
                 ({"idempotencyKey": ""}, "idempotencyKey"),
                 ({"inputSchema": {"$ref": "https://example.invalid/schema"}}, "external JSON Schema"),
+                ({"inputSchema": {"properties": {"foo": {"$ref": "https://example.invalid/schema"}}}}, "external JSON Schema"),
                 ({"inputSchema": {"type": "bogus"}}, "inputSchema"),
             ]:
                 with self.subTest(updates=updates):
@@ -84,6 +90,16 @@ class WorkflowCompilerTest(unittest.TestCase):
             path.write_text("id: first\nid: second\n", encoding="utf-8")
             with self.assertRaisesRegex(WorkflowError, "duplicate mapping key"):
                 load_workflow(path)
+
+    def test_reference_keys_in_literal_schema_data_are_preserved(self):
+        source = yaml.safe_load(TRANSACTION.read_text(encoding="utf-8"))
+        schema = source["tasks"][0]["inputSchema"]
+        literal = {"$ref": "https://example.invalid/literal"}
+        schema.update(default=literal, examples=[literal], enum=[literal])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "workflow.yaml"
+            path.write_text(yaml.safe_dump(source), encoding="utf-8")
+            self.assertEqual(load_workflow(path).tasks[0].input_schema["default"], literal)
 
 
 class WorkflowStateTest(unittest.TestCase):
@@ -210,6 +226,17 @@ class WorkflowStateTest(unittest.TestCase):
         self.assertEqual(snapshot["status"], "failed")
         self.assertEqual(snapshot["tasks"]["first-write"]["attempt"], 0)
         self.assertEqual(self.store.active(run), ())
+
+    def test_failure_fences_already_claimed_unsubmitted_main_tasks(self):
+        import sqlite3
+
+        workflow = load_workflow(SEARCH)
+        run = self.store.create_run(workflow, {"query": "failure fence"})
+        first, second, _ = self.store.advance(run, workflow.capabilities)
+        self.store.fail(run, first.task_id, first.attempt, "blocked", retryable=False)
+        with closing(sqlite3.connect(self.database)) as conn:
+            with self.assertRaisesRegex(StateError, "no longer has a live workflow attempt"):
+                self.store.authorize_submission(conn, second)
 
     def test_deadline_is_checked_in_completion_transaction(self):
         workflow = load_workflow(SEARCH)

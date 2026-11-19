@@ -112,6 +112,8 @@ class Supervisor:
             raise ProviderError("provider operation outcome is unknown; inspect or reconcile the attempt before retrying")
         if event is not None:
             if event.state in {"running", "waiting_auth"}:
+                if event.poll_not_before is not None and event.poll_not_before > self.store.clock():
+                    return event, revision
                 return self._poll(binding, key, event, revision, timeout=self._timeout(dispatch))
             return event, revision
 
@@ -156,12 +158,19 @@ class Supervisor:
         key = operation_key(dispatch.idempotency_key, dispatch.attempt)
         event, revision = self._provider_event(binding, dispatch, key)
         if event.state in {"running", "waiting_auth"}:
+            self.store.provider_status(
+                *args, event.state, reason=event.reason, prompt_url=event.prompt_url, **flags,
+            )
             return
         if event.state in {"waiting_input", "waiting_approval"}:
             kind = "approval" if event.state == "waiting_approval" else "input"
             self.store.wait_for_input(
                 *args, event.reason or "provider is waiting for operator input", kind,
-                checkpoint_revision=revision, **flags,
+                checkpoint_revision=revision,
+                checkpoint_guard=lambda db: self.journal.checkpoint_current(
+                    db, key, binding.route, revision, event.state,
+                ),
+                **flags,
             )
         elif event.state == "completed":
             if not event.artifacts_collected:
@@ -199,12 +208,52 @@ class Supervisor:
             return self.store.snapshot(run_id)
         self.preflight(self.store.definition(run_id))
         resolved = self._resolve_expired(run_id)
-        self.store.advance(run_id, self._available(), resolved_expiry=resolved)
+        self.store.advance(
+            run_id, self._available(), resolved_expiry=resolved, expiry_guard=self._allows_expiry,
+        )
         dispatches = [dispatch for dispatch in self.store.active(run_id) if dispatch.deadline > self.store.clock()]
         if dispatches:
             with ThreadPoolExecutor(max_workers=self.max_parallel) as pool:
                 tuple(pool.map(self._process, dispatches))
         return self.store.snapshot(run_id)
+
+    def _allows_expiry(self, connection: Any, dispatch: Any) -> bool:
+        binding = self._binding(dispatch.task.provider)
+        key = operation_key(dispatch.idempotency_key, dispatch.attempt)
+        return self.journal.allows_expiry(connection, key, binding.route)
+
+    def next_poll_delay(self, run_id: str) -> float | None:
+        """Time until ready work or the earliest eligible poll, independent of other tasks."""
+        state = self.store.snapshot(run_id)
+        if state["status"] in TERMINAL:
+            return None
+        if state.get("cancellation_requested"):
+            return 0
+        tasks = state["tasks"]
+        definition = self.store.definition(run_id)
+        if any(
+            tasks[task.id]["status"] == "pending"
+            and all(tasks[dependency]["status"] == "completed" for dependency in task.needs)
+            for task in definition.tasks
+        ):
+            return 0
+        now = self.store.clock()
+        delays = []
+        for dispatch in self.store.active(run_id):
+            binding = self._binding(dispatch.task.provider)
+            key = operation_key(dispatch.idempotency_key, dispatch.attempt)
+            event, action = self.journal.read(key, binding.route)
+            if event is None or action or event.state not in {"running", "waiting_auth"}:
+                return 0
+            eligible = event.poll_not_before if event.poll_not_before is not None else now + 1
+            delays.append(max(0, min(eligible, dispatch.deadline) - now))
+        if delays:
+            return min(delays)
+        if state["status"] == "compensating" and not any(
+            entry["status"] == "waiting_input" for entry, _ in self._attempts(state)
+        ):
+            return 0
+        return None
 
     def _resolve_expired(self, run_id: str) -> set[tuple[str, int, bool]]:
         # A timeout only permits retry once the same attempt is resolved remotely.
@@ -281,14 +330,16 @@ class Supervisor:
         capability = "approval" if approval else "input"
         expected = "waiting_approval" if approval else "waiting_input"
         if revision != checkpoint:
-            if not self.journal.confirmed(key, binding.route, capability, revision=checkpoint + 1):
-                raise ProviderError("provider checkpoint changed; refresh the task before replying")
+            if not self.journal.confirmed(
+                key, binding.route, capability, revision=checkpoint + 1, decision=approved,
+            ):
+                raise ProviderError("provider checkpoint changed or a different decision was already recorded")
             payload = {"reconciled": True}
         else:
             if event.state != expected or capability not in binding.capabilities():
                 raise ProviderError(f"provider does not accept {capability} at this checkpoint")
             self.journal.begin_action(
-                key, binding.route, capability, revision=checkpoint,
+                key, binding.route, capability, revision=checkpoint, decision=approved,
                 guard=lambda db: self.store.authorize_interaction(db, run_id, task_id, attempt, checkpoint),
             )
             try:
@@ -326,6 +377,10 @@ class Supervisor:
         update = binding.provider.resume(handle, timeout=120)
         if update.handle.native_id != handle.native_id:
             raise ProviderError("provider returned a different native handle")
+        if action == "cancel" and update.state not in TERMINAL:
+            raise ProviderError(
+                "cancellation remains unconfirmed; resolve it with the provider and reconcile again",
+            )
         interaction = action in {"input", "approval"}
         if interaction and event is not None and update.state == event.state and update.handle == handle:
             raise ProviderError("provider has not confirmed a change at the waiting checkpoint")

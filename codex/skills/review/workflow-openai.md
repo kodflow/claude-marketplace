@@ -2,19 +2,19 @@
 
 Coordinate specialist review of a local code change and preserve the existing evidence-bound review report.
 
-Required capabilities: local-verifier, parallel-delegation, repository.read, structured-output.
+Required capabilities: local-verifier, parallel-delegation, repository.read, scratch.write, structured-output.
 
 Use Codex collaboration to spawn named agents, wait for their results, then join the results.
 Confirm each required capability in the current session. If any is unavailable, stop before dispatch and report what is missing.
 Dispatch independent tasks together. Start a dependent task only after its prerequisites have completed and their outputs satisfy the declared contracts.
-Preserve the existing skill's evidence and report format. Do not run write actions on read-only tasks.
+Preserve the existing skill's evidence and report format. Keep repository files unchanged on read-only tasks.
 
 ## capture-tiers
 
 Assign role `developer-executor-quality` with `read` access. Prerequisites: none.
-Timeout: 300 seconds. Retries: 0.
+Timeout: 9600 seconds. Retries: 0.
 
-Run the existing /review Phase 3 tool invocations from deterministic.md. Use its scratch directory, capture each applicable invocation's .out file and _table.tsv, and return paths to those captured files. Do not synthesize captures or change repository files.
+Run the existing /review Phase 3 tool invocations from deterministic.md. Keep the default 180-second short and 600-second long caps or lower them so all captures fit the workflow deadline. Write only to its designated scratch directory and keep the repository read-only. Capture each applicable invocation's .out file and _table.tsv, and return paths to those captured files. Do not synthesize captures. Redirect build and cache output into the designated scratch directory, or record the tool's blocked invocation when it cannot run without writing elsewhere.
 
 Input JSON Schema:
 
@@ -59,6 +59,8 @@ Output JSON Schema:
   "type": "object"
 }
 ```
+
+Allow writes only in the designated scratch directory. Keep the reviewed repository read-only.
 
 ## correctness
 

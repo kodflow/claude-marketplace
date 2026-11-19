@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from pluginlib.roles import build_role_artifacts, compile_roles, load_roles, perplexity_role_skills
 from pluginlib.codex_text import render_agent
+from pluginlib.workflows import load_workflow
 
 
 SCHEMAS = ROOT / "schemas"
@@ -129,6 +130,21 @@ class RoleCompilerTests(unittest.TestCase):
         self.assertFalse(output.is_valid({"agent": "correctness-checker", "issues": "bad"}))
         self.assertTrue(output.is_valid("No findings. Full report in the requested file."))
         self.assertFalse(output.is_valid(""))
+
+    def test_correctness_role_accepts_the_search_task_contracts(self):
+        role = next(role for role in self.roles if role.id == PILOT)
+        output = Draft202012Validator(role.output_schema)
+        workflow = load_workflow(ROOT / "plugins/kodflow-workflow/io.github.kodflow/workflows/search.yaml", SCHEMAS)
+        tasks = {task.id: task for task in workflow.tasks}
+        verified = {"claim": "Reference reviewed", "source": "docs/example.md", "checked": True}
+        corroboration = {"claims": [verified]}
+        validated = {"claims": [verified], "gaps": ["Missing older reference"]}
+        for task, result in (("corroboration", corroboration), ("validate-sources", validated)):
+            with self.subTest(task=task):
+                output.validate(result)
+                Draft202012Validator(tasks[task].output_schema).validate(result)
+        self.assertFalse(Draft202012Validator(tasks["validate-sources"].output_schema).is_valid(corroboration))
+        self.assertFalse(output.is_valid({"claims": [{"claim": "Evidence missing"}]}))
 
     def test_plan_review_schemas_accept_objections_without_relaxing_normal_results(self):
         objection = {

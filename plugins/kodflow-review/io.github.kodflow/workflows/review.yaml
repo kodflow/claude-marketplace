@@ -14,12 +14,20 @@ tasks:
   - id: capture-tiers
     role: developer-executor-quality
     access: read
-    timeout: 300
+    scratchWrite: true
+    # The sequential matrix can include 34 short and four long invocations.
+    # Default caps of 180/600 seconds leave 1,080 seconds for capture overhead.
+    timeout: 9600
     instructions: >-
       Run the existing /review Phase 3 tool invocations from deterministic.md.
-      Use its scratch directory, capture each applicable invocation's .out file
+      Keep the default 180-second short and 600-second long caps or lower them
+      so all captures fit the workflow deadline.
+      Write only to its designated scratch directory and keep the repository
+      read-only. Capture each applicable invocation's .out file
       and _table.tsv, and return paths to those captured files. Do not synthesize
-      captures or change repository files.
+      captures. Redirect build and cache output into the designated scratch
+      directory, or record the tool's blocked invocation when it cannot run
+      without writing elsewhere.
     inputSchema: &task_input
       type: object
       required: [inputs, dependencies]

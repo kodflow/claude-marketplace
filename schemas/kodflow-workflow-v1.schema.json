@@ -42,6 +42,7 @@
         "outputSchema": { "type": "object" },
         "with": { "type": "object" },
         "access": { "enum": ["read", "write"] },
+        "scratchWrite": { "type": "boolean" },
         "ownedPaths": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },

@@ -122,10 +122,19 @@ before_approval:
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
+const typescriptFiles = ['**/*.{ts,tsx,mts,cts}'];
+// Match files included by the actual tsconfig files. This example's
+// tsconfig includes src/. Add tests and scripts when their projects include them.
+const projectFiles = ['src/**/*.{ts,tsx,mts,cts}'];
+
 export default tseslint.config(
   eslint.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx,mts,cts}'],
+    files: typescriptFiles,
+    extends: tseslint.configs.recommended,
+  },
+  {
+    files: projectFiles,
     extends: [
       ...tseslint.configs.strictTypeChecked,
       ...tseslint.configs.stylisticTypeChecked,

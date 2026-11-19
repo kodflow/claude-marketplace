@@ -43,7 +43,8 @@ each selected model service.
 
 The Perplexity Computer token is an existing OAuth bearer token. The operator
 completes the account authorization separately. New Computer operations use
-MCP Tasks on protocol version 2026-07-28 to retrieve the exact task's result.
+stateless MCP Tasks on protocol version 2026-07-28 to retrieve the exact
+task's result and respect its polling interval across restarts.
 A combined thread transcript cannot substitute for that result. A2A uses an operator-trusted
 HTTPS Agent Card and follows only its same-origin JSON-RPC 1.0 interface.
 Neither adapter forwards credentials across redirects.
@@ -75,7 +76,8 @@ no repository-write capability.
   investigation instead. The runtime keeps an uncertain attempt visible.
 - For input, use `input RUN TASK --attempt N --checkpoint N --value JSON_OBJECT`.
   A2A accepts a `text` field. Computer accepts an `answers` object. Finish sign-ins
-  and other URL-based prompts in the provider UI, then resume polling.
+  and other URL-based prompts in the provider UI. The CLI reports Computer's
+  prompt URL and polls for completion without opening it.
 - Review the pending decision before calling
   `approve RUN TASK allow|deny --attempt N --checkpoint N --reason MESSAGE`.
   Read the attempt and checkpoint revision from `status RUN` before each

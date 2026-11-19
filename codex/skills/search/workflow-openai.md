@@ -7,7 +7,7 @@ Required capabilities: parallel-delegation, structured-output, web.official-docs
 Use Codex collaboration to spawn named agents, wait for their results, then join the results.
 Confirm each required capability in the current session. If any is unavailable, stop before dispatch and report what is missing.
 Dispatch independent tasks together. Start a dependent task only after its prerequisites have completed and their outputs satisfy the declared contracts.
-Preserve the existing skill's evidence and report format. Do not run write actions on read-only tasks.
+Preserve the existing skill's evidence and report format. Keep repository files unchanged on read-only tasks.
 
 ## local-evidence
 

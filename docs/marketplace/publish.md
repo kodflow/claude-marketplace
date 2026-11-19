@@ -1,7 +1,7 @@
 # Prepare a marketplace canary
 
-Build from the full SHA of a committed, tested tree. The command exports that
-commit through Git, runs its validators and scanner, and creates
+Use Python 3.11.4 or newer. Build from the full SHA of a committed, tested
+tree. The command exports that commit through Git, runs its validators and scanner, and creates
 `dist/releases/<sha>/`. It also accepts an explicit `--output` parent.
 
 ```sh

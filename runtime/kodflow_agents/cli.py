@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import sqlite3
@@ -83,7 +84,16 @@ def _print(value) -> None:
 
 
 def _json_object(raw: str) -> Json:
-    value = json.loads(raw)
+    def reject_nonfinite(_: str) -> float:
+        raise ValueError("workflow JSON numbers must be finite")
+
+    def parse_finite(number: str) -> float:
+        value = float(number)
+        if not math.isfinite(value):
+            return reject_nonfinite(number)
+        return value
+
+    value = json.loads(raw, parse_constant=reject_nonfinite, parse_float=parse_finite)
     if not isinstance(value, dict):
         raise ProviderError("workflow data must be a JSON object")
     return value
@@ -94,14 +104,24 @@ def _workflow_providers(workflow, default: str) -> set[str]:
 
 
 def _run(supervisor: Supervisor, run_id: str, *, once: bool) -> int:
+    reported_prompts = set()
     while True:
         state = supervisor.step(run_id)
         status = state["status"]
         if once or status in TERMINAL or status == "waiting_input":
             _print(state)
             return int(status == "failed")
-        if status in {"running", "compensating"}:
-            time.sleep(1)
+        for task_id, task in state["tasks"].items():
+            if task.get("provider_status") != "waiting_auth":
+                continue
+            notice = json.dumps({
+                "task": task_id, "message": task.get("error"), "url": task.get("provider_prompt_url"),
+            })
+            if notice not in reported_prompts:
+                reported_prompts.add(notice)
+                print(f"Authorization required: {notice}", file=sys.stderr, flush=True)
+        if (delay := supervisor.next_poll_delay(run_id)) is not None and delay > 0:
+            time.sleep(delay)
 
 
 def _doctor(repository: Path) -> int:

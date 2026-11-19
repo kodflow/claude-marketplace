@@ -71,11 +71,16 @@ out=$(bash "$T/repo/scripts/install.sh" --codex --check 2>&1); rc=$?
   grep -q 'would: codex plugin marketplace add' <<<"$out" &&
   ok "native check reads capability without installing" ||
   bad "native check reads capability without installing" "$out"
+mkdir -p "$CODEX_HOME/agents"
+printf '%s\n' '# generated-from: plugins/*/agents/old.md' > "$CODEX_HOME/agents/old.toml"
+printf '%s\n' 'name = "manual"' > "$CODEX_HOME/agents/manual.toml"
 out=$(bash "$T/repo/scripts/install.sh" --codex 2>&1); rc=$?
 [ "$rc" -eq 0 ] && grep -qxF "plugin marketplace add $T/repo" "$CODEX_CALLS" &&
   grep -qxF 'plugin add kodflow-workflow@kodflow' "$CODEX_CALLS" &&
   [ -f "$CODEX_HOME/agents/demo.toml" ] && [ ! -e "$CODEX_HOME/skills/demo" ] &&
   ok "native marketplace plus explicit role install" || bad "native install" "$out"
+[ ! -e "$CODEX_HOME/agents/old.toml" ] && [ -f "$CODEX_HOME/agents/manual.toml" ] &&
+  ok "native install retires obsolete generated roles only" || bad "native role retirement" "$out"
 rm -f "$CODEX_CALLS"
 out=$(bash "$T/repo/scripts/install.sh" --codex --legacy 2>&1); rc=$?
 [ "$rc" -eq 0 ] && [ ! -e "$CODEX_CALLS" ] && [ -f "$CODEX_HOME/skills/demo/SKILL.md" ] &&

@@ -30,7 +30,7 @@ Specialized security scanning and compliance. Return **condensed JSON only**.
 |--------|-------|-------|
 | **IaC** | trivy, checkov, tfsec | Misconfigurations |
 | **Containers** | trivy, grype | CVEs, base images |
-| **Secrets** | gitleaks, trufflehog | Leaked credentials |
+| **Secrets** | gitleaks | Leaked credentials |
 | **Code** | semgrep, bandit | SAST, OWASP Top 10 |
 | **K8s** | kubesec, kube-bench | CIS Benchmarks |
 | **SBOM** | syft, trivy | Supply chain |
@@ -159,8 +159,7 @@ syft image:tag -o json > sbom.json
 
 ```bash
 # Secret detection
-gitleaks detect --source . --verbose
-trufflehog filesystem . --json
+gitleaks detect --source . --redact --verbose
 ```
 
 ### Kubernetes

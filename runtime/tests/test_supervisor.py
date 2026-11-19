@@ -72,8 +72,8 @@ tasks:
     return load_workflow(path)
 
 
-def setup(tmp_path, provider, *, clock=time.time, retries=0, text_type="string"):
-    workflow = single_workflow(tmp_path, retries=retries, text_type=text_type)
+def setup(tmp_path, provider, *, clock=time.time, retries=0, text_type="string", workflow=None):
+    workflow = workflow or single_workflow(tmp_path, retries=retries, text_type=text_type)
     database = tmp_path / "runs.sqlite"
     store = StateStore(database, clock=clock)
     journal = Journal(database)
@@ -329,3 +329,135 @@ def test_non_string_text_field_uses_json_prompt_and_parser(tmp_path):
 
     run, _, _, _, supervisor = setup(tmp_path, NumericText(), text_type="integer")
     assert supervisor.step(run)["tasks"]["demo"]["result"] == {"text": 42}
+
+
+def test_opposite_approval_does_not_resume_previous_decision(tmp_path):
+    class Approval(Provider):
+        def capabilities(self):
+            return super().capabilities() | {"approval"}
+
+        def submit(self, request):
+            return Event("waiting_approval", Handle("approval", "form"))
+
+        def approve(self, handle, approved, reason, *, timeout):
+            raise AssertionError("a persisted approval must not be sent again")
+
+    run, store, journal, _, supervisor = setup(tmp_path, Approval())
+    waiting = supervisor.step(run)["tasks"]["demo"]
+    key = waiting["idempotency_key"]
+    revision = waiting["checkpoint_revision"]
+    # The prior allow reached the provider, but the process stopped before
+    # advancing local workflow state.
+    journal.begin_action(key, "test-provider", "approval", revision=revision, decision=True)
+    assert journal.save(
+        key, "test-provider", Event("running", Handle("approval", "form")),
+        revision=revision, action="approval",
+    )
+    with pytest.raises(ProviderError, match="different decision"):
+        supervisor.provide_input(run, "demo", {}, approved=False, attempt=1, checkpoint=revision)
+    assert store.snapshot(run)["tasks"]["demo"] == waiting
+    supervisor.provide_input(run, "demo", {}, approved=True, attempt=1, checkpoint=revision)
+    assert store.snapshot(run)["tasks"]["demo"]["status"] == "running"
+
+
+def test_expiry_rechecks_provider_reservation_inside_transition(tmp_path, monkeypatch):
+    now = [10.0]
+    run, store, journal, _, supervisor = setup(tmp_path, SlowProvider(), clock=lambda: now[0], retries=1)
+    (first,) = store.advance(run, store.definition(run).capabilities)
+    now[0] = first.deadline
+    advance = store.advance
+
+    def reserve_then_advance(*args, **kwargs):
+        assert journal.reserve(first.idempotency_key, "test-provider")
+        return advance(*args, **kwargs)
+
+    monkeypatch.setattr(store, "advance", reserve_then_advance)
+    state = supervisor.step(run)
+    assert state["tasks"]["demo"]["attempt"] == 1
+    assert journal.read(first.idempotency_key, "test-provider")[1] == "submit"
+
+
+def test_delayed_waiting_event_cannot_park_newer_running_task(tmp_path, monkeypatch):
+    run, store, journal, _, supervisor = setup(tmp_path, SlowProvider())
+    (dispatch,) = store.advance(run, store.definition(run).capabilities)
+    key = dispatch.idempotency_key
+    handle = Handle("delayed")
+    stale = Event("waiting_input", handle)
+    assert journal.reserve(key, "test-provider")
+    assert journal.save(key, "test-provider", stale, action="submit", revision=0)
+    assert journal.save(key, "test-provider", Event("running", handle), revision=1)
+    monkeypatch.setattr(supervisor, "_provider_event", lambda *_: (stale, 1))
+    supervisor._process(dispatch)
+    assert store.snapshot(run)["tasks"]["demo"]["status"] == "running"
+
+
+def test_nonterminal_reconciliation_preserves_cancel_reservation(tmp_path):
+    class AmbiguousCancel(SlowProvider):
+        resolved = False
+
+        def cancel(self, handle, *, timeout):
+            self.cancellations += 1
+            raise ProviderError("cancel response was lost")
+
+        def resume(self, handle, *, timeout):
+            return Event("cancelled" if self.resolved else "running", handle)
+
+    remote = AmbiguousCancel()
+    run, store, journal, _, supervisor = setup(tmp_path, remote)
+    key = supervisor.step(run)["tasks"]["demo"]["idempotency_key"]
+    with pytest.raises(ProviderError, match="response was lost"):
+        supervisor.cancel(run)
+    with pytest.raises(ProviderError, match="cancellation remains unconfirmed"):
+        supervisor.reconcile(run, "demo")
+    assert journal.read(key, "test-provider")[1] == "cancel"
+    remote.resolved = True
+    assert supervisor.reconcile(run, "demo").state == "cancelled"
+    supervisor.cancel(run)
+    assert store.snapshot(run)["status"] == "cancelled"
+    assert remote.cancellations == 1
+
+
+def test_poll_eligibility_survives_restart_without_delaying_other_tasks(tmp_path):
+    import yaml
+
+    now = [10.0]
+
+    class DelayedAuth(SlowProvider):
+        def submit(self, request):
+            if request.instructions == "Slow":
+                return Event(
+                    "waiting_auth", Handle("delayed"),
+                    reason="Sign in to continue", prompt_url="https://example.org/sign-in",
+                    poll_not_before=now[0] + 20,
+                )
+            return Event("completed", Handle("fast"), text="result")
+
+    source = yaml.safe_load(single_workflow(tmp_path).document)
+    task = source["tasks"][0]
+    source["tasks"] = [
+        {**task, "id": "slow", "instructions": "Slow"},
+        {**task, "id": "fast"},
+        {**task, "id": "follow-up", "needs": ["fast"]},
+    ]
+    path = tmp_path / "polling.yaml"
+    path.write_text(yaml.safe_dump(source), encoding="utf-8")
+    remote = DelayedAuth()
+    run, store, _, bindings, supervisor = setup(
+        tmp_path, remote, clock=lambda: now[0], workflow=load_workflow(path),
+    )
+    state = supervisor.step(run)
+    assert state["tasks"]["slow"]["provider_status"] == "waiting_auth"
+    assert state["tasks"]["slow"]["provider_prompt_url"] == "https://example.org/sign-in"
+    assert state["tasks"]["slow"]["error"] == "Sign in to continue"
+    assert supervisor.next_poll_delay(run) == 0
+    assert supervisor.step(run)["tasks"]["follow-up"]["status"] == "completed"
+    assert supervisor.next_poll_delay(run) == 20
+
+    restored = Supervisor(StateStore(store.database, clock=lambda: now[0]), Journal(store.database), bindings, default_provider="test")
+    restored.step(run)
+    assert remote.resumes == 0
+    now[0] += 20
+    state = restored.step(run)
+    assert state["status"] == "completed"
+    assert state["tasks"]["slow"]["provider_prompt_url"] is None
+    assert remote.resumes == 1

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-review",
-  "version": "0.0.0-r281edba48060",
+  "version": "0.0.0-rb3746aa05b81",
   "description": "Evidence-bound review, debugging, linting, and architectural decisions.",
   "author": {
     "name": "kodflow",

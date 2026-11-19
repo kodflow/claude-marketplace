@@ -28,7 +28,7 @@ outputSchema:
   title: developer-executor-correctness result
   description: The role instructions specify the applicable report format for the current
     host and mode.
-  oneOf:
+  anyOf:
   - type: object
     required:
     - agent
@@ -53,6 +53,21 @@ outputSchema:
         type: string
       agent_feedback:
         type: string
+  - type: object
+    required: [claims]
+    properties:
+      claims:
+        type: array
+        items:
+          type: object
+          required: [claim, source, checked]
+          properties:
+            claim: {type: string, minLength: 1}
+            source: {type: string, minLength: 1}
+            checked: {type: boolean}
+      gaps:
+        type: array
+        items: {type: string}
   - type: string
     minLength: 1
     description: Compact caller return when writing a separate JSON report.

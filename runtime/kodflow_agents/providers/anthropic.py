@@ -2,7 +2,7 @@
 
 import time
 
-from ..ports import Event, Handle, Provider, ProviderError, Request
+from ..ports import Event, Handle, NoSendError, Provider, ProviderError, Request
 from ..transport import Transport, credential, objects, token_usage
 
 _MAX_CONTINUATIONS = 3
@@ -55,5 +55,5 @@ class Anthropic(Provider):
                 return Event("completed", handle, text="\n".join(text), usage=usage)
             return Event("failed", handle, usage=usage, reason="Anthropic did not complete a text response")
         if handle is None:
-            raise ProviderError("Anthropic request deadline exhausted")
+            raise NoSendError("Anthropic request deadline exhausted before sending")
         return Event("failed", handle, usage=usage, reason="Anthropic continuation budget exhausted")

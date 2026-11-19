@@ -42,7 +42,7 @@ validation:
   - "terraform fmt -check"
   - "terraform validate"
   - "tflint --recursive"
-  - "terraform-docs markdown table --output-file README.md --output-check <module-path>"
+  - 'terraform-docs --config "$module_config" --output-check "$module_path"'
 
 security:
   - "No hardcoded credentials"
@@ -51,7 +51,9 @@ security:
   - "Network security groups restrictive"
 ```
 
-Use the formatter configured for the module in the terraform-docs freshness check.
+Choose the module's actual terraform-docs configuration file for `module_config`.
+It supplies the formatter, output file, and output mode. If the project
+configures these in CI flags, use those same flags with `--output-check`.
 
 ## Best Practices Enforced
 

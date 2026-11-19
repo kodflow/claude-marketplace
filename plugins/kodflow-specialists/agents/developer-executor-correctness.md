@@ -180,8 +180,12 @@ directory, and nothing else: never a file inside the reviewed repository, never 
 file the brief supplies, never through the shell (redirection, heredoc, `tee`, `cp`). With no
 report-file path in the brief, write nothing.
 
-Without a report file, return the JSON object below, including `agent`, `issues`,
-`commendations`, and `metrics` even when there are no findings.
+Without a report file, follow the output schema declared by the brief.
+For the search workflow's `corroboration` task, return `claims`. For
+`validate-sources`, return `claims` and `gaps`. Each claim carries `claim`,
+`source`, and `checked`, as specified by the task. Use the findings object
+below for review briefs that request that format, including all four
+required fields even when there are no findings.
 
 When submitting a report file, return compact text, at most ~1500 characters by
 default: the summary line your brief specifies,

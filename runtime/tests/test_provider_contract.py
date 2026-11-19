@@ -2,6 +2,7 @@
 
 from email.message import Message
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,7 +12,7 @@ from kodflow_agents.providers.anthropic import Anthropic
 from kodflow_agents.providers.computer import Computer, ComputerMcp
 from kodflow_agents.providers.openai import OpenAI
 from kodflow_agents.providers.perplexity import Perplexity
-from kodflow_agents.transport import ProviderHTTPError, Reply, Transport, https_origin
+from kodflow_agents.transport import ProviderHTTPError, Reply, StreamInterrupted, Transport, https_origin
 
 REQUEST = Request("task", "Research one question", {"topic": "storage"}, "test-model", timeout=20)
 
@@ -33,7 +34,10 @@ class RecordedTransport:
     def stream(self, url, payload, *, headers, timeout):
         self.calls.append(("STREAM", url, payload, headers, timeout, {}))
         for item in next(self.responses):
-            yield {"jsonrpc": "2.0", "id": payload["id"], "result": item}
+            if isinstance(item, Exception):
+                raise item
+            key = "error" if "code" in item else "result"
+            yield {"jsonrpc": "2.0", "id": payload["id"], key: item}
 
 
 def rpc(result):
@@ -224,7 +228,7 @@ def test_mcp_streamable_http_negotiation_and_session(monkeypatch):
 
     output = {"thread_id": "thread", "task_status": "working"}
     transport = RecordedTransport([initialize, {}, rpc({"structuredContent": output})])
-    assert ComputerMcp(transport).call("read_thread", {"thread_id": "thread"}, 20) == output
+    assert ComputerMcp(transport, protocol_version="2025-11-25").call("read_thread", {"thread_id": "thread"}, 20) == output
     assert [item[2]["method"] for item in transport.calls] == ["initialize", "notifications/initialized", "tools/call"]
     assert transport.calls[2][3]["MCP-Session-Id"] == "mcp-session"
     assert transport.calls[2][3]["MCP-Protocol-Version"] == "2025-11-25"
@@ -301,12 +305,12 @@ def test_computer_mcp_reinitializes_only_on_session_specific_404(monkeypatch):
 
     valid = rpc({"structuredContent": {"value": 1}})
     transport = RecordedTransport([initialize("old"), {}, ProviderHTTPError(404), initialize("new"), {}, valid])
-    assert ComputerMcp(transport).call("read_thread", {}, 20) == {"value": 1}
+    assert ComputerMcp(transport, protocol_version="2025-11-25").call("read_thread", {}, 20) == {"value": 1}
     assert [item[3]["MCP-Session-Id"] for item in transport.calls if item[2]["method"] == "tools/call"] == ["old", "new"]
 
     failed = RecordedTransport([initialize("old"), {}, ProviderHTTPError(500)])
     with pytest.raises(ProviderHTTPError, match="500"):
-        ComputerMcp(failed).call("read_thread", {}, 20)
+        ComputerMcp(failed, protocol_version="2025-11-25").call("read_thread", {}, 20)
     assert len(failed.calls) == 3
 
 
@@ -317,10 +321,10 @@ def test_computer_handles_only_confirmed_no_thread_errors_as_unsent(monkeypatch)
         "isError": True, "structuredContent": {"event": "error", "interactive": {"type": "insufficient_credits"}},
     })
     with pytest.raises(NoSendError, match="before starting a thread"):
-        ComputerMcp(RecordedTransport([initial, {}, declined])).call("call_perplexity_computer", {}, 20)
+        ComputerMcp(RecordedTransport([initial, {}, declined]), protocol_version="2025-11-25").call("call_perplexity_computer", {}, 20)
     ambiguous = rpc({"isError": True, "structuredContent": {"event": "error", "text": "SECRET"}})
     with pytest.raises(ProviderError, match="tool reported an error") as caught:
-        ComputerMcp(RecordedTransport([initial, {}, ambiguous])).call("call_perplexity_computer", {}, 20)
+        ComputerMcp(RecordedTransport([initial, {}, ambiguous]), protocol_version="2025-11-25").call("call_perplexity_computer", {}, 20)
     assert not isinstance(caught.value, NoSendError) and "SECRET" not in str(caught.value)
 
 
@@ -478,3 +482,136 @@ tasks:
 
     assert cli.main(options + ["resume", "routing", "--once"]) == 0
     assert submissions == ["anthropic", "openai"]
+
+
+def test_cli_rejects_nonfinite_json_numbers_before_operator_action():
+    from kodflow_agents.cli import _json_object
+
+    for number in ("NaN", "Infinity", "-Infinity", "1e500", "-1e500"):
+        with pytest.raises(ValueError, match="finite"):
+            _json_object('{"answers": {"data": ' + number + "}}")
+    assert _json_object('{"answers": {"data": 2.5e1}}') == {"answers": {"data": 25.0}}
+
+
+@pytest.mark.parametrize("extension", [
+    {"required": ["text", "language"]},
+    {"additionalProperties": True},
+    {"minProperties": 2},
+    {"anyOf": [{"type": "null"}]},
+    {"properties": {"text": {"type": "string"}, "language": {"type": "string"}}},
+])
+def test_text_envelope_preserves_structured_schema_constraints(extension):
+    schema = {"type": "object", "properties": {"text": {"type": "string"}}, **extension}
+    assert "Return only a JSON value" in Request("id", "prompt", {}, "model", 1, output_schema=schema).prompt()
+
+
+def test_a2a_skips_invalid_agent_card_candidates_in_order():
+    interface = lambda url: {"url": url, "protocolBinding": "JSONRPC", "protocolVersion": "1.0"}
+    transport = RecordedTransport([
+        {**card(), "supportedInterfaces": [
+            interface("https://agent.example/rpc?token=invalid"),
+            interface("https://other.example/rpc"),
+            interface("bad-path"),
+            interface("https://agent.example/first-valid"),
+            interface("https://agent.example/second-valid"),
+        ]},
+        rpc({"task": task("WORKING")}),
+    ])
+    event = A2A(transport, "https://agent.example/.well-known/agent-card.json").submit(REQUEST)
+    assert event.handle.endpoint == "https://agent.example/first-valid"
+
+
+def test_a2a_recovers_interrupted_stream_but_propagates_rpc_error():
+    transport = RecordedTransport([
+        card(), rpc({"task": task("WORKING")}),
+        [StreamInterrupted("read interrupted")],
+        rpc(task("COMPLETED", artifacts=[{"artifactId": "answer", "parts": [{"text": "fixed"}]}])),
+    ])
+    agent = A2A(transport, "https://agent.example/.well-known/agent-card.json")
+    first = agent.submit(REQUEST)
+    assert [event.text for event in agent.events(first.handle, timeout=2)] == ["fixed"]
+    assert [entry[2]["method"] for entry in transport.calls[-2:]] == ["SubscribeToTask", "GetTask"]
+
+    errors = RecordedTransport([card(), rpc({"task": task("WORKING")}), [{"code": -32601}]])
+    agent = A2A(errors, "https://agent.example/.well-known/agent-card.json")
+    first = agent.submit(REQUEST)
+    with pytest.raises(ProviderError, match="JSON-RPC error"):
+        list(agent.events(first.handle, timeout=2))
+    assert errors.calls[-1][2]["method"] == "SubscribeToTask"
+
+
+def test_anthropic_exhaustion_before_first_send_is_not_an_uncertain_submission(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-test")
+    clock = iter([1.0, 30.0])
+    monkeypatch.setattr("kodflow_agents.providers.anthropic.time", SimpleNamespace(monotonic=lambda: next(clock)))
+    transport = RecordedTransport([])
+    with pytest.raises(NoSendError, match="before sending"):
+        Anthropic(transport).submit(REQUEST)
+    assert not transport.calls
+
+
+def test_computer_modern_tasks_and_tool_calls_are_stateless(monkeypatch):
+    monkeypatch.setenv("PERPLEXITY_COMPUTER_OAUTH_TOKEN", "oauth-fixture")
+    transport = RecordedTransport([
+        rpc({"resultType": "task"}),
+        rpc({"resultType": "complete"}),
+        rpc({"structuredContent": {"assets": []}}),
+    ])
+    mcp = ComputerMcp(transport)
+    assert mcp.tasks("tools/call", {"name": "call_perplexity_computer", "arguments": {}}, 1)["resultType"] == "task"
+    assert mcp.tasks("tasks/get", {"taskId": "some-task"}, 1)["resultType"] == "complete"
+    assert mcp.call("list_thread_assets", {"thread_id": "thread"}, 1) == {"assets": []}
+    assert [entry[2]["method"] for entry in transport.calls] == ["tools/call", "tasks/get", "tools/call"]
+    for _, _, payload, headers, _, _ in transport.calls:
+        meta = payload["params"]["_meta"]
+        assert meta["io.modelcontextprotocol/protocolVersion"] == headers["MCP-Protocol-Version"] == "2026-07-28"
+        assert headers["Mcp-Method"] == payload["method"]
+        assert headers.get("Mcp-Name") == payload["params"].get("name")
+        assert "MCP-Session-Id" not in headers
+    assert transport.calls[1][2]["params"]["_meta"]["io.modelcontextprotocol/clientCapabilities"] == {
+        "extensions": {"io.modelcontextprotocol/tasks": {}},
+    }
+
+
+def test_computer_repolls_acknowledged_keys_and_exposes_new_operator_input(monkeypatch):
+    monkeypatch.setattr("kodflow_agents.providers.computer.time", SimpleNamespace(time=lambda: 100))
+    first = {"params": {"mode": "form", "requestedSchema": {"properties": {}}}}
+    second = {"params": {"mode": "form", "requestedSchema": {"properties": {"text": {"type": "string"}}}}}
+    route = {"taskId": "task", "_meta": {"ai.perplexity/threadId": "thread"}}
+    replies = iter([
+        {**route, "resultType": "task", "status": "working", "pollIntervalMs": 8000},
+        {**route, "status": "input_required", "inputRequests": {"known": first}},
+        {},
+        {**route, "status": "input_required", "inputRequests": {"known": first}},
+        {**route, "status": "input_required", "inputRequests": {"known": first, "new": second}},
+    ])
+    provider = Computer(lambda *_: None, lambda *_: next(replies))
+    submitted = provider.submit(REQUEST)
+    assert submitted.poll_not_before == 108
+    waiting = provider.resume(submitted.handle, timeout=1)
+    assert waiting.state == "waiting_approval"
+    acknowledged = provider.approve(waiting.handle, True, "operator", timeout=1)
+    assert acknowledged.handle.acknowledged_inputs == ("known",)
+    assert acknowledged.poll_not_before == 108
+    stale = provider.resume(acknowledged.handle, timeout=1)
+    assert stale.state == "running" and stale.poll_not_before == 108
+    outstanding = provider.resume(stale.handle, timeout=1)
+    assert outstanding.state == "waiting_input" and outstanding.handle.context_id == "new"
+    assert outstanding.handle.acknowledged_inputs == ("known",)
+
+
+def test_computer_exposes_https_auth_prompt_and_reports_terminal_failure(monkeypatch):
+    monkeypatch.setattr("kodflow_agents.providers.computer.time", SimpleNamespace(time=lambda: 100))
+    handle = Handle("task", thread_id="thread")
+    replies = iter([
+        {"taskId": "task", "status": "input_required", "pollIntervalMs": 6000, "inputRequests": {
+            "auth": {"params": {"mode": "url", "url": "https://account.example/login", "message": "Sign in to continue"}},
+        }},
+        {"taskId": "task", "status": "failed", "statusMessage": "provider secret"},
+    ])
+    provider = Computer(lambda *_: None, lambda *_: next(replies))
+    pending = provider.resume(handle, timeout=1)
+    assert pending.state == "waiting_auth" and pending.poll_not_before == 106
+    assert pending.prompt_url == "https://account.example/login" and pending.reason == "Sign in to continue"
+    failure = provider.resume(pending.handle, timeout=1)
+    assert failure.state == "failed" and failure.reason == "Computer reported a failed task"

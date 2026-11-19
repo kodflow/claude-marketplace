@@ -24,9 +24,16 @@ class UnsupportedOperation(NoSendError):
 
 def uses_text_output(schema: Json) -> bool:
     """Use the text envelope only for unconstrained or string-valued text outputs."""
+    if not schema:
+        return True
     properties = schema.get("properties")
-    return not schema or (
-        isinstance(properties, dict) and properties.keys() == {"text"}
+    required = schema.get("required", [])
+    return (
+        schema.keys() <= {"type", "properties", "required", "additionalProperties", "title", "description", "$schema"}
+        and schema.get("type", "object") == "object"
+        and isinstance(required, list) and all(field == "text" for field in required)
+        and schema.get("additionalProperties", False) is False
+        and isinstance(properties, dict) and properties.keys() == {"text"}
         and isinstance(properties["text"], dict) and properties["text"].get("type") == "string"
     )
 
@@ -59,6 +66,12 @@ class Handle:
     endpoint: str | None = None
     tenant: str | None = None
     thread_id: str | None = None
+    poll_interval_ms: int | None = None
+    acknowledged_inputs: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        # The journal's JSON encoding represents tuples as arrays.
+        object.__setattr__(self, "acknowledged_inputs", tuple(self.acknowledged_inputs))
 
 
 @dataclass(frozen=True)
@@ -70,6 +83,8 @@ class Event:
     usage: dict[str, int] = field(default_factory=dict)
     reason: str = ""
     artifacts_collected: bool = True
+    poll_not_before: float | None = None
+    prompt_url: str | None = None
 
 
 class Provider:

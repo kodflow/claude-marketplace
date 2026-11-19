@@ -66,6 +66,8 @@ def _new_attempt() -> dict:
         "error": None,
         "waiting_kind": None,
         "checkpoint_revision": 0,
+        "provider_status": None,
+        "provider_prompt_url": None,
         "deadline": None,
         "idempotency_key": None,
         "input": None,
@@ -111,11 +113,11 @@ class StateStore:
         return sqlite3.connect(self.database, timeout=30)
 
     @contextmanager
-    def _edit(self, run_id: str) -> Iterator[tuple[Workflow, dict]]:
+    def _edit(self, run_id: str) -> Iterator[tuple[sqlite3.Connection, Workflow, dict]]:
         with closing(self._connect()) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
             workflow, state = self._load(connection, run_id)
-            yield workflow, state
+            yield connection, workflow, state
             connection.execute(
                 "UPDATE workflow_runs SET state = ? WHERE id = ?", (_json(state), run_id)
             )
@@ -184,6 +186,7 @@ class StateStore:
             entry = entry["compensation"]
         if (
             state.get("cancellation_requested")
+            or (state["terminal_target"] is not None and not dispatch.compensation)
             or not entry
             or entry["status"] != "running"
             or entry["attempt"] != dispatch.attempt
@@ -249,6 +252,8 @@ class StateStore:
         entry["input"] = inputs
         entry["error"] = None
         entry["waiting_kind"] = None
+        entry["provider_status"] = None
+        entry["provider_prompt_url"] = None
         return self._dispatch(state, task, entry, compensation)
 
     @staticmethod
@@ -312,6 +317,8 @@ class StateStore:
             error=message,
             deadline=None,
             waiting_kind=None,
+            provider_status=None,
+            provider_prompt_url=None,
         )
         if not retry and not compensation and state["terminal_target"] is None:
             self._abort(state, "failed")
@@ -338,9 +345,10 @@ class StateStore:
     def advance(
         self, run_id: str, capabilities: Collection[str], *,
         resolved_expiry: Collection[tuple[str, int, bool]] | None = None,
+        expiry_guard: Callable[[sqlite3.Connection, Dispatch], bool] | None = None,
     ) -> tuple[Dispatch, ...]:
         """Apply timeouts and atomically claim up to one eligible DAG frontier."""
-        with self._edit(run_id) as (workflow, state):
+        with self._edit(run_id) as (connection, workflow, state):
             if state["status"] in TERMINAL or state.get("cancellation_requested"):
                 return ()
             missing = workflow.capabilities - set(capabilities)
@@ -355,6 +363,10 @@ class StateStore:
                         and (
                             resolved_expiry is None
                             or (task.id, attempt["attempt"], compensation) in resolved_expiry
+                        )
+                        and (
+                            expiry_guard is None
+                            or expiry_guard(connection, self._dispatch(state, task, attempt, compensation))
                         )
                     ):
                         self._fail(state, task, attempt, "deadline exceeded", True, compensation)
@@ -424,7 +436,7 @@ class StateStore:
     ) -> None:
         """Record a result once and check the declared result/artifact contracts."""
         rejected = None
-        with self._edit(run_id) as (workflow, state):
+        with self._edit(run_id) as (_, workflow, state):
             task, entry = self._find_attempt(state, workflow, task_id, attempt, compensation)
             if entry["status"] != "running":
                 raise StateError(f"task {task_id!r} must receive operator input before completion")
@@ -464,6 +476,8 @@ class StateStore:
                     error=None,
                     deadline=None,
                     waiting_kind=None,
+                    provider_status=None,
+                    provider_prompt_url=None,
                 )
             self._refresh(state, workflow)
         if rejected is not None:
@@ -498,7 +512,7 @@ class StateStore:
         *,
         compensation: bool = False,
     ) -> None:
-        with self._edit(run_id) as (workflow, state):
+        with self._edit(run_id) as (_, workflow, state):
             task, entry = self._find_attempt(state, workflow, task_id, attempt, compensation)
             self._fail(state, task, entry, message, retryable, compensation)
             self._refresh(state, workflow)
@@ -513,19 +527,45 @@ class StateStore:
         *,
         compensation: bool = False,
         checkpoint_revision: int | None = None,
-    ) -> None:
+        checkpoint_guard: Callable[[sqlite3.Connection], bool] | None = None,
+    ) -> bool:
         if kind not in {"input", "approval"}:
             raise StateError(f"unsupported waiting kind {kind!r}")
-        with self._edit(run_id) as (workflow, state):
+        with self._edit(run_id) as (connection, workflow, state):
+            if state.get("cancellation_requested") or (
+                checkpoint_guard is not None and not checkpoint_guard(connection)
+            ):
+                return False
             _, entry = self._find_attempt(state, workflow, task_id, attempt, compensation)
+            if entry["status"] != "running":
+                return False
             revision = checkpoint_revision
             if revision is None:
                 revision = entry.get("checkpoint_revision", 0) + 1
             entry.update(
                 status="waiting_input", error=reason, waiting_kind=kind, deadline=None,
                 checkpoint_revision=revision,
+                provider_status=None, provider_prompt_url=None,
             )
             self._refresh(state, workflow)
+            return True
+
+    def provider_status(
+        self, run_id: str, task_id: str, attempt: int, status: str, *,
+        reason: str = "", prompt_url: str | None = None, compensation: bool = False,
+    ) -> None:
+        """Expose authorization prompts without parking a remotely pollable attempt."""
+        with self._edit(run_id) as (_, workflow, state):
+            _, entry = self._find_attempt(state, workflow, task_id, attempt, compensation)
+            if entry["status"] == "running" and (
+                status == "waiting_auth" or entry.get("provider_status") == "waiting_auth"
+            ):
+                waiting = status == "waiting_auth"
+                entry.update(
+                    provider_status=status if waiting else None,
+                    provider_prompt_url=prompt_url if waiting else None,
+                    error=reason if waiting else None,
+                )
 
     @staticmethod
     def _waiting_at(entry: dict | None, attempt: int, checkpoint_revision: int | None) -> bool:
@@ -548,7 +588,7 @@ class StateStore:
     ) -> None:
         if not isinstance(payload, dict):
             raise StateError("operator input must be an object")
-        with self._edit(run_id) as (workflow, state):
+        with self._edit(run_id) as (_, workflow, state):
             task = next((task for task in workflow.tasks if task.id == task_id), None)
             if task is None:
                 raise StateError(f"unknown workflow task {task_id!r}")
@@ -572,14 +612,14 @@ class StateStore:
 
     def begin_cancel(self, run_id: str) -> dict:
         """Persist intent before the supervisor inspects or cancels provider operations."""
-        with self._edit(run_id) as (_, state):
+        with self._edit(run_id) as (_, _, state):
             if state["status"] not in TERMINAL:
                 state["cancellation_requested"] = True
             return state
 
     def cancel(self, run_id: str) -> None:
         """Stop new work after the caller has cancelled outstanding provider handles."""
-        with self._edit(run_id) as (workflow, state):
+        with self._edit(run_id) as (_, workflow, state):
             if state["status"] in TERMINAL:
                 return
             if state["terminal_target"] is None:
@@ -587,6 +627,9 @@ class StateStore:
             for task in workflow.tasks:
                 for _, entry in self._entries(state, task):
                     if _is_active(entry):
-                        entry.update(status="cancelled", waiting_kind=None, deadline=None)
+                        entry.update(
+                            status="cancelled", waiting_kind=None, deadline=None,
+                            provider_status=None, provider_prompt_url=None,
+                        )
             state["cancellation_requested"] = False
             self._refresh(state, workflow)

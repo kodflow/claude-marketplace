@@ -1,11 +1,13 @@
 """A2A 1.0 JSON-RPC over HTTPS using an operator-configured Agent Card."""
 
+from contextlib import closing
 from dataclasses import replace
+import time
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from ..ports import Event, Handle, Json, NoSendError, Provider, ProviderError, Request, TERMINAL
-from ..transport import Transport, credential, https_origin, objects
+from ..transport import StreamInterrupted, Transport, credential, https_origin, objects
 
 _VERSION = "1.0"
 
@@ -52,19 +54,27 @@ class A2A(Provider):
             raise ProviderError("A2A Agent Card has no capabilities")
         if any(extension.get("required") is True for extension in objects(capability.get("extensions"))):
             raise ProviderError("A2A Agent Card requires an unsupported extension")
-        interface = next((
-            item for item in objects(card.get("supportedInterfaces"))
-            if item.get("protocolBinding") == "JSONRPC" and item.get("protocolVersion") == _VERSION
-            and isinstance(item.get("url"), str) and _agent_origin(item["url"]) == self.origin
-        ), None)
-        if interface is None:
-            raise ProviderError("A2A requires a same-origin JSON-RPC 1.0 interface")
-        if interface.get("tenant") is not None and not isinstance(interface["tenant"], str):
-            raise ProviderError("A2A Agent Card has an invalid tenant")
+        interface = self._matching_interface(card)
         self._check_auth(card)
         self.streaming = capability.get("streaming") is True
         self.tenant = interface.get("tenant") or ""
         self.endpoint = interface["url"]
+
+    def _matching_interface(self, card: Json) -> Json:
+        for item in objects(card.get("supportedInterfaces")):
+            if item.get("protocolBinding") != "JSONRPC" or item.get("protocolVersion") != _VERSION:
+                continue
+            url = item.get("url")
+            if not isinstance(url, str):
+                continue
+            try:
+                if _agent_origin(url) != self.origin:
+                    continue
+            except NoSendError:
+                continue
+            if item.get("tenant") is None or isinstance(item["tenant"], str):
+                return item
+        raise ProviderError("A2A requires a same-origin JSON-RPC 1.0 interface")
 
     def _check_auth(self, card: Json) -> None:
         schemes = card.get("securitySchemes") or {}
@@ -202,25 +212,39 @@ class A2A(Provider):
         }, timeout, handle)))
 
     def events(self, handle: Handle, *, timeout: float):
-        self._check_handle(handle, timeout)
+        deadline = time.monotonic() + timeout
+
+        def remaining() -> float:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise ProviderError("A2A event deadline exhausted")
+            return left
+
+        self._check_handle(handle, remaining())
         if not self.streaming:
-            yield self.resume(handle, timeout=timeout)
+            yield self.resume(handle, timeout=remaining())
             return
         payload = self._payload("SubscribeToTask", {"id": handle.native_id})
-        for frame in self.transport.stream(self.endpoint, payload, headers=self._headers(), timeout=timeout):
-            result = self._result(frame, payload["id"])
-            task = result.get("task")
-            if isinstance(task, dict):
-                event = self._pin(self._task(task))
-                yield event
-                if event.state in TERMINAL:
-                    return
-                continue
-            update = result.get("statusUpdate")
-            if isinstance(update, dict) and isinstance(update.get("status"), dict):
-                state = update["status"].get("state")
-                if state not in {"TASK_STATE_SUBMITTED", "TASK_STATE_WORKING"}:
-                    break
-                yield Event("running", handle)
+        # Keep time for the status read that recovers from a stream disconnect.
+        stream = self.transport.stream(self.endpoint, payload, headers=self._headers(), timeout=remaining() * 0.8)
+        try:
+            with closing(stream) as frames:
+                for frame in frames:
+                    result = self._result(frame, payload["id"])
+                    task = result.get("task")
+                    if isinstance(task, dict):
+                        event = self._pin(self._task(task))
+                        yield event
+                        if event.state in TERMINAL:
+                            return
+                        continue
+                    update = result.get("statusUpdate")
+                    if isinstance(update, dict) and isinstance(update.get("status"), dict):
+                        state = update["status"].get("state")
+                        if state not in {"TASK_STATE_SUBMITTED", "TASK_STATE_WORKING"}:
+                            break
+                        yield Event("running", handle)
+        except StreamInterrupted:
+            pass
         # GetTask has the authoritative artifacts after a stream disconnect or final delta.
-        yield self.resume(handle, timeout=timeout)
+        yield self.resume(handle, timeout=remaining())

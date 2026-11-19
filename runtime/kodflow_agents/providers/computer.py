@@ -1,5 +1,6 @@
 """Perplexity Computer MCP with operator-provided OAuth bearer authentication."""
 
+from base64 import b64encode
 from collections.abc import Callable
 from dataclasses import replace
 from threading import Lock
@@ -7,12 +8,13 @@ import time
 from uuid import uuid4
 
 from ..ports import Event, Handle, Json, NoSendError, Provider, ProviderError, Request
-from ..transport import ProviderHTTPError, Transport, credential, objects
+from ..transport import ProviderHTTPError, Transport, credential, https_origin, objects
 
 _ENDPOINT = "https://www.perplexity.ai/rest/computer/mcp"
 _TASKS_VERSION = "2026-07-28"
-_VERSIONS = {"2025-03-26", "2025-06-18", "2025-11-25", _TASKS_VERSION}
-_TASKS_META = {"io.modelcontextprotocol/clientCapabilities": {"extensions": {"io.modelcontextprotocol/tasks": {}}}}
+_LEGACY_VERSIONS = {"2025-03-26", "2025-06-18", "2025-11-25"}
+_CLIENT_INFO = {"name": "kodflow-agents", "version": "0.1.0"}
+_DEFAULT_POLL_MS = 5000
 _THREAD_META = "ai.perplexity/threadId"
 
 
@@ -63,8 +65,11 @@ def _tool_result(result: Json) -> Json:
 class ComputerMcp:
     """Streamable HTTP client with session rollover for Computer's tools and tasks."""
 
-    def __init__(self, transport: Transport) -> None:
+    def __init__(self, transport: Transport, *, protocol_version: str = _TASKS_VERSION) -> None:
+        if protocol_version != _TASKS_VERSION and protocol_version not in _LEGACY_VERSIONS:
+            raise NoSendError("unsupported Computer MCP protocol version")
         self.transport = transport
+        self.protocol_version = protocol_version
         self.lock = Lock()
         self.session = ""
         self.version = ""
@@ -94,12 +99,12 @@ class ComputerMcp:
         reply = self.transport.request("POST", _ENDPOINT, {
             "jsonrpc": "2.0", "id": identifier, "method": "initialize",
             "params": {
-                "protocolVersion": _TASKS_VERSION, "capabilities": {},
-                "clientInfo": {"name": "kodflow-agents", "version": "0.1.0"},
+                "protocolVersion": self.protocol_version, "capabilities": {},
+                "clientInfo": _CLIENT_INFO,
             },
         }, headers=self._headers(), timeout=_remaining(deadline))
         version = self._result(reply.body, identifier).get("protocolVersion")
-        if version not in _VERSIONS:
+        if version not in _LEGACY_VERSIONS:
             raise ProviderError("Computer MCP negotiated an unsupported protocol version")
         self.version = version
         self.session = reply.headers.get("mcp-session-id", "")
@@ -113,22 +118,49 @@ class ComputerMcp:
             raise
         self.generation += 1
 
-    def _prepare(self, deadline: float, require_tasks: bool) -> tuple[dict[str, str], int]:
+    def _prepare(self, deadline: float) -> tuple[dict[str, str], int]:
         with self.lock:
             try:
                 if not self.version:
                     self._initialize(deadline)
             except ProviderError as error:
                 raise NoSendError(f"Computer MCP session could not be initialized: {error}") from None
-            if require_tasks and self.version != _TASKS_VERSION:
-                raise NoSendError("Computer MCP did not negotiate the version needed for task-specific results")
             return self._session_headers(), self.generation
 
-    def _request(self, method: str, params: Json, timeout: float, *, require_tasks: bool = False) -> Json:
+    @staticmethod
+    def _name_header(name: str) -> str:
+        visible_ascii = name == name.strip() and all(0x20 <= ord(char) <= 0x7E for char in name)
+        ambiguous = name.startswith("=?base64?") and name.endswith("?=")
+        if visible_ascii and not ambiguous:
+            return name
+        return f"=?base64?{b64encode(name.encode()).decode('ascii')}?="
+
+    def _modern(self, method: str, params: Json, timeout: float, *, use_tasks: bool) -> Json:
+        parameters = {
+            **params,
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": _TASKS_VERSION,
+                "io.modelcontextprotocol/clientInfo": _CLIENT_INFO,
+                "io.modelcontextprotocol/clientCapabilities": (
+                    {"extensions": {"io.modelcontextprotocol/tasks": {}}} if use_tasks else {}
+                ),
+            },
+        }
+        headers = {**self._headers(), "MCP-Protocol-Version": _TASKS_VERSION, "Mcp-Method": method}
+        if method == "tools/call":
+            headers["Mcp-Name"] = self._name_header(params["name"])
+        identifier = uuid4().hex
+        response = self.transport.request(
+            "POST", _ENDPOINT, {"jsonrpc": "2.0", "id": identifier, "method": method, "params": parameters},
+            headers=headers, timeout=timeout,
+        )
+        return self._result(response.body, identifier)
+
+    def _request(self, method: str, params: Json, timeout: float) -> Json:
         deadline = time.monotonic() + timeout
         identifier = uuid4().hex
         payload = {"jsonrpc": "2.0", "id": identifier, "method": method, "params": params}
-        headers, generation = self._prepare(deadline, require_tasks)
+        headers, generation = self._prepare(deadline)
         try:
             response = self.transport.request(
                 "POST", _ENDPOINT, payload, headers=headers, timeout=_remaining(deadline),
@@ -141,7 +173,7 @@ class ComputerMcp:
             with self.lock:
                 if self.generation == generation:
                     self.session = self.version = ""
-            headers, _ = self._prepare(deadline, require_tasks)
+            headers, _ = self._prepare(deadline)
             try:
                 response = self.transport.request(
                     "POST", _ENDPOINT, payload, headers=headers, timeout=_remaining(deadline),
@@ -153,10 +185,15 @@ class ComputerMcp:
         return self._result(response.body, identifier)
 
     def call(self, name: str, arguments: Json, timeout: float) -> Json:
-        return _tool_result(self._request("tools/call", {"name": name, "arguments": arguments}, timeout))
+        params = {"name": name, "arguments": arguments}
+        if self.protocol_version == _TASKS_VERSION:
+            return _tool_result(self._modern("tools/call", params, timeout, use_tasks=False))
+        return _tool_result(self._request("tools/call", params, timeout))
 
     def tasks(self, method: str, params: Json, timeout: float) -> Json:
-        return self._request(method, {**params, "_meta": _TASKS_META}, timeout, require_tasks=True)
+        if self.protocol_version != _TASKS_VERSION:
+            raise NoSendError("Computer Tasks require the stateless 2026-07-28 MCP version")
+        return self._modern(method, params, timeout, use_tasks=True)
 
 
 class Computer(Provider):
@@ -232,27 +269,26 @@ class Computer(Provider):
             thread = existing.thread_id
         if not isinstance(identifier, str) or not identifier or not isinstance(thread, str) or not thread:
             raise ProviderError("Computer MCP did not return the task and thread identifiers")
-        handle = Handle(identifier, thread_id=thread)
+        interval = body.get("pollIntervalMs")
+        if type(interval) is not int or not 0 < interval <= 2**53:
+            interval = existing.poll_interval_ms if existing and existing.poll_interval_ms else _DEFAULT_POLL_MS
+        handle = Handle(
+            identifier, thread_id=thread, poll_interval_ms=interval,
+            acknowledged_inputs=existing.acknowledged_inputs if existing else (),
+        )
+        next_poll = time.time() + interval / 1000
         status = body.get("status")
         if status == "working":
-            return Event("running", handle)
+            return Event("running", handle, poll_not_before=next_poll)
+        if status == "failed":
+            return Event("failed", handle, reason="Computer reported a failed task")
         if status == "cancelled":
             return Event("cancelled", handle)
         if status == "input_required":
             requests = body.get("inputRequests")
             if not isinstance(requests, dict) or not requests:
                 raise ProviderError("Computer did not return the waiting task's input requests")
-            for key, form in sorted(requests.items()):
-                params = form.get("params") if isinstance(form, dict) else None
-                if not isinstance(params, dict) or params.get("mode", "form") != "form":
-                    continue
-                schema = params.get("requestedSchema")
-                if not isinstance(schema, dict) or not isinstance(schema.get("properties", {}), dict):
-                    raise ProviderError("Computer returned a malformed input form")
-                state = "waiting_input" if schema.get("properties") else "waiting_approval"
-                reason = params.get("message") if isinstance(params.get("message"), str) else ""
-                return Event(state, replace(handle, context_id=key), reason=reason)
-            return Event("waiting_auth", handle, reason="Computer is waiting for an action in the Perplexity UI")
+            return Computer._task_input(requests, handle, next_poll)
         if status == "completed":
             result = body.get("result")
             if not isinstance(result, dict):
@@ -264,6 +300,44 @@ class Computer(Provider):
                 raise ProviderError("Computer returned an inconsistent completed task")
             return replace(outcome, handle=handle)
         raise ProviderError("Computer returned an unsupported task status")
+
+    @staticmethod
+    def _task_input(requests: Json, handle: Handle, next_poll: float) -> Event:
+        remaining = {
+            key: form for key, form in requests.items() if key not in handle.acknowledged_inputs
+        }
+        if not remaining:
+            return Event("running", handle, poll_not_before=next_poll)
+
+        pending_auth = None
+        for key, form in sorted(remaining.items()):
+            params = form.get("params") if isinstance(form, dict) else None
+            if not isinstance(params, dict):
+                continue
+            mode = params.get("mode", "form")
+            reason = params.get("message") if isinstance(params.get("message"), str) else ""
+            if mode == "url" and pending_auth is None:
+                url = params.get("url")
+                if isinstance(url, str):
+                    try:
+                        https_origin(url)
+                    except NoSendError:
+                        url = None
+                pending_auth = Event(
+                    "waiting_auth", replace(handle, context_id=key),
+                    reason=reason or "Computer is waiting for an action in the Perplexity UI",
+                    poll_not_before=next_poll, prompt_url=url if isinstance(url, str) else None,
+                )
+            if mode != "form":
+                continue
+            schema = params.get("requestedSchema")
+            if not isinstance(schema, dict) or not isinstance(schema.get("properties", {}), dict):
+                raise ProviderError("Computer returned a malformed input form")
+            state = "waiting_input" if schema.get("properties") else "waiting_approval"
+            return Event(state, replace(handle, context_id=key), reason=reason)
+        if pending_auth is not None:
+            return pending_auth
+        raise ProviderError("Computer returned an unsupported input request")
 
     def collect_artifacts(self, event: Event, *, timeout: float) -> tuple[Json, ...]:
         artifacts = self._assets(event.handle, timeout)
@@ -329,7 +403,10 @@ class Computer(Provider):
         self.call_tasks("tasks/update", {
             "taskId": handle.native_id, "inputResponses": {handle.context_id: response},
         }, timeout)
-        return Event("running", handle)
+        if handle.context_id not in handle.acknowledged_inputs:
+            handle = replace(handle, acknowledged_inputs=(*handle.acknowledged_inputs, handle.context_id))
+        interval = handle.poll_interval_ms or _DEFAULT_POLL_MS
+        return Event("running", handle, poll_not_before=time.time() + interval / 1000)
 
     def provide_input(self, handle: Handle, payload: Json, *, timeout: float) -> Event:
         if handle.thread_id:

@@ -23,12 +23,12 @@ HOSTS = {
     "claude": (
         "Claude Code",
         "Use Claude Teams when available. Otherwise delegate through named Claude Code subagents.",
-        {"parallel-delegation", "structured-output", "local-verifier", "repository.read", "web.official-docs"},
+        {"parallel-delegation", "structured-output", "local-verifier", "repository.read", "scratch.write", "web.official-docs"},
     ),
     "openai": (
         "Codex",
         "Use Codex collaboration to spawn named agents, wait for their results, then join the results.",
-        {"parallel-delegation", "structured-output", "local-verifier", "repository.read", "web.official-docs"},
+        {"parallel-delegation", "structured-output", "local-verifier", "repository.read", "scratch.write", "web.official-docs"},
     ),
     "perplexity": (
         "Perplexity",
@@ -72,6 +72,7 @@ class Task:
     required_capabilities: frozenset[str]
     bindings: dict | None
     provider: str | None
+    scratch_write: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,26 +97,40 @@ class Workflow:
                     required |= {"idempotent-write"}
             if task.approval:
                 required |= {"human-approval"}
+            if task.scratch_write:
+                required |= {"scratch.write"}
         return required
 
 
 def _check_schema(schema: dict, where: str) -> None:
     def check_refs(value: Any) -> None:
-        if isinstance(value, dict):
-            # Runtime validation must stay offline and pinned to the workflow.
-            for key, child in value.items():
-                if key in {"$ref", "$dynamicRef"} and isinstance(child, str) and not child.startswith("#"):
-                    raise WorkflowError(f"{where}: external JSON Schema references are unsupported")
-                check_refs(child)
-        elif isinstance(value, list):
-            for child in value:
-                check_refs(child)
+        if not isinstance(value, dict):
+            return
+        for key in ("$ref", "$dynamicRef"):
+            if key in value and not value[key].startswith("#"):
+                raise WorkflowError(f"{where}: external JSON Schema references are unsupported")
+        # Defaults, constants, and examples may contain literal reference keys.
+        for key in ("$defs", "definitions", "dependentSchemas", "patternProperties", "properties"):
+            children = value.get(key)
+            if isinstance(children, dict):
+                for child in children.values():
+                    check_refs(child)
+        for key in ("allOf", "anyOf", "oneOf", "prefixItems"):
+            children = value.get(key)
+            if isinstance(children, list):
+                for child in children:
+                    check_refs(child)
+        for key in (
+            "additionalItems", "additionalProperties", "contains", "contentSchema", "else", "if",
+            "items", "not", "propertyNames", "then", "unevaluatedItems", "unevaluatedProperties",
+        ):
+            check_refs(value.get(key))
 
-    check_refs(schema)
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as error:
         raise WorkflowError(f"{where}: {error.message}") from error
+    check_refs(schema)
 
 
 def validate_value(schema: dict, value: Any, where: str) -> None:
@@ -171,6 +186,7 @@ def _workflow(data: dict) -> Workflow:
             required_capabilities=frozenset(node.get("requiredCapabilities", ())),
             bindings=node.get("with"),
             provider=node.get("provider"),
+            scratch_write=node.get("scratchWrite", False),
         )
         for node in data["tasks"]
     )
@@ -282,7 +298,7 @@ def render_projection(workflow: Workflow, host: str) -> bytes:
         delegation,
         "Confirm each required capability in the current session. If any is unavailable, stop before dispatch and report what is missing.",
         "Dispatch independent tasks together. Start a dependent task only after its prerequisites have completed and their outputs satisfy the declared contracts.",
-        "Preserve the existing skill's evidence and report format. Do not run write actions on read-only tasks.",
+        "Preserve the existing skill's evidence and report format. Keep repository files unchanged on read-only tasks.",
         "",
     ]
     for task in workflow.tasks:
@@ -325,6 +341,8 @@ def render_projection(workflow: Workflow, host: str) -> bytes:
         ]
         if task.owned_paths:
             lines += ["Owned paths: " + ", ".join(task.owned_paths) + ".", ""]
+        if task.scratch_write:
+            lines += ["Allow writes only in the designated scratch directory. Keep the reviewed repository read-only.", ""]
         if task.approval:
             lines += ["Obtain operator approval before dispatching this task.", ""]
         if task.idempotency_key:

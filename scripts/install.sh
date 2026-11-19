@@ -109,6 +109,16 @@ install_codex_agents() {
       return 1
     fi
   done
+  # Only files marked by the generator belong to this installer.
+  for f in "$directory"/*.toml; do
+    [ -f "$f" ] || continue
+    name=$(basename "$f")
+    [ -f "$HERE/codex/agents/$name" ] && continue
+    head -1 "$f" | grep -q '^# generated-from: plugins/\*/agents/' || continue
+    if [ "$CHECK" -eq 1 ]; then say "would: retire agent $name (no longer shipped)"; continue; fi
+    run rm -f "$f" || return 1
+    say "retired agent $name (no longer shipped)"
+  done
 }
 
 # -------------------------------------------------------------------- Codex
@@ -134,7 +144,6 @@ if [ "$DO_CODEX" -eq 1 ]; then
       echo "native Codex installation incomplete; use --legacy to restore the flat installation" >&2
       exit 1
     }
-    # Codex discovers custom roles in its agent directory.
     install_codex_agents "$codex_dir/agents" || exit 1
   else
     say "flat installation ($codex_dir)"
@@ -189,15 +198,6 @@ if [ "$DO_CODEX" -eq 1 ]; then
       if [ "$CHECK" -eq 1 ]; then say "would: retire skill $n (no longer shipped)"; continue; fi
       run rm -rf "$d" && say "retired skill $n (no longer shipped)"
     done
-    for f in "$codex_dir"/agents/*.toml; do
-      [ -f "$f" ] || continue
-      b=$(basename "$f")
-      [ -f "$HERE/codex/agents/$b" ] && continue
-      head -1 "$f" | grep -q '^# generated-from: plugins/\*/agents/' || continue
-      if [ "$CHECK" -eq 1 ]; then say "would: retire agent $b (no longer shipped)"; continue; fi
-      run rm -f "$f" && say "retired agent $b (no longer shipped)"
-    done
-
     c=$(find "$HERE/codex/agents" -name '*.toml' 2>/dev/null | wc -l | tr -d ' ')
     say "$c custom agents"
   fi

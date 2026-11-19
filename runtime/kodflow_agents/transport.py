@@ -27,6 +27,14 @@ class Reply:
     headers: Mapping[str, str]
 
 
+class StreamInterrupted(ProviderError):
+    """An established event stream disconnected while reading."""
+
+
+class _ResponseReadError(ProviderError):
+    """The provider's response body could not be read before the deadline."""
+
+
 class ProviderHTTPError(ProviderError):
     """Status-based recovery is safe only for the protocols that define it."""
 
@@ -100,7 +108,7 @@ class _Deadline:
     def remaining(self) -> float:
         left = self.expires - time.monotonic()
         if left <= 0:
-            raise ProviderError("provider request deadline exceeded")
+            raise _ResponseReadError("provider request deadline exceeded")
         return left
 
     def attach(self, connection: socket.socket) -> None:
@@ -188,7 +196,7 @@ class Transport:
                 if late is not None and not isinstance(late, ProviderError):
                     late.close()
             deadline.interrupt()
-            raise ProviderError("provider request deadline exceeded") from None
+            raise _ResponseReadError("provider request deadline exceeded") from None
         if isinstance(outcome, ProviderError):
             raise outcome
         return outcome
@@ -203,7 +211,7 @@ class Transport:
                 deadline.remaining()
             except (OSError, http.client.HTTPException):
                 deadline.remaining()
-                raise ProviderError("provider response could not be read") from None
+                raise _ResponseReadError("provider response could not be read") from None
             if not data:
                 return
             remaining -= len(data)
@@ -235,7 +243,10 @@ class Transport:
             with self._open("POST", url, payload, {**headers, "Accept": "text/event-stream"}, deadline) as response:
                 if response.headers.get_content_type() != "text/event-stream":
                     raise ProviderError("provider did not return an event stream")
-                yield from self._sse(self._chunks(response, deadline))
+                try:
+                    yield from self._sse(self._chunks(response, deadline))
+                except _ResponseReadError as error:
+                    raise StreamInterrupted(str(error)) from None
 
     @staticmethod
     def _sse(chunks: Iterable[bytes]) -> Iterator[Json]:
@@ -254,7 +265,7 @@ class Transport:
                     data.clear()
             del buffer[:start]
         if data or buffer:
-            raise ProviderError("provider event stream ended mid-frame")
+            raise StreamInterrupted("provider event stream ended mid-frame")
 
     @staticmethod
     def _object(raw: bytes) -> Json:

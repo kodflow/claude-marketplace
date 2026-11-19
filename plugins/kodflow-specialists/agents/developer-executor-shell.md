@@ -64,7 +64,7 @@ download_safety:
       severity: "HIGH"
 
     - name: "Cleanup on failure"
-      good: "trap 'rm -rf $tmpdir' EXIT"
+      good: "trap 'rm -rf -- \"$tmpdir\"' EXIT"
       bad: "No trap"
       severity: "MEDIUM"
 
@@ -237,7 +237,10 @@ directory, and nothing else: never a file inside the reviewed repository, never 
 file the brief supplies, never through the shell (redirection, heredoc, `tee`, `cp`), save the tree archive of Plan review mode below. With no
 report-file path in the brief, write nothing.
 
-Then return at most ~1500 characters to the caller: the summary line your brief specifies,
+Without a report-file path, return the JSON object documented below.
+
+When the requested report file holds the full result, return the summary
+line from your brief in a response of at most ~1500 characters by default,
 followed by one line per finding as `SEVERITY | file:line | expected fix`, and nothing else
 — no reasoning, no restated diff. If the finding lines would overflow, keep the summary
 line plus the highest-severity ones and leave the rest in the report file. A brief that sets

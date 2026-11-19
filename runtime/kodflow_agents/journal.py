@@ -28,13 +28,17 @@ class Journal:
             connection.execute(
                 "CREATE TABLE IF NOT EXISTS provider_operations ("
                 "id TEXT PRIMARY KEY, route TEXT NOT NULL, event TEXT, action TEXT, "
-                "revision INTEGER NOT NULL DEFAULT 0, last_action TEXT)"
+                "revision INTEGER NOT NULL DEFAULT 0, last_action TEXT, "
+                "action_decision INTEGER, last_action_decision INTEGER)"
             )
             columns = {column[1] for column in connection.execute("PRAGMA table_info(provider_operations)")}
             if "revision" not in columns:
                 connection.execute("ALTER TABLE provider_operations ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
             if "last_action" not in columns:
                 connection.execute("ALTER TABLE provider_operations ADD COLUMN last_action TEXT")
+            for name in ("action_decision", "last_action_decision"):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE provider_operations ADD COLUMN {name} INTEGER")
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.database, timeout=30)
@@ -80,6 +84,7 @@ class Journal:
 
     def begin_action(
         self, key: str, route: str, action: str, *, revision: int,
+        decision: bool | None = None,
         guard: Callable[[sqlite3.Connection], None] | None = None,
     ) -> None:
         with closing(self._connect()) as connection, connection:
@@ -87,9 +92,9 @@ class Journal:
             if guard is not None:
                 guard(connection)
             written = connection.execute(
-                "UPDATE provider_operations SET action = ? WHERE id = ? AND route = ? "
+                "UPDATE provider_operations SET action = ?, action_decision = ? WHERE id = ? AND route = ? "
                 "AND event IS NOT NULL AND action IS NULL AND revision = ?",
-                (action, key, route, revision),
+                (action, decision, key, route, revision),
             ).rowcount
         if written != 1:
             raise ProviderError("provider checkpoint changed or an operation requires reconciliation")
@@ -99,7 +104,7 @@ class Journal:
         if action == "submit":
             query = "DELETE FROM provider_operations WHERE event IS NULL"
         else:
-            query = "UPDATE provider_operations SET action = NULL WHERE event IS NOT NULL"
+            query = "UPDATE provider_operations SET action = NULL, action_decision = NULL WHERE event IS NOT NULL"
         with closing(self._connect()) as connection, connection:
             written = connection.execute(
                 query + " AND id = ? AND route = ? AND action = ? AND revision = ?",
@@ -108,14 +113,41 @@ class Journal:
         if written != 1:
             raise ProviderError("provider operation changed before its unsent reservation could be released")
 
-    def confirmed(self, key: str, route: str, action: str, *, revision: int) -> bool:
+    def confirmed(
+        self, key: str, route: str, action: str, *, revision: int, decision: bool | None = None,
+    ) -> bool:
         """Recognize a persisted operator action whose local transition was interrupted."""
         with closing(self._connect()) as connection:
             return connection.execute(
                 "SELECT 1 FROM provider_operations WHERE id = ? AND route = ? AND revision = ? "
-                "AND last_action = ? AND action IS NULL",
-                (key, route, revision, action),
+                "AND last_action = ? AND last_action_decision IS ? AND action IS NULL",
+                (key, route, revision, action, decision),
             ).fetchone() is not None
+
+    @staticmethod
+    def allows_expiry(connection: sqlite3.Connection, key: str, route: str) -> bool:
+        """Recheck absence or terminal failure under the workflow's expiry write lock."""
+        row = connection.execute(
+            "SELECT route, action, event FROM provider_operations WHERE id = ?", (key,)
+        ).fetchone()
+        if row is None:
+            return True
+        return (
+            row[0] == route and row[1] is None and row[2] is not None
+            and json.loads(row[2])["state"] in {"failed", "cancelled"}
+        )
+
+    @staticmethod
+    def checkpoint_current(
+        connection: sqlite3.Connection, key: str, route: str, revision: int, state: str,
+    ) -> bool:
+        """Prevent replay of a waiting event while its provider revision changes."""
+        row = connection.execute(
+            "SELECT event FROM provider_operations WHERE id = ? AND route = ? "
+            "AND revision = ? AND action IS NULL",
+            (key, route, revision),
+        ).fetchone()
+        return row is not None and row[0] is not None and json.loads(row[0])["state"] == state
 
     def save(
         self, key: str, route: str, event: Event, *, action: str | None = None,
@@ -123,7 +155,9 @@ class Journal:
     ) -> bool:
         serialized = _encode(event)
         query = (
-            "UPDATE provider_operations SET event = ?, last_action = action, action = NULL, revision = revision + 1 "
+            "UPDATE provider_operations SET event = ?, last_action = action, "
+            "last_action_decision = action_decision, action = NULL, action_decision = NULL, "
+            "revision = revision + 1 "
             "WHERE id = ? AND route = ? AND action IS ? AND revision = ?"
         )
         with closing(self._connect()) as connection, connection:
