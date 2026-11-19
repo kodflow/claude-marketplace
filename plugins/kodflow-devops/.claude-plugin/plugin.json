@@ -1,11 +1,11 @@
 {
-  "name": "kodflow-devops",
-  "version": "0.0.0-r9dedfa01e68d",
-  "description": "Infrastructure, environment health and template sync — Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
   "author": {
     "name": "kodflow",
     "url": "https://github.com/kodflow"
   },
+  "description": "Infrastructure, environment health and template sync — Terraform and Terragrunt work, a health check for this configuration itself, and the update path back to the upstream template.",
   "homepage": "https://github.com/kodflow/claude-marketplace",
-  "license": "MIT"
+  "license": "MIT",
+  "name": "kodflow-devops",
+  "version": "0.0.0-r9dedfa01e68d"
 }

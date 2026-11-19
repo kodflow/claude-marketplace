@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 import yaml
 
 from .contract_schema import offline_validator
+from .manifest import overlay_issues
 from .model import (
     Catalog,
     EXTENSION_NAMESPACE,
@@ -387,6 +388,8 @@ def validate_package(
             issues.extend(_schema_issues(value, schema, manifest_path, "publisher-strict"))
         else:
             issues.append(_issue("error", "kodflow-extension", manifest_path, "Kodflow extension must be an object"))
+    for message in overlay_issues(manifest):
+        issues.append(_issue("error", "claude-manifest-overlay", manifest_path, message))
     issues.extend(_validate_skills(package, mode))
     issues.extend(_validate_mcp(package, schemas_root, mode, plugin_data_root))
     return sorted(issues, key=lambda item: (item.path, item.code, item.message))
@@ -396,8 +399,40 @@ def validate_catalog(catalog: Catalog, schemas_root: Path) -> list[ValidationIss
     return validate_catalog_packages(catalog, schemas_root)[1]
 
 
+def external_url_issue(url: object) -> str | None:
+    """Explain why an external source URL is not a pinned public HTTPS remote."""
+    if not isinstance(url, str):
+        return "source.url must be a string"
+    parts = urlsplit(url)
+    if parts.scheme != "https":
+        return f"source.url must use https, got {parts.scheme or 'no'} scheme"
+    if not parts.hostname or parts.username or parts.password or parts.query or parts.fragment:
+        return "source.url must name a host without credentials, query or fragment"
+    return None
+
+
+def _validate_externals(
+    catalog: Catalog, path: Path, local: set[str], mode: str
+) -> list[ValidationIssue]:
+    severity = "error" if mode == "publisher-strict" else "warning"
+    issues: list[ValidationIssue] = []
+    seen: set[str] = set()
+    for entry in catalog.externals:
+        name = entry.get("name")
+        if not isinstance(name, str):
+            continue
+        if name in local or name in seen:
+            issues.append(_issue("error", "duplicate-plugin", path, f"duplicate catalog plugin {name!r}"))
+        seen.add(name)
+        source = entry.get("source")
+        problem = external_url_issue(source.get("url") if isinstance(source, dict) else None)
+        if problem:
+            issues.append(_issue(severity, "external-source", path, f"external {name!r}: {problem}"))
+    return issues
+
+
 def validate_catalog_packages(
-    catalog: Catalog, schemas_root: Path
+    catalog: Catalog, schemas_root: Path, mode: str = "publisher-strict"
 ) -> tuple[list[PluginPackage], list[ValidationIssue]]:
     """Report catalog issues and return one snapshot of safely loaded packages."""
     path = catalog.root / "catalog" / "catalog.json"
@@ -464,6 +499,7 @@ def validate_catalog_packages(
         else:
             for directory in sorted(directories - declared):
                 issues.append(_issue("error", "unlisted-plugin", path, f"{directory!r} has no catalog entry"))
+    issues.extend(_validate_externals(catalog, path, names, mode))
     for name, dependencies in sorted(graph.items()):
         for dependency in dependencies:
             if dependency not in names:

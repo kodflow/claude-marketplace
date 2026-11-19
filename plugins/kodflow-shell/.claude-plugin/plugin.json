@@ -1,11 +1,11 @@
 {
-  "name": "kodflow-shell",
-  "version": "0.0.0-rfb6a226383fc",
-  "description": "The shell side of the harness: super-claude on PATH instead of an alias, a session picker on TAB that lists only conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell.",
   "author": {
     "name": "kodflow",
     "url": "https://github.com/kodflow"
   },
+  "description": "The shell side of the harness: super-claude on PATH instead of an alias, a session picker on TAB that lists only conversations that still exist — matched on the words of their title, coloured by age — and housekeeping that deletes a session with everything keyed to its id. A SessionStart hook re-syncs it from the plugin at every launch, so updating the marketplace updates the shell.",
   "homepage": "https://github.com/kodflow/claude-marketplace",
-  "license": "MIT"
+  "license": "MIT",
+  "name": "kodflow-shell",
+  "version": "0.0.0-rfb6a226383fc"
 }

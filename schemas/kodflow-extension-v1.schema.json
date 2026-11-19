@@ -32,7 +32,19 @@
         "properties": {
           "enabled": { "type": "boolean" },
           "profile": { "type": "string", "minLength": 1 },
-          "minimumVersion": { "type": "string" }
+          "minimumVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+          "manifest": {
+            "description": "Host-only manifest fields merged into the generated host manifest (claude only). name, version, description and engines are derived and cannot appear here.",
+            "type": "object",
+            "not": {
+              "anyOf": [
+                { "required": ["name"] },
+                { "required": ["version"] },
+                { "required": ["description"] },
+                { "required": ["engines"] }
+              ]
+            }
+          }
         },
         "required": ["enabled", "profile"],
         "additionalProperties": false

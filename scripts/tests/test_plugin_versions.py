@@ -7,6 +7,8 @@ import subprocess
 import tempfile
 import unittest
 
+from pluginlib.manifest import render_claude_manifest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "stamp-versions.py"
@@ -45,8 +47,15 @@ class PluginVersionTests(unittest.TestCase):
         result = self.stamp(*args, root=root)
         self.assertEqual(returncode, result.returncode, result.stderr.decode("utf-8"))
 
+    def project(self, root: Path | None = None) -> None:
+        """Regenerate the Claude manifest the way `pluginctl build` does."""
+        plugin = (root or self.fixture) / self.plugin.relative_to(self.fixture)
+        manifest = json.loads((plugin / "plugin.json").read_text(encoding="utf-8"))
+        (plugin / ".claude-plugin/plugin.json").write_bytes(render_claude_manifest(manifest))
+
     def test_stamp_then_two_checks_is_stable_and_source_changes_version(self) -> None:
         self.assert_stamp()
+        self.project()
         first = self.version()
         for _ in range(2):
             self.assert_stamp("--check")
@@ -57,8 +66,18 @@ class PluginVersionTests(unittest.TestCase):
         self.assert_stamp()
         self.assertNotEqual(first, self.version())
 
-    def test_legacy_metadata_and_new_sources_change_version_but_not_projections(self) -> None:
+    def test_stamp_writes_only_the_root_and_check_reports_a_stale_claude_manifest(self) -> None:
         self.assert_stamp()
+        self.assertEqual("old", self.version(self.legacy))
+        result = self.stamp("--check")
+        self.assertEqual(1, result.returncode)
+        self.assertIn(b"stale projection plugins/fixture/.claude-plugin/plugin.json", result.stdout)
+        self.project()
+        self.assert_stamp("--check")
+
+    def test_root_metadata_and_new_sources_change_version_but_not_projections(self) -> None:
+        self.assert_stamp()
+        self.project()
         first = self.version()
         projection = self.plugin / "io.github.kodflow/projections/workflows/example.md"
         projection.parent.mkdir(parents=True)
@@ -67,6 +86,15 @@ class PluginVersionTests(unittest.TestCase):
         metadata = json.loads(self.legacy.read_text(encoding="utf-8"))
         metadata["description"] = "Nouveau réglage"
         self.legacy.write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
+        # A hand edit of the generated Claude manifest is stale, not a new version.
+        self.assert_stamp("--check", returncode=1)
+        self.assert_stamp()
+        self.assertEqual(first, self.version())
+        self.project()
+        self.assert_stamp("--check")
+        metadata = json.loads((self.plugin / "plugin.json").read_text(encoding="utf-8"))
+        metadata["description"] = "Nouveau réglage"
+        (self.plugin / "plugin.json").write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
         self.assert_stamp("--check", returncode=1)
         self.assert_stamp()
         self.assertNotEqual(first, self.version())
@@ -79,6 +107,7 @@ class PluginVersionTests(unittest.TestCase):
         binary.write_bytes(b"raw\r\nimage\r\n")
         self.git("add", ".")
         self.assert_stamp()
+        self.project()
         self.git("add", ".")
         self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                  "commit", "-qm", "Create stamped source")
