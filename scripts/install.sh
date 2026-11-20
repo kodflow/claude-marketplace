@@ -251,12 +251,60 @@ retire_flat_skills() {
     rm -rf "$d" && say "retired flat skill $n (provided by the native plugins)"
   done
 }
+# Root of the kodflow marketplace clone as Codex has it, or nothing.
+codex_mp_root() {
+  codex plugin marketplace list 2>/dev/null | awk '$1 == "kodflow" { print $2 }'
+}
+# True when the registered kodflow marketplace is a clone of this repository
+# (Git origin of its root), whatever revision it is pinned to. A local path or
+# another repository is a foreign source.
+codex_mp_is_ours() {
+  local root=$1 url
+  [ -n "$root" ] || return 1
+  url=$(git -C "$root" remote get-url origin 2>/dev/null) || return 1
+  url=${url%.git}; url=${url%/}
+  case "$url" in
+    "${MARKET_URL%.git}"|"git@github.com:$CODEX_REPO"|"ssh://git@github.com/$CODEX_REPO") return 0 ;;
+  esac
+  return 1
+}
+# Installed version of a plugin as `codex plugin list --json` reports it.
+codex_plugin_version() {
+  codex plugin list --json -m kodflow 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    for p in json.load(sys.stdin).get("installed", []):
+        if p.get("pluginId") == sys.argv[1]:
+            print(p.get("version") or "")
+except Exception:
+    pass' "$1"
+}
+# Moves an existing pinned registration of this repository to a new revision:
+# `marketplace add` refuses a different ref, `marketplace upgrade` does not move
+# a pinned one, so the registration is removed and added again. Codex keeps the
+# plugins' enabled state across the removal; the caller reinstalls them. If the
+# add fails, the previous revision is registered again.
+switch_codex_marketplace() {
+  local sha=$1 root=$2 prev
+  prev=$(git -C "$root" rev-parse HEAD 2>/dev/null)
+  say "kodflow is registered from this repository at ${prev:-an unknown revision}: replacing it with $sha"
+  codex plugin marketplace remove kodflow || return 1
+  if codex plugin marketplace add "$CODEX_REPO" --ref "$sha"; then return 0; fi
+  if [ -n "$prev" ] && codex plugin marketplace add "$CODEX_REPO" --ref "$prev"; then
+    echo "the previous registration ($prev) was restored" >&2
+  else
+    echo "could not restore the previous registration${prev:+ ($prev)}; inspect it with 'codex plugin marketplace list'" >&2
+  fi
+  return 1
+}
 # Registers the marketplace in Codex: pinned to the commit of a clean checkout,
 # or this very directory with --checkout. A pinned registration is verified
 # afterwards: `codex plugin marketplace list` gives the root of the clone and
-# that clone must be at the commit that was asked for.
+# that clone must be at the commit that was asked for. SWITCHED=1 tells the
+# caller that an earlier revision was replaced.
+SWITCHED=0
 register_codex_marketplace() {
-  local sha root got
+  local sha root got out
   if [ "$CHECKOUT" -eq 1 ]; then
     say "native marketplace, local checkout ($HERE)"
     run codex plugin marketplace add "$HERE"
@@ -268,9 +316,23 @@ register_codex_marketplace() {
     return 1
   fi
   say "native marketplace, $CODEX_REPO pinned to $sha"
-  run codex plugin marketplace add "$CODEX_REPO" --ref "$sha" || return 1
-  [ "$CHECK" -eq 1 ] && return 0
-  root=$(codex plugin marketplace list 2>/dev/null | awk '$1 == "kodflow" { print $2 }')
+  root=$(codex_mp_root)
+  if [ "$CHECK" -eq 1 ]; then
+    if codex_mp_is_ours "$root" && [ "$(git -C "$root" rev-parse HEAD 2>/dev/null)" != "$sha" ]; then
+      say "would: codex plugin marketplace remove kodflow (replaces the revision registered from this repository)"
+    fi
+    say "would: codex plugin marketplace add $CODEX_REPO --ref $sha"
+    return 0
+  fi
+  if out=$(codex plugin marketplace add "$CODEX_REPO" --ref "$sha" 2>&1); then
+    [ -z "$out" ] || printf '%s\n' "$out"
+  else
+    case "$out" in *"already added from a different source"*) ;; *) printf '%s\n' "$out" >&2; return 1 ;; esac
+    if ! codex_mp_is_ours "$root"; then printf '%s\n' "$out" >&2; return 1; fi
+    switch_codex_marketplace "$sha" "$root" || return 1
+    SWITCHED=1
+  fi
+  root=$(codex_mp_root)
   got=$([ -n "$root" ] && git -C "$root" rev-parse HEAD 2>/dev/null)
   if [ "$got" != "$sha" ]; then
     echo "the kodflow marketplace is not at the pinned revision $sha (found: ${got:-unreadable}, root: ${root:-none})" >&2
@@ -292,12 +354,27 @@ if [ "$DO_CODEX" -eq 1 ]; then
     run mkdir -p "$codex_dir" || exit 1
     if ! register_codex_marketplace; then
       echo "If Kodflow is registered from another source, inspect it with 'codex plugin marketplace list'." >&2
-      echo "To switch sources, remove that registration with 'codex plugin marketplace remove kodflow' and rerun the installer." >&2
+      echo "To switch to this checkout, remove that registration with 'codex plugin marketplace remove kodflow' and rerun the installer." >&2
       exit 1
     fi
     failed=0
     for p in $(plugin_names "$HERE/.agents/plugins/marketplace.json"); do
-      run codex plugin add "$p@kodflow" || failed=1
+      if [ "$SWITCHED" -eq 1 ]; then
+        # Reinstalled at the new revision, then checked: the version Codex
+        # reports must be the one of the plugin it just installed.
+        added=$(codex plugin add "$p@kodflow" 2>&1) || { printf '%s\n' "$added" >&2; failed=1; continue; }
+        [ -z "$added" ] || printf '%s\n' "$added"
+        want=$(printf '%s\n' "$added" | sed -n 's|^Installed plugin root: .*/||p' | tail -1)
+        have=$(codex_plugin_version "$p@kodflow")
+        if [ -z "$have" ] || { [ -n "$want" ] && [ "$have" != "$want" ]; }; then
+          echo "$p@kodflow: installed version ${have:-unknown} does not match the one just installed (${want:-unknown})" >&2
+          failed=1
+        else
+          say "$p@kodflow at $have"
+        fi
+      else
+        run codex plugin add "$p@kodflow" || failed=1
+      fi
     done
     [ "$failed" -eq 0 ] || {
       echo "native Codex installation incomplete; use --legacy to restore the flat installation" >&2
