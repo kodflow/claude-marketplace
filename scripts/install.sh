@@ -29,7 +29,14 @@
 set -uo pipefail
 # Git for Windows: a native jq.exe writes CRLF unless --binary, and every name
 # read back would end in \r (`name\r@kodflow` is a plugin nobody publishes).
-case "${OSTYPE:-}" in msys*|cygwin*) jq() { command jq -b "$@"; } ;; esac
+# Only over a jq that is there, so `command -v jq` still sends a machine with
+# none to manifest_walk; jq before 1.7 has no -b and gets its \r cut instead.
+case "${OSTYPE:-}" in msys*|cygwin*)
+  if type -P jq >/dev/null 2>&1; then
+    if command jq -b -n 1 >/dev/null 2>&1; then jq() { command jq -b "$@"; }
+    else jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }; fi
+  fi ;;
+esac
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MARKET_URL="https://github.com/kodflow/claude-marketplace.git"

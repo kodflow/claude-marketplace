@@ -46,6 +46,18 @@ if command -v jq >/dev/null 2>&1; then
     eq "jq -b answers a value with no carriage return" "$got" 'x\n'
 fi
 
+FJ=$(mktemp -d)
+# A jq 1.6: no -b, CRLF out. And no jq at all.
+mkdir -p "$FJ/old" "$FJ/none"
+printf '#!/bin/sh\ncase "$1" in -b) echo "jq: Unknown option: -b" >&2; exit 2 ;; esac\nprintf '"'"'x\\r\\n'"'"'\nexit 3\n' > "$FJ/old/jq"
+chmod +x "$FJ/old/jq"
+for t in printf tr od cat; do p=$(type -P "$t") && ln -s "$p" "$FJ/none/$t" 2>/dev/null; done
+got=$(OSTYPE=msys PATH="$FJ/old:$PATH"; . "$LIB/host.sh"; jq -r . <<<'{}' | od -An -c | tr -d ' \n'; printf '|%s' "${PIPESTATUS[0]}")
+eq "a jq without -b: its \\r cut, its exit status kept" "$got" 'x\n|3'
+got=$(OSTYPE=msys PATH="$FJ/none"; . "$LIB/host.sh"; command -v jq || echo none)
+eq "no jq on PATH: no jq function either, the no-jq paths stay reachable" "$got" none
+rm -rf "$FJ"
+
 echo "== lib/host.sh elsewhere (OSTYPE=linux-gnu, darwin)"
 for os in linux-gnu darwin23; do
     got=$(

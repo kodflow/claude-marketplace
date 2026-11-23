@@ -7,7 +7,8 @@
 # Under Git Bash:
 #   - a native jq.exe writes CRLF unless given --binary, which leaves a \r at
 #     the end of the last variable each `eval "$(jq -r '@sh ...')"` sets, and
-#     of every `jq -r` line read back. jq becomes `jq -b`.
+#     of every `jq -r` line read back. jq becomes `jq -b` (or, before jq
+#     1.7, jq with its \r cut), and only when a jq is there.
 #   - Claude Code hands every path in the Windows spelling (cwd C:\x\y,
 #     tool_input.file_path, CLAUDE_PROJECT_DIR), and the hooks test absolute
 #     paths with /* and walk them by /. kf_unixpath VAR... rewrites C:\x and
@@ -16,9 +17,17 @@
 
 case "${OSTYPE:-}" in
     msys*|cygwin*)
-        # No probe: a fork costs tens of milliseconds there, on every hook.
-        # --binary is in every jq since 1.6 (2018).
-        jq() { command jq -b "$@"; }
+        # Only over a jq that exists: a function would make `command -v jq`
+        # answer yes without one, and every "no jq" fallback unreachable.
+        # --binary came with jq 1.7; an older jq.exe has its \r cut instead,
+        # its own exit status kept.
+        if type -P jq >/dev/null 2>&1; then
+            if command jq -b -n 1 >/dev/null 2>&1; then
+                jq() { command jq -b "$@"; }
+            else
+                jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
+            fi
+        fi
         kf_unixpath() {
             local _v _p _d _u
             for _v in "$@"; do

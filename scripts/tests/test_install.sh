@@ -135,7 +135,7 @@ for t in bash env sed awk grep head tail cat mktemp rm cp mv mkdir find wc tr ba
 done
 mkdir -p "$T/only-claude" "$T/only-codex" "$T/jq"
 ln -sf "$T/bin/claude" "$T/only-claude/claude"; ln -sf "$T/bin/codex" "$T/only-codex/codex"
-tool "$(command -v jq)" "$T/jq/jq"
+tool "$(type -P jq)" "$T/jq/jq"   # the program: under Git Bash jq is also a function (host.sh)
 fresh_home() { rm -rf "$T/h"; mkdir -p "$T/h"; printf '%s' "$T/h"; }
 no_state() { rm -f "$CLAUDE_CALLS" "$CODEX_CALLS"; }
 
