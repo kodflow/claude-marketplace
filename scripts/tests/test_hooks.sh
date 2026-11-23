@@ -87,7 +87,9 @@ printf '{}\n' > "$T/repo/mymcp.json"; git -C "$T/repo" add mymcp.json
 bash_cmd 'git commit -m "feat: x"';                                    expect_rc "mymcp.json staged allowed" 0
 git -C "$T/repo" rm -q --cached mymcp.json; rm -f "$T/repo/mymcp.json"
 git -C "$T/repo" rm -q --cached sub/servers.json; rm -rf "$T/repo/sub"
-git -C "$T/repo" config core.excludesFile /dev/null
+# an empty file, not /dev/null: Git for Windows is handed `nul` for it and
+# refuses that as an exclude file, which fails every `git add` that follows
+: > "$T/empty-excludes"; git -C "$T/repo" config core.excludesFile "$T/empty-excludes"
 forge mcp__GitKraken__git_add '{"directory":"."}';                     expect_mj "GitKraken git_add of every file with an untracked .mcp.json blocked"
 rm -f "$T/repo/.mcp.json"
 forge mcp__GitKraken__git_add '{"directory":"."}';                     expect_rc "GitKraken git_add of every file without one allowed" 0

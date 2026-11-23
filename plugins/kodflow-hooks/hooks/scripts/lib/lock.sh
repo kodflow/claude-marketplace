@@ -41,7 +41,9 @@ kf_unlock() {
 # kf_lock DIR [WAIT_SECONDS] → 0 holding the lock, 1 gave up
 kf_lock() {
     local d=$1 tries=$(( ${2:-2} * 10 )) stale=${KF_LOCK_STALE:-10} m grave
-    while ! { mkdir "$d" && ln -s "$$.$RANDOM" "$d/owner"; } 2>/dev/null; do
+    # MSYS (Git for Windows) copies on `ln -s` and refuses a dangling target
+    # unless told to make Cygwin's own kind of link; elsewhere MSYS is unread
+    while ! { mkdir "$d" && MSYS="${MSYS:+$MSYS }winsymlinks:sys" ln -s "$$.$RANDOM" "$d/owner"; } 2>/dev/null; do
         [ -d "${d%/*}" ] || return 1
         if m=$(_kf_mtime "$d") && [ $(( $(date +%s) - m )) -ge "$stale" ]; then
             grave=$d.stale.$$.$RANDOM

@@ -16,6 +16,9 @@
 #   kodflow-statusline-setup --force    reinstall even if present
 #   kodflow-statusline-setup --uninstall
 set -u
+# Git for Windows: a native jq.exe writes CRLF unless --binary, and a value
+# read back with -r would never equal the one compared with
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) jq() { command jq -b "$@"; } ;; esac
 
 REPO=kodflow/status-line
 BIN_NAME=status-line

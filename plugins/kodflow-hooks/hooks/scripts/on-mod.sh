@@ -6,17 +6,21 @@
 # like a PostToolUse (or PostToolUseFailure for a refusal), and it is written
 # through lib/event.jq like every other line of .claude/logs/<branch>/.
 set +e
+# Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
+. "${BASH_SOURCE[0]%/*}/lib/host.sh"
+
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 eval "$(printf '%s' "$INPUT" | jq -r '@sh "CWD=\(.cwd // "")"' 2>/dev/null)" || exit 0
+kf_unixpath CWD FILE NB SCRATCH
 
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 LIB=${BASH_SOURCE[0]%/*}/lib
 
 _branch() {
     local g=$PROJECT_DIR/.git head
-    if [ -f "$g" ]; then read -r head < "$g"; g=${head#gitdir: }; [[ $g = /* ]] || g=$PROJECT_DIR/$g; fi
+    if [ -f "$g" ]; then read -r head < "$g"; g=${head#gitdir: }; [[ $g = /* || $g = [A-Za-z]:[\\/]* ]] || g=$PROJECT_DIR/$g; fi
     if [ -f "$g/HEAD" ]; then
         read -r head < "$g/HEAD"
         case "$head" in "ref: refs/heads/"*) BRANCH=${head#ref: refs/heads/} ;; *) BRANCH=detached ;; esac

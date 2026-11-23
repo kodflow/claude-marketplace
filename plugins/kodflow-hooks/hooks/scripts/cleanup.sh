@@ -24,6 +24,9 @@
 # KODFLOW_CLEANUP_TIMEOUT seconds (default 15), and a call that fails or
 # times out counts as "not known to be merged". KODFLOW_CLEANUP=off: nothing.
 set +e
+# Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
+. "${BASH_SOURCE[0]%/*}/lib/host.sh"
+
 
 [ "${KODFLOW_CLEANUP:-}" = off ] && exit 0
 DIR=${1:-}; shift

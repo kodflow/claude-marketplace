@@ -14,6 +14,9 @@
 # KODFLOW_PERMISSIONS=off switches it off. Fails open: an unreadable settings.json
 # or a missing jq is a message on stderr and exit 0, never a broken file.
 set -u
+# Git for Windows: a native jq.exe writes CRLF unless --binary, and a value
+# read back with -r would never equal the one compared with
+case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) jq() { command jq -b "$@"; } ;; esac
 
 SRC=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 RULES=$SRC/permissions.json
