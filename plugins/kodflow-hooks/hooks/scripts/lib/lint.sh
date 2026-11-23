@@ -66,7 +66,7 @@ kf_lint() {
     # judged where it lands, not by its spelling
     root=$(cd "$root" 2>/dev/null && pwd -P) || return 0
     f=$(cd "${raw%/*}" 2>/dev/null && pwd -P)/${raw##*/} || return 0
-    . "${BASH_SOURCE[0]%/*}/gomod.sh" 2>/dev/null || return 0
+    . "${BASH_SOURCE[0]%[/\\]*}/gomod.sh" 2>/dev/null || return 0
     kf_gomod "$f" "$root" || return 0
     mod=$KF_GOMOD
     if _kf_lint_owned "$cfg" "$root" "$tool"; then

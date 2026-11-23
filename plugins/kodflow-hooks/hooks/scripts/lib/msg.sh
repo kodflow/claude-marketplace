@@ -20,7 +20,7 @@
 
 KF_LANG=${KF_LANG:-}
 KF_MSG_COLOR=0
-KF_MSG_FILE=${BASH_SOURCE[0]%/*}/../../messages.json
+KF_MSG_FILE=${BASH_SOURCE[0]%[/\\]*}/../../messages.json
 
 kf_lang() {
     local project=${1:-} v="" f val

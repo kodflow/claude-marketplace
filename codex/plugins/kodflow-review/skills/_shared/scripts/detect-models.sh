@@ -17,7 +17,7 @@ CJ="${HOME}/.claude.json"
 # An unreadable list must not make every model ungated: it falls back to the
 # one model the policy gates today, as the hooks do.
 GATED=""
-GF="${BASH_SOURCE[0]%/*}/../gated-models.txt"
+GF="${BASH_SOURCE[0]%[/\\]*}/../gated-models.txt"
 if [ ! -r "$GF" ]; then
   GATED=fable
 else

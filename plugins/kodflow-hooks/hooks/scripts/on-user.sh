@@ -3,7 +3,7 @@
 # Sequence: GATE → TRANSFORM (context Claude reads with the prompt) → OBSERVE.
 set +e
 # Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
-. "${BASH_SOURCE[0]%/*}/lib/host.sh"
+. "${BASH_SOURCE[0]%[/\\]*}/lib/host.sh"
 
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
@@ -14,7 +14,7 @@ kf_unixpath CWD FILE NB SCRATCH
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}
-LIB=${BASH_SOURCE[0]%/*}/lib
+LIB=${BASH_SOURCE[0]%[/\\]*}/lib
 
 _branch() {
     local g=$PROJECT_DIR/.git head

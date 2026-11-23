@@ -5,7 +5,7 @@
 **Run `review-context.sh` to collect ALL context in ONE call:**
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rf25e0c43346e"/skills/_shared/scripts/review-context.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r26313b440f4f"/skills/_shared/scripts/review-context.sh
 ```
 
 Returns JSON with: `git{branch, platform, org, repo}`, `diff{files, stats}`, `repo_profile{lint_configs}`, `pr{exists, number}`.
@@ -17,7 +17,7 @@ Use this output for ALL decisions. DO NOT re-run individual git commands.
 ```yaml
 context_detection:
   1_collect:
-    command: "bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rf25e0c43346e"/skills/_shared/scripts/review-context.sh"
+    command: "bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r26313b440f4f"/skills/_shared/scripts/review-context.sh"
     output: "JSON with git context, diff, repo profile, PR detection"
 
   1.5_platform_detection:

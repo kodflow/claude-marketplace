@@ -13,7 +13,7 @@ metadata:
   generated-from: plugins/*/skills/usage
   argument-hint: '[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project FRAGMENT] [--json]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-r5c96de43c332`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rf412f86c420f`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /usage — what the sessions cost
@@ -26,7 +26,7 @@ arithmetic over local files: no API key, no request, no upload, no account
 needed — and nothing it prints came from anywhere but this disk.
 
 ```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-r5c96de43c332"/skills/usage/scripts/usage_report.py --since 2026-09-01
+python3 "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rf412f86c420f"/skills/usage/scripts/usage_report.py --since 2026-09-01
 ```
 
 Options: `--since YYYY-MM-DD`, `--until YYYY-MM-DD` (inclusive), `--project

@@ -7,7 +7,7 @@
 # that branch does one append and leaves.
 set +e
 # Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
-. "${BASH_SOURCE[0]%/*}/lib/host.sh"
+. "${BASH_SOURCE[0]%[/\\]*}/lib/host.sh"
 
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
@@ -18,7 +18,7 @@ kf_unixpath CWD FILE NB SCRATCH
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}
-LIB=${BASH_SOURCE[0]%/*}/lib
+LIB=${BASH_SOURCE[0]%[/\\]*}/lib
 
 _branch() {
     local g=$PROJECT_DIR/.git head
@@ -58,7 +58,7 @@ _sha256() { { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else
 # fingerprint shipped with this copy, and one when this copy's fingerprints
 # differ from the marketplace's (an update pending, or a modified install).
 _fingerprints() {
-    local hd=${BASH_SOURCE[0]%/*}/.. fp h p got pub
+    local hd=${BASH_SOURCE[0]%[/\\]*}/.. fp h p got pub
     fp=$hd/fingerprints.sha256
     if [ ! -f "$fp" ]; then
         printf '\n%s' "- hooks/fingerprints.sha256 is missing from the installed kodflow-hooks: the guards cannot be checked."

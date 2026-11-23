@@ -25,7 +25,7 @@
 # times out counts as "not known to be merged". KODFLOW_CLEANUP=off: nothing.
 set +e
 # Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
-. "${BASH_SOURCE[0]%/*}/lib/host.sh"
+. "${BASH_SOURCE[0]%[/\\]*}/lib/host.sh"
 
 
 [ "${KODFLOW_CLEANUP:-}" = off ] && exit 0
@@ -33,7 +33,7 @@ DIR=${1:-}; shift
 [ -n "$DIR" ] && [ "$#" -gt 0 ] || exit 0
 command -v git >/dev/null 2>&1 || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
-LIB=${BASH_SOURCE[0]%/*}/lib
+LIB=${BASH_SOURCE[0]%[/\\]*}/lib
 LIMIT=${KODFLOW_CLEANUP_TIMEOUT:-15}
 case "$LIMIT" in ''|*[!0-9]*) LIMIT=15 ;; esac
 mkdir -p "$DIR" 2>/dev/null || exit 0

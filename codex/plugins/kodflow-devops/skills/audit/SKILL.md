@@ -12,7 +12,7 @@ metadata:
   generated-from: plugins/*/skills/audit
   argument-hint: '[--fix] [--dimension agents|skills|hooks|mcp|settings|security|knowledge]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-r5c96de43c332`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rf412f86c420f`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /audit — installation health

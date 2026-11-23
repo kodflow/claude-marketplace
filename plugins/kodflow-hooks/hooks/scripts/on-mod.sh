@@ -7,7 +7,7 @@
 # through lib/event.jq like every other line of .claude/logs/<branch>/.
 set +e
 # Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
-. "${BASH_SOURCE[0]%/*}/lib/host.sh"
+. "${BASH_SOURCE[0]%[/\\]*}/lib/host.sh"
 
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
@@ -16,7 +16,7 @@ eval "$(printf '%s' "$INPUT" | jq -r '@sh "CWD=\(.cwd // "")"' 2>/dev/null)" || 
 kf_unixpath CWD FILE NB SCRATCH
 
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
-LIB=${BASH_SOURCE[0]%/*}/lib
+LIB=${BASH_SOURCE[0]%[/\\]*}/lib
 
 _branch() {
     local g=$PROJECT_DIR/.git head

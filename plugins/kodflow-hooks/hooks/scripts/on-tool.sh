@@ -16,7 +16,7 @@
 # fails by accident blocks every shell call of the session.
 set +e
 # Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
-. "${BASH_SOURCE[0]%/*}/lib/host.sh"
+. "${BASH_SOURCE[0]%[/\\]*}/lib/host.sh"
 
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
@@ -89,7 +89,7 @@ _fable_sd() {
 _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
     local fa=main
     [[ $INPUT =~ \"agent_type\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]] && fa=${BASH_REMATCH[1]}
-    . "${BASH_SOURCE[0]%/*}/lib/blocks.sh" 2>/dev/null \
+    . "${BASH_SOURCE[0]%[/\\]*}/lib/blocks.sh" 2>/dev/null \
         && kf_block "$FABLE_SD" hook "${TOOL:-${fp_tool:-}}" "GATED MODEL REFUSED — $1 ($2)" fable "$fa"
     printf '═══════════════════════════════════════════════\n  ❌ %s\n═══════════════════════════════════════════════\n' "GATED MODEL REFUSED — $1 ($2)" >&2
     printf '  %s\n' "A gated model (kodflow-hooks/hooks/gated-models.txt) runs only after the user's yes, once per session." "$3" \
@@ -102,14 +102,14 @@ _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
 # tier-mode file), see _kf_tier_mode in lib/tier.sh.
 _tier_check() {
     [ -n "${TIER_DONE:-}" ] && return 0; TIER_DONE=1
-    . "${BASH_SOURCE[0]%/*}/lib/tier.sh" 2>/dev/null || return 0
+    . "${BASH_SOURCE[0]%[/\\]*}/lib/tier.sh" 2>/dev/null || return 0
     kf_tier_check
     return 0
 }
 _fable_fast() {
     [ -n "${FABLE_DONE:-}" ] && return 0; FABLE_DONE=1
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
-    local L=${BASH_SOURCE[0]%/*}/lib sd m="" t="" why=""
+    local L=${BASH_SOURCE[0]%[/\\]*}/lib sd m="" t="" why=""
     _fable_sd; sd=$FABLE_SD
     if . "$L/beat.sh" 2>/dev/null && kf_beat "$sd"; then return 0; fi
     . "$L/agents.sh" 2>/dev/null || return 0
@@ -142,7 +142,7 @@ _fable_fast() {
 _fable_skill() {
     [ -n "${FABLE_DONE:-}" ] && return 0; FABLE_DONE=1
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
-    local L=${BASH_SOURCE[0]%/*}/lib sk
+    local L=${BASH_SOURCE[0]%[/\\]*}/lib sk
     _fable_sd
     if . "$L/beat.sh" 2>/dev/null && kf_beat "$FABLE_SD"; then return 0; fi
     sk=${FF_SKILL#/}
@@ -215,7 +215,7 @@ kf_unixpath CWD FILE NB SCRATCH
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}   # session-scoped state; on-stop.sh reads it
-LIB=${BASH_SOURCE[0]%/*}/lib
+LIB=${BASH_SOURCE[0]%[/\\]*}/lib
 
 # DELEGATION GATE. A PreToolUse payload carries agent_id only when the call
 # comes from inside a subagent; the main thread sends none (measured on 855
@@ -601,7 +601,7 @@ _p_file() {
 # vendor keywords, `leak` for a commit-only pattern naming a workflow artefact
 # (a .claude path, the Plan: footer). Leaks are tried before the keywords, so
 # `\bclaude\b` does not report `.claude/plans/x.md` as an attribution.
-PATTERNS_DIR=${BASH_SOURCE[0]%/*}/../patterns
+PATTERNS_DIR=${BASH_SOURCE[0]%[/\\]*}/../patterns
 ATTR_PATTERNS=(); COMMIT_PATTERNS=(); PATTERNS_LOADED=""
 
 # Once per call, builtins only: patterns.sh's format (one ERE a line, `#` and
