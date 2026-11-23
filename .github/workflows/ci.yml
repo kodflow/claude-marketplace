@@ -475,6 +475,16 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '24' }
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with: { python-version: '3.13' }
+      # The hooks and the installer call python3; setup-python names it python
+      # alone on Windows, where python3 is otherwise the Microsoft Store stub.
+      - name: python3 on Windows too
+        if: runner.os == 'Windows'
+        run: |
+          d=$(dirname "$(command -v python)")
+          [ -e "$d/python3.exe" ] || cp "$d/python.exe" "$d/python3.exe"
+          python3 -c 'import sys; print(sys.executable)'
 
       # .gitattributes forces LF: a CRLF hook is a silent no-op under bash.
       # The Windows runner checks out with core.autocrlf=true.
