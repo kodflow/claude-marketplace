@@ -62,13 +62,13 @@ MUST_PASS = {
 def git_file_ignored() -> bool:
     # In a worktree `.git` is a file holding the clone's absolute path.
     with tempfile.TemporaryDirectory() as d:
-        (pathlib.Path(d) / ".git").write_text("gitdir: /home/" + "someone/clone/.git\n")
+        (pathlib.Path(d) / ".git").write_text("gitdir: /home/" + "someone/clone/.git\n", encoding="utf-8")
         return subprocess.run([sys.executable, str(SANITIZE), d],
                               capture_output=True).returncode == 0
 
 def blocked(content: str) -> bool:
     with tempfile.TemporaryDirectory() as d:
-        (pathlib.Path(d) / "case.txt").write_text(content + "\n")
+        (pathlib.Path(d) / "case.txt").write_text(content + "\n", encoding="utf-8")
         return subprocess.run([sys.executable, str(SANITIZE), d],
                               capture_output=True).returncode != 0
 

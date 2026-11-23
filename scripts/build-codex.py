@@ -20,7 +20,7 @@ def excluded_plugins(root):
     f = root / "scripts" / "install-exclude.txt"
     if not f.is_file():
         return set()
-    return {l.split("#", 1)[0].strip() for l in f.read_text().splitlines()} - {""}
+    return {l.split("#", 1)[0].strip() for l in f.read_text(encoding="utf-8").splitlines()} - {""}
 
 EXCLUDE_PLUGINS = excluded_plugins(ROOT)
 
@@ -46,7 +46,7 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
     dst.mkdir(parents=True, exist_ok=True)
     entry = src / "SKILL.md"
     if entry.exists():
-        fm, body = split(entry.read_text())
+        fm, body = split(entry.read_text(encoding="utf-8"))
         # The flat install has no package root, so these documents must
         # travel with their skill rather than be linked by package path.
         companions = pathlib.Path("io.github.kodflow/projections/workflows")
@@ -62,14 +62,14 @@ for src in sorted(ROOT.glob("plugins/*/skills/*")):
             written.add(target)
             body = body.replace(f"../../{companions.as_posix()}/{source.name}", target.name)
         entry_text = render_skill(fm, neutralise(body), name)
-        (dst / "SKILL.md").write_text(entry_text)
+        (dst / "SKILL.md").write_text(entry_text, encoding="utf-8", newline="\n")
         written.add(dst / "SKILL.md")
         n_sk += 1
     for f in src.rglob("*"):
         if f.is_file() and f.name != "SKILL.md":
             tgt = dst / f.relative_to(src)
             tgt.parent.mkdir(parents=True, exist_ok=True)
-            try: tgt.write_text(neutralise(f.read_text()))
+            try: tgt.write_text(neutralise(f.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
             except UnicodeDecodeError: tgt.write_bytes(f.read_bytes())
             if f.suffix == ".sh": tgt.chmod(0o755)
             written.add(tgt)
@@ -98,12 +98,12 @@ for src in sorted(ROOT.glob("plugins/*/agents/*.md")):
     package_name = plugin_of(src)
     if package_name in EXCLUDE_PLUGINS or (package_name, src.stem) in portable_roles:
         continue
-    fm, body = split(src.read_text())
+    fm, body = split(src.read_text(encoding="utf-8"))
     name = fm.get("name", src.stem)
     target = agents_out / f"{name}.toml"
     if target in written:
         raise ValueError(f"duplicate custom agent {name!r}")
-    target.write_text(render_agent(fm, body, src.name), encoding="utf-8")
+    target.write_text(render_agent(fm, body, src.name), encoding="utf-8", newline="\n")
     written.add(target)
     n_ag += 1
 

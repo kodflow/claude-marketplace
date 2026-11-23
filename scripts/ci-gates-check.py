@@ -75,7 +75,7 @@ def uses(job):
 
 
 def make_targets(makefile):
-    text = makefile.read_text() if makefile.exists() else ""
+    text = makefile.read_text(encoding="utf-8") if makefile.exists() else ""
     return set(re.findall(r"^([A-Za-z0-9_.-]+):", text, re.M))
 
 
@@ -84,7 +84,7 @@ def main():
     gates = arg("--gates").split()
     advisory = set(arg("--advisory").split())
     targets = make_targets(root / "Makefile")
-    flows = {p.name: yaml.safe_load(p.read_text()) or {} for p in sorted((root / ".github/workflows").glob("*.yml"))}
+    flows = {p.name: yaml.safe_load(p.read_text(encoding="utf-8")) or {} for p in sorted((root / ".github/workflows").glob("*.yml"))}
     bad = []
 
     ci_made = set()

@@ -39,7 +39,7 @@ def gated_tokens(root):
     path = root / GATED
     if not path.is_file():
         return None
-    tokens = ("".join(l.split("#", 1)[0].split()).lower() for l in path.read_text().splitlines())
+    tokens = ("".join(l.split("#", 1)[0].split()).lower() for l in path.read_text(encoding="utf-8").splitlines())
     return [t for t in tokens if t]
 
 def model_fault(rel, m):
@@ -94,7 +94,7 @@ def scratch_write_fault(rel, fm, body):
     return None
 
 def frontmatter(p):
-    raw = p.read_text()
+    raw = p.read_text(encoding="utf-8")
     if not raw.startswith("---\n"):
         return None, raw, "no frontmatter"
     end = raw.find("\n---\n", 4)

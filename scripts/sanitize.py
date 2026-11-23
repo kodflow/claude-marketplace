@@ -41,7 +41,7 @@ def _load_private_rules():
                 sys.exit(f"sanitize: SANITIZE_EXTRA_RULES={c!r} does not exist")
             continue
         n = 0
-        for line in f.read_text().splitlines():
+        for line in f.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "\t" not in line: continue
             pat, _, rep = line.partition("\t")
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     findings, residue, unread = [], [], []
     for f in root.rglob("*"):
         if not f.is_file() or ".git/" in str(f) or f.name == ".git": continue
-        try: t = f.read_text()
+        try: t = f.read_text(encoding="utf-8")
         except UnicodeDecodeError: continue          # binary: not text, not scanned
         except Exception as e: unread.append(f"{f.relative_to(root)}: {e}"); continue
         findings += scan(f.relative_to(root), t)

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import json
+import os
 from pathlib import Path
 import shlex
+import subprocess
 from typing import Any
 
 from ..model import PluginPackage
@@ -43,6 +45,26 @@ SUPPORT: dict[str, dict[str, tuple[str, str, str]]] = {
 def _file(package: PluginPackage, source: Path) -> bool:
     resolved = source.resolve(strict=True)
     return resolved.is_relative_to(package.root.resolve(strict=True)) and resolved.is_file()
+
+
+def _executable(path: Path) -> bool:
+    """Whether a hook command can be run as it is named.
+
+    POSIX: the file's own mode. Windows has no execute bit (`st_mode` shows
+    one only for .exe, .bat, .cmd and .com), so the mode Git records is read
+    instead, which is what a clone on macOS or Linux will get; a file Git
+    does not track there is taken as it is.
+    """
+    if os.name != "nt":
+        return bool(path.stat().st_mode & 0o111)
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--stage", "--", path.name],
+            cwd=path.parent, capture_output=True, text=True, check=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return True
+    return not out or out.startswith("100755 ")
 
 
 def _manifest(package: PluginPackage) -> bool:
@@ -92,7 +114,7 @@ def _commands(package: PluginPackage, groups: object) -> bool:
             if not parts or not parts[0].startswith("${CLAUDE_PLUGIN_ROOT}/"):
                 return False
             path = package.root / parts[0].removeprefix("${CLAUDE_PLUGIN_ROOT}/")
-            if not _file(package, path) or not path.stat().st_mode & 0o111:
+            if not _file(package, path) or not _executable(path):
                 return False
     return True
 

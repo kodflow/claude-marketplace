@@ -56,7 +56,7 @@ class PluginValidationTests(unittest.TestCase):
     def test_loader_warns_where_publisher_rejects_unknown_root_field(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             package = Path(temporary)
-            (package / "plugin.json").write_text(json.dumps(manifest("fixture", {"future": True})))
+            (package / "plugin.json").write_text(json.dumps(manifest("fixture", {"future": True})), encoding="utf-8")
             strict = validate_plugin(package, SCHEMAS, "publisher-strict")
             loader = validate_plugin(package, SCHEMAS, "loader-conformance")
         self.assertTrue(any(issue.severity == "error" for issue in strict))
@@ -144,8 +144,8 @@ class PluginValidationTests(unittest.TestCase):
             outside = root / "outside"
             package.mkdir()
             outside.mkdir()
-            (package / "plugin.json").write_text(json.dumps(manifest("fixture")))
-            (outside / "SKILL.md").write_text("---\nname: escaped\ndescription: escaped\n---\n")
+            (package / "plugin.json").write_text(json.dumps(manifest("fixture")), encoding="utf-8")
+            (outside / "SKILL.md").write_text("---\nname: escaped\ndescription: escaped\n---\n", encoding="utf-8")
             (package / "skills").mkdir()
             (package / "skills" / "escaped").symlink_to(outside, target_is_directory=True)
             issues = validate_plugin(package, SCHEMAS, "publisher-strict")
@@ -261,7 +261,7 @@ class PluginValidationTests(unittest.TestCase):
                     "capabilities": {},
                     "targets": {},
                 }
-                (package / "plugin.json").write_text(json.dumps(manifest(name, {"extensions": {"io.github.kodflow": extension}})))
+                (package / "plugin.json").write_text(json.dumps(manifest(name, {"extensions": {"io.github.kodflow": extension}})), encoding="utf-8")
                 entries.append({"name": name, "path": f"plugins/{name}", "category": "test"})
             data = {
                 "$schema": "../schemas/kodflow-catalog-v1.schema.json",
@@ -273,7 +273,7 @@ class PluginValidationTests(unittest.TestCase):
                 "plugins": entries,
             }
             path = root / "catalog" / "catalog.json"
-            path.write_text(json.dumps(data))
+            path.write_text(json.dumps(data), encoding="utf-8")
             issues = validate_catalog(Catalog.load(path), SCHEMAS)
         self.assertTrue(any(issue.code == "dependency-cycle" for issue in issues))
 

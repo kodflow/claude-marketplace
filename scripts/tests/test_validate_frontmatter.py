@@ -28,12 +28,12 @@ def fixture(agent_fm="model: sonnet\neffort: medium\n", skill_fm="model: inherit
     k = root / "plugins/kodflow-demo/skills/demo/SKILL.md"
     for p in (a, k):
         p.parent.mkdir(parents=True, exist_ok=True)
-    a.write_text(f"---\nname: demo\ndescription: A demo agent.\n{agent_fm}---\n\n{agent_body}\n")
-    k.write_text(f"---\nname: demo\ndescription: A demo skill.\n{skill_fm}---\n\nBody.\n")
+    a.write_text(f"---\nname: demo\ndescription: A demo agent.\n{agent_fm}---\n\n{agent_body}\n", encoding="utf-8")
+    k.write_text(f"---\nname: demo\ndescription: A demo skill.\n{skill_fm}---\n\nBody.\n", encoding="utf-8")
     if gated:
         g = root / GATED
         g.parent.mkdir(parents=True, exist_ok=True)
-        g.write_text("# gated\nfable   # a trailing comment keeps the token\n")
+        g.write_text("# gated\nfable   # a trailing comment keeps the token\n", encoding="utf-8")
     return root
 
 

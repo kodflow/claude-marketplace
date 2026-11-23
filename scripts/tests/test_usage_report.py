@@ -45,11 +45,11 @@ def usage(inp=0, cr=0, w5=0, w1=0, out=0):
 
 def write(path, records):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(json.dumps(r) + "\n" for r in records))
+    path.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
 
 
 def meta(path, **fields):
-    path.with_suffix(".meta.json").write_text(json.dumps(fields))
+    path.with_suffix(".meta.json").write_text(json.dumps(fields), encoding="utf-8")
 
 
 M = 1_000_000
