@@ -7,6 +7,7 @@ import {
   hostArgv,
   isAbsolutePath,
   joinPath,
+  NO_GIT_BASH,
   rootOf,
   slashed,
   trimSlash,
@@ -44,6 +45,26 @@ test("slashes, roots, trims and joins", () => {
   expect(joinPath("/repo", "D:\\abs")).toBe("D:/abs");
 });
 
+test("a share in forward slashes, a drive in either case, a relative part in backslashes", () => {
+  expect(slashed("c:\\a")).toBe("C:/a");
+  expect(rootOf("//srv/share/x.ts")).toBe("//srv/share/");
+  expect(normalize("//srv/share/../x.ts")).toBe("//srv/share/x.ts");
+  // The same file by its absolute spelling and joined under the share: one key
+  expect(targetOf("Edit", { file_path: "src\\..\\x.ts" }, "\\\\srv\\share\\repo")).toBe(
+    targetOf("Edit", { file_path: "\\\\srv\\share\\repo\\x.ts" }, "/elsewhere"),
+  );
+  expect(targetOf("Edit", { file_path: "src\\..\\x.ts" }, "\\\\srv\\share\\repo")).toBe("//srv/share/repo/x.ts");
+  // Under a POSIX base a backslash stays a name character
+  expect(joinPath("/repo", "a\\b")).toBe("/repo/a\\b");
+});
+
+test("lint and tier: c:\\ and C:\\ are the same drive", async () => {
+  const exists = async (p: string) => p === "C:/repo/go.mod";
+  expect(await goModuleOf("c:\\repo\\main.go", "C:\\repo", exists)).toBe("C:/repo");
+  const roots = scriptRoots({ config: "C:/Profiles/dev/.claude", cwd: "C:\\repo", session: "s1" });
+  expect(insideRoots("c:\\repo\\wf.js", roots, "s1")).toBe(true);
+});
+
 test("home: HOME when absolute, else USERPROFILE", () => {
   expect(homeOf("/srv/me", "C:\\Profiles\\dev")).toBe("/srv/me");
   expect(homeOf("C:\\Profiles\\dev", undefined)).toBe("C:/Profiles/dev");
@@ -78,6 +99,10 @@ test("argv: unchanged off Windows, through Git Bash on it", () => {
   // A native program is started as it is
   expect(hostArgv(["git", "status"], B)).toEqual(["git", "status"]);
   expect(hostArgv([], B)).toEqual([]);
+  // No Git Bash on Windows: refused, never a bare bash (WSL's, maybe)
+  expect(() => hostArgv(["mv", "a", "b"], NO_GIT_BASH)).toThrow("Git Bash not found");
+  expect(() => hostArgv(["bash", "x.sh"], NO_GIT_BASH)).toThrow("Git Bash not found");
+  expect(hostArgv(["git", "status"], NO_GIT_BASH)).toEqual(["git", "status"]);
 });
 
 test("collision: a Windows target is absolute, normalised under its drive", () => {

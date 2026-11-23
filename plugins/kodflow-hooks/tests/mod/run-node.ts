@@ -616,7 +616,9 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
         PATH: `${join(T, "bin")}${delimiter}${process.env.PATH}`,
       },
     });
-    if (existsSync(wt)) {
+    // Read before the traced run, which could remove it and hide this one's failure
+    const left = existsSync(wt);
+    if (left) {
       // Why it stayed: the script traced, its last lines in the failure
       const traced = await run(BASH ?? "bash", ["-x", script, dir, ...paths], {
         env: { ...Object.fromEntries(Object.entries(env).filter(([k]) => k.toUpperCase() !== "PATH")), PATH: `${join(T, "bin")}${delimiter}${process.env.PATH}` },
@@ -624,7 +626,7 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
       console.log(String(traced.stderr ?? "").split("\n").slice(-60).join("\n"));
     }
     const notices = (() => { try { return readFileSync(join(dir, "cleanup-notices"), "utf8"); } catch { return "(no notice)"; } })();
-    check(!existsSync(wt), "end to end: the worktree of a merged PR is removed", `paths ${JSON.stringify(paths)}; ${notices.trim()}`);
+    check(!left, "end to end: the worktree of a merged PR is removed", `paths ${JSON.stringify(paths)}; ${notices.trim()}`);
     const branches = (await g("-C", join(T, "remote.git"), "branch", "--list", "feat/z")).stdout.trim();
     check(branches === "", "end to end: its remote branch is deleted");
   } finally {

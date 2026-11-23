@@ -15,6 +15,8 @@ type Host = {
   runs: string[][];
   /** Every argv as the mod passed it to Git Bash on Windows, before unwrapping. */
   wrapped: string[][];
+  /** Every argv as the mod passed it, unwrapped but before fspath.ts folds it. */
+  rawRuns: string[][];
   /** What each `bash` the mod ran read on stdin (on-mod.sh's payload). */
   stdins: string[];
   registered: any[];
@@ -35,6 +37,7 @@ function host(on: any, env: Record<string, string>): Host {
     dirs: new Set(["/", CFG]),
     runs: [],
     wrapped: [],
+    rawRuns: [],
     stdins: [],
     registered: [],
     commands: [],
@@ -106,6 +109,7 @@ function host(on: any, env: Record<string, string>): Host {
     const argv: string[] = ["mkdir", "ln", "rmdir", "rm", "mv"].includes(raw[0]!)
       ? raw.map(px)
       : raw;
+    h.rawRuns.push(raw);
     h.runs.push(argv);
     const stdin = e.init?.stdin ?? e.stdin;
     if (argv[0] === "bash" && typeof stdin === "string") h.stdins.push(stdin);
@@ -454,6 +458,9 @@ for (const env of [
     // The temporary file and the lock in forward slashes, under the drive
     const mv = h.runs.find((a) => a[0] === "mv")!;
     expect(mv[3]).toBe(`/Profiles/dev/.claude/kodflow/sessions/${SID}/tasks.json`);
+    // ...and on drive C itself, before any folding: D:\ would pass the line above
+    const rawMv = h.rawRuns.find((a) => a[0] === "mv")!;
+    expect(rawMv[3]).toBe(`C:/Profiles/dev/.claude/kodflow/sessions/${SID}/tasks.json`);
   });
 
 test("no home at all: the task tools say why instead of writing anywhere", async ($, on) => {
@@ -501,6 +508,15 @@ test("CLAUDE_CODE_GIT_BASH_PATH wins over the default install", async ($, on) =>
   await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
   expect(h.wrapped.length).toBeGreaterThan(0);
   expect(h.wrapped.every((a) => a[0] === mine)).toBe(true);
+});
+
+test("on Windows with no Git Bash anywhere, nothing runs through a bare bash", async ($, on) => {
+  const h = host(on, { HOME: "C:\\Profiles\\dev", OS: "Windows_NT", ProgramFiles: "C:\\Program Files" });
+  await start($);
+  const r: any = await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+  // A failure answered as text, the store untouched; never WSL's bash
+  expect(r.result ?? refusal(r)).toContain("Git Bash not found");
+  expect(h.rawRuns.some((a) => ["bash", "sh", "mkdir", "mv", "ln"].includes(a[0]!))).toBe(false);
 });
 
 test("off Windows (no OS=Windows_NT) argv runs as it is", async ($, on) => {

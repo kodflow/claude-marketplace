@@ -16,6 +16,12 @@
 
 const DRIVE = /^[A-Za-z]:[\\/]/;
 const UNC = /^\\\\[^\\]/;
+// The same share once its separators are forward (`//srv/share`)
+const UNC_FWD = /^\/\/[^/\\]+[/\\][^/\\]/;
+
+/** A path spelled the Windows way: a drive, or a share in either slash. */
+const windowsy = (p: string): boolean =>
+  DRIVE.test(p) || UNC.test(p) || UNC_FWD.test(p);
 
 /** Absolute on any host: `/a`, `C:\a`, `C:/a` or `\\server\share`. */
 export const isAbsolutePath = (p: unknown): p is string =>
@@ -24,11 +30,15 @@ export const isAbsolutePath = (p: unknown): p is string =>
 
 /**
  * A Windows path in forward slashes (`C:\a\b` to `C:/a/b`, `\\s\x` to
- * `//s/x`); anything else unchanged, since a backslash is a legal character
- * in a POSIX file name.
+ * `//s/x`), its drive letter upper-cased (`c:\a` and `C:\a` are one file);
+ * anything else unchanged, since a backslash is a legal character in a
+ * POSIX file name.
  */
-export const slashed = (p: string): string =>
-  DRIVE.test(p) || UNC.test(p) ? p.replace(/\\/g, "/") : p;
+export const slashed = (p: string): string => {
+  if (!windowsy(p)) return p;
+  const s = p.replace(/\\/g, "/");
+  return DRIVE.test(s) ? s[0]!.toUpperCase() + s.slice(1) : s;
+};
 
 /**
  * The root an absolute path starts from, in forward slashes: `/`, `C:/` or
@@ -38,7 +48,7 @@ export function rootOf(p: string): string | undefined {
   const s = slashed(p);
   if (/^[A-Za-z]:\//.test(s)) return s.slice(0, 3);
   const unc = /^\/\/[^/]+\/[^/]+\/?/.exec(s);
-  if (unc && UNC.test(p)) return unc[0].endsWith("/") ? unc[0] : `${unc[0]}/`;
+  if (unc) return unc[0].endsWith("/") ? unc[0] : `${unc[0]}/`;
   return s.startsWith("/") ? "/" : undefined;
 }
 
@@ -50,9 +60,14 @@ export function trimSlash(p: string): string {
   return root && cut.length < root.length ? root : cut || s;
 }
 
-/** `rel` under `base`, or `rel` itself when it is absolute. */
+/**
+ * `rel` under `base`, or `rel` itself when it is absolute. Under a Windows
+ * base the relative part's backslashes are separators too.
+ */
 export const joinPath = (base: string, rel: string): string =>
-  isAbsolutePath(rel) ? slashed(rel) : `${trimSlash(base).replace(/\/$/, "")}/${rel}`;
+  isAbsolutePath(rel)
+    ? slashed(rel)
+    : `${trimSlash(base).replace(/\/$/, "")}/${windowsy(base) ? rel.replace(/\\/g, "/") : rel}`;
 
 /**
  * The user's home: HOME when it is absolute, else USERPROFILE (Windows
@@ -93,6 +108,9 @@ export function bashCandidates(v: HostVars): string[] {
   return out;
 }
 
+/** What the lookup answers on Windows when no Git Bash exists: argv needing it is refused. */
+export const NO_GIT_BASH = "";
+
 /** The POSIX tools the mod runs by name: Git for Windows', not native, on Windows. */
 const POSIX = new Set(["mv", "mkdir", "ln", "rm", "rmdir", "cat", "chmod"]);
 
@@ -104,6 +122,11 @@ const POSIX = new Set(["mv", "mkdir", "ln", "rm", "rmdir", "cat", "chmod"]);
  */
 export function hostArgv(argv: readonly string[], bash: string | undefined): string[] {
   const [cmd, ...rest] = argv;
+  if (bash === NO_GIT_BASH && cmd !== undefined && (cmd === "bash" || cmd === "sh" || POSIX.has(cmd)))
+    // Never a bare "bash": on Windows it may be WSL's, which cannot see C:\
+    throw new Error(
+      `${cmd}: Git Bash not found (set CLAUDE_CODE_GIT_BASH_PATH to its bin\\bash.exe)`,
+    );
   if (!bash || cmd === undefined) return [...argv];
   if (cmd === "bash" || cmd === "sh") return [bash, ...rest];
   if (POSIX.has(cmd))

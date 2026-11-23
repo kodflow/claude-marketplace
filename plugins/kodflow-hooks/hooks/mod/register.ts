@@ -91,6 +91,7 @@ import {
   hostArgv,
   isWindows,
   joinPath,
+  NO_GIT_BASH,
   slashed,
   type HostVars,
 } from "./host.ts";
@@ -187,7 +188,8 @@ function bashOf($: any): Promise<string | undefined> {
     if (!isWindows(vars)) return undefined;
     for (const c of bashCandidates(vars))
       if (await $.fs.exists(c).catch(() => false)) return c;
-    return "bash";
+    // None found: refused rather than a bare "bash" (WSL's, maybe)
+    return NO_GIT_BASH;
   })().catch(() => undefined));
 }
 
