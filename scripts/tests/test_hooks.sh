@@ -1002,7 +1002,10 @@ for t in bash jq cat sort grep head tail cut awk date cksum mkdir touch rm mv wc
     p=$(command -v "$t" 2>/dev/null) && ln -sf "$p" "$T/nokt/$t"
 done
 ln -sf "$FB/ktn-linter" "$T/nokt/ktn-linter"; printf '5\n' > "$T/lint.sleep"; ljson 1 2 KTN-SLOW
-for lp in "$FB:$PATH" "$T/nokt"; do
+# Git Bash always has timeout(1), and a PATH of links to MSYS programs does
+# not start them all: the no-timeout(1) branch is macOS' and is held there.
+lps=("$FB:$PATH" "$T/nokt"); case "${OSTYPE:-}" in msys*|cygwin*) lps=("$FB:$PATH") ;; esac
+for lp in "${lps[@]}"; do
     t0=$(date +%s); LPATH=$lp KF_LINT_TIMEOUT=1 ledit "$GM/cmd/x/main.go"; t1=$(date +%s)
     [ $((t1 - t0)) -lt 4 ] && [ "$RC" -eq 0 ] && [ -z "$(lctx)" ] && ok "post-edit: a slow run is cut and silent ($( [ "$lp" = "$T/nokt" ] && echo 'no timeout(1)' || echo 'timeout(1) if present'))" || bad "post timeout $lp" "$((t1 - t0)) s, $OUT"
 done
