@@ -151,6 +151,18 @@ jobs:
           diff plugins/kodflow-hooks/hooks/docs-catalog.json plugins/kodflow-workflow/skills/docs/catalogue.json \
             || { echo "::error::catalogue.json differs from kodflow-hooks' docs-catalog.json"; exit 1; }
 
+      # host.ts: what differs between macOS, Linux, WSL and Windows, copied
+      # into kodflow-hud (installed alone) from kodflow-hooks; and the test
+      # hosts' path folding, one copy per plugin.
+      - name: The mods' host module is the same in kodflow-hooks and kodflow-hud
+        run: |
+          diff plugins/kodflow-hooks/hooks/mod/host.ts plugins/kodflow-hud/hooks/mod/host.ts \
+            || { echo "::error::host.ts differs between kodflow-hooks and kodflow-hud"; exit 1; }
+          for p in plugins/kodflow-hud/tests plugins/kodflow-ktn/tests; do
+            diff plugins/kodflow-hooks/tests/mod/fspath.ts "$p/fspath.ts" \
+              || { echo "::error::$p/fspath.ts differs from kodflow-hooks'"; exit 1; }
+          done
+
       # route-agent.sh carries agents.sh, the hooks' reader of agent
       # definitions (project, user, installed plugin), because a plugin is
       # installed alone and cannot source a sibling's file. One source, two
@@ -438,6 +450,68 @@ jobs:
       - name: kodflow-gamedev's suite under /bin/bash 3.2
         run: /bin/bash plugins/kodflow-gamedev/tests/run-tests.sh
 
+  # Parity: the same plugin behaviour on Linux, macOS and Windows (Git Bash,
+  # where Claude Code runs every hook). The mods' engine tests, the mod's
+  # store, probe and journal on a real disk with the host's own mv, mkdir and
+  # ln, and the hook scripts against the payloads Claude Code sends, on each
+  # host. A Windows-only path rule (C:\ is absolute, HOME may be missing,
+  # jq.exe writes CRLF, a checkout must stay LF) is held here, not claimed.
+  parity:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: { node-version: '24' }
+
+      # .gitattributes forces LF: a CRLF hook is a silent no-op under bash.
+      # The Windows runner checks out with core.autocrlf=true.
+      - name: The checkout is LF on every host
+        run: |
+          git config --show-origin --get core.autocrlf || true
+          if git ls-files --eol | grep -E '^i/lf +w/(crlf|mixed)'; then
+            echo "::error::files checked out with CRLF"; exit 1
+          fi
+
+      - name: Host tools
+        run: |
+          echo "OSTYPE=$OSTYPE"; bash --version | head -1
+          jq --version; git --version; node --version
+          v=$(sed -n 's/^CLAUDE_CODE_VERSION=//p' .github/versions.env | tr -d '\r')
+          npm install -g "@anthropic-ai/claude-code@${v}"
+          claude --version
+
+      - name: kodflow-ktn's pure modules (node --test)
+        run: node --test plugins/kodflow-ktn/tests/pure/*.spec.ts
+
+      - name: The mods' tests, in the engine (claude plugin test)
+        run: |
+          for p in kodflow-hooks kodflow-hud kodflow-ktn; do
+            echo "== $p"
+            claude plugin test "plugins/$p"
+          done
+
+      - name: The mod's store, probe and journal on a real disk (node)
+        run: node plugins/kodflow-hooks/tests/mod/run-node.ts
+
+      - name: Hook libraries (host, lock, Go project rule)
+        run: |
+          bash plugins/kodflow-hooks/tests/test_host.sh
+          bash plugins/kodflow-hooks/tests/test_lock.sh
+          bash plugins/kodflow-hooks/tests/test_gomod.sh
+
+      - name: Hook scripts, bash-guard corpus included
+        run: bash scripts/tests/test_hooks.sh
+
+      - name: The installer
+        run: bash scripts/tests/test_install.sh
   # The marketplace installed from Git in throwaway homes, Claude and Codex,
   # at the versions .github/versions.env pins (plugin-smoke.yml).
   plugin-smoke:
