@@ -610,9 +610,14 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
     const paths = await claim(disk, dir, { workers: ["agent-9"], epic: 3, epicClosed: false }, undefined);
     const script = join(dirname(HERE), "..", "..", "hooks", "scripts", "cleanup.sh");
     await run(BASH ?? "bash", [script, dir, ...paths], {
-      env: { ...env, PATH: `${join(T, "bin")}${delimiter}${process.env.PATH}` },
+      // Windows spells it Path: a second PATH beside it is a coin toss
+      env: {
+        ...Object.fromEntries(Object.entries(env).filter(([k]) => k.toUpperCase() !== "PATH")),
+        PATH: `${join(T, "bin")}${delimiter}${process.env.PATH}`,
+      },
     });
-    check(!existsSync(wt), "end to end: the worktree of a merged PR is removed");
+    const notices = (() => { try { return readFileSync(join(dir, "cleanup-notices"), "utf8"); } catch { return "(no notice)"; } })();
+    check(!existsSync(wt), "end to end: the worktree of a merged PR is removed", `paths ${JSON.stringify(paths)}; ${notices.trim()}`);
     const branches = (await g("-C", join(T, "remote.git"), "branch", "--list", "feat/z")).stdout.trim();
     check(branches === "", "end to end: its remote branch is deleted");
   } finally {
