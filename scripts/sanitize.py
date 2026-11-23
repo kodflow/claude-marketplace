@@ -139,9 +139,17 @@ if __name__ == "__main__":
     findings, residue, unread = [], [], []
     for f in root.rglob("*"):
         if not f.is_file() or ".git/" in str(f) or f.name == ".git": continue
-        try: t = f.read_text(encoding="utf-8")
-        except UnicodeDecodeError: continue          # binary: not text, not scanned
-        except Exception as e: unread.append(f"{f.relative_to(root)}: {e}"); continue
+        try:
+            data = f.read_bytes()
+        except Exception as e:
+            unread.append(f"{f.relative_to(root)}: {e}")
+            continue
+        # Binary only when it says so (a NUL early on): a text file in
+        # another encoding is still scanned, its invalid bytes replaced, so
+        # an ASCII credential in a Latin-1 file is never passed as clean.
+        if b"\0" in data[:8192]:
+            continue
+        t = data.decode("utf-8", errors="replace")
         findings += scan(f.relative_to(root), t)
         if f.name != pathlib.Path(__file__).name:
             for pat in scrub_residue(t):
