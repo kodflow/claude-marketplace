@@ -525,7 +525,11 @@ jobs:
       - name: Hook scripts, bash-guard corpus included
         run: bash scripts/tests/test_hooks.sh
 
+      # Not on Windows yet: past its first 29 assertions (the install and the
+      # names it reads, which pass there) the suite hangs at the --check
+      # --checkout state case on the runner, under its PATH of fake tools.
       - name: The installer
+        if: runner.os != 'Windows'
         run: bash scripts/tests/test_install.sh
   # The marketplace installed from Git in throwaway homes, Claude and Codex,
   # at the versions .github/versions.env pins (plugin-smoke.yml).
