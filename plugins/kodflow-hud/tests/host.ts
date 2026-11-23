@@ -2,6 +2,7 @@
 // memory: files, agents, commands, toasts, processes, with the clock the
 // test moves. Shared by the wiring and the tree tests.
 import { mock } from "claude-code/testing";
+import { px } from "./fspath.ts";
 
 export const CFG = "/cfg";
 export const SID = "sess-1";
@@ -41,7 +42,12 @@ export type Host = {
 
 export function host(
   on: any,
-  opts: { session?: () => string; env?: Record<string, string> } = {},
+  opts: {
+    session?: () => string;
+    env?: Record<string, string>;
+    /** A read of this path fails (EIO) while it answers true. */
+    readFails?: (path: string) => boolean;
+  } = {},
 ): {
   h: Host;
   clock: ReturnType<typeof mock.clock>;
@@ -109,10 +115,10 @@ export function host(
   });
   on("agent.list", async () => ({ value: h.agents }));
   on("fs.exists", async (_$: any, e: any) => ({
-    value: h.dirs.has(e.path) || h.files.has(e.path),
+    value: h.dirs.has(px(e.path)) || h.files.has(px(e.path)),
   }));
   on("fs.stat", async (_$: any, e: any) => {
-    const f = h.files.get(e.path);
+    const f = h.files.get(px(e.path));
     if (!f) return { deny: "ENOENT" };
     return {
       value: {
@@ -124,18 +130,19 @@ export function host(
     };
   });
   on("fs.read", async (_$: any, e: any) => {
-    const f = h.files.get(e.path);
+    if (opts.readFails?.(px(e.path))) return { deny: "EIO" };
+    const f = h.files.get(px(e.path));
     return f ? { value: f.text } : { deny: "ENOENT" };
   });
   on("fs.write", async (_$: any, e: any) => {
-    h.files.set(e.path, { text: String(e.content ?? e.text ?? ""), mtimeMs: 0 });
+    h.files.set(px(e.path), { text: String(e.content ?? e.text ?? ""), mtimeMs: 0 });
     return { value: undefined };
   });
   on("process.run", async (_$: any, e: any) => {
     h.runs.push(e.argv);
     // `mv -f from to`, the rename a whole write ends with, on the files here
     if (e.argv[0] === "mv") {
-      const [from, to] = e.argv.slice(-2);
+      const [from, to] = e.argv.slice(-2).map(px);
       const f = h.files.get(from);
       if (f) {
         h.files.set(to, f);

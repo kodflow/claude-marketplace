@@ -9,6 +9,7 @@
 // newline.
 
 import type { HudDoc, HudDocs } from "../../types";
+import { isAbsolutePath, joinPath } from "./host.ts";
 
 /** The catalogue's ids, in its order: the manifest's documents are sorted by it. */
 export const CATALOG = [
@@ -83,10 +84,10 @@ export const missingOf = (docs: HudDocs): HudDoc[] =>
  */
 export function manifestPath(docs: HudDocs): string | undefined {
   const root = docs.root;
-  if (!root || !root.startsWith("/")) return undefined;
+  if (!isAbsolutePath(root)) return undefined;
   const rel = docs.manifest || "docs/manifest.json";
-  if (rel.startsWith("/") || rel.split("/").includes("..")) return undefined;
-  return `${root.replace(/\/+$/, "")}/${rel}`;
+  if (isAbsolutePath(rel) || rel.replace(/\\/g, "/").split("/").includes("..")) return undefined;
+  return joinPath(root, rel);
 }
 
 /**

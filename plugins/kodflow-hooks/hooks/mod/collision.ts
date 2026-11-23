@@ -6,6 +6,8 @@
 // the other live sessions' files; a recent line on the same path is a
 // collision the user is asked about.
 
+import { isAbsolutePath, joinPath, rootOf, slashed } from "./host.ts";
+
 /** How far back an edit counts, and how fresh a beat must be: 30 minutes. */
 export const WINDOW_S = 30 * 60;
 
@@ -43,18 +45,26 @@ export function targetOf(
   const key = writes(tool) ? WRITERS[tool as string] : undefined;
   const raw = key ? args[key] : undefined;
   if (typeof raw !== "string" || raw === "") return undefined;
-  return normalize(raw.startsWith("/") ? raw : `${cwd}/${raw}`);
+  return normalize(joinPath(cwd, raw));
 }
 
-/** `a/./b/../c` to `a/c`, without touching the disk. */
+/**
+ * `a/./b/../c` to `a/c`, without touching the disk. The root stays: `/`, or
+ * on Windows `C:/` (the drive letter upper-cased, as the host spells it no
+ * matter how a tool did) or `//server/share/`.
+ */
 export function normalize(path: string): string {
+  const s = slashed(path);
+  let root = rootOf(path) ?? "/";
+  const rest = s.startsWith(root) ? s.slice(root.length) : s;
+  if (/^[a-z]:\/$/.test(root)) root = root.toUpperCase();
   const out: string[] = [];
-  for (const part of path.split("/")) {
+  for (const part of rest.split("/")) {
     if (part === "" || part === ".") continue;
     if (part === "..") out.pop();
     else out.push(part);
   }
-  return "/" + out.join("/");
+  return root + out.join("/");
 }
 
 /** Claude's own transcripts and memory: written by every session, never a collision. */
@@ -70,7 +80,7 @@ export function parse(text: string | undefined): Edit[] {
     if (tab < 1) continue;
     const at = Number(line.slice(0, tab));
     const path = line.slice(tab + 1);
-    if (Number.isFinite(at) && path.startsWith("/")) edits.push({ at, path });
+    if (Number.isFinite(at) && isAbsolutePath(path)) edits.push({ at, path });
   }
   return edits;
 }

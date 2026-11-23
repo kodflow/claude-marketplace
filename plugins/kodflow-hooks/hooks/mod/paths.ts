@@ -4,19 +4,23 @@
 // status line: tasks.json (the task list), agents.json (on-agent.sh),
 // triage-pending (the triage gate) and mod-beat (the proof the mod is loaded).
 
+import { isAbsolutePath, joinPath, trimSlash } from "./host.ts";
+
 /**
  * The Claude configuration directory: CLAUDE_CONFIG_DIR, else ~/.claude.
  * Always absolute: `$.fs` resolves a relative path against the session's
  * working directory and never expands `~`, so anything else is refused.
+ * Absolute on any host (`/x`, `C:\x`, `C:/x`, `\\server\share`), and
+ * returned in forward slashes: a Windows session's HOME is `C:\Profiles\dev`.
  */
 export function configDir(
   claudeConfigDir: string | undefined,
   home: string | undefined,
 ): string | undefined {
   const pick =
-    claudeConfigDir || (home ? `${home.replace(/\/+$/, "")}/.claude` : "");
-  if (!pick.startsWith("/")) return undefined;
-  return pick.length > 1 ? pick.replace(/\/+$/, "") : pick;
+    claudeConfigDir || (isAbsolutePath(home) ? joinPath(home, ".claude") : "");
+  if (!isAbsolutePath(pick)) return undefined;
+  return trimSlash(pick);
 }
 
 /** Keep an identifier usable as a single path component (tasks.py's safe). */

@@ -31,6 +31,7 @@ import type {
   HudHuntStatus,
 } from "../../types";
 import { safe } from "./paths.ts";
+import { isAbsolutePath, joinPath } from "./host.ts";
 
 /** The status.json format this reader knows. */
 export const HUNT_V = 1;
@@ -52,8 +53,8 @@ export const UNREADABLE = "état illisible";
 
 /** The state directory: always `$HOME/.local/state/hunt`, never XDG_STATE_HOME. */
 export function huntRoot(home: string | undefined): string | undefined {
-  if (!home || !home.startsWith("/")) return undefined;
-  return `${home.replace(/\/+$/, "")}/.local/state/hunt`;
+  if (!isAbsolutePath(home)) return undefined;
+  return joinPath(home, ".local/state/hunt");
 }
 
 export const activeFile = (root: string): string => `${root}/active.json`;

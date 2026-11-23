@@ -2,6 +2,7 @@
 // `$` over the plugin, with the host (files, commands, agents) in memory
 // beneath it.
 import { test, expect, mock } from "claude-code/testing";
+import { px } from "./fspath.ts";
 
 const CFG = "/cfg";
 const SID = "sess-1";
@@ -12,6 +13,8 @@ type Host = {
   files: Map<string, string>;
   dirs: Set<string>;
   runs: string[][];
+  /** Every argv as the mod passed it to Git Bash on Windows, before unwrapping. */
+  wrapped: string[][];
   /** What each `bash` the mod ran read on stdin (on-mod.sh's payload). */
   stdins: string[];
   registered: any[];
@@ -31,6 +34,7 @@ function host(on: any, env: Record<string, string>): Host {
     files: new Map(),
     dirs: new Set(["/", CFG]),
     runs: [],
+    wrapped: [],
     stdins: [],
     registered: [],
     commands: [],
@@ -60,27 +64,27 @@ function host(on: any, env: Record<string, string>): Host {
     return { value: { command: e.name } };
   });
   on("fs.exists", async (_$: any, e: any) => ({
-    value: h.dirs.has(e.path) || h.files.has(e.path),
+    value: h.dirs.has(px(e.path)) || h.files.has(px(e.path)),
   }));
   on("clock.sleep", async () => ({ value: undefined }));
   on("fs.write", async (_$: any, e: any) => {
-    mkdirs(parent(e.path));
-    h.files.set(e.path, e.text);
+    mkdirs(parent(px(e.path)));
+    h.files.set(px(e.path), e.text);
     return { value: undefined };
   });
   on("fs.read", async (_$: any, e: any) => {
     // A key "*/a/b" stands for a file under the plugin root, wherever it is
     const text =
-      h.files.get(e.path) ??
-      [...h.files].find(([k]) => k.startsWith("*/") && e.path.endsWith(k.slice(1)))?.[1];
+      h.files.get(px(e.path)) ??
+      [...h.files].find(([k]) => k.startsWith("*/") && px(e.path).endsWith(k.slice(1)))?.[1];
     if (text === undefined) return { deny: "ENOENT" };
     return { value: text };
   });
   on("fs.stat", async (_$: any, e: any) => {
-    if (!h.dirs.has(e.path) && !h.files.has(e.path)) return { deny: "ENOENT" };
+    if (!h.dirs.has(px(e.path)) && !h.files.has(px(e.path))) return { deny: "ENOENT" };
     return {
       value: {
-        kind: h.dirs.has(e.path) ? "directory" : "file",
+        kind: h.dirs.has(px(e.path)) ? "directory" : "file",
         size: 0,
         mtimeMs: Date.now(),
         isLink: false,
@@ -88,7 +92,20 @@ function host(on: any, env: Record<string, string>): Host {
     };
   });
   on("process.run", async (_$: any, e: any) => {
-    const argv: string[] = e.argv;
+    // On Windows the mod starts its POSIX tools through Git Bash by path
+    // (host.ts): unwrapped here, the wrapped argv kept in h.wrapped
+    let raw: string[] = e.argv;
+    if (/bash\.exe$/.test(raw[0] ?? "")) {
+      h.wrapped.push(raw);
+      raw =
+        raw[1] === "-c" && raw[3] === "kodflow"
+          ? raw.slice(4)
+          : [raw[1] === "-c" && raw[3] !== undefined ? "sh" : "bash", ...raw.slice(1)];
+    }
+    // The file tools' paths keyed as the fs hooks key them (fspath.ts)
+    const argv: string[] = ["mkdir", "ln", "rmdir", "rm", "mv"].includes(raw[0]!)
+      ? raw.map(px)
+      : raw;
     h.runs.push(argv);
     const stdin = e.init?.stdin ?? e.stdin;
     if (argv[0] === "bash" && typeof stdin === "string") h.stdins.push(stdin);
@@ -416,6 +433,82 @@ test("the paths follow HOME when CLAUDE_CONFIG_DIR is unset", async ($, on) => {
   expect(
     h.files.has(`/u/.claude/kodflow/sessions/${SID}/tasks.json`),
   ).toBe(true);
+});
+
+// Windows 11: HOME=C:\Profiles\dev, CLAUDE_CONFIG_DIR unset. The task tools
+// were all refused: "no absolute CLAUDE_CONFIG_DIR or HOME" (a drive path
+// did not start with /).
+for (const env of [
+  { HOME: "C:\\Profiles\\dev" },
+  { HOME: "C:/Profiles/dev/" },
+  { USERPROFILE: "C:\\Profiles\\dev" },
+  { HOME: "~", USERPROFILE: "C:\\Profiles\\dev" },
+])
+  test(`a Windows home keeps the list: ${JSON.stringify(env)}`, async ($, on) => {
+    const h = host(on, env);
+    await start($);
+    const r: any = await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+    expect(refusal(r)).toBeUndefined();
+    expect(r.result).toBe("Task #1 created: x");
+    expect(h.files.has(`/Profiles/dev/.claude/kodflow/sessions/${SID}/tasks.json`)).toBe(true);
+    // The temporary file and the lock in forward slashes, under the drive
+    const mv = h.runs.find((a) => a[0] === "mv")!;
+    expect(mv[3]).toBe(`/Profiles/dev/.claude/kodflow/sessions/${SID}/tasks.json`);
+  });
+
+test("no home at all: the task tools say why instead of writing anywhere", async ($, on) => {
+  const h = host(on, { HOME: "relative" });
+  await start($);
+  const r: any = await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+  expect(refusal(r)).toContain("no absolute CLAUDE_CONFIG_DIR, HOME or USERPROFILE");
+  expect(h.runs.some((a) => a[0] === "mv")).toBe(false);
+});
+
+test("on Windows the POSIX tools run through Git Bash, found by path", async ($, on) => {
+  const bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+  const h = host(on, {
+    HOME: "C:\\Profiles\\dev",
+    OS: "Windows_NT",
+    ProgramFiles: "C:\\Program Files",
+  });
+  h.files.set(px(bash), "");
+  await start($);
+  const r: any = await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+  expect(r.result).toBe("Task #1 created: x");
+  // Every mkdir, ln, mv, rm, rmdir and on-mod.sh went through it
+  expect(h.wrapped.length).toBe(h.runs.length);
+  expect(h.wrapped.every((a) => a[0] === bash)).toBe(true);
+  const ln = h.wrapped.find((a) => a[4] === "ln")!;
+  expect(ln.slice(1, 4)).toEqual([
+    "-c",
+    'export MSYS="${MSYS:+$MSYS }winsymlinks:sys"; exec "$@"',
+    "kodflow",
+  ]);
+  expect(h.files.has(`/Profiles/dev/.claude/kodflow/sessions/${SID}/tasks.json`)).toBe(true);
+});
+
+test("CLAUDE_CODE_GIT_BASH_PATH wins over the default install", async ($, on) => {
+  const mine = "D:\\tools\\git\\bin\\bash.exe";
+  const h = host(on, {
+    CLAUDE_CONFIG_DIR: CFG,
+    OS: "Windows_NT",
+    ProgramFiles: "C:\\Program Files",
+    CLAUDE_CODE_GIT_BASH_PATH: mine,
+  });
+  h.files.set(px(mine), "");
+  h.files.set(px("C:\\Program Files\\Git\\bin\\bash.exe"), "");
+  await start($);
+  await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+  expect(h.wrapped.length).toBeGreaterThan(0);
+  expect(h.wrapped.every((a) => a[0] === mine)).toBe(true);
+});
+
+test("off Windows (no OS=Windows_NT) argv runs as it is", async ($, on) => {
+  const h = host(on, { CLAUDE_CONFIG_DIR: CFG, ProgramFiles: "C:\\Program Files" });
+  await start($);
+  await $.tool.call({ tool: T("task_create"), subject: "x", epic: 0 } as any);
+  expect(h.wrapped).toEqual([]);
+  expect(h.runs.some((a) => a[0] === "mv")).toBe(true);
 });
 
 test("KODFLOW_MOD=off: no tool, no beat, attribution left alone", async ($, on) => {

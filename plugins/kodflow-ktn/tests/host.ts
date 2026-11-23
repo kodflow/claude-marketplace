@@ -4,6 +4,7 @@
 // Every hook here stands for the engine, so what it answers reaches the mod
 // as a session would hand it over.
 import { mock } from "claude-code/testing";
+import { px } from "./fspath.ts";
 
 export const NOW = 1_800_000_000_000;
 
@@ -145,16 +146,16 @@ export function host(on: any, over: Partial<Host> = {}) {
       .map((id) => ({ id, title: id, isShown: h.placed, isFocused: false, isPlaced: h.placed })),
   }));
   on("fs.list", async (_$: any, e: any) => {
-    h.listed.push(e.path);
-    const d = h.dirs.get(e.path);
-    return d ? { value: d } : { deny: `ENOENT: ${e.path}` };
+    h.listed.push(px(e.path));
+    const d = h.dirs.get(px(e.path));
+    return d ? { value: d } : { deny: `ENOENT: ${px(e.path)}` };
   });
   on("fs.read", async (_$: any, e: any) => {
-    const f = h.files.get(e.path);
-    return f === undefined ? { deny: `ENOENT: ${e.path}` } : { value: f };
+    const f = h.files.get(px(e.path));
+    return f === undefined ? { deny: `ENOENT: ${px(e.path)}` } : { value: f };
   });
   on("fs.exists", async (_$: any, e: any) => ({
-    value: h.files.has(e.path) || h.dirs.has(e.path),
+    value: h.files.has(px(e.path)) || h.dirs.has(px(e.path)),
   }));
   on("http.fetch", async (_$: any, e: any) => {
     h.fetches.push({ url: e.url, socketPath: e.init?.socketPath });

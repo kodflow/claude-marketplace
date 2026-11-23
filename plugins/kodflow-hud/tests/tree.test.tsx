@@ -735,12 +735,10 @@ test("a new session's agent-models.tsv is read even when its time matches the la
 
 test("a failed read of agent-models.tsv is tried again on the next poll", async ($, on) => {
   let fail = true;
-  on(
-    "fs.read",
-    { path: TASKS.replace("tasks.json", "agent-models.tsv") } as any,
-    async (_$: any, e: any, next: any) => (fail ? { deny: "EIO" } : next(e)),
-  );
-  const { h, clock } = host(on);
+  // Through the host, not a path matcher: the engine hands a hook the path
+  // resolved for the platform (C:\cfg\... on Windows)
+  const models = TASKS.replace("tasks.json", "agent-models.tsv");
+  const { h, clock } = host(on, { readFails: (p) => fail && p === models });
   h.files.set(TASKS, {
     text: tasksJson(
       [task("1", "Work", "in_progress", { worker: "w", worker_id: "a1" })],
