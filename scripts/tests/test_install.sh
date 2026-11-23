@@ -118,20 +118,24 @@ out=$(DEMO_OTHER_SOURCE=1 CODEX_CALLS="$T/conflict-calls" CODEX_HOME="$T/conflic
 # ---- helpers for the cases below
 # A PATH with the tools the installer needs and neither claude, codex nor jq,
 # so a case adds back exactly what it wants (and never reaches the real CLIs).
+# tool SRC DEST: DEST runs SRC. A link, except under Git Bash: Windows looks
+# for a program's DLLs (msys-2.0.dll, python3xx.dll) beside the path it was
+# started by, so there DEST is a two-line launcher. tool_copy DEST2 from one.
+tool() {
+  case "${OSTYPE:-}" in
+    msys*|cygwin*) printf '#!/bin/sh\nexec "%s" "$@"\n' "$1" > "$2" && chmod +x "$2" ;;
+    *) ln -sf "$1" "$2" ;;
+  esac
+}
+tool_copy() { if [ -L "$1" ]; then ln -sf "$(readlink "$1")" "$2"; else cp "$1" "$2"; fi; }
 mkdir -p "$T/tools"
 for t in bash env sed awk grep head tail cat mktemp rm cp mv mkdir find wc tr basename dirname \
          git python3 uname sort date ls cut readlink chmod printf; do
-  src=$(command -v "$t" 2>/dev/null) && [ -x "$src" ] && ln -sf "$src" "$T/tools/$t"
+  src=$(command -v "$t" 2>/dev/null) && [ -x "$src" ] && tool "$src" "$T/tools/$t"
 done
-# Windows: a native program started through a link looks for its DLLs beside
-# the link, so Python gets a two-line launcher there instead
-case "${OSTYPE:-}" in msys*|cygwin*)
-  src=$(command -v python3 2>/dev/null) && rm -f "$T/tools/python3" &&
-    printf '#!/bin/sh\nexec "%s" "$@"\n' "$src" > "$T/tools/python3" && chmod +x "$T/tools/python3" ;;
-esac
 mkdir -p "$T/only-claude" "$T/only-codex" "$T/jq"
 ln -sf "$T/bin/claude" "$T/only-claude/claude"; ln -sf "$T/bin/codex" "$T/only-codex/codex"
-ln -sf "$(command -v jq)" "$T/jq/jq"
+tool "$(command -v jq)" "$T/jq/jq"
 fresh_home() { rm -rf "$T/h"; mkdir -p "$T/h"; printf '%s' "$T/h"; }
 no_state() { rm -f "$CLAUDE_CALLS" "$CODEX_CALLS"; }
 
@@ -171,7 +175,7 @@ out=$(HOME=$(fresh_home) PATH="$T/only-claude:$T/tools" "$BASH" "$T/repo/scripts
 [ "$rc" -eq 0 ] && grep -q 'codex CLI not found' <<<"$out" && ok "no side named: an absent CLI is skipped" || bad "implicit skip" "rc=$rc $out"
 
 # ---- the secret scan cannot be skipped by losing python3
-mkdir -p "$T/nopy"; for t in "$T"/tools/*; do [ "$(basename "$t")" = python3 ] || ln -sf "$(readlink "$t")" "$T/nopy/$(basename "$t")"; done
+mkdir -p "$T/nopy"; for t in "$T"/tools/*; do [ "$(basename "$t")" = python3 ] || tool_copy "$t" "$T/nopy/$(basename "$t")"; done
 out=$(HOME=$(fresh_home) PATH="$T/only-claude:$T/nopy" "$BASH" "$T/repo/scripts/install.sh" --claude 2>&1); rc=$?
 [ "$rc" -ne 0 ] && grep -q python3 <<<"$out" && ok "no python3: install refuses (scan skipped is an error)" || bad "no python3" "rc=$rc $out"
 out=$(HOME=$(fresh_home) PATH="$T/only-claude:$T/nopy" "$BASH" "$T/repo/scripts/install.sh" --claude --check 2>&1); rc=$?
