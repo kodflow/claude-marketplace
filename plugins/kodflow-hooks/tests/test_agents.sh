@@ -452,6 +452,11 @@ gi "$ISO/third"
 run on-tool.sh "$(iso "$P and $ISO/third/x, $ISO/other/y")" CLAUDE_PROJECT_DIR="$ISO/sess"
 ISOC=$(cd "$ISO" && pwd -P)   # macOS: /var is /private/var
 printf '%s' "$ERR" | grep -qF "($ISOC/other, $ISOC/third)" && ok "two other repositories: both named, once each" || bad "iso two" "${ERR:0:300}"
+# A Windows path that does not exist, on any host: the walk up to an existing
+# directory used to cut at / alone and never ended on C:\nope\newrepo
+t0=$(date +%s)
+run on-tool.sh "$(iso 'Start C:\nope\newrepo, then Z:\missing')" CLAUDE_PROJECT_DIR="$ISO/sess"
+[ "$RC" -eq 0 ] && [ $(( $(date +%s) - t0 )) -lt 10 ] && ok "a missing drive path ends the walk and passes" || bad "iso drive path" "rc=$RC"
 run on-tool.sh "$(iso "$P" "")" CLAUDE_PROJECT_DIR="$ISO/sess"
 expect_rc "the same prompt without isolation passes" 0
 run on-tool.sh "$(iso "Edit $ISO/sess/README.md and $ISO/sess/.claude/worktrees/agent-1/a.txt")" CLAUDE_PROJECT_DIR="$ISO/sess"

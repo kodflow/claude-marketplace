@@ -1824,7 +1824,11 @@ post_failure() {
 # nearest existing directory, on stdout; 1 when it is in none.
 _git_common() {
     local d=$1 c
-    while [ -n "$d" ] && [ ! -d "$d" ]; do d=${d%/*}; done
+    # Up to the nearest existing directory; a value with no / left to cut
+    # (C:\x off Windows, a bare word) is in no repository
+    while [ -n "$d" ] && [ ! -d "$d" ]; do
+        case "$d" in */*) d=${d%/*} ;; *) return 1 ;; esac
+    done
     [ -n "$d" ] || d=/
     c=$(unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE; git -C "$d" rev-parse --git-common-dir 2>/dev/null) || return 1
     [ -n "$c" ] || return 1
@@ -1848,6 +1852,7 @@ _isolation_gate() {
         case "$seen" in *$'\n'"$p"$'\n'*) continue ;; esac
         seen="$seen"$'\n'"$p"$'\n'
         n=$((n+1)); [ $n -gt 16 ] && break
+        kf_unixpath p   # Git Bash: C:\x read as /c/x
         c=$(_git_common "$p") || continue
         [ "$c" = "$own" ] && continue
         c=${c%/.git}
