@@ -123,6 +123,12 @@ for t in bash env sed awk grep head tail cat mktemp rm cp mv mkdir find wc tr ba
          git python3 uname sort date ls cut readlink chmod printf; do
   src=$(command -v "$t" 2>/dev/null) && [ -x "$src" ] && ln -sf "$src" "$T/tools/$t"
 done
+# Windows: a native program started through a link looks for its DLLs beside
+# the link, so Python gets a two-line launcher there instead
+case "${OSTYPE:-}" in msys*|cygwin*)
+  src=$(command -v python3 2>/dev/null) && rm -f "$T/tools/python3" &&
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "$src" > "$T/tools/python3" && chmod +x "$T/tools/python3" ;;
+esac
 mkdir -p "$T/only-claude" "$T/only-codex" "$T/jq"
 ln -sf "$T/bin/claude" "$T/only-claude/claude"; ln -sf "$T/bin/codex" "$T/only-codex/codex"
 ln -sf "$(command -v jq)" "$T/jq/jq"
