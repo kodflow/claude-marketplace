@@ -72,9 +72,13 @@ one() {   # $1 = the worktree as the mod noted it
     local p=$1 wt top main br def sha tmp prs verdict num remote rb
     [ -d "$p" ] || return 0
     wt=$(cd "$p" 2>/dev/null && pwd -P) || return 0
+    # The top of its worktree, said by git rather than by comparing two
+    # spellings: on Windows pwd keeps an 8.3 name (RUNNER~1) that git
+    # answers in full, and the main-worktree test below compares git to git.
+    top=$(git -C "$wt" rev-parse --show-prefix 2>/dev/null) || return 0
+    [ -z "$top" ] || return 0
     top=$(git -C "$wt" rev-parse --show-toplevel 2>/dev/null) || return 0
-    top=$(cd "$top" && pwd -P)
-    [ "$top" = "$wt" ] || return 0
+    wt=$(cd "$top" && pwd -P) || return 0
     main=$(git -C "$wt" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')
     [ -n "$main" ] && main=$(cd "$main" 2>/dev/null && pwd -P)
     if [ -z "$main" ] || [ "$main" = "$wt" ]; then
