@@ -5,6 +5,8 @@
 set -u
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 S=$ROOT/plugins/kodflow-hooks/hooks/scripts
+# jq -b under Git Bash (a native jq.exe writes CRLF), as the hooks have it
+. "$S/lib/host.sh"
 FX=$ROOT/plugins/kodflow-hooks/tests/fixtures/gomod.json
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 T=$(cd "$T" && pwd -P)

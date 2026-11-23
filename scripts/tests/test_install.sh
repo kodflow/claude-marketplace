@@ -10,6 +10,8 @@
 # covered, and one added to the exclusion file is held.
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+# jq -b under Git Bash (a native jq.exe writes CRLF), as the hooks have it
+. "$ROOT/plugins/kodflow-hooks/hooks/scripts/lib/host.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 pass=0; fail=0
 ok()  { pass=$((pass+1)); printf '  ok   %s\n' "$1"; }
