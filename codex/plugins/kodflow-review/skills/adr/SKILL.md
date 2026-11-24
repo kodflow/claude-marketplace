@@ -11,7 +11,7 @@ metadata:
   generated-from: plugins/*/skills/adr
   argument-hint: '[--new "<title>"] [--list] [--link <id>]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r2770c3d8f6a8`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r28687dd6b01e`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /adr - Architecture Decision Records
@@ -52,6 +52,8 @@ six months later nobody re-litigates a settled trade-off or silently violates it
 
 - Status: <proposed | accepted | rejected | deprecated | superseded by NNNN>
 - Date: <YYYY-MM-DD>
+- Area: <tag[, tag]> (from docs/adr/areas.txt when it exists)
+- Need: <decision | constraint | incident | convention | record>
 - Deciders: <who>
 - Related: <PR/issue links, related ADRs>
 
@@ -76,6 +78,18 @@ The choice, stated in active voice: "We will …". Be specific and falsifiable.
 - Negative / cost: what we accept (debt, lock-in, perf, complexity).
 - Follow-ups: migrations, fitness functions, things to revisit.
 ```
+
+## Header contract
+
+`Status`, `Date`, `Area` and `Need` are required, as `- Key: value` or
+`- **Key**: value` bullets. `Need` is one of: `decision` (a choice between
+options), `constraint` (a rule to follow), `incident` (a defect and its rule),
+`convention` (process or tooling), `record` (history with no active effect).
+`Area` tags come from `docs/adr/areas.txt` when the repository has one. The
+kodflow-hooks hook refuses a new ADR without a valid `Area` and `Need`
+(`KODFLOW_ADR_LINT=off|warn|strict`); check by hand with
+`python3 -I <plugin>/hooks/scripts/lib/adr_lint.py --check docs/adr`.
+Existing ADRs are not backfilled by this skill.
 
 ## Workflow
 

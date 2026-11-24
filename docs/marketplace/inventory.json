@@ -851,12 +851,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "c242132bd44cdaa10977d813309412cad12d24a566a1e9356dfc7d67dfa9f147"
+          "sha256": "a76f03259b62045551e2d07f2f0547b8ee07cdd4792311a4f3351fd1bfdaa679"
         },
         {
           "class": "support",
           "path": "plugins/kodflow-hooks/README.md",
-          "sha256": "f7d06a41d852b6312317e0f61ba742398875e20e40f6d1a8fdbd2538c983fc5d"
+          "sha256": "2c869a18e5570a69a2716ba5afe613313a477e1d56345cc60dc87c267a78a941"
         },
         {
           "class": "support",
@@ -876,7 +876,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/fingerprints.sha256",
-          "sha256": "cf1bd14c0e81edb358bf883a54642f4a1d28986a54746cad097fbccb8e6e977a"
+          "sha256": "5a6670f90bb4ebc1cffe3037d5347a0d567a84909adc8a3136c7f1bb12f5c9f8"
         },
         {
           "class": "host-extension",
@@ -1025,6 +1025,11 @@
         },
         {
           "class": "host-extension",
+          "path": "plugins/kodflow-hooks/hooks/scripts/lib/adr_lint.py",
+          "sha256": "5a8d3687a9083dc5a1bd031b8a1630b9fead6cb39084d6750468b57afe2a05b8"
+        },
+        {
+          "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/agents.sh",
           "sha256": "813ddc3832c41609edc944134effc86e2ca232dbbaac935bc2737f2c0cba3284"
         },
@@ -1166,7 +1171,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-tool.sh",
-          "sha256": "c8bf2fb2cd2c00836d1aa224e47ded2fc9b75df3c7718286a23c2823510f1ab5"
+          "sha256": "00721329a108d32b87d2b818765c2d1f5f67e2a07fcff5709c4a46322381ae2c"
         },
         {
           "class": "host-extension",
@@ -1186,7 +1191,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "8c320f46c6762ed8aa095a1c357be8d3637f9711b9b031d8ef171336268608a2"
+          "sha256": "139dd199ce8923c641903bd414a1a0769ad6566dc7d5bba14d397e56772cfd6b"
         },
         {
           "class": "verification",
@@ -1237,6 +1242,31 @@
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/fixtures/T0-FINDINGS.md",
           "sha256": "f565a1d5c124b6de911ba2ab835823d859e81107dead1dbf6d429e84c760e370"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/fixtures/adr/0001-plain-bullets.md",
+          "sha256": "24e655785d277e7b3aaf6505707e1b0d5bfe6b3eb211b7ba30a0d9fd9a95384d"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/fixtures/adr/0002-bold-bullets.md",
+          "sha256": "1c07b125e8bfcb03234ae489e6f2da944cba3315e0f82608d63aae2776947215"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/fixtures/adr/0003-front-matter.md",
+          "sha256": "cc442c3b627ad5181bb2602f19aef663909fc3c4d1bae388fc53d898a0a7e54b"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/fixtures/adr/0004-missing-area-need.md",
+          "sha256": "762a04e09873cc8db0cdb14611091a89e5a223f406950f7c38c925fe85a60dae"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/fixtures/adr/areas.txt",
+          "sha256": "bfcba79a3cde7b43997df93d0d346dbb0d37d1eddaec985fb49bd837aec9bf09"
         },
         {
           "class": "verification",
@@ -1401,7 +1431,12 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/run-tests.sh",
-          "sha256": "3befd05546e3cf21dc37f5829e9684ec22d6c19a3354e989832e23cc8d3cd25f"
+          "sha256": "42e6eff95546b077946160d5056e9110037c1d44fb50a1af83e07ee06e52d12d"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/test_adr.sh",
+          "sha256": "b8a4bc75e3d2e7c5acd4ead5998a7385951f2f278d1fb4e62ee0d2831d76d0a2"
         },
         {
           "class": "verification",
@@ -1906,7 +1941,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-review/.claude-plugin/plugin.json",
-          "sha256": "73429159f97df6a9bba01ea13b9fc21c511913b594602b4b411dab37dd4ef38d"
+          "sha256": "60396df3754327dd3a46b9aa4921651973b050cc4057d9738078e5c81ebe6cb4"
         },
         {
           "class": "support",
@@ -1931,7 +1966,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/plugin.json",
-          "sha256": "d7af8cf60ab807face3e9908b07dcf8880ba4e8bf3bae1b23b716728a940854d"
+          "sha256": "046249cba7ae72924568a224b9eee1ec91f901575207ba2789b0dd4dca2a5ffd"
         },
         {
           "class": "portable",
@@ -2056,7 +2091,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/adr/SKILL.md",
-          "sha256": "8510475b6eeac36e693a8f2723eda40c6428f70f0e7c4e37384eb79554e11db1"
+          "sha256": "101810d74685ae9370abafa120e85694d09fdad42db4b96eed9dc7bb2add5d27"
         },
         {
           "class": "portable",
@@ -3369,7 +3404,7 @@
   "schemaVersion": 1,
   "totals": {
     "agents": 49,
-    "files": 650,
+    "files": 657,
     "hookBundles": 5,
     "plugins": 9,
     "skills": 30

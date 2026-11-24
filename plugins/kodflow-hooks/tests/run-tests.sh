@@ -4,7 +4,7 @@
 # test_root_gate.sh here, the routing gate, the gated-model fallback and the
 # agent feedback by test_agents.sh, the Go-project rule by test_gomod.sh, the
 # cleanup of a subagent's worktree on close by test_cleanup.sh, the commit
-# identity by test_identity.sh, the project's documents by test_docs.sh, the
+# identity by test_identity.sh, the project's documents by test_docs.sh, the ADR header contract by test_adr.sh, the
 # Command scope advice by test_scope.sh, the epic predicates (jq) by
 # test_epic_predicates.sh, the mod by tests/mod: run-node.ts under node, the
 # *.test.ts files under `claude plugin test`).
@@ -27,6 +27,7 @@ bash test_gomod.sh
 bash test_cleanup.sh
 bash test_identity.sh
 bash test_docs.sh
+bash test_adr.sh
 bash test_tier.sh
 bash test_scope.sh
 bash test_tier_judge.sh
