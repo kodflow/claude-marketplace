@@ -988,7 +988,8 @@ printf '%s' "$OUT" | jq -e '(.systemMessage | test("scripts/on-tool.sh differs f
 cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/on-tool.sh" "$CP/scripts/on-tool.sh"
 # The triage gate's read list and its reader, and the beat that arms it, are guards too
 for g in lib/read-tools.txt lib/readlist.sh lib/beat.sh; do
-    printf '\nEdit\n' >> "$CP/scripts/$g"; start_copy
+    # A comment, not a word: a sourced lib would run it (on Windows, edit.exe)
+    printf '\n# edited\n' >> "$CP/scripts/$g"; start_copy
     printf '%s' "$OUT" | jq -e --arg g "scripts/$g differs" '.systemMessage | contains($g)' >/dev/null 2>&1 \
         && ok "an edited $g raises a visible warning" || bad "fingerprint $g" "$OUT"
     cp "$ROOT/plugins/kodflow-hooks/hooks/scripts/$g" "$CP/scripts/$g"
