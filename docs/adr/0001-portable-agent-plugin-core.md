@@ -3,6 +3,8 @@
 - Status: accepted
 - Date: 2026-11-18
 - Issue: [#166](https://github.com/kodflow/claude-marketplace/issues/166)
+- Area: catalog, runtime, codex, schemas
+- Need: decision
 
 ## Context
 

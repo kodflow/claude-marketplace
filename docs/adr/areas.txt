@@ -1,0 +1,8 @@
+catalog
+codex
+mcp
+plugins
+runtime
+schemas
+scripts
+docs
