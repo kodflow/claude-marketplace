@@ -53,7 +53,11 @@ wt() {
     printf '%s' "$p"
 }
 # pr BRANCH STATE OID → what gh answers for that branch
-pr() { printf '[{"number":7,"state":"%s","headRefOid":"%s","url":"https://example.invalid/pr/7"}]\n' "$2" "$3" > "$T/gh/${1//\//_}"; }
+# An optional 4th argument adds headRefName (the PR's head branch on the forge).
+pr() {
+    local hn=""; [ -n "${4:-}" ] && hn=$(printf '"headRefName":"%s",' "$4")
+    printf '[{"number":7,"state":"%s","headRefOid":"%s",%s"url":"https://example.invalid/pr/7"}]\n' "$2" "$3" "$hn" > "$T/gh/${1//\//_}"
+}
 sha() { git -C "$1" rev-parse HEAD; }
 local_branch() { git -C "$T/repo" show-ref --verify --quiet "refs/heads/$1"; }
 remote_branch() { git -C "$T/remote.git" show-ref --verify --quiet "refs/heads/$1"; }
@@ -195,6 +199,39 @@ pr feat/k MERGED "$(sha "$K")"
 clean "$K"
 check "second attempt removes it" '[ ! -e "$K" ] && ! local_branch feat/k'
 check "and the removal is said after the refusal" 'notices | grep "repo-k" | grep -q "removed"'
+
+echo "== work branch tracking origin/main (#173): the PR's head is deleted, never main"
+P=$T/.worktrees/repo-p
+git -C "$T/repo" worktree add -q -b work/p "$P" origin/main 2>/dev/null
+git -C "$P" commit -q --allow-empty -m "feat: p"
+git -C "$P" push -q origin work/p:feat/p 2>/dev/null
+git -C "$P" branch -q --set-upstream-to=origin/main work/p 2>/dev/null
+check "setup: the branch tracks main" '[ "$(git -C "$P" config branch.work/p.merge)" = refs/heads/main ]'
+pr work/p MERGED "$(sha "$P")" feat/p
+clean "$P"
+check "worktree and local branch removed" '[ ! -e "$P" ] && ! local_branch work/p'
+check "the PR head branch is deleted on the remote" '! remote_branch feat/p'
+check "main is still on the remote" 'remote_branch main'
+
+echo "== merged PR whose head is the default branch: no remote deletion"
+Q=$T/.worktrees/repo-q
+git -C "$T/repo" worktree add -q -b work/q "$Q" origin/main 2>/dev/null
+git -C "$Q" commit -q --allow-empty -m "feat: q"
+pr work/q MERGED "$(sha "$Q")" main
+clean "$Q"
+check "worktree and local branch removed" '[ ! -e "$Q" ] && ! local_branch work/q'
+check "main is still on the remote" 'remote_branch main'
+check "said with the remote-default motif" 'notices | grep "repo-q" | grep -q "not deleted: it is the default branch"'
+
+echo "== no headRefName from gh, branch tracking main: the fallback never deletes main"
+R=$T/.worktrees/repo-r
+git -C "$T/repo" worktree add -q -b work/r "$R" origin/main 2>/dev/null
+git -C "$R" commit -q --allow-empty -m "feat: r"
+git -C "$R" branch -q --set-upstream-to=origin/main work/r 2>/dev/null
+pr work/r MERGED "$(sha "$R")"
+clean "$R"
+check "main is still on the remote" 'remote_branch main'
+check "said with the remote-default motif" 'notices | grep "repo-r" | grep -q "default branch"'
 
 echo "== UserPromptSubmit hands the notices to the model once"
 : > "$SD/cleanup-notices"; printf 'kodflow cleanup: left X in place: test\n' >> "$SD/cleanup-notices"

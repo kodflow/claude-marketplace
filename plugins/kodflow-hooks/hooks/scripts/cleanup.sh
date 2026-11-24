@@ -106,7 +106,7 @@ one() {   # $1 = the worktree as the mod noted it
         return 0
     fi
     tmp=$DIR/.cleanup.$$.gh
-    ( cd "$wt" && bounded "$tmp" gh pr list --head "$br" --state all --json number,state,headRefOid,url --limit 20 )
+    ( cd "$wt" && bounded "$tmp" gh pr list --head "$br" --state all --json number,state,headRefOid,headRefName,url --limit 20 )
     case $? in
         0) prs=$(cat "$tmp" 2>/dev/null) ;;
         124) rm -f "$tmp" "$tmp.err"
@@ -120,14 +120,15 @@ one() {   # $1 = the worktree as the mod noted it
     verdict=$(printf '%s' "$prs" | jq -r --arg sha "$sha" '
         if type != "array" then "bad"
         elif any(.[]; .state == "MERGED" and .headRefOid == $sha) then
-            "merged " + ([.[] | select(.state == "MERGED" and .headRefOid == $sha)][0].number | tostring)
+            [.[] | select(.state == "MERGED" and .headRefOid == $sha)][0]
+            | "merged \(.number) \(.headRefName // "")"
         elif any(.[]; .state == "MERGED") then
             "differs " + ([.[] | select(.state == "MERGED")][0] | "\(.number) \(.headRefOid)")
         elif any(.[]; .state == "OPEN") then "open " + ([.[] | select(.state == "OPEN")][0].number | tostring)
         elif length > 0 then "closed " + (.[0].number | tostring)
         else "none" end' 2>/dev/null)
     case "$verdict" in
-        merged\ *) num=${verdict#merged } ;;
+        merged\ *) set -- ${verdict#merged }; num=$1; prhead=${2:-} ;;
         differs\ *)
             set -- ${verdict#differs }
             say "$p" differs "left $p in place (branch $br): its head ${sha:0:12} differs from the head ${2:0:12} merged by PR #$1, unpublished work."
@@ -144,9 +145,23 @@ one() {   # $1 = the worktree as the mod noted it
         rm -f "$DIR/.cleanup.$$.err"
         return 0
     fi
-    # The name on the remote, read before branch -D drops the config
-    rb=$(git -C "$main" config "branch.$br.merge" 2>/dev/null); rb=${rb#refs/heads/}; rb=${rb:-$br}
+    # The name on the remote: the merged PR's head branch. The upstream
+    # (branch.<br>.merge) is only the fallback when gh gave no name: a work
+    # branch cut from origin/main tracks main, and deleting that is the bug
+    # of #173. Read before branch -D drops the config.
+    rb=$prhead
+    if [ -z "$rb" ]; then
+        rb=$(git -C "$main" config "branch.$br.merge" 2>/dev/null); rb=${rb#refs/heads/}; rb=${rb:-$br}
+    fi
     git -C "$main" branch -D "$br" >/dev/null 2>&1
+    # Never the default branch on the remote, whatever named it. The worktree
+    # and the local branch are already gone (the PR is merged, the heads
+    # match: nothing is lost), only the remote deletion is withheld.
+    case "$rb" in main|master|"$def")
+        say "$p" remote-default "removed $p and branch $br locally (PR #$num merged); $remote/$rb was not deleted: it is the default branch."
+        rm -f "$DIR/.cleanup.$$.err"
+        return 0 ;;
+    esac
     tmp=$DIR/.cleanup.$$.push
     bounded "$tmp" git -C "$main" push "$remote" --delete "$rb"
     case $? in
