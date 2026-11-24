@@ -674,7 +674,8 @@ run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -qF 'Epics: none active · other open: #2 Kept 0/1' && ! printf '%s' "$C" | grep -q 'Shut\|Old go' \
     && ok "a closed epic, its tasks and the user's tasks in it are left out" || bad "closed epic state" "$C"
-# Idle for 24 h: closing is proposed once per idle period
+# Idle for 24 h: closing is proposed once per idle period. Each prompt
+# beats first: a slow host (Windows) lets the earlier beat go stale.
 old=$((now_s - 90000))
 printf '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"Stale","touched":%s},{"id":2,"agent":"main","title":"Busy","touched":%s}],
   "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Left","status":"pending","updated":%s},
@@ -682,18 +683,18 @@ printf '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title"
     "$old" "$old" "$old" "$old" > "$MS/tasks.json"
 printf '{"agents":{"a-live":{"type":"impl","started":%s,"stopped":null}}}' "$now_s" > "$MS/agents.json"
 rm -f "$T/tmp/sp/user-said"
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -qF 'Idle for 24 h: #1 Stale. Close?' && ! printf '%s' "$C" | grep -q '#2 Busy\. Close' \
     && ok "an epic idle for 24 h is offered for closing, one with a live worker on it is not" || bad "idle proposal" "$C"
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 ctx_of | grep -q 'Idle for 24 h' && bad "idle twice" "$(ctx_of)" || ok "the proposal is made once per idle period"
 jq -c --argjson n "$((now_s - 89000))" '.epics[0].touched = $n' "$MS/tasks.json" > "$MS/t" && mv -f "$MS/t" "$MS/tasks.json"
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 ctx_of | grep -qF 'Idle for 24 h: #1 Stale' && ok "a new idle period is proposed again" || bad "idle again" "$(ctx_of)"
 rm -f "$MS/agents.json" "$T/tmp/sp/user-said"
 printf '{"tasks":[' > "$MS/tasks.json"
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -s 'length' 2>/dev/null)" = 1 ] && ctx_of | grep -q TRIAGE && ! ctx_of | grep -q 'Epics:' \
     && ok "a malformed tasks.json: one document, triage kept, state left out" || bad "user malformed" "rc=$RC $OUT"
 printf '%s' '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"E"}],"tasks":[]}' > "$MS/tasks.json"
