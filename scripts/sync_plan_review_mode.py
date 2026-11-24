@@ -7,9 +7,11 @@ copies). The canonical text is the section of
 plugins/kodflow-workflow/skills/_shared/specialists.md; this script is how it
 reaches the copies, so nobody edits 38 files by hand:
 
-- every agent file under plugins/*/agents that has a `## Plan review mode`
-  heading gets the canonical section in place of its own, wherever the
-  section sits (in the middle of the file or at its end);
+- every agent file under plugins/*/agents, and every neutral role's
+  instructions.md under plugins/*/io.github.kodflow/roles (the source those
+  agent files are compiled from by `pluginctl roles`), that has a
+  `## Plan review mode` heading gets the canonical section in place of its
+  own, wherever the section sits (in the middle of the file or at its end);
 - the two mirrors of _shared/specialists.md (kodflow-review, kodflow-devops)
   get the canonical file whole, as CI's `diff -r` of the _shared trees wants.
 
@@ -55,8 +57,10 @@ def with_section(text, canon):
 
 
 def targets(root):
-    """The agent files that carry the section."""
-    for f in sorted(root.glob("plugins/*/agents/*.md")):
+    """The agent files and role instructions that carry the section."""
+    files = list(root.glob("plugins/*/agents/*.md"))
+    files += root.glob("plugins/*/io.github.kodflow/roles/*/instructions.md")
+    for f in sorted(files):
         if span(f.read_text(encoding="utf-8")) is not None:
             yield f
 
