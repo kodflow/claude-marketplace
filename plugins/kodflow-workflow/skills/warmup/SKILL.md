@@ -127,6 +127,11 @@ CLAUDE.md size thresholds (lines; ceiling decided by Florent, 2026-10-23):
   Plus a character check (wc -m) for what loads on demand (a subdirectory
   CLAUDE.md, a path-scoped rule): over 40 000 = "truncated on a 200K window",
   over 150 000 = "truncated everywhere" (FORBIDDEN). Claude Code memory docs.
+  Byte budget, applied with the line table (`wc -c`; the SessionStart hook
+  warns on the same numbers): the root CLAUDE.md over 24 KB, or a
+  subdirectory one over 12 KB, is WARNING at least: --update condenses or
+  splits it whatever its line count (KODFLOW_CLAUDE_MD_ROOT_KB / _SUB_KB move
+  the numbers).
   A file warmup creates starts from the short template; a file it moves is
   bounded by this table only.
   --update proposes a new CLAUDE.md only where no ancestor covers the

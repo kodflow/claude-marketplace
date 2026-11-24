@@ -36,3 +36,4 @@ bash test_epic_predicates.sh
 bash test_coderabbit.sh
 python3 -I -m unittest discover -s coderabbit
 python3 -I -m unittest discover -s . -p 'test_kf_docs.py'
+python3 -I -m unittest discover -s . -p 'test_decision_map.py'

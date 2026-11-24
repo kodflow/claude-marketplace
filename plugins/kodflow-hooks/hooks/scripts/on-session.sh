@@ -165,6 +165,14 @@ Context was compacted: verify the task state before continuing.'
             [ -n "$idx" ] && ctx="${ctx:+$ctx
 
 }$idx"
+            idx=$(kf_docs_map "$KF_DOCS_TOP")
+            [ -n "$idx" ] && ctx="${ctx:+$ctx
+
+}$idx"
+            idx=$(kf_docs_budget "$KF_DOCS_TOP")
+            [ -n "$idx" ] && ctx="${ctx:+$ctx
+
+}$idx"
         else
             rm -f "$sdir/docs.json" 2>/dev/null
         fi

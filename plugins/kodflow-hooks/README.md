@@ -1258,3 +1258,16 @@ ADRs are left out unless `--all`. The mod registers the same search as the
 call is not wanted. SessionStart and a Write/Edit under `docs/` (or of a
 `CLAUDE.md`) refresh the index in a detached background child, never waited on;
 `KODFLOW_DOCS_INDEX=off` lifts that, `KODFLOW_DOCS_CACHE` moves the cache.
+
+### Decision map and CLAUDE.md budget (SessionStart)
+
+`kf_docs.py map` prints at most 60 lines and 3600 bytes: the accepted ADRs
+(superseded ones left out) grouped by `Area` (`-` when absent), a short title
+and the `amends` / `supersedes` edges; ADRs with edges come first, then the
+newest, the rest is counted. SessionStart appends it to the document index
+(headers only, 5 s bound, fails open; `KODFLOW_DOCS_INDEX=off` lifts it). It
+also adds one line when the root `CLAUDE.md` exceeds 24 KB or another one 12
+KB (`kf_docs.py budget`; `KODFLOW_CLAUDE_MD_ROOT_KB`, `KODFLOW_CLAUDE_MD_SUB_KB`
+move the numbers, `KODFLOW_CLAUDE_MD_BUDGET=off` lifts it). `kf_docs.py export
+--obsidian DIR` writes one generated note per ADR with `[[ADR-NNNN]]` links:
+an output, never a source.
