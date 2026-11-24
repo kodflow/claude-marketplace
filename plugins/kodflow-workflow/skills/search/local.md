@@ -7,8 +7,8 @@ every `CLAUDE.md`, and the global base and memory). Prefer the `docs_search`
 tool when it is listed; otherwise the CLI, which needs no mod:
 
 ```bash
-python3 -I "${CLAUDE_PLUGIN_ROOT}/../kodflow-hooks/hooks/scripts/lib/kf_docs.py" \
-  search "<keywords>" [--area A] [--need N] --limit 8
+KF=$(ls -d ~/.claude/plugins/cache/*/kodflow-hooks/*/hooks/scripts/lib/kf_docs.py 2>/dev/null | tail -1)
+python3 -I "$KF" search "<keywords>" [--area A] [--need N] --limit 8
 ```
 
 A hit is `num · title · status · area · path:line` and a snippet: Read only the

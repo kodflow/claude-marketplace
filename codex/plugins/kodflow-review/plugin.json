@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-review",
-  "version": "0.0.0-r8ccf0c960ae2",
+  "version": "0.0.0-r4ab4c72ea0a9",
   "description": "Evidence-bound review and debugging. Findings cite real code and a counterexample; deterministic scanners run for real and their exit codes populate the report; an external non-LLM verifier can invalidate the whole run. Root-cause-first debugging refuses a fix nobody proved.",
   "author": {
     "name": "kodflow",

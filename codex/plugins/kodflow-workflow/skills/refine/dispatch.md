@@ -28,14 +28,14 @@ Char-cap stays 4000 in both cases.
 
 ```bash
 # 1. Try router
-ROUTER="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704"/skills/_shared/scripts/route-agent.sh
+ROUTER="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r9e36d241194d"/skills/_shared/scripts/route-agent.sh
 DISPATCH=$(bash "$ROUTER" --skill /refine --phase "$LENS" --profile "$PROFILE")
 RC=$?
 
 # 2. Router exit 0 or 10 → use returned dispatch JSON
 # 3. Router exit 20-31 → static fallback (fix #17)
 if [ "$RC" -ge 20 ] && [ "$RC" -le 31 ]; then
-  source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704"/skills/_shared/scripts/refine-static-fallback.sh
+  source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r9e36d241194d"/skills/_shared/scripts/refine-static-fallback.sh
   DISPATCH=$(refine_static_lens "$LENS")
   [ -z "$DISPATCH" ] && {
     # Drop lens; annotate telemetry

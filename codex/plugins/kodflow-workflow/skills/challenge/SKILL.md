@@ -17,7 +17,7 @@ metadata:
   generated-from: plugins/*/skills/challenge
   argument-hint: <plan slug|file|description> [--concurrency N] [--no-codex] [--dry-run]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r9e36d241194d`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /challenge — debate the plan, lock the directive
@@ -110,7 +110,7 @@ Resolve the argument to a plan. Read the project's constraint ledger too
 (`CLAUDE.md` and `.claude/constraints.md`) — a plan that violates a recorded
 `MUST` is wrong before any reviewer opens it, and that check costs nothing.
 Same for the project's documents (the `ok` entries of
-`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704"/skills/docs/scripts/docs.sh compute`)
+`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r9e36d241194d"/skills/docs/scripts/docs.sh compute`)
 and the ADRs that concern the plan, each checked for a later ADR that amends or
 supersedes it. A superseded ADR is replaced by the one in force; a partly
 amended one is handed with its amendment, naming what of the earlier text still
