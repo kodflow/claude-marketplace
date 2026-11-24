@@ -15,6 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -798,6 +800,17 @@ def print_text(report: dict, projects: Path, since: str | None, until: str | Non
         for agent, count in repeats["by_agent"].items():
             print(f"   {agent:<30} {count:>4}")
 
+    total = report["reprimes_total"]
+    print()
+    print(f"── re-primes total: {total['requests']} request(s), {money(total['cost'])} "
+          f"paid to reload expired caches")
+    rtk = report["rtk"]
+    if rtk["available"]:
+        print(f"── rtk: {rtk['saved_tokens']:,} tokens saved "
+              f"({rtk['commands']:,} commands, {rtk['scope']})")
+    else:
+        print(f"── rtk: not reported — {rtk['reason']}")
+
     print()
     # "the ten most expensive" is a ceiling: a short range simply has fewer
     # windows, and claiming ten while printing four reads like a bug.
@@ -809,6 +822,31 @@ def print_text(report: dict, projects: Path, since: str | None, until: str | Non
               f"{window['parallel_sessions']} session(s) in parallel")
 
 
+def rtk_gain(since: datetime | None, until: datetime | None) -> dict:
+    """Read-only rtk savings; never raises, so a missing rtk cannot fail the report."""
+    exe = shutil.which("rtk")
+    if not exe:
+        return {"available": False, "reason": "rtk is not on PATH"}
+    try:
+        proc = subprocess.run([exe, "gain", "--all", "--format", "json"],
+                              capture_output=True, text=True, timeout=30, check=False)
+        if proc.returncode != 0:
+            return {"available": False, "reason": f"rtk gain exited {proc.returncode}"}
+        data = json.loads(proc.stdout)
+        if since or until:
+            lo = since.date().isoformat() if since else ""
+            hi = until.date().isoformat() if until else "9999-12-31"
+            days = [d for d in data.get("daily", []) if lo <= d.get("date", "") <= hi]
+            return {"available": True, "scope": "range",
+                    "saved_tokens": sum(d.get("saved_tokens", 0) for d in days),
+                    "commands": sum(d.get("commands", 0) for d in days)}
+        summary = data["summary"]
+        return {"available": True, "scope": "all time",
+                "saved_tokens": summary["total_saved"], "commands": summary["total_commands"]}
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as err:
+        return {"available": False, "reason": f"rtk gain unreadable: {err}"}
+
+
 def jsonable(report: dict) -> dict:
     def cost(value: Cost) -> dict:
         return {"input": round(value.inp, 6), "cache_read": round(value.cache_read, 6),
@@ -816,6 +854,8 @@ def jsonable(report: dict) -> dict:
                 "total": round(value.total, 6)}
 
     return {
+        "rtk": report.get("rtk"),
+        "reprimes_total": report.get("reprimes_total"),
         "stats": report["stats"],
         "unknown_models": {k: dict(v) for k, v in report["unknown_models"].items()},
         "dispatches": report["dispatches"],
@@ -900,6 +940,11 @@ def main(argv: list[str] | None = None) -> int:
     sessions = projects.parent / "kodflow" / "sessions"
     tier = analyse_tier(trace, sessions, parse_day(args.since), parse_day(args.until, end=True))
     report = build_report(events, stats, trace, tier)
+    report["rtk"] = rtk_gain(parse_day(args.since), parse_day(args.until, end=True))
+    report["reprimes_total"] = {
+        "requests": sum(w["reprimes"]["requests"] for w in report["weeks"].values()),
+        "cost": sum(w["reprimes"]["cost"].total for w in report["weeks"].values()),
+    }
 
     if args.json:
         json.dump(jsonable(report), sys.stdout, indent=2, sort_keys=False)

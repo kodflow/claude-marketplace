@@ -214,5 +214,13 @@ has "and says so" "$OUT" "no priced requests in range"
 OUT="$(python3 "$REPORT" --projects "$BOX/does-not-exist" 2>&1)"; STATUS=$?
 is "a missing root is not an error either" "$STATUS" "0"
 
+# --- 10. rtk is optional ----------------------------------------------------
+echo "rtk section"
+PY="$(command -v python3)"; NORTK="$BOX/nortk"; mkdir -p "$NORTK"
+OUT="$(PATH="$NORTK" "$PY" "$REPORT" --projects "$BOX/filters" 2>&1)"; STATUS=$?
+is "no rtk on PATH is not an error" "$STATUS" "0"
+has "the rtk line says why" "$OUT" "rtk: not reported"
+has "the re-prime total is printed" "$OUT" "re-primes total"
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
