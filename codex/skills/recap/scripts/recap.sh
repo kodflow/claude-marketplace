@@ -9,8 +9,9 @@
 # reconstruct it from memory of the conversation: the task list and the
 # subagents live in files kodflow-hooks writes, and this script reads them.
 #
-#   state  open epics and their open tasks (main agent only, the ones the
-#          status line shows), who has to act on each, the running
+#   state  open epics and their open tasks (main agent only; an epic closed
+#          with task_focus(close=true) and its tasks left out), who has
+#          to act on each, the running
 #          subagents, and the branch and GitHub repository of each one's
 #          worktree, so the skill can look up its PR and CI.
 #   seen   reads the rendered table (third argument, else stdin) and
@@ -99,9 +100,15 @@ EOF
     | ($t.epics | if type == "object"
                   then [to_entries[] | (.value | obj) + {agent: .key}]
                   else arr end
-       | map(obj | select((.agent // "main") == "main" and (.id | type) == "number"))) as $epics
-    | (($t.active | obj).main // ($t.epics | obj).main.id? // 0) as $active
-    | ($t.tasks | arr | map(obj | select((.agent // "main") == "main"))) as $tasks
+       | map(obj | select((.agent // "main") == "main" and (.id | type) == "number"))) as $all
+    # closed_at a finite number above 0: closed (kodflow-hooks lib/epics.jq)
+    | def closed: (.closed_at) as $c | ($c | type) == "number" and ($c | isinfinite | not) and $c > 0;
+      [$all[] | select(closed) | .id] as $shut
+    | [$all[] | select(closed | not)] as $epics
+    | (($t.active | obj).main // ($t.epics | obj).main.id? // 0) as $active0
+    | (if any($shut[]; . == $active0) then 0 else $active0 end) as $active
+    | ($t.tasks | arr | map(obj | select((.agent // "main") == "main"))) as $every
+    | [$every[] | (.epic // 0) as $e | select(any($shut[]; . == $e) | not)] as $tasks
     | ($a | obj | .agents | obj | to_entries
        | map(select((.value | obj).stopped == null)
              | {id: .key, type: (.value.type // "?"), epic: (.value.epic // 0),
@@ -114,7 +121,8 @@ EOF
     | def holds($w; $wid; $agent):
         if $wid != "" then $agent.id == $wid else $agent.type == $w or $agent.id == $w end;
       def alive($w; $wid): any($running[] as $r | holds($w; $wid; $r); .);
-      def done_ids: [$tasks[] | select(.status == "completed") | .id | tostring];
+      # settled: completed, or filed in a closed epic (a deleted task is gone)
+      def done_ids: [$every[] | (.epic // 0) as $e | select(.status == "completed" or .status == "deleted" or any($shut[]; . == $e)) | .id | tostring];
       done_ids as $done
     | {
         session: $sid,
