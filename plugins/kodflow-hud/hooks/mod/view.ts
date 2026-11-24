@@ -7,7 +7,7 @@
 // listed. « reprendre », on a hunt probably orphaned, asks for
 // `/hunt --resume <slug>` in the prompt box, never sent.
 
-import type { HudHunt, HudHuntRun } from "../../types";
+import type { HudHunt, HudHuntRun, HudVitals } from "../../types";
 import type { TreeModel } from "./tree.ts";
 import {
   NO_HUNT,
@@ -39,12 +39,15 @@ import {
   type Ui,
 } from "./layout.tsx";
 import { cells } from "./width.ts";
+import { hasVitals, vitalsLines } from "./vitals.ts";
 
 /** What the views read beside the tree: handed down with it. */
 export type Extra = {
   now: number;
   /** Absent from an older caller: no hunt, no « Chasse » tab. */
   hunt?: HudHunt;
+  /** The context gauge, cache countdown and receipt; absent: no rows. */
+  vitals?: HudVitals;
   /**
    * The fault seam, inert unless KODFLOW_HUD_FAULT_PROBE=1: the key « ! »
    * then makes the Client draw past the engine's 100,000 characters, which
@@ -88,10 +91,35 @@ export function viewScreen(
       counts,
       extra.now,
     );
-  const s = screenOf(model, ui, width, rows, counts);
+  // The vitals rows sit above the views' bar, under the tree, from 10 rows
+  const vit =
+    extra.vitals && hasVitals(extra.vitals) && rows >= 10 && model.found && model.epics.length
+      ? vitalsLines(extra.vitals, extra.now, width)
+      : [];
+  const s = screenOf(model, ui, width, rows - vit.length, counts);
+  if (typeof s !== "string" && vit.length) return withVitals(s, vit);
   // No tree: its message, and the bar while a hunt keeps « Chasse » reachable
   if (typeof s !== "string" || rows < 4 || !counts.hunt) return s;
   return messageScreen(s, ui, width, rows, counts);
+}
+
+/** The vitals lines put in before the bar (or last); buttons below move down. */
+function withVitals(s: Screen, vit: Cell[][]): Screen {
+  const at = s.tabsLine >= 0 ? s.tabsLine : s.lines.length;
+  const n = vit.length;
+  return {
+    ...s,
+    lines: [...s.lines.slice(0, at), ...vit, ...s.lines.slice(at)],
+    rowIds: [
+      ...s.rowIds.slice(0, at),
+      ...vit.map(() => undefined),
+      ...s.rowIds.slice(at),
+    ],
+    tabsLine: s.tabsLine >= 0 ? s.tabsLine + n : s.tabsLine,
+    ...(s.buttons && {
+      buttons: s.buttons.map((b) => (b.y >= at ? { ...b, y: b.y + n } : b)),
+    }),
+  };
 }
 
 export function messageScreen(

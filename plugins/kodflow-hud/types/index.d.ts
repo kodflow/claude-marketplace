@@ -171,6 +171,47 @@ export type HudHuntCursor = Record<string, { created: number; seq: number }>;
  */
 export type HudFault = { gen: number; at: number[]; until: number };
 
+/** The receipt of the last turn: only what the host measured. */
+export type HudReceipt = {
+  durationMs: number;
+  subagents: number;
+  edits: number;
+  errors: number;
+  /** Absent unless the host gave the session cost at both ends of the turn. */
+  costUsd?: number;
+};
+
+/**
+ * What the vitals rows draw. Every field is absent until the host gives it;
+ * the window is the compaction window when `compact` is set, else the
+ * model's own and the row says « (inféré) ».
+ */
+export type HudVitals = {
+  /** Input tokens of the last response (session.measure). */
+  tokens?: number;
+  /** The window the gauge measures against. */
+  window?: number;
+  /** The host exposed the compaction window (the breakdown's own). */
+  compact?: boolean;
+  /** Session cost in dollars, when the host keeps a ledger. */
+  costUsd?: number;
+  /** When the last turn that touched the prompt cache ended, in ms. */
+  cacheAt?: number;
+  /** 5 min or 1 h, in ms. */
+  cacheTtlMs?: number;
+  /** The usage named the lifetime; else five minutes is assumed. */
+  cacheTtlKnown?: boolean;
+  /** The turn under way. */
+  turn?: {
+    at: number;
+    subagents: number;
+    edits: number;
+    errors: number;
+    cost0?: number;
+  };
+  receipt?: HudReceipt;
+};
+
 declare module "claude-code" {
   interface PluginState {
     "kodflow-hud": {
@@ -197,6 +238,8 @@ declare module "claude-code" {
       huntCursor: HudHuntCursor;
       /** The « Tâches » Client's faults, and its key's generation. */
       fault: HudFault;
+      /** Context gauge, cache countdown and last-turn receipt. */
+      vitals: HudVitals;
     };
   }
 }
