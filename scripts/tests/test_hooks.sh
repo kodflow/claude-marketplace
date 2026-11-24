@@ -634,6 +634,9 @@ printf '%s' "$C" | grep -q 'task_create always names its epic' && printf '%s' "$
 MS=$T/home/.claude/kodflow/sessions/sess-1; mkdir -p "$MS"; beat
 # Epics touched now (their recorded order kept): an epic idle for 24 h adds
 # a line of its own, tested apart below
+# Every prompt beats first, as the mod does before each hook: the Epics line is
+# read only while the beat is under KF_BEAT_FRESH (5 s) old, and a Windows host
+# spends more than that between two runs.
 fresh() { jq -c --argjson n "$(date +%s)" '.epics |= map(if (.touched | type) == "number" then .touched += $n else . end)' "$1" > "$1.f" && mv -f "$1.f" "$1"; }
 printf '%s' '{"version":2,"active":{"main":2},
   "epics":[{"id":1,"agent":"main","title":"api-gateway","touched":5},{"id":2,"agent":"main","title":"SDK status-line","touched":9},
@@ -644,7 +647,7 @@ printf '%s' '{"version":2,"active":{"main":2},
            {"id":"4","agent":"main","epic":3,"subject":"Old","status":"completed"},
            {"id":"5","agent":"main","epic":0,"subject":"Loose","status":"pending"}]}' > "$MS/tasks.json"
 fresh "$MS/tasks.json"
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -qF 'Epics: active #2 SDK status-line 1/2, in progress #3 Freeze renders · other open: #1 api-gateway 0/1 · no epic: 1 open task(s)' \
     && ok "epic state: active epic with its task in progress, other open epics, loose tasks" || bad "epic state" "$C"
@@ -652,14 +655,14 @@ printf '%s' "$C" | grep -q 'Finished\|Sub epic' && bad "closed/other agent epics
 printf '%s' "$C" | grep -q 'TRIAGE' && ok "triage still injected alongside the state" || bad "triage with state" "$C"
 [ "${#C}" -lt 900 ] && ok "context with the epic state stays under 900 characters (${#C})" || bad "context size" "${#C}"
 printf '%s' '{"version":1,"epics":{"main":{"id":1,"title":"Legacy"}},"tasks":[{"id":"1","agent":"main","epic":1,"subject":"T","status":"pending"}]}' > "$MS/tasks.json"
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 ctx_of | grep -qF 'Epics: active #1 Legacy 0/1' && ok "a v1 tasks.json is read as v2" || bad "v1 state" "$OUT"
 printf '%s' '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title":"NAS","touched":1}],
   "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Check backups","status":"in_progress"},
            {"id":"2","agent":"main","epic":1,"subject":"Give the go","status":"waiting","assignee":"human"},
            {"id":"3","agent":"main","epic":1,"subject":"Touch ID","status":"completed","assignee":"human"}]}' > "$MS/tasks.json"
 fresh "$MS/tasks.json"
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -qF 'Epics: active #1 NAS 1/3, in progress #1 Check backups · waiting on the user: #2 Give the go (task_update completed once answered)' \
     && ok "the user's open tasks ride the epic state, answered ones do not" || bad "human state" "$C"
@@ -670,7 +673,7 @@ printf '{"version":2,"active":{"main":1},"epics":[{"id":1,"agent":"main","title"
   {"id":2,"agent":"main","title":"Kept","touched":%s,"closed_at":1e999}],
   "tasks":[{"id":"1","agent":"main","epic":1,"subject":"Left","status":"pending"},{"id":"2","agent":"main","epic":1,"subject":"Old go","status":"waiting","assignee":"human"},
   {"id":"3","agent":"main","epic":2,"subject":"Go on","status":"pending"}]}' "$now_s" "$now_s" > "$MS/tasks.json"
-run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
+beat; run UserPromptSubmit "" '{"prompt":"hi"}' on-user.sh
 C=$(ctx_of)
 printf '%s' "$C" | grep -qF 'Epics: none active · other open: #2 Kept 0/1' && ! printf '%s' "$C" | grep -q 'Shut\|Old go' \
     && ok "a closed epic, its tasks and the user's tasks in it are left out" || bad "closed epic state" "$C"
