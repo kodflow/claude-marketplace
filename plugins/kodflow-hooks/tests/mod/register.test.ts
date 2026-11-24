@@ -176,7 +176,7 @@ const start = async ($: any) => {
   await $.session.start({ source: "startup", cwd: "/repo" });
 };
 
-test("the six task tools are registered, in the prompt from the start", async ($, on) => {
+test("the six task tools and docs_search are registered, in the prompt from the start", async ($, on) => {
   const h = host(on, { CLAUDE_CONFIG_DIR: CFG });
   await start($);
   expect(h.registered.map((t) => t.name)).toEqual([
@@ -186,6 +186,7 @@ test("the six task tools are registered, in the prompt from the start", async ($
     "task_focus",
     "task_list",
     "task_assign_human",
+    "docs_search",
   ]);
   expect(h.registered.every((t) => t.isDeferred === false)).toBe(true);
 });

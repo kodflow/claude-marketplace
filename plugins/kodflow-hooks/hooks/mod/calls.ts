@@ -1,4 +1,5 @@
 // calls.ts — the small decisions register.ts makes on an event. Pure.
+import { DOCS_TOOL } from "./docs.ts";
 import { TOOL_NAMES, type ToolName } from "./tasks.ts";
 
 export const PLUGIN = "kodflow-hooks";
@@ -11,6 +12,11 @@ export function taskTool(tool: unknown): ToolName | undefined {
   return (TOOL_NAMES as readonly string[]).includes(name)
     ? (name as ToolName)
     : undefined;
+}
+
+/** `docs_search` when a `tool.call` names it, undefined for any other tool. */
+export function docsTool(tool: unknown): typeof DOCS_TOOL | undefined {
+  return tool === `${PREFIX}${DOCS_TOOL}` ? DOCS_TOOL : undefined;
 }
 
 // What `tool.call` carries beside the tool's own arguments

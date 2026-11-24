@@ -27,6 +27,7 @@ mcp__context7__resolve-library-id
 mcp__context7__query-docs
 mcp__kodflow-hooks__task_*
 mcp__plugin_kodflow-hooks_tasks__task_*
+mcp__kodflow-hooks__docs_search
 mcp__github__get_commit
 mcp__github__get_file_contents
 mcp__github__get_label

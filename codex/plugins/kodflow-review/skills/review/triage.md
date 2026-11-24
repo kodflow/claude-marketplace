@@ -257,7 +257,7 @@ question_handling:
 **Branch on runtime mode** (from review.md Execution Mode Detection):
 
 ```bash
-source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r28687dd6b01e/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r8ccf0c960ae2/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 

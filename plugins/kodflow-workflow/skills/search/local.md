@@ -1,5 +1,20 @@
 # /search — Phases 1-2: local lookup and decomposition
 
+## Phase 1.0a — the project's own documents first
+
+Before the knowledge base, ask the project's index (ADRs by section, `docs/**`,
+every `CLAUDE.md`, and the global base and memory). Prefer the `docs_search`
+tool when it is listed; otherwise the CLI, which needs no mod:
+
+```bash
+python3 -I "${CLAUDE_PLUGIN_ROOT}/../kodflow-hooks/hooks/scripts/lib/kf_docs.py" \
+  search "<keywords>" [--area A] [--need N] --limit 8
+```
+
+A hit is `num · title · status · area · path:line` and a snippet: Read only the
+cited section (`offset`/`limit`), never the whole document. Superseded ADRs are
+left out unless `--all`. Record what each hit answers, as for the base below.
+
 ## Phase 1.0 — index-driven lookup
 
 Read the index once. Do not walk the directory tree; the index exists so this

@@ -16,7 +16,7 @@ metadata:
   generated-from: plugins/*/skills/refine
   argument-hint: <slug> | "<description>" [--bare] [--full <slug>] [--lenses light|full]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 the arguments
@@ -111,7 +111,7 @@ resolve_mode_and_slug() {
 ### Project documents (all modes)
 
 Read the project's documents that concern the slug (the `ok` entries of
-`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d"/skills/docs/scripts/docs.sh compute`)
+`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704"/skills/docs/scripts/docs.sh compute`)
 and its ADRs. A directive that contradicts one carries the contradiction in
 `# CONSTRAINTS`, with `fichier:ligne`, and the user is told before `/goal`.
 
@@ -227,7 +227,7 @@ Read `../_shared/model-policy.md` and resolve the tiers **before** writing the
 plan:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d"/skills/_shared/scripts/detect-models.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704"/skills/_shared/scripts/detect-models.sh
 ```
 
 Every plan carries the allocation, in one line under its constraints:

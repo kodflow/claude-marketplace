@@ -13,6 +13,7 @@
 #   kf_docs_top DIR             → KF_DOCS_TOP, the git root above DIR (no fork)
 #   kf_docs_write ROOT SDIR     → SDIR/docs.json, replaced whole
 #   kf_docs_index SDIR          → the short index SessionStart injects
+#   kf_docs_reindex ROOT        → the FTS index refreshed in the background
 #   kf_docs_touch FILE SDIR     → KF_DOCS_CTX, one line per document the file
 #                                 concerns, once per document and session
 #
@@ -160,13 +161,29 @@ EOF
     return 0
 }
 
+# $1 git root → the full-text index of its documents (lib/kf_docs.py) brought
+# up to date in a detached child, never waited on: a hook must not stall on a
+# big repository. KODFLOW_DOCS_INDEX=off lifts it. Fails open.
+kf_docs_reindex() {
+    local root=$1 py=${BASH_SOURCE[0]%[/\\]*}/kf_docs.py t=""
+    [ -n "$root" ] && [ -f "$py" ] || return 0
+    [ "${KODFLOW_DOCS_INDEX:-}" = off ] && return 0
+    command -v python3 >/dev/null 2>&1 || return 0
+    command -v timeout >/dev/null 2>&1 && t="timeout 120"
+    ( $t python3 -I "$py" index --root "$root" --quiet </dev/null >/dev/null 2>&1 & ) 2>/dev/null
+    return 0
+}
+
 # $1 root, $2 session directory, $3 a path just written (may be empty) →
 # docs.json rebuilt when the path is under docs/ or is the manifest, and at
 # most every 30 seconds otherwise.
 kf_docs_refresh() {
     local root=$1 sd=$2 f=${3:-} m now
     [ -n "$root" ] && [ -n "$sd" ] || return 0
-    case "$f" in "$root"/docs/*) kf_docs_write "$root" "$sd"; return 0 ;; esac
+    case "$f" in
+        "$root"/docs/*) kf_docs_write "$root" "$sd"; kf_docs_reindex "$root"; return 0 ;;
+        */CLAUDE.md) kf_docs_reindex "$root" ;;
+    esac
     if [ -f "$sd/docs.json" ]; then
         m=$(stat -c %Y "$sd/docs.json" 2>/dev/null) || m=$(stat -f %m "$sd/docs.json" 2>/dev/null)
         now=$(date +%s)

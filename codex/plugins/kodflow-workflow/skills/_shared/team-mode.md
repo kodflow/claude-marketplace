@@ -2,7 +2,7 @@
 
 > **Single source of truth** for Agent Teams behavior across all skills.
 > Every team-aware skill `@`-references this file instead of duplicating the detection logic.
-> Implementation: `"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d"/skills/_shared/scripts/team-mode-primitives.sh`
+> Implementation: `"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704"/skills/_shared/scripts/team-mode-primitives.sh`
 > Reference: <https://code.claude.com/docs/en/agent-teams>
 
 ---
@@ -60,10 +60,10 @@ Notice: persistent `TMUX` capability can downgrade to `TEAMS_INPROCESS` runtime 
 
 ## 3. Runtime detection (canonical block)
 
-Source `"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d"/skills/_shared/scripts/team-mode-primitives.sh` and call `detect_runtime_mode`. Every team-aware skill starts with:
+Source `"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704"/skills/_shared/scripts/team-mode-primitives.sh` and call `detect_runtime_mode`. Every team-aware skill starts with:
 
 ```bash
-source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r799de344d704/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 case "$MODE" in
     TEAMS_TMUX|TEAMS_INPROCESS) : ;;   # go to TEAMS execution
