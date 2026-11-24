@@ -951,7 +951,12 @@ mod does it when the main agent completes the task linked to that subagent
   the branch's local head. A squash merge leaves no ancestry, so the heads are
   compared; a local commit past the merged head is unpublished work. Then
   `git worktree remove` (never `--force`, run from the main worktree),
-  `git branch -D`, `git push <remote> --delete`. When the push fails,
+  `git branch -D`, `git push <remote> --delete <head>`, where `<head>` is the
+  merged PR's `headRefName`, never the branch's upstream (a branch cut from
+  `origin/main` tracks `main`); the upstream only serves when gh gave no
+  name. A remote name that is `main`, `master` or the default branch is
+  never deleted: the worktree and local branch go, the notice says
+  `remote-default`. When the push fails,
   `git ls-remote --exit-code` tells a branch the forge already deleted
   (said as removed) from a deletion that failed; git's message is never read,
   since git translates it.
