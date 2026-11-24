@@ -4,7 +4,7 @@
 # test_root_gate.sh here, the routing gate, the gated-model fallback and the
 # agent feedback by test_agents.sh, the Go-project rule by test_gomod.sh, the
 # cleanup of a subagent's worktree on close by test_cleanup.sh, the commit
-# identity by test_identity.sh, the project's documents by test_docs.sh, the ADR header contract by test_adr.sh, the
+# identity by test_identity.sh, the project's documents by test_docs.sh, the ADR header contract by test_adr.sh, the document index (lib/kf_docs.py) by test_kf_docs.py, the
 # Command scope advice by test_scope.sh, the epic predicates (jq) by
 # test_epic_predicates.sh, the mod by tests/mod: run-node.ts under node, the
 # *.test.ts files under `claude plugin test`).
@@ -35,3 +35,4 @@ bash test_tier_vectors.sh
 bash test_epic_predicates.sh
 bash test_coderabbit.sh
 python3 -I -m unittest discover -s coderabbit
+python3 -I -m unittest discover -s . -p 'test_kf_docs.py'

@@ -160,6 +160,7 @@ Context was compacted: verify the task state before continuing.'
     if [ "${KODFLOW_DOCS:-}" != off ] && . "$LIB/docs.sh" 2>/dev/null; then
         if kf_docs_top "$PROJECT_DIR"; then
             kf_docs_write "$KF_DOCS_TOP" "$sdir"
+            kf_docs_reindex "$KF_DOCS_TOP"
             idx=$(kf_docs_index "$sdir")
             [ -n "$idx" ] && ctx="${ctx:+$ctx
 

@@ -27,7 +27,8 @@ import { fileURLToPath } from "node:url";
 import { conformance } from "./conformance.ts";
 import { lock, mutate, unlock, type Port } from "../../hooks/mod/store.ts";
 import { closed, idle, plan } from "../../hooks/mod/tasks.ts";
-import { isReadTool, parseReadList } from "../../hooks/mod/calls.ts";
+import { docsTool, isReadTool, parseReadList } from "../../hooks/mod/calls.ts";
+import { docsArgv } from "../../hooks/mod/docs.ts";
 import { EPIC_PREDICATES_JSON } from "./epic-predicates.ts";
 import { goModuleOf } from "../../hooks/mod/lint.ts";
 import { decide, replay, type Row } from "./corpus.ts";
@@ -780,6 +781,22 @@ console.log("== triage: the read list (hooks/scripts/lib/read-tools.txt)");
     check(isReadTool(list, tool), `${tool} reads`);
   for (const tool of ["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "Agent", "Skill", "mcp__github__mark_all_notifications_read", "mcp__github__create_pull_request", "mcp__x_tasks__task_create"])
     check(!isReadTool(list, tool), `${tool} is not on the read list`);
+}
+
+console.log("== docs_search");
+{
+  const text = readFileSync(join(dirname(HERE), "..", "..", "hooks", "scripts", "lib", "read-tools.txt"), "utf8");
+  check(isReadTool(parseReadList(text), "mcp__kodflow-hooks__docs_search"), "docs_search is on the read list");
+  check(docsTool("mcp__kodflow-hooks__docs_search") === "docs_search", "docsTool names it");
+  check(docsTool("mcp__kodflow-hooks__task_list") === undefined && docsTool("docs_search") === undefined, "docsTool names nothing else");
+  const argv = docsArgv("/p/kf_docs.py", { query: "0.2.57", area: "net", all: true, limit: 3, bogus: 1 });
+  check(
+    JSON.stringify(argv) === JSON.stringify(["python3", "-I", "/p/kf_docs.py", "search", "0.2.57", "--format", "md", "--area", "net", "--all", "--limit", "3"]),
+    "docsArgv builds the isolated CLI call",
+    JSON.stringify(argv),
+  );
+  check(docsArgv("/p", { query: "  " }) === undefined && docsArgv("/p", {}) === undefined, "an empty query builds nothing");
+  check(!docsArgv("/p", { query: "x", limit: 99 })!.includes("--limit"), "a limit out of range is dropped");
 }
 
 console.log("== invariants over the hooks module");

@@ -51,6 +51,7 @@ import {
   resolveWorkers,
   type ToolName,
 } from "./tasks.ts";
+import { DOCS_SEARCH, DOCS_TOOL, docsArgv } from "./docs.ts";
 import { load, lock, mutate, unique, unlock, type Port } from "./store.ts";
 import { LINT_SETUP, lintSetup, type LintPort } from "./lint.ts";
 import {
@@ -63,6 +64,7 @@ import {
   parseReadList,
   settleCauses,
   settlesAny,
+  docsTool,
   taskTool,
   triageCauses,
   triesToWrite,
@@ -211,7 +213,7 @@ async function run($: any, argv: readonly string[], init?: any): Promise<any> {
 
 async function ensureTools($: any): Promise<void> {
   if (toolsReady) return;
-  for (const tool of TOOLS)
+  for (const tool of [...TOOLS, DOCS_SEARCH])
     await $.tool.register({ ...tool, isDeferred: false });
   toolsReady = true;
 }
@@ -285,9 +287,30 @@ function port($: any): Port {
   };
 }
 
+// One docs_search call: the index script's answer as text. Never throws: a
+// read that fails says so, and the model goes on with grep.
+async function docsText($: any, e: any): Promise<string> {
+  const argv = docsArgv(
+    `${$.plugin.root}/hooks/scripts/lib/kf_docs.py`,
+    argsOf(e),
+  );
+  if (!argv) return "docs_search: query must be a non-empty string";
+  try {
+    const r = await run($, argv, {
+      cwd: await projectDir($),
+      timeoutMs: 20_000,
+    });
+    const out = String(r?.stdout ?? "").trim();
+    if (r?.exitCode === 0) return out || "no match";
+    return `docs_search failed (exit ${r?.exitCode}): ${String(r?.stderr ?? "").slice(0, 300)}`;
+  } catch (err: any) {
+    return `docs_search unavailable: ${err?.message ?? err}`;
+  }
+}
+
 async function serve(
   $: any,
-  tool: ToolName,
+  tool: ToolName | typeof DOCS_TOOL,
   e: any,
 ): Promise<{ result: string } | { deny: string }> {
   const cfg = await config($);
@@ -303,7 +326,7 @@ async function serve(
   let answer: { result: string } | { deny: string };
   let closing: Closing | undefined;
   try {
-    const step = plan(tool, agent, argsOf(e));
+    const step = tool === DOCS_TOOL ? undefined : plan(tool, agent, argsOf(e));
     // The main agent completing a task or closing an epic: the list before
     // the change is kept, since the update drops the task's worker link
     const closingEpic = tool === "task_focus" && agent === MAIN;
@@ -321,7 +344,9 @@ async function serve(
         nowSec(),
       );
     }
-    const text = step.mutates
+    const text = !step
+      ? await docsText($, e)
+      : step.mutates
       ? await mutate(io, dir, (data) => {
           const before = completing ? JSON.parse(JSON.stringify(data)) : undefined;
           const out = step.run(data, { now: nowSec(), workers });
@@ -347,7 +372,7 @@ async function serve(
   }
   // A refusal leaves the gate as it was; a call that succeeded settles the
   // causes it answers. Never at the cost of the answer of an applied change.
-  if ("result" in answer)
+  if ("result" in answer && tool !== DOCS_TOOL)
     await settleTriage(io, dir, tool, argsOf(e), e.agentId).catch(
       () => undefined,
     );
@@ -791,7 +816,7 @@ export const register: Register = (on) => {
   on("tool.call", async ($, e, next) => {
     if (await off($)) return next(e);
     await markWrite($, e).catch(() => undefined);
-    const tool = taskTool(e.tool);
+    const tool = taskTool(e.tool) ?? docsTool(e.tool);
     // Before next: the shell's PreToolUse runs inside it and reads the beat
     await beat($).catch(() => undefined);
     if (tool) return serve($, tool, e);
@@ -827,7 +852,7 @@ export const register: Register = (on) => {
     return out;
   }).catch(($, e, next) => {
     if (next.called) return next(e);
-    if (taskTool(e.tool))
+    if (taskTool(e.tool) || docsTool(e.tool))
       return {
         deny: `kodflow task tools failed: ${next.error.message ?? next.error.kind}`,
       };

@@ -1236,3 +1236,25 @@ An ADR is `docs/adr/NNNN-slug.md`; its header (bullets before the first `## `,
 existing one gets its defects as PostToolUse context; `warn` never refuses;
 `strict` refuses any defect; `off` is silent. A repository runs the same check
 in CI: see `docs/marketplace/adr-lint-ci.md`.
+
+## Document index (`lib/kf_docs.py`)
+
+A stdlib-only SQLite FTS5 index (BM25, no network) of the project's documents:
+`docs/adr/*.md` split by `## ` section, `docs/**/*.md` and every `CLAUDE.md`,
+in `~/.cache/kodflow/docs-index/<sha1(git root)>.db`, plus `global.db` for
+`~/.claude/docs` and `~/.claude/projects/*/memory`. The tokenizer is `unicode61`
+with `tokenchars '.-_/'`, so `0.2.57`, `ADR-0152` and `net/http1` match whole,
+and `num` is an exact column. Reindexing is incremental by mtime and size.
+
+```bash
+python3 -I lib/kf_docs.py index [--root DIR]
+python3 -I lib/kf_docs.py search QUERY [--area A] [--need N] [--status S] [--all] [--limit 8] [--format text|json|md]
+```
+
+A search returns at most 8 files (their best section), each `num · title ·
+status · area · path:line` and a snippet of at most 200 characters; superseded
+ADRs are left out unless `--all`. The mod registers the same search as the
+`docs_search` tool (read-only, on `read-tools.txt`), for sessions where a CLI
+call is not wanted. SessionStart and a Write/Edit under `docs/` (or of a
+`CLAUDE.md`) refresh the index in a detached background child, never waited on;
+`KODFLOW_DOCS_INDEX=off` lifts that, `KODFLOW_DOCS_CACHE` moves the cache.

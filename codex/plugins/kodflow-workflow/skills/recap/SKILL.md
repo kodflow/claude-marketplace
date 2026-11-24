@@ -12,7 +12,7 @@ metadata:
   generated-from: plugins/*/skills/recap
   argument-hint: '[--loop [N] | --stop | --help]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r9e36d241194d`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /recap — Where the Work Stands
@@ -50,7 +50,7 @@ conversation is how a finished task stays "en cours" on screen.
 ### 1. The session's work
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d"/skills/recap/scripts/recap.sh state "${CLAUDE_SESSION_ID}"
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r9e36d241194d"/skills/recap/scripts/recap.sh state "${CLAUDE_SESSION_ID}"
 ```
 
 One JSON document, read from `<config>/kodflow/sessions/<session>/`
@@ -164,7 +164,7 @@ If `CronCreate` is not available in this engine, schedule nothing and say:
 Gather, build the table, then pass it to `seen`:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r687b4efee45d"/skills/recap/scripts/recap.sh seen "${CLAUDE_SESSION_ID}" '<the table, exactly as it would be printed>'
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r9e36d241194d"/skills/recap/scripts/recap.sh seen "${CLAUDE_SESSION_ID}" '<the table, exactly as it would be printed>'
 ```
 
 The table goes in one single-quoted argument (a `'` in a cell written `'\''`),
