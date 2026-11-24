@@ -3,17 +3,18 @@ name: usage
 description: What this machine's Claude Code sessions cost, priced from the transcripts they
   already wrote. Per ISO week, cost split into input, cache read, cache write and output;
   main thread versus subagents by agent type; models and effort observed; context-size bands;
-  expired-cache re-primes; the priciest five-hour windows. Reads files, calls nothing. Use
-  when a week felt expensive and nobody can say why, before or after changing the default
-  model or effort, to size what subagents actually cost, or to find the sessions that keep
-  reloading an expired cache. Local workstation only — never in CI.
+  expired-cache re-primes; the priciest five-hour windows. Reads files; the only command it
+  runs is a read-only `rtk gain`, when rtk is installed. Use when a week felt expensive and
+  nobody can say why, before or after changing the default model or effort, to size what subagents
+  actually cost, or to find the sessions that keep reloading an expired cache. Local workstation
+  only — never in CI.
 metadata:
   short-description: 'What this machine''s Claude Code sessions cost, priced from the transcripts
     they '
   generated-from: plugins/*/skills/usage
   argument-hint: '[--since YYYY-MM-DD] [--until YYYY-MM-DD] [--project FRAGMENT] [--json]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-re94d1dfd109b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rd869e6ee2c95`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /usage — what the sessions cost
@@ -26,7 +27,7 @@ arithmetic over local files: no API key, no request, no upload, no account
 needed — and nothing it prints came from anywhere but this disk.
 
 ```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-re94d1dfd109b"/skills/usage/scripts/usage_report.py --since 2026-09-01
+python3 "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rd869e6ee2c95"/skills/usage/scripts/usage_report.py --since 2026-09-01
 ```
 
 Options: `--since YYYY-MM-DD`, `--until YYYY-MM-DD` (inclusive), `--project
@@ -82,6 +83,11 @@ is the case for compacting earlier.
 session, so that sessions running at the same time land in the same bucket —
 which is what makes the parallel-session count mean anything. The ten most
 expensive windows, with how many sessions were active in each.
+
+**Re-primes total and rtk.** After the windows, one line sums the re-prime cost over
+the whole range, and one reports the tokens rtk saved (`rtk gain --all --format json`,
+filtered to `--since/--until` by day). If rtk is absent or fails, that line says so and
+the exit code stays 0.
 
 ## Reading it back to the user
 

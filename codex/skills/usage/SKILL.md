@@ -3,10 +3,11 @@ name: usage
 description: What this machine's Claude Code sessions cost, priced from the transcripts they
   already wrote. Per ISO week, cost split into input, cache read, cache write and output;
   main thread versus subagents by agent type; models and effort observed; context-size bands;
-  expired-cache re-primes; the priciest five-hour windows. Reads files, calls nothing. Use
-  when a week felt expensive and nobody can say why, before or after changing the default
-  model or effort, to size what subagents actually cost, or to find the sessions that keep
-  reloading an expired cache. Local workstation only — never in CI.
+  expired-cache re-primes; the priciest five-hour windows. Reads files; the only command it
+  runs is a read-only `rtk gain`, when rtk is installed. Use when a week felt expensive and
+  nobody can say why, before or after changing the default model or effort, to size what subagents
+  actually cost, or to find the sessions that keep reloading an expired cache. Local workstation
+  only — never in CI.
 metadata:
   short-description: 'What this machine''s Claude Code sessions cost, priced from the transcripts
     they '
@@ -80,6 +81,11 @@ is the case for compacting earlier.
 session, so that sessions running at the same time land in the same bucket —
 which is what makes the parallel-session count mean anything. The ten most
 expensive windows, with how many sessions were active in each.
+
+**Re-primes total and rtk.** After the windows, one line sums the re-prime cost over
+the whole range, and one reports the tokens rtk saved (`rtk gain --all --format json`,
+filtered to `--since/--until` by day). If rtk is absent or fails, that line says so and
+the exit code stays 0.
 
 ## Reading it back to the user
 
