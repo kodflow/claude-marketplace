@@ -7,6 +7,9 @@ SQLite FTS5 with BM25 ranking, no network, no third-party import.
   kf_docs.py search QUERY [--root DIR] [--area A] [--need N] [--status S]
                           [--all] [--no-global] [--limit 8]
                           [--format text|json|md] [--no-refresh]
+  kf_docs.py map [--root DIR] [--max-lines 60] [--max-bytes 3600]
+  kf_docs.py budget [--root DIR]
+  kf_docs.py export --obsidian DIR [--root DIR]
 
 Indexed per repository (~/.cache/kodflow/docs-index/<sha1(git root)>.db):
 docs/adr/*.md split by "## " section, docs/**/*.md, every CLAUDE.md. A global
@@ -18,6 +21,15 @@ net/http1 stay one token; `num` is an exact column (an ADR's NNNN). A search
 returns at most --limit hits (default 8), each a line plus a snippet of at
 most 200 characters: never a whole document. Superseded ADRs are left out
 unless --all. KODFLOW_DOCS_CACHE overrides the cache directory.
+
+`map` prints the decision map SessionStart injects: accepted ADRs grouped by
+Area ("-" when absent), a short title and the amends / supersedes edges, at
+most --max-lines lines and --max-bytes bytes (ADRs with edges first, then the
+newest; the rest is counted, not listed). It reads the ADR headers only: no
+index, no cache. `budget` prints one line when the root CLAUDE.md exceeds
+KODFLOW_CLAUDE_MD_ROOT_KB (24) or another one KODFLOW_CLAUDE_MD_SUB_KB (12),
+nothing otherwise. `export --obsidian` writes one generated note a decision
+with [[ADR-NNNN]] links; the notes are an output, never a source.
 """
 import argparse
 import hashlib
@@ -284,6 +296,142 @@ def render(hits, fmt):
     return "\n".join(out)
 
 
+EDGE_NUM = re.compile(r"(?:ADR[ -]?|docs/adr/)?(\d{4})(?!\d)")
+
+
+def adr_records(root):
+    """Every ADR of root/docs/adr as a dict, from its header only."""
+    adir = os.path.join(root, "docs", "adr")
+    try:
+        names = sorted(os.listdir(adir))
+    except OSError:
+        return []
+    recs = []
+    for n in names:
+        m = ADR_RE.search("docs/adr/" + n)
+        if not m:
+            continue
+        try:
+            with open(os.path.join(adir, n), encoding="utf-8", errors="replace") as fh:
+                text = fh.read(12000)
+        except OSError:
+            continue
+        h = parse_header(text)
+        title = ""
+        t = re.search(r"^#\s+(.+)$", text, re.M)
+        if t:
+            title = re.sub(r"^ADR[ -]?\d+\s*[-\u2014:.]*\s*", "", t.group(1)).strip()
+        short = re.split(r"\s+\(`|:\s|\s\u2014\s", title)[0].replace("`", "").strip("*_ ") or title
+        if len(short) > 44:
+            short = short[:43].rstrip() + "\u2026"
+        st = h.get("status", "")
+        edges = {}
+        for key in ("amends", "supersedes"):
+            nums = [x for x in EDGE_NUM.findall(h.get(key, "")) if x != m.group(1)]
+            edges[key] = sorted(set(nums))
+        area = (h.get("area", "").split(",")[0].strip().lower()) or "-"
+        recs.append({"num": m.group(1), "file": n, "title": title, "short": short,
+                     "status": status_word(st), "area": area,
+                     "by": superseded_by(st), "edges": edges})
+    return recs
+
+
+def decision_map(recs, max_lines=60, max_bytes=3600):
+    live = [r for r in recs if r["status"] in ("accepted", "amended")]
+    if not live:
+        return ""
+    gone = {r["num"] for r in recs if r["status"] == "superseded" or r["by"]}
+    live = [r for r in live if r["num"] not in gone]
+    hubs = {}
+    for r in live:
+        for k in ("amends", "supersedes"):
+            for n in r["edges"][k]:
+                hubs[n] = hubs.get(n, 0) + 1
+    for r in live:
+        r["deg"] = len(r["edges"]["amends"]) + len(r["edges"]["supersedes"]) + hubs.get(r["num"], 0)
+    head = "## Decision map (kodflow-hooks): %d accepted ADRs; kf_docs.py search QUERY or docs_search for the rest" % len(live)
+    used, size, areas, picked = 1 + 1, len(head) + 120, set(), []
+    for r in sorted(live, key=lambda r: (-r["deg"], -int(r["num"]))):
+        r["line"] = "- %s %s%s" % (r["num"], r["short"], edge_text(r, hubs, gone))
+        cost = 1 + (0 if r["area"] in areas else 1)
+        add = len(r["line"]) + 1 + (0 if r["area"] in areas else len(r["area"]) + 8)
+        if used + cost > max_lines or size + add > max_bytes:
+            continue
+        areas.add(r["area"])
+        picked.append(r)
+        used, size = used + cost, size + add
+    out = [head]
+    for area in sorted(areas, key=lambda x: (x == "-", x)):
+        grp = sorted((r for r in picked if r["area"] == area), key=lambda r: r["num"])
+        total = sum(1 for r in live if r["area"] == area)
+        out.append("### %s (%d)" % (area, total))
+        out += [r["line"] for r in grp]
+    if len(picked) < len(live):
+        out.append("%d more accepted ADRs not listed." % (len(live) - len(picked)))
+    return "\n".join(out)
+
+
+def edge_text(r, hubs, gone):
+    bits = []
+    if r["edges"]["amends"]:
+        bits.append("amends " + ",".join(r["edges"]["amends"][:3]))
+    if r["edges"]["supersedes"]:
+        bits.append("supersedes " + ",".join(r["edges"]["supersedes"][:3]))
+    return " [%s]" % "; ".join(bits) if bits else ""
+
+
+def cmd_map(a):
+    out = decision_map(adr_records(git_root(a.root)), a.max_lines, a.max_bytes)
+    if out:
+        print(out)
+    return 0
+
+
+def cmd_budget(a):
+    root = git_root(a.root)
+    try:
+        lim_root = int(os.environ.get("KODFLOW_CLAUDE_MD_ROOT_KB", "24"))
+        lim_sub = int(os.environ.get("KODFLOW_CLAUDE_MD_SUB_KB", "12"))
+    except ValueError:
+        return 0
+    over = []
+    for f in repo_files(root):
+        if os.path.basename(f) != "CLAUDE.md":
+            continue
+        try:
+            size = os.path.getsize(f)
+        except OSError:
+            continue
+        rel = os.path.relpath(f, root)
+        lim = lim_root if rel == "CLAUDE.md" else lim_sub
+        if size > lim * 1024:
+            over.append((rel != "CLAUDE.md", -size, rel, lim))
+    over.sort()
+    if not over:
+        return 0
+    bits = ["%s %d KB > budget %d KB" % (r, -n // 1024, lim) for _, n, r, lim in over[:3]]
+    more = " (+%d more)" % (len(over) - 3) if len(over) > 3 else ""
+    print("CLAUDE.md budget: %s%s. Every session loads them: trim or split (/warmup --update)." % ("; ".join(bits), more))
+    return 0
+
+
+def cmd_export(a):
+    recs = adr_records(git_root(a.root))
+    os.makedirs(a.obsidian, exist_ok=True)
+    for r in recs:
+        links = []
+        for k in ("amends", "supersedes"):
+            links += ["%s: [[ADR-%s]]" % (k.capitalize(), n) for n in r["edges"][k]]
+        if r["by"]:
+            links.append("Superseded by: [[ADR-%s]]" % r["by"])
+        body = "---\nstatus: %s\narea: %s\ngenerated: true\n---\n# ADR-%s %s\n\n%s\n" % (
+            r["status"], r["area"], r["num"], r["short"], "\n".join("- " + x for x in links))
+        with open(os.path.join(a.obsidian, "ADR-%s.md" % r["num"]), "w", encoding="utf-8") as fh:
+            fh.write(body)
+    print("exported %d note(s)" % len(recs))
+    return 0
+
+
 def cmd_index(a):
     if a.glob:
         n = build(None)
@@ -342,9 +490,20 @@ def main(argv):
     s.add_argument("--no-refresh", action="store_true")
     s.add_argument("--limit", type=int, default=8)
     s.add_argument("--format", choices=("text", "json", "md"), default="text")
+    m = sub.add_parser("map")
+    m.add_argument("--root", default=".")
+    m.add_argument("--max-lines", type=int, default=60)
+    m.add_argument("--max-bytes", type=int, default=3600)
+    b = sub.add_parser("budget")
+    b.add_argument("--root", default=".")
+    x = sub.add_parser("export")
+    x.add_argument("--root", default=".")
+    x.add_argument("--obsidian", required=True)
     a = p.parse_args(argv)
     try:
-        return cmd_index(a) if a.cmd == "index" else cmd_search(a)
+        cmds = {"index": cmd_index, "search": cmd_search, "map": cmd_map,
+                "budget": cmd_budget, "export": cmd_export}
+        return cmds[a.cmd](a)
     except sqlite3.Error as e:
         print("kf_docs: %s" % e, file=sys.stderr)
         return 1

@@ -12,7 +12,7 @@ metadata:
   generated-from: plugins/*/skills/warmup
   argument-hint: '[--update] [--dry-run] [--constraints]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r9e36d241194d`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re0b9503e8e7b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /warmup — project context pre-loading
@@ -95,6 +95,11 @@ CLAUDE.md size thresholds (lines; ceiling decided by Florent, 2026-10-23):
   Plus a character check (wc -m) for what loads on demand (a subdirectory
   CLAUDE.md, a path-scoped rule): over 40 000 = "truncated on a 200K window",
   over 150 000 = "truncated everywhere" (FORBIDDEN). Claude Code memory docs.
+  Byte budget, applied with the line table (`wc -c`; the SessionStart hook
+  warns on the same numbers): the root CLAUDE.md over 24 KB, or a
+  subdirectory one over 12 KB, is WARNING at least: --update condenses or
+  splits it whatever its line count (KODFLOW_CLAUDE_MD_ROOT_KB / _SUB_KB move
+  the numbers).
   A file warmup creates starts from the short template; a file it moves is
   bounded by this table only.
   --update proposes a new CLAUDE.md only where no ancestor covers the

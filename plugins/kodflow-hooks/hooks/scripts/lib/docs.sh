@@ -14,6 +14,8 @@
 #   kf_docs_write ROOT SDIR     → SDIR/docs.json, replaced whole
 #   kf_docs_index SDIR          → the short index SessionStart injects
 #   kf_docs_reindex ROOT        → the FTS index refreshed in the background
+#   kf_docs_map ROOT            → the decision map (≤ 60 lines), or nothing
+#   kf_docs_budget ROOT         → one line when a CLAUDE.md exceeds its byte budget
 #   kf_docs_touch FILE SDIR     → KF_DOCS_CTX, one line per document the file
 #                                 concerns, once per document and session
 #
@@ -109,6 +111,28 @@ kf_docs_index() {
          | if ($miss | length) > 0
            then "Missing: \($miss | join(", ")). /kodflow-workflow:docs <id> creates one; docs/manifest.json moves or ignores one."
            else empty end)' "$1/docs.json" 2>/dev/null
+}
+
+# $1 root, $2 kf_docs.py subcommand → its output, bounded to 5 s, empty on any
+# failure. The map and the budget read headers and file sizes only.
+_kf_docs_py() {
+    local py=${BASH_SOURCE[0]%[/\\]*}/kf_docs.py t=""
+    [ -n "$1" ] && [ -f "$py" ] && command -v python3 >/dev/null 2>&1 || return 0
+    command -v timeout >/dev/null 2>&1 && t="timeout 5"
+    $t python3 -I "$py" "$2" --root "$1" 2>/dev/null </dev/null
+    return 0
+}
+
+# $1 root → the decision map in place of the raw ADR index. KODFLOW_DOCS_INDEX=off lifts it.
+kf_docs_map() {
+    [ "${KODFLOW_DOCS_INDEX:-}" = off ] && return 0
+    _kf_docs_py "$1" map
+}
+
+# $1 root → the budget warning. KODFLOW_CLAUDE_MD_BUDGET=off lifts it.
+kf_docs_budget() {
+    [ "${KODFLOW_CLAUDE_MD_BUDGET:-}" = off ] && return 0
+    _kf_docs_py "$1" budget
 }
 
 # $1 the file read or written, $2 session directory → KF_DOCS_CTX. The file is

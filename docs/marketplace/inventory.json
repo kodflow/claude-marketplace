@@ -851,12 +851,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "ed0a9c16287f61227b03313e52809a8972735e0f0760180435972fe6a41b4316"
+          "sha256": "a059dcf2837a9e8a553cb043a4a120ddbb906fc9cf33e22d5342ef5ae4de469c"
         },
         {
           "class": "support",
           "path": "plugins/kodflow-hooks/README.md",
-          "sha256": "6d8fef803bdab18386be52626b4cf411c006d2ce61ec436b4d9b0e2b6fa9849a"
+          "sha256": "625291998eddc4c8c139f4ee5d732421c4e7fe17660aadf7b06b22a0fe732dd8"
         },
         {
           "class": "support",
@@ -1051,7 +1051,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/docs.sh",
-          "sha256": "dd07f80b1e9447a08520e1db2c1ffa014f95802820cff30ee4e0d749afd77812"
+          "sha256": "9605ad14e3d03bcb46cc9249b6bac7e50b13604a9e8ee9647a2e33183c33b691"
         },
         {
           "class": "host-extension",
@@ -1096,7 +1096,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/kf_docs.py",
-          "sha256": "8a0e3df45862e4ebdec2b52ad7f1282a6bfaa7c369317c570eaa4f7083671a00"
+          "sha256": "b2724a8b3d0b21001a62a6e0f7c77d8e27cb80b1ba4a9d20cafe607498df2115"
         },
         {
           "class": "host-extension",
@@ -1166,7 +1166,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-session.sh",
-          "sha256": "e1b7ee5572fa8435235460b42a2ee98eca53da132de4ef13053004fe6e0c84ce"
+          "sha256": "8c397e7621e661dbd5ace2a0990cb767add505f559f117c3108c779f6c2c4f88"
         },
         {
           "class": "host-extension",
@@ -1201,7 +1201,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "673114edec5aa105bb5c5292636548f002371c36ee491c55dd1874b003d3a589"
+          "sha256": "422a493368bfe84516d0800d4b0e267452104df2cc1a12cc71e82c2fc3e0ee56"
         },
         {
           "class": "verification",
@@ -1441,7 +1441,7 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/run-tests.sh",
-          "sha256": "6eb82c074c997d863713b5e857d3bc42e70d0c35a1cd758dc2b3ffeff417778f"
+          "sha256": "3a04d025d6d2f3eded04692dfb6cf877d11884b773444f827044a2db627ccfba"
         },
         {
           "class": "verification",
@@ -1462,6 +1462,11 @@
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/test_coderabbit.sh",
           "sha256": "75ae04794ccaa2321cdf257b70c059e6645629f76eb46955376863b144430126"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/test_decision_map.py",
+          "sha256": "a0d366cf7a271a27972b1e99ae231562219bd82d732dc5c391f945146a548b45"
         },
         {
           "class": "verification",
@@ -2946,7 +2951,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-workflow/.claude-plugin/plugin.json",
-          "sha256": "ca055dfcd0009c8695b1d374dc6205d5148ab347e7880d6738a0c56f7dbe2539"
+          "sha256": "0c95144afa274ef92630ba832a615a8198db7dc4a37738fc7df81172126e3b1a"
         },
         {
           "class": "support",
@@ -3006,7 +3011,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/plugin.json",
-          "sha256": "809a7e9f7668f52eb7b74428a8fb317a09538a9188271e8ad7b7610f8a5706b5"
+          "sha256": "d19d57cdef65aa1dac85fd4b9828dfcb4d50b0c150a5bf443c077d871c41ab8b"
         },
         {
           "class": "portable",
@@ -3396,7 +3401,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/warmup/SKILL.md",
-          "sha256": "d826e31bd917682774ff5ee8ee951ffcb9816e670f91fd82c9b295f0c88fa329"
+          "sha256": "e34a8e8f72ad829dffbf027b70d8c42f3eec47a50753d4f5379db7a47d920e82"
         },
         {
           "class": "portable",
@@ -3429,7 +3434,7 @@
   "schemaVersion": 1,
   "totals": {
     "agents": 49,
-    "files": 662,
+    "files": 663,
     "hookBundles": 5,
     "plugins": 9,
     "skills": 30
