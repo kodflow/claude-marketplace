@@ -6,12 +6,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-devops/.claude-plugin/plugin.json",
-          "sha256": "45e4db8989094cad2612fd124f0f9dc0f48a5a0518bcde37831d1881940a0438"
+          "sha256": "702f8ee118e30ccf3ed0639b8d9191b8631533d978814c7e07a150c270431262"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/plugin.json",
-          "sha256": "155b9648201b5db04b7e15a6ec726035b356a7fd4b0251e3bd6cee4989869c63"
+          "sha256": "c4e677307526af83a0c2f1f829b100eb179d6d576eefc77c394a31655c7acf2f"
         },
         {
           "class": "portable",
@@ -116,7 +116,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/_shared/specialists.md",
-          "sha256": "f43f20ee46bbaf40a08f33098d55176ef97d031ee5bd280809ff3829ceb1b9d5"
+          "sha256": "93e0545b9bbfdc40d4006ee135ffebf6bb6e305dbd72959db7b775b16526718e"
         },
         {
           "class": "portable",
@@ -231,7 +231,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/.claude-plugin/plugin.json",
-          "sha256": "a6d820f37a4a178b694046e159127e9d9ed37df7f8e4e75dbdc228538464db6f"
+          "sha256": "483f45a890f5efc84c20ddd596b5cd22eb4ee180ff347321a93675b6c7bc1983"
         },
         {
           "class": "support",
@@ -241,72 +241,72 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/anatomy-specialist-biomechanics.md",
-          "sha256": "20c4aee7a0ca7049d2e9e3dba0932d8aa739eca255e476f7978a8a7d1c0de3e3"
+          "sha256": "c4a9ed2e8b925b8623c4b53c0f08d4a7a6a79b550ac1243baaa9eb467bbc37d5"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/animation-specialist-combat.md",
-          "sha256": "6a97124e823b24421503bdc4a47dc214dc22f5d10fa1b0eb26f5bd5588e3a55c"
+          "sha256": "b401cd43b4479c81a4d862d8feda129b5642c2cd4f172e17077faebd887ec5b8"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/asset-specialist-meshy.md",
-          "sha256": "d533ecea209fa57aa6dec2ffd3bafed413a7bef96e545bb115c9c5f1b9089072"
+          "sha256": "b518f0b009f3c28e4bc2e126cfaab26aa0f877671190e0a3387c5c4cb19508be"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/engine-specialist-godot.md",
-          "sha256": "0051b0057ad8ba4b43aa136b040d0d8ee2fe4bfb4ddc024b72988c8f47730377"
+          "sha256": "15e4dbf806cee9f8a4adf082f4b62c04afb07f29dfe6de151d4704939b5fa52b"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/engine-specialist-threejs.md",
-          "sha256": "880382c54b0b109c5831744bc165b11638da65bc4890ca7802938028edbdb318"
+          "sha256": "719fbc14acfd013bb7a7af3a887ebba62239c9cb455e5d101f5dc108c1a16e4b"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/gamedev-animation-director.md",
-          "sha256": "042fac9ad990dd144f838f4197cc72284bf5342bf56d6418983f07abbaae782f"
+          "sha256": "59bf6482c3e345050692aafdf449749bd3c7d209f0c5d5de1b799ad812f5f50e"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/martial-specialist-antiquity.md",
-          "sha256": "3b75d7a742853b413544135f9efefceca00a5daf4e0bdc8015741a6d1728553b"
+          "sha256": "ae4b295daec18807f90ee692781bcd9cecb8687d8cb397cd1adf305bafc4c89f"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/martial-specialist-east-asia.md",
-          "sha256": "a391f64c137b81713ca56e731f88f5bf29e9cdccb74587965751ec09f6160612"
+          "sha256": "e4db0942ded46906afcdc76b8ea6f30a3676958cd3005fd91590983c7c4a0dfd"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/martial-specialist-europe.md",
-          "sha256": "9653f917f40c7f2ce8b8cc07e8b04bafdc61ecf62a04898ae45d49bb095711dc"
+          "sha256": "eff8764db8eb5a7989af11a3ab7548e7790485bc6e57db588e4d08b0c592692b"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/martial-specialist-south-asia.md",
-          "sha256": "b0e87991a82962573074fabb661954bf062647eeda707372224212b315470e40"
+          "sha256": "4ac2d64afb3d25ccf5f20b29ea673846404431e15ec33b2ce2fb6a6298027e60"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/martial-specialist-southeast-asia.md",
-          "sha256": "3b66e25f6415bbc671ab10c5fe4f7c99d5df6b9596c5bef26bcef9aa8d1d9970"
+          "sha256": "1f8cf871315dd9d43d0fbd38e2ae5bb0740a4461c79202548f8cca4e69149d01"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/martial-specialist-unarmed.md",
-          "sha256": "aad0488944959c381eaac9d1f4887f8c858d6d7f331da7ad9e523f90f7934938"
+          "sha256": "5695c70d3034902c7950210298e53a0753da23034377b100ff0f0835cca29894"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/reference-specialist-imagery.md",
-          "sha256": "8dc15be3bb92f603d6dc01426cf9f816f1cd216e97e5484a78c80557eec25d67"
+          "sha256": "2bd0a53e5e185cb4fccdab89aa200957253a89f0e012976a5bf2fd9a03b7b9be"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-gamedev/agents/rig-specialist-ik.md",
-          "sha256": "314b353774dd32d964ff66c6852cf1751b645d939464eb9a1097395540c87c5d"
+          "sha256": "2cf3701e9ed92e41c60a50bd470000c6c1e5499a134701a0c59ab6a9eff8bfc6"
         },
         {
           "class": "support",
@@ -331,7 +331,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/anatomy-specialist-biomechanics/instructions.md",
-          "sha256": "3612a99469e4f7aca359bdacefaabe6a8bc7ff0a748baf70e21dce2e502fba19"
+          "sha256": "fb2321c4088f68463ff68831160f6014a1b1988668194cb925a12feea904bb40"
         },
         {
           "class": "support",
@@ -341,7 +341,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/animation-specialist-combat/instructions.md",
-          "sha256": "ed92e04cf463c5fb75eb3d53b4a22aaeeb6aa2b9c1d035ffc65c4b8fe1c7745a"
+          "sha256": "3dbe70dd87cff1a9bec3e70b46f436c6d8b75890d7a6e43f5b95cd722ebccc95"
         },
         {
           "class": "support",
@@ -351,7 +351,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/asset-specialist-meshy/instructions.md",
-          "sha256": "a390711f510db0d96a7fbc640c8bb64e2ef56b0cf94064fbc44305ee484d8f7a"
+          "sha256": "b4c9529be0a4afb18e7a1cd532d9b5c1380e9d0853d92eb69f0d343aeaed2bd5"
         },
         {
           "class": "support",
@@ -361,7 +361,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/engine-specialist-godot/instructions.md",
-          "sha256": "d00503ceb5e63f623d97ba37c87b6df778e44560ae8599358e8e5caac297eace"
+          "sha256": "7b7086215c22569557ca7b7be17e49acf9b5df1cd7673d38bb2edb4b344f688e"
         },
         {
           "class": "support",
@@ -371,7 +371,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/engine-specialist-threejs/instructions.md",
-          "sha256": "5c6a34fac955ff782c3e625568e36f4e9c50d35c71c94177ac36208c5ecf840b"
+          "sha256": "329a41cac2d46ea4b58d244d8a2e9665b85ee41d4a92ff779d5a34a888d2a297"
         },
         {
           "class": "support",
@@ -381,7 +381,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/gamedev-animation-director/instructions.md",
-          "sha256": "4aa5820373c20c73ee94038216bc03ea7c2b3188c8f02401a560f1e7922b8ffa"
+          "sha256": "b27de9bc9fccc4b318414a3d68a7d5580577ee541758a9cad2102be2bdc992d2"
         },
         {
           "class": "support",
@@ -391,7 +391,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/martial-specialist-antiquity/instructions.md",
-          "sha256": "2f84875a338eb4c369c49fb17e89f7fe5697e4324d12bbeb3115abbc993a324e"
+          "sha256": "6eb7baf921e180b1dac85fa3e2e028d30baace28fd1edeed152b93bb4629b37c"
         },
         {
           "class": "support",
@@ -401,7 +401,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/martial-specialist-east-asia/instructions.md",
-          "sha256": "816a8ab6b764e19b095ccc54b6d88f6b09695a5b743bd2bc778331f903776c87"
+          "sha256": "58d496fb9e34aba1e222e71ae5a57520b0cb11d55b315f285e1f14eb259f9338"
         },
         {
           "class": "support",
@@ -411,7 +411,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/martial-specialist-europe/instructions.md",
-          "sha256": "f80b8987c0691ba1af0dacb8b16fd57cdf807fe6e504c36afcc401ee926b47e8"
+          "sha256": "b1ad5a7b9974465979a76f7ab3e16a7b02b6816254881455dd596b9bf76b870b"
         },
         {
           "class": "support",
@@ -421,7 +421,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/martial-specialist-south-asia/instructions.md",
-          "sha256": "d7d99643b2a34b1ef751b464fa25d2285a4e0df31b410221ff616e39200704ad"
+          "sha256": "1550d2866a1704664162a9789b832203b27271f7bd8b206afca90d3b44fcfae1"
         },
         {
           "class": "support",
@@ -431,7 +431,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/martial-specialist-southeast-asia/instructions.md",
-          "sha256": "48fd91c69fc4db6501e8f5f585219f1a99a4bffdc062ed0be264b9efffb1af98"
+          "sha256": "c567fdf50aff32b25e670c3dfe9286752cec72552a26eb12fd74935a0ae62b1f"
         },
         {
           "class": "support",
@@ -441,7 +441,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/martial-specialist-unarmed/instructions.md",
-          "sha256": "8beb607993a044f18a1e280e14523144c0557f92766378f77926012ff34f43cf"
+          "sha256": "1d65d0bfc5261694686bff73cd6ee383e940b149bf7a0d124d4639108147ab10"
         },
         {
           "class": "support",
@@ -451,7 +451,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/reference-specialist-imagery/instructions.md",
-          "sha256": "7abffac744e0c6a15910d465b8475f99cc78173241dd9700e1df508c0ba99395"
+          "sha256": "e2cb50d15db4bbcf6dad97cebf38ef244f26562d50715eb0f5d6f98e0dfc23f0"
         },
         {
           "class": "support",
@@ -461,7 +461,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-gamedev/io.github.kodflow/roles/rig-specialist-ik/instructions.md",
-          "sha256": "777d69ee033931e7dac467ad0cf595c67c7c430d8de45aa68c8ebf90f2cda57d"
+          "sha256": "b5de216bca65e9b35212e785088fcc8e1c352d16776381ec9cad86cb39084b9b"
         },
         {
           "class": "support",
@@ -471,7 +471,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-gamedev/plugin.json",
-          "sha256": "d9e096d530a22c8fc2acf44fc7cd930694968bf56531aa60b03efdb42993b879"
+          "sha256": "93d85d20b60646b86b6dc2c0f36faf40b59c08e722df851e360a1fd5e6e7d31d"
         },
         {
           "class": "support",
@@ -851,7 +851,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "53032e99b26b6280b0723bc2c33256aeface7847dd64f6da74fe11a0f6fa3430"
+          "sha256": "4318fd21d25bccbcc3438359c3bad19305c28c1a7317c5e52ba7d9f9021199e1"
         },
         {
           "class": "support",
@@ -1131,7 +1131,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/scope.sh",
-          "sha256": "f855710beeb8d51869399231d62d6e423a2972d45ce8f7597721f83e1af95dc4"
+          "sha256": "3cc7a44b6cdd14feebb6a922cae6ddf261a937266e4da36a1f4be2bd1e59c8ba"
         },
         {
           "class": "host-extension",
@@ -1186,7 +1186,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "ba0d0482308d4571ba8a4149a4b835f0ca84a2baa55d186a4d9c4ffabd38ae09"
+          "sha256": "d986ea794b871118e9c9b8e47fd780a6f321250baa61c1b6cb962996eadca14c"
         },
         {
           "class": "verification",
@@ -1456,7 +1456,7 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/test_scope.sh",
-          "sha256": "fdc0cf1dacddeae79e9bd43bf0e0783a29570d089fe1adb98b0dc476ac461f50"
+          "sha256": "cb287fb64ae9c07d9db17c43ef0381d6aed7dbfe83e20d60651fd6e5f4065550"
         },
         {
           "class": "verification",
@@ -1906,7 +1906,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-review/.claude-plugin/plugin.json",
-          "sha256": "c651bc70dcaf9f828896d80ac5cf510168da94c131cd1a76245de18d19ac14a8"
+          "sha256": "73429159f97df6a9bba01ea13b9fc21c511913b594602b4b411dab37dd4ef38d"
         },
         {
           "class": "support",
@@ -1931,7 +1931,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/plugin.json",
-          "sha256": "6348b6450a5a3ff682bd68e5132117e31046f43b317fe4b3b0a6dde4f213ee1f"
+          "sha256": "d7af8cf60ab807face3e9908b07dcf8880ba4e8bf3bae1b23b716728a940854d"
         },
         {
           "class": "portable",
@@ -2036,7 +2036,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/_shared/specialists.md",
-          "sha256": "f43f20ee46bbaf40a08f33098d55176ef97d031ee5bd280809ff3829ceb1b9d5"
+          "sha256": "93e0545b9bbfdc40d4006ee135ffebf6bb6e305dbd72959db7b775b16526718e"
         },
         {
           "class": "portable",
@@ -2336,17 +2336,17 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/.claude-plugin/plugin.json",
-          "sha256": "2e847d623e573cc514a01f4d253b3c62b529fc6ec4b4c479c98f2a8c783cc1e2"
+          "sha256": "ac198cb36fab3cd077e25045184160d2e79cd772166eaf99a5be8c5747ef093e"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/data-specialist-postgres.md",
-          "sha256": "aff1e82d03efc83bbeeae48b857ee3cbcd26a61a710f86da5a6a57f961878519"
+          "sha256": "366bf39c2e446784bc19205f71c086dffa53f99473a79594acd64fba6c2ab915"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/data-specialist-valkey.md",
-          "sha256": "d28ec673897ef26dadbe51dc92c3a897ecbe1b5980afce95978ce2e2ae0194fe"
+          "sha256": "2050d4e7a4758b271648ada5e2cd8e8d40410ad3a88e6650d05b73b301c5bfb9"
         },
         {
           "class": "host-extension",
@@ -2376,12 +2376,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-executor-security.md",
-          "sha256": "cd8cc340dd677be535679c5b1ba57575ba8227d30f7f300425054094162f9416"
+          "sha256": "e242411633d50bd3a77182e99fc441f0d7459e16d78f1c5de2a5e195960d0aee"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-executor-shell.md",
-          "sha256": "59fe0cf546b780a335c3603a9c73308ccf39c0dc27591200a99ad0b10f12e098"
+          "sha256": "7d5279cd3e831a4ceb0f6b5b28f634de2b3dd483fd0e4b2e9fb69c49a0d5c5a5"
         },
         {
           "class": "host-extension",
@@ -2391,37 +2391,37 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-c.md",
-          "sha256": "af9824b8ad1fc98de7ab51e181a13f39b1aebaca36c238bb1fcae6c2070de10b"
+          "sha256": "66be94424e00bbc5b59636fab2216beda0c1a10ee30dbb71a862f64b01e0bf58"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-cpp.md",
-          "sha256": "992c2814a0c200e09d9d4b82a48a802f269c681ee6832fe50c17c57fd2d4d46d"
+          "sha256": "3eeb1b6067d56579c439f11b09a43d0f4245c035907a1a0bfd11b4734e69ee9b"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-go.md",
-          "sha256": "4d87875d578c392c77626868914b0d7bec1fae885b1c41174e10c0b2e55ff29c"
+          "sha256": "539cfaa728c07978d4fba7c14a0af010a5cc97e406e458e9443a587714c444c2"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-nodejs.md",
-          "sha256": "ae6e068f8a3a9320956a98beead1e255dc570857c0db685c67b41221b5ab6772"
+          "sha256": "2c4d739623600b25711868af6df0fc4cab91023d7fdfcdd396cf3405514ff4ff"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-protobuf.md",
-          "sha256": "b406d4361c5d3bf478337850f51a49346e8c84254677ded6c9600313b98f2af3"
+          "sha256": "09e6acbeb7b5c8e6b4ee83a73942163b163f6a56ea2cb7555b0022e1b52d9e8f"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-python.md",
-          "sha256": "c714a2a982852c957839eab6bd773baa627e3a5f3f2132993c448e1f40c13709"
+          "sha256": "b1fb87017c3fa973456d2369253a2ec024d49075fd9d5870c8602d51f66c9477"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-react.md",
-          "sha256": "f9687a65b34bf0cb29495ac69ce04d0e405991e9682d6486e021293b8d82ff4c"
+          "sha256": "2d4ab293291e026ec390308807bab146326fc3203043710ed547810fcff13a90"
         },
         {
           "class": "host-extension",
@@ -2431,17 +2431,17 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-rust.md",
-          "sha256": "6972f9fd0b3384a169ef7b3741c712e50d527cbed06193c311e961a04d28f8f2"
+          "sha256": "27e520d2ce11aa753eef5199ef0e35d222b7591bef1e3276c63ad25a20614bc4"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/developer-specialist-zig.md",
-          "sha256": "965e55a8f328e996933ed9d18d4ec38d5bb1c24005a553d428e753d951ac86bb"
+          "sha256": "86ec92ae3c42a49b99e0855139085b8464e65c302b41fcac882d1abd277800b2"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/devops-executor-linux.md",
-          "sha256": "572d24268b8d20b3ab7a85a3b0710b0e83b07b2b070ce47cacf0c45b5451eafe"
+          "sha256": "4d47f65f0b557de8e490c125725030b94b67d49b640d47a97a996e3c7b0abe10"
         },
         {
           "class": "host-extension",
@@ -2451,37 +2451,37 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/devops-specialist-docker.md",
-          "sha256": "228854ea9795672fbd86998d122a7e076924934fca861d3a5c2e6ee088aa92b6"
+          "sha256": "79b6471d86dd4953f7c816716f690ab792e5543e44263a46a086756289d347a3"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/devops-specialist-hashicorp.md",
-          "sha256": "87840cab178e65ab1dc14b0e1779a6af04ef5f95742366a72c4297d72392843c"
+          "sha256": "e960125ac9629fef263c6ecc5d999bab1b11cfa66d83659690b3e31464f15c5c"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/devops-specialist-infrastructure.md",
-          "sha256": "db990f35c729d601b1fdf1115d3c232e9a489fc95ef4a8d5433fe9adebf348c3"
+          "sha256": "e9bc3fac5c7e539a39fa38caa4b70275f7b204c7697bf2efeb26b10e763caf1a"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/devops-specialist-kubernetes.md",
-          "sha256": "5041e87a5b4d5c75ee4716dcaeee8ccee031be72a85145a801e9090f09db2549"
+          "sha256": "6795a18f9211016dcd3ab3b91ef5af142f8a3a272a9640f01b182a321b6eeb64"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/devops-specialist-security.md",
-          "sha256": "40129c81659672a18e6fe11fc07e4f7c5c9cf41d86da913bfba7eb9978c315e1"
+          "sha256": "165c716be6815c6189a8d691ea4401d68f4b17d162552d61a563d49503007477"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/domain-specialist-systemd.md",
-          "sha256": "fef8df098a37331da92a1f1040df63a1602c2048ba32732115319aeeee33e7b3"
+          "sha256": "1153a1b363b7d79addcf6b088c6d6391b62e2f5706b9ece2ea60eec041cf35db"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/domain-specialist-telecom.md",
-          "sha256": "b6d6fbd17b10694114c6e0d67efb1a21d8fd6a79c40c541f6cbcc5badea4ca01"
+          "sha256": "fc75fdd776f941379f135b4e70b7011df27896a7f0c709541a59dbd1a65f98fa"
         },
         {
           "class": "host-extension",
@@ -2501,17 +2501,17 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/tooling-specialist-ansible.md",
-          "sha256": "6fcf42aea6a2916cffcd1ff21bbd776b5819e192187b906b897b471bcf93c491"
+          "sha256": "a37a89b8fcba1311fb9c31077a633eedc8f00355463c45058ab66299cd1ae71d"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/tooling-specialist-github-actions.md",
-          "sha256": "70362e3462f6895cd442602c9cadf5e801e9c5d4be410efa0bba686fecd1b52d"
+          "sha256": "8dea4c5508981e266209537b79105b47ab76b1fac4a9e3a82e17bcc9d5dd7c9d"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/tooling-specialist-gitlab-ci.md",
-          "sha256": "616111fae35f67cf5f99584f0d7811ae74eaa635c2ef30f867039de1bbe69172"
+          "sha256": "b1fcdc5cc12387547645b88af9d555877df9ba5ad7c8051b42e65097e1f65470"
         },
         {
           "class": "support",
@@ -2521,7 +2521,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/data-specialist-postgres/instructions.md",
-          "sha256": "d49b3b14450cd6919a7b6b300eef2bfc23da7d1e129c34609aff938d9d4341a3"
+          "sha256": "2b985ea4f46d3ce4eac14de3653d3ea3d2fa980f7fdff6f01e4bf5e8619b1a40"
         },
         {
           "class": "support",
@@ -2531,7 +2531,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/data-specialist-valkey/instructions.md",
-          "sha256": "dafb2485e028eb370aabdf3031da80d6966f29bb874ef596afd78a2c5d62f884"
+          "sha256": "63b24a5a01e7ea5138cf4e52909f9079a2f69b67e4b4baef805fab5dc0c409d0"
         },
         {
           "class": "support",
@@ -2591,7 +2591,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-executor-security/instructions.md",
-          "sha256": "d63361c4a546c9d8adf3a20eeef15b65bcf5fc2e1081ee71f33a0ce6d2784b7a"
+          "sha256": "0203afdd162f4d6f6c131b711776a8970443f14e6212917b638829cc226504c4"
         },
         {
           "class": "support",
@@ -2601,7 +2601,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-executor-shell/instructions.md",
-          "sha256": "2bfac2b0c24e5f9a2f986df460b6d7c41368f064e999df8fefa05fbd9f40d8bd"
+          "sha256": "cd03df4a9b06c2b5a5a956e5cb754a03ff78e4b0c4004b711c2cf373b36bbcda"
         },
         {
           "class": "support",
@@ -2621,7 +2621,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-c/instructions.md",
-          "sha256": "fe9e4e3955c6c263eef902b95386a8da96719a47ad09e29ee8df0a45f78726a5"
+          "sha256": "682af67e816f7b22818061a9d2aad7d961218a86748509b34c294560a17e8861"
         },
         {
           "class": "support",
@@ -2631,7 +2631,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-cpp/instructions.md",
-          "sha256": "9758a26e39934dfbb76855a0e0edc3f64712ffe8cdb2fc8af93a58d4de83f919"
+          "sha256": "5e7d8573e8e62e50c9c1db6bf179148bfaa5f22e353bea4f52efae28ff97a77d"
         },
         {
           "class": "support",
@@ -2641,7 +2641,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-go/instructions.md",
-          "sha256": "0cea816f13c5944dceb383a197ca334bb4ebad87156d97dc145ba85dd56f7d9a"
+          "sha256": "128efb29b69438a5432eabe83c4a99caa5af12b4b9d811be87ec7fad7d6d7e5b"
         },
         {
           "class": "support",
@@ -2651,7 +2651,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-nodejs/instructions.md",
-          "sha256": "aad5caefd6f20b476a179aa9a833498a1a1766ca24d772483292e0f2e14f15cf"
+          "sha256": "133bd22b5d5a388eace5fedb4d0c8a4a68eafa15172781ba41a99c5c713c8e2e"
         },
         {
           "class": "support",
@@ -2661,7 +2661,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-protobuf/instructions.md",
-          "sha256": "ae29679ce1d03a21b5fcf31714f5d665bc018522df7024978fbd42e675c18e48"
+          "sha256": "3c05408a6451d25ba940d3c87fbf3d711f685a00cef8484ec6f4f687d8b2cee7"
         },
         {
           "class": "support",
@@ -2671,7 +2671,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-python/instructions.md",
-          "sha256": "ee6e4c5d094e39aefd0ea980d7b1225aa8b4cbac5c15c37bd9ba6c4018e7a39e"
+          "sha256": "05782bcd6a334ad2fa9f56bdcbc9a52e625fdf70eec12570b16ac4ec06ea8cde"
         },
         {
           "class": "support",
@@ -2681,7 +2681,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-react/instructions.md",
-          "sha256": "8dc9d0162256faa579671c335fc08d07e1a61ecd967b85c28102390377336d15"
+          "sha256": "3af3b076b847a9915ba27b7fa20caa84b715e7889d9ea81c78f016907a5cadfb"
         },
         {
           "class": "support",
@@ -2701,7 +2701,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-rust/instructions.md",
-          "sha256": "e859581210085eb38d16ef5acdf3fbdd30b923a46d6ccaaf6d5aa141e5d7beb9"
+          "sha256": "ba7110e0910308a45128352e9f8a80a365c6d693af4337f3c68c322876555a82"
         },
         {
           "class": "support",
@@ -2711,7 +2711,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/developer-specialist-zig/instructions.md",
-          "sha256": "cacdcdf6716fb34a02346586abd8e54ed4cc204e127479e6573c95367cfccba4"
+          "sha256": "f445937b4d110333d97108c382ea904fe2dbe0b8dcb9a49cbb75095d7b7fdc0a"
         },
         {
           "class": "support",
@@ -2721,7 +2721,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/devops-executor-linux/instructions.md",
-          "sha256": "9cf35affb6978271060cc7df70265f24198ddfde1022aa7673ddc42b74e870dc"
+          "sha256": "1a2d1dab3cdd85abfa3eb4a8c1a9a716fc8a082c5ab23a0c58ff21b8d92cb06e"
         },
         {
           "class": "support",
@@ -2741,7 +2741,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/devops-specialist-docker/instructions.md",
-          "sha256": "4c4d264a10557ba09238507e4bff1ee5e83244e06aa8bf487e00774d31071403"
+          "sha256": "8a7d0f52d41c1454778d3b426b49dcdec015cc492531e576cbc7ef8bc9f5d188"
         },
         {
           "class": "support",
@@ -2751,7 +2751,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/devops-specialist-hashicorp/instructions.md",
-          "sha256": "43c7915cbd151f657ffc39fe76532d6aca33544e32ec95bc997a515e9ceac37e"
+          "sha256": "4eb89bfcb9d7702aa959ed3485df171b328dcb7698f3e87c8be47a750f4c9718"
         },
         {
           "class": "support",
@@ -2761,7 +2761,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/devops-specialist-infrastructure/instructions.md",
-          "sha256": "05daac1e4d722af4e4630ee68a680758438a2d525965075f1c7ee320ff03c3c5"
+          "sha256": "f826e5b4a2203001725d77b6a4dc60be0c9039f731cdd568a2c8486965457db4"
         },
         {
           "class": "support",
@@ -2771,7 +2771,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/devops-specialist-kubernetes/instructions.md",
-          "sha256": "ee1c774217d7bddc4aaaf3784e700a3f33b8f5ee3cf7824e9f455dde67aa76d6"
+          "sha256": "f1ed1c48a0f677a3a294eb6028630007871db5f72373c47812bd24133a23f878"
         },
         {
           "class": "support",
@@ -2781,7 +2781,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/devops-specialist-security/instructions.md",
-          "sha256": "3a2805d5aaa350509f6e477b832b1f3a28d68a9c3a85c468bec8295a0659c493"
+          "sha256": "060a5246230b2b68544ce561d4cd53ce0249c5bb1203216ca38d6f9a097bdd37"
         },
         {
           "class": "support",
@@ -2791,7 +2791,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/domain-specialist-systemd/instructions.md",
-          "sha256": "44141e441286a62d63034ecfae8218fd2b24cee19c9dcf65c45d69de6854b385"
+          "sha256": "dc8cbf690390f07854a43d43329b156ff749156c098f9f79d2f63c1274a61a7a"
         },
         {
           "class": "support",
@@ -2801,7 +2801,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/domain-specialist-telecom/instructions.md",
-          "sha256": "75ee5ca48695aabcd46786c2e2b780029efbd79b95cc3444ad9a43a3524de272"
+          "sha256": "0ce2019b57a48ea35f05f50cfaf8a69fca54e9e48f70f576fcbfb55d4cb0038a"
         },
         {
           "class": "support",
@@ -2841,7 +2841,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/tooling-specialist-ansible/instructions.md",
-          "sha256": "3919e5ce25482bb9b6d537c5ba55506d16a1145e0e47b74e6fc1ded138800b6c"
+          "sha256": "274900c68403d1430f2eace050501ddbb46f91a72cd02f3518184eaedd49cff8"
         },
         {
           "class": "support",
@@ -2851,7 +2851,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/tooling-specialist-github-actions/instructions.md",
-          "sha256": "23471c030b7ad59494a063d03ea594d476f855982ec8cc335f8ce0efb235913e"
+          "sha256": "af5c38e68cc4f7807b81996fc1eebe8bf5a3fb9ee71221ccb320ce7e54239df5"
         },
         {
           "class": "support",
@@ -2861,7 +2861,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/tooling-specialist-gitlab-ci/instructions.md",
-          "sha256": "b066b4666b41869ef61b89e1418f2ee068e53f69a0ba9e50512c106ff2b37e4b"
+          "sha256": "41ea290d0da49701079cc842bb724cda168bce684787882983a977b26acdecd3"
         },
         {
           "class": "support",
@@ -2871,7 +2871,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-specialists/plugin.json",
-          "sha256": "9b037250fca7f358cff27eda3ce8f82ced34c62e6326dd3702e2c8036b8c658f"
+          "sha256": "f3e4fd096e55c470b5474bc9e97b8f4f57dd7b9b2559f0d768021f90985e01c9"
         }
       ],
       "dependencies": [],
@@ -2886,7 +2886,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-workflow/.claude-plugin/plugin.json",
-          "sha256": "a2c7bd3affd3bb9c6318bf4222fddca239bfa7f00611644e8d073e12702663fd"
+          "sha256": "51feb389dc0ce68a6d09092de91d300bb1c65ff89875e7d7432139340566fb57"
         },
         {
           "class": "support",
@@ -2946,7 +2946,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/plugin.json",
-          "sha256": "fcb30dc7c040739c51a1f70b21541e3152558536f7e680deea7784aa89467876"
+          "sha256": "62848783b4e232a197904053e0e1fbb9a94d07cfd0f43a48d41e357f6924f768"
         },
         {
           "class": "portable",
@@ -3051,7 +3051,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/_shared/specialists.md",
-          "sha256": "f43f20ee46bbaf40a08f33098d55176ef97d031ee5bd280809ff3829ceb1b9d5"
+          "sha256": "93e0545b9bbfdc40d4006ee135ffebf6bb6e305dbd72959db7b775b16526718e"
         },
         {
           "class": "portable",
