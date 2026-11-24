@@ -1429,6 +1429,49 @@ pre_builtin_tasks() {
 }
 
 # ============================================================================
+# docs/adr/NNNN-*.md · the header contract (lib/adr_lint.py)
+# ============================================================================
+# KODFLOW_ADR_LINT: unset or anything else = a NEW ADR without a valid Area or
+# Need is refused (PreToolUse), an existing one gets its defects as
+# additionalContext after the write; warn = never refuses; strict = refuses
+# every ADR whose written text has a defect; off = silent. Fails open without
+# python3.
+_adr_path() { case "$1" in */docs/adr/[0-9][0-9][0-9][0-9]-*.md) return 0 ;; esac; return 1; }
+
+_adr_pre() {
+    [ "${KODFLOW_ADR_LINT:-}" = off ] && return 0
+    [ "${KODFLOW_ADR_LINT:-}" = warn ] && return 0
+    _adr_path "$FILE" && command -v python3 >/dev/null 2>&1 || return 0
+    local out blk wrn new=0
+    [ -e "$FILE" ] || new=1
+    out=$(printf '%s' "$INPUT" | jq -c '.tool_input' 2>/dev/null | python3 -I "$LIB/adr_lint.py" --hook "$FILE" 2>/dev/null) || return 0
+    blk=$(printf '%s\n' "$out" | grep '^BLOCK ' | head -n 5)
+    wrn=$(printf '%s\n' "$out" | grep '^WARN ' | head -n 5)
+    if [ "${KODFLOW_ADR_LINT:-}" = strict ]; then
+        [ -n "$blk$wrn" ] || return 0
+    else
+        [ "$new" = 1 ] && [ -n "$blk" ] || return 0
+        wrn=""
+    fi
+    local lines=() l
+    while IFS= read -r l; do [ -n "$l" ] && lines+=("${l#* }"); done <<< "$blk
+$wrn"
+    _motif_block adr-lint "ADR BLOCKED — header contract" "${lines[@]}" \
+        "An ADR header needs '- Status:', '- Date:', '- Area:' (docs/adr/areas.txt) and '- Need:' (decision|constraint|incident|convention|record). KODFLOW_ADR_LINT=warn|off lifts this."
+}
+
+_adr_post() {   # → KF_ADR_CTX
+    KF_ADR_CTX=""
+    [ "${KODFLOW_ADR_LINT:-}" = off ] && return 0
+    _adr_path "$FILE" && command -v python3 >/dev/null 2>&1 || return 0
+    local out
+    out=$(python3 -I "$LIB/adr_lint.py" --check "$FILE" 2>/dev/null | head -n 8) || return 0
+    [ -n "$out" ] && KF_ADR_CTX="ADR header defects (non-blocking, KODFLOW_ADR_LINT=off silences):
+$out"
+    return 0
+}
+
+# ============================================================================
 # PreToolUse · Write / Edit / MultiEdit / NotebookEdit
 # ============================================================================
 pre_edit() {
@@ -1437,6 +1480,7 @@ pre_edit() {
         "${FILE:-$NB}: a hooks.json or .claude-plugin/ there loads code beside these guards without a marketplace." \
         "Ship it as a plugin of the kodflow marketplace instead."
     [ -n "$FILE" ] || exit 0
+    _adr_pre
 
     # --- BLOCK: protected paths ----------------------------------------------
     # Globs, matched against the path's tail so `*.lock` means the basename and
@@ -1470,6 +1514,12 @@ pre_edit() {
 post_edit() {
     [ -n "$FILE" ] && [ -f "$FILE" ] || { _log; exit 0; }
     KF_DOCS_CTX=""; _docs_post
+    _adr_post
+    if [ -n "$KF_ADR_CTX" ]; then
+        jq -n -c --arg c "${KF_DOCS_CTX:+$KF_DOCS_CTX
+}$KF_ADR_CTX" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$c}}' 2>/dev/null
+        _log; exit 0
+    fi
     case "$FILE" in *.md|*/.claude/*|"$HOME"/.claude/*) _log; exit 0 ;; esac
     local ctx=$KF_DOCS_CTX
 

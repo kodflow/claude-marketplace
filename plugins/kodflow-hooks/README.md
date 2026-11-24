@@ -1150,7 +1150,7 @@ the mod) and the task tools' answers are still in English.
 
 ```
 bash scripts/tests/test_hooks.sh
-bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh + test_cleanup.sh + test_identity.sh + test_docs.sh + test_scope.sh
+bash plugins/kodflow-hooks/tests/run-tests.sh   # mod (node) + delegation gate + test_agents.sh + test_cleanup.sh + test_identity.sh + test_docs.sh + test_adr.sh + test_scope.sh
 claude plugin validate --json plugins/kodflow-hooks
 claude plugin test plugins/kodflow-hooks         # tests/mod/*.test.ts, in the engine
 node plugins/kodflow-hooks/tests/mod/run-node.ts # corpora, real disk, several processes, invariants
@@ -1222,3 +1222,17 @@ and configuration inside a repository, sysadmin commands allowed, every
 producing git/forge op refused including wrapped forms, merges allowed and journaled, the
 forge MCP tools, the escapes, the subagent never gated, the Stop rule with and
 without a subagent on the epic, and the log tags.
+
+## ADR header contract (`lib/adr_lint.py`)
+
+An ADR is `docs/adr/NNNN-slug.md`; its header (bullets before the first `## `,
+`- Status:` or `- **Status**:`, MADR front matter tolerated) carries `Status`
+(first word in proposed|accepted|rejected|deprecated|superseded|amended),
+`Date` (ISO), `Area` (tags from `docs/adr/areas.txt` when that file exists) and
+`Need` (decision|constraint|incident|convention|record). `python3 -I adr_lint.py
+--check <dir|file> [--strict]` prints one line per defect (exit 1 only with
+`--strict`). `on-tool.sh` runs it on Write/Edit of `docs/adr/NNNN-*.md`:
+`KODFLOW_ADR_LINT` unset = a new ADR without a valid Area/Need is refused, an
+existing one gets its defects as PostToolUse context; `warn` never refuses;
+`strict` refuses any defect; `off` is silent. A repository runs the same check
+in CI: see `docs/marketplace/adr-lint-ci.md`.

@@ -56,6 +56,8 @@ six months later nobody re-litigates a settled trade-off or silently violates it
 
 - Status: <proposed | accepted | rejected | deprecated | superseded by NNNN>
 - Date: <YYYY-MM-DD>
+- Area: <tag[, tag]> (from docs/adr/areas.txt when it exists)
+- Need: <decision | constraint | incident | convention | record>
 - Deciders: <who>
 - Related: <PR/issue links, related ADRs>
 
@@ -80,6 +82,18 @@ The choice, stated in active voice: "We will …". Be specific and falsifiable.
 - Negative / cost: what we accept (debt, lock-in, perf, complexity).
 - Follow-ups: migrations, fitness functions, things to revisit.
 ```
+
+## Header contract
+
+`Status`, `Date`, `Area` and `Need` are required, as `- Key: value` or
+`- **Key**: value` bullets. `Need` is one of: `decision` (a choice between
+options), `constraint` (a rule to follow), `incident` (a defect and its rule),
+`convention` (process or tooling), `record` (history with no active effect).
+`Area` tags come from `docs/adr/areas.txt` when the repository has one. The
+kodflow-hooks hook refuses a new ADR without a valid `Area` and `Need`
+(`KODFLOW_ADR_LINT=off|warn|strict`); check by hand with
+`python3 -I <plugin>/hooks/scripts/lib/adr_lint.py --check docs/adr`.
+Existing ADRs are not backfilled by this skill.
 
 ## Workflow
 
