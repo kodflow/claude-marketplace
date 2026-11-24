@@ -26,7 +26,10 @@ six months later nobody re-litigates a settled trade-off or silently violates it
   ("we went with X instead of Y", a new dependency, a layering choice, a protocol
   pick) and propose an ADR for it.
 - **Free text**: the decision title/topic (e.g. `/adr use registry cache for buildkit`).
-- **`--list`**: list existing ADRs with status.
+- **`--list`**: list existing ADRs with status, from the document index: the
+  `docs_search` tool (or `kf_docs.py search "<topic>" --all --format md` from
+  kodflow-hooks' `hooks/scripts/lib/`) with the `--status`, `--area`, `--need` filters; read the
+  file itself only for what the hit does not say.
 - **`--supersede <NNNN>`**: create a new ADR that supersedes ADR NNNN (marks the
   old one `Superseded by NNNN`).
 - **`--status <proposed|accepted|rejected|deprecated|superseded>`**: set status
