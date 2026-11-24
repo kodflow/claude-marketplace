@@ -13,12 +13,19 @@
 // The critical path is the longest blockedBy chain of tasks not completed,
 // down to the epic's final tasks (the ones nothing waits on); every task on
 // a chain of that length is on it. A list with no link has none.
+//
+// A subagent's own tasks are no rows of the tree: the task it was handed
+// (its `workers`, the anchor board.ts picks) carries one read-only summary
+// of them, `helpers` (how many, the one under way, the ones whose agent
+// stopped), outside the depth, the counts and the critical path. Those whose
+// subagent no task names form one more group, « Sous-agents », which counts
+// its stopped ones too.
 
-import type { HudBoard, HudCi, HudModel, HudSeen, HudTask } from "../../types";
-import { MAIN, judge, loopLabel, type Ctx } from "./board.ts";
+import type { HudBoard, HudCi, HudEpic, HudModel, HudTask } from "../../types";
+import { MAIN, UNKNOWN, anchorOf, judge, loopLabel, type Ctx } from "./board.ts";
 import { MAIN_NAME, colorOf, roleOf } from "./who.ts";
 import { cells, fit } from "./width.ts";
-import { modelKey, seenKey } from "./models.ts";
+import { modelKey } from "./models.ts";
 
 export type NodeState =
   "done" | "run" | "you" | "wait" | "ready" | "blocked" | "todo";
@@ -50,11 +57,34 @@ export type TreeNode = {
   /** "CI ✓" and the like, for a cited pull request. */
   ci: string;
   kids: TreeNode[];
+  /**
+   * The subagents' own tasks hanging on this one (its `workers`): how many,
+   * how many done, the one under way, how many left by a stopped agent, and
+   * whether the agents' standing could not be read. Absent when none.
+   */
+  helpers?: {
+    total: number;
+    done: number;
+    current?: string;
+    stopped: number;
+    unknown?: boolean;
+  };
 };
 
+/** The group of the subagents' tasks no task names: its id. */
+export const HELPERS_GROUP = -1;
+export const HELPERS_TITLE = "Sous-agents";
+
 export type TreeEpic = {
+  /** The epic's id; 0 the tasks under no epic, -1 the « Sous-agents » group. */
   id: number;
   title: string;
+  /** The main agent's active epic, marked in place. */
+  active?: boolean;
+  /** Nothing moved for 24 h: one line until the person opens it. */
+  idle?: boolean;
+  /** « Sous-agents »: tasks left by a stopped agent, counted, not drawn. */
+  stopped?: number;
   done: number;
   total: number;
   age: string;
@@ -67,8 +97,6 @@ export type TreeEpic = {
   next?: { label: string; title: string };
   /** Where the epic ends: its final task on the path, else its last. */
   goal?: { label: string; title: string; state: NodeState; note: string };
-  /** The graph's edges between top-level tasks, blocker first, by id. */
-  edges: [string, string][];
 };
 
 export type TreeModel = { found: boolean; epics: TreeEpic[] };
@@ -78,8 +106,7 @@ export type TreeData = {
   ctx: Ctx;
   ci: Readonly<Record<string, HudCi>>;
   models: Readonly<Record<string, HudModel>>;
-  seen: Readonly<Record<string, HudSeen>>;
-  /** The session the board was read for: the `seen` keys carry it. */
+  /** The session the board was read for: the model keys carry it. */
   session: string;
 };
 
@@ -240,7 +267,40 @@ function criticalPath(
  */
 export function buildTree(data: TreeData): TreeModel {
   const { board, ctx } = data;
-  const epics = board.epics.map((epic) => {
+  const mainTasks = board.epics.flatMap((e) => e.tasks);
+  const helpers = board.helpers ?? [];
+  // Each subagent's tasks under the task it was handed, if any is shown
+  const anchorFor = new Map<string, HudTask | undefined>();
+  const anchored = (agent: string) => {
+    if (!anchorFor.has(agent)) anchorFor.set(agent, anchorOf(mainTasks, agent));
+    return anchorFor.get(agent);
+  };
+  const helpersOf = (t: HudTask): TreeNode["helpers"] => {
+    const mine = helpers.filter((h) => anchored(h.agent) === t);
+    if (!mine.length) return undefined;
+    const shown = mine.filter((h) => !h.stopped);
+    const run = shown.find((h) => h.status === "in_progress");
+    const out: NonNullable<TreeNode["helpers"]> = {
+      total: shown.length,
+      done: shown.filter(done).length,
+      stopped: mine.length - shown.length,
+    };
+    if (run) out.current = `${labelOf(run)} ${run.subject}`;
+    if (ctx.liveness === UNKNOWN) out.unknown = true;
+    return out;
+  };
+  const loose = helpers.filter((h) => !anchored(h.agent));
+  const groups: HudEpic[] = [...board.epics];
+  if (loose.length)
+    groups.push({
+      id: HELPERS_GROUP,
+      title: HELPERS_TITLE,
+      agent: "",
+      created: 0,
+      touched: 0,
+      tasks: loose.filter((h) => !h.stopped),
+    });
+  const epics = groups.map((epic) => {
     const tasks = epic.tasks;
     const byId = new Map(tasks.map((t) => [t.id, t]));
     const { onPath, chains: pathIds } = criticalPath(tasks, byId);
@@ -267,9 +327,9 @@ export function buildTree(data: TreeData): TreeModel {
     const node = (t: HudTask, depth: number, path: Set<string>): TreeNode => {
       const state = stateOf(t);
       const v = judge(t, ctx);
-      const seen = data.seen[seenKey(data.session, t)];
-      const workerId = t.workerId || seen?.workerId;
-      const worker = t.worker || seen?.worker;
+      // The worker on it now, else the last one it was handed to
+      const workerId = t.workerId || t.workers?.[t.workers.length - 1];
+      const worker = t.worker;
       const loop = workerId || t.agent;
       let agent = "";
       let agentKind: TreeNode["agentKind"] = "";
@@ -326,6 +386,7 @@ export function buildTree(data: TreeData): TreeModel {
               .map((k) => node(k, depth + 1, path))
           : [];
       path.delete(t.id);
+      const hang = epic.id === HELPERS_GROUP ? undefined : helpersOf(t);
       return {
         id: t.id,
         label: labelOf(t),
@@ -350,6 +411,7 @@ export function buildTree(data: TreeData): TreeModel {
         desc: t.description ?? "",
         ci,
         kids,
+        ...(hang && { helpers: hang }),
       };
     };
 
@@ -438,8 +500,11 @@ export function buildTree(data: TreeData): TreeModel {
           state: stateOf(byId.get(id)!),
         })),
       ),
-      edges,
     };
+    if (epic.active) out.active = true;
+    if (epic.idle) out.idle = true;
+    if (epic.id === HELPERS_GROUP)
+      out.stopped = loose.filter((h) => h.stopped).length;
     if (youNode)
       out.you = { label: youNode.label, age: youNode.age, crit: youNode.crit };
     if (nextNode) out.next = { label: nextNode.label, title: nextNode.title };

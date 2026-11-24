@@ -186,7 +186,7 @@ issue**:
 
 ```bash
 codex exec -s read-only --ephemeral -C <integration-worktree> \
-  --output-schema "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rba7e8596e1b0/skills/hunt/codex-review.schema.json" \
+  --output-schema "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rc9c9c2d2e2ff/skills/hunt/codex-review.schema.json" \
   "<neutral brief: the issue text, the commit SHA, what to check>"
 ```
 
@@ -208,7 +208,7 @@ The argument order matters: the permission rule matches the prefix
 
 Each brief is self-contained — the role has no other context:
 
-- slug, role, the plugin path (`${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rba7e8596e1b0`, resolved this session),
+- slug, role, the plugin path (`${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rc9c9c2d2e2ff`, resolved this session),
   the state directory, the scope path, its agent id's ledger events so far;
 - the module to read (`roles.md` section, `queue.md`, the adapter);
 - what to return, in one structured block, and that it must append its own

@@ -255,8 +255,6 @@ To turn this check off for the session: $off_cmd
 
     if [ $enforce = 1 ]; then
         _kf_tier_log refuse $reason
-        . "$KF_TIER_LIB/blocks.sh" 2>/dev/null \
-            && kf_block "$kt_sdir" hook "${t_tool:-Agent}" "TIER — $what names no $missing" tier "$kt_caller" "" "" "$kt_tuid"
         printf '═══════════════════════════════════════════════\n  ❌ TIER REFUSED — %s\n═══════════════════════════════════════════════\n' "$what names no $missing" >&2
         printf '  %s\n' "$msg" >&2
         exit 2

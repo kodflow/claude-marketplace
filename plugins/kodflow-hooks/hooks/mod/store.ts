@@ -4,7 +4,7 @@
 //
 // The file is read fresh on every call and replaced whole: written to a
 // temporary file in the same directory, then renamed over tasks.json by `mv`,
-// so a reader (status line, shell hooks) never sees half a list. `$.fs` has
+// so a reader (shell hooks, /recap, kodflow-hud) never sees half a list. `$.fs` has
 // no rename, hence `mv` through `$.process.run`, its exit code checked.
 //
 // Two writers are kept apart twice. Inside this process (the main loop and
