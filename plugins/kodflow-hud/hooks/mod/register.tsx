@@ -52,7 +52,15 @@ import type {
   HudHunt,
   HudHuntCursor,
   HudModel,
+  HudVitals,
 } from "../../types";
+import {
+  afterTurn,
+  finishTurn,
+  noteSpawn,
+  noteTool,
+  startTurn,
+} from "./vitals.ts";
 import {
   LIVE,
   MAIN,
@@ -138,6 +146,10 @@ const huntCursorAtom = atom(
 const livenessAtom = atom(
   { plugin: "kodflow-hud", key: "liveness" } as const,
   "",
+);
+const vitalsAtom = atom(
+  { plugin: "kodflow-hud", key: "vitals" } as const,
+  {} as HudVitals,
 );
 const primedAtom = atom({ plugin: "kodflow-hud", key: "primed" } as const, "");
 const tickAtom = atom({ plugin: "kodflow-hud", key: "tick" } as const, 0);
@@ -594,6 +606,9 @@ export const register: Register = (on, options) => {
     const r: any = await next(e);
     if (r?.deny === undefined) {
       await record($, e).catch(() => undefined);
+      await update($, vitalsAtom, (v) =>
+        noteTool(v, String(e.tool), !!r?.isError),
+      ).catch(() => undefined);
       if (TASK_TOOL.test(String(e.tool))) kick($);
       if (e.tool === "Agent" && !r?.isError) {
         const said = fromAgentCall(e as { effort?: unknown }, r?.result);
@@ -604,9 +619,60 @@ export const register: Register = (on, options) => {
     return r;
   }).catch(($, e, next) => next(e));
 
+  // The context gauge: what the host measured, against the compaction window
+  // when its breakdown gives one (a local estimate, no request is sent)
+  on("session.measure", async ($, e, next) => {
+    const r: any = await next(e);
+    const c: any = e.context;
+    let window: number | undefined = c?.window || undefined;
+    let compact = false;
+    if (e.changed.includes("context")) {
+      const u: any = await $.session
+        .usage({ breakdown: "summary" })
+        .catch(() => undefined);
+      const raw = u?.context?.breakdown?.rawMaxTokens;
+      if (typeof raw === "number" && raw > 0) {
+        window = raw;
+        compact = true;
+      }
+    }
+    await update($, vitalsAtom, (v) => ({
+      ...v,
+      ...(typeof c?.tokens === "number" && { tokens: c.tokens }),
+      ...(window && { window, compact: compact || (v.compact && v.window === window) }),
+      ...(e.cost && { costUsd: e.cost.usd }),
+    })).catch(() => undefined);
+    return r;
+  }).catch(($, e, next) => next(e));
+
+  // The receipt: the main loop's turn, counted from its start to its end
+  on("turn.start", async ($, e, next) => {
+    const r: any = await next(e);
+    if (e.agentId === undefined) {
+      const now = await $.clock.now();
+      await update($, vitalsAtom, (v) => startTurn(v, now, v.costUsd)).catch(
+        () => undefined,
+      );
+    }
+    return r;
+  }).catch(($, e, next) => next(e));
+
+  on("turn.complete", async ($, e, next) => {
+    const r: any = await next(e);
+    if (e.agentId === undefined) {
+      const now = await $.clock.now();
+      await update($, vitalsAtom, (v) =>
+        finishTurn(afterTurn(v, e.usage, now), now, e.durationMs, v.costUsd),
+      ).catch(() => undefined);
+    }
+    return r;
+  }).catch(($, e, next) => next(e));
+
   // The model core resolved for a subagent it started, whoever asked
   on("agent.spawn", async ($, e, next) => {
     const r: any = await next(e);
+    if (r?.deny === undefined && typeof r?.agentId === "string")
+      await update($, vitalsAtom, noteSpawn).catch(() => undefined);
     if (r?.deny === undefined && typeof r?.agentId === "string" && r.model)
       await noteModels($, { [r.agentId]: { model: String(r.model) } }).catch(
         () => undefined,
@@ -642,6 +708,7 @@ export const register: Register = (on, options) => {
       const extra: Extra = {
         now: await $.clock.now(),
         hunt: await read($, huntAtom),
+        vitals: await read($, vitalsAtom),
       };
       // Tests only: the fault seam (view.ts), inert in a session
       if ((await $.env.get("KODFLOW_HUD_FAULT_PROBE")) === "1")

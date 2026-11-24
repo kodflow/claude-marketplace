@@ -21,6 +21,15 @@ shows the task list it does not.
   counter, pass, heavy queue, tip, Codex, pending decisions and what
   happened since the view was last left; « Chasse 7/10 » counts the busiest
   hunt's open issues against its cap. No hunt, no bar.
+- **Vitals** — two rows under the tree, from 10 rows up and only once the
+  host has measured something: the context gauge (`ctx 612k/1M ██████░░░░ 61%`,
+  against the compaction window when the host exposes it, else the model's
+  window and « (inféré) ») with the prompt-cache countdown (`cache ↻ 3m`,
+  5 min or 1 h as the turn's usage says, orange shortly before expiry, red
+  once expired; « (inféré) » while the lifetime is only assumed); then the
+  receipt of the last turn: duration, subagents, edits, errors and the cost
+  delta only when the host gives the cost. Pure reducers in `hooks/mod/vitals.ts`;
+  no file, no network.
 - **Toasts** — a task done, a task blocked (`waiting`), a task gone silent:
   at most one per task and per state.
 - **Coloured words** — a few words of a reply drawn in colour in the

@@ -265,7 +265,7 @@ test("no tasks.json: the board says so", async ($, on) => {
   ).toBeDefined();
 });
 
-test("an epic whose last task was just done stays 20 minutes, in the tree, then goes with no change to tasks.json", async ($, on) => {
+test("an epic whose last task was just done stays 20 minutes, in the tree, then goes with no change to tasks.json", SLOW, async ($, on) => {
   const { h, clock } = host(on);
   writeTasks(h, [T("1", "completed"), T("2", "completed")], 1);
   await start($, clock);
@@ -544,7 +544,7 @@ test("the anchor done while its helper still runs: the summary stays under it", 
   expect(narrow).toContain("↳ sous-agents : 1 tâche · en cours #7 Still going");
 });
 
-test("$.agent.list() failing: no toast, no key written, the agents kept, nobody stopped", async ($, on) => {
+test("$.agent.list() failing: no toast, no key written, the agents kept, nobody stopped", SLOW, async ($, on) => {
   const { h, clock } = host(on, { env: { KODFLOW_HUD_TRACE: "/tmp/hud-trace.json" } });
   h.agents = [{ id: "a1", type: "general-purpose", name: "impl", status: "running" }];
   writeFile(
