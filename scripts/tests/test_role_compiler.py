@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from pluginlib.roles import build_role_artifacts, compile_roles, load_roles, perplexity_role_skills
 from pluginlib.codex_text import render_agent
 from pluginlib.workflows import load_workflow
+from sync_plan_review_mode import section, with_section
 
 
 SCHEMAS = ROOT / "schemas"
@@ -39,6 +40,19 @@ REVIEWED_INSTRUCTIONS = {
 
 def digest(data: bytes) -> str:
     return sha256(data).hexdigest()
+
+
+# Plan review mode is one shared section, synced into every role from
+# _shared/specialists.md (scripts/sync_plan_review_mode.py), so it evolves
+# with that file. The migration baseline pins the rest of each body: the
+# section is put back to its text at migration time before hashing.
+PLAN_REVIEW_BASELINE = (
+    ROOT / "scripts/tests/fixtures/roles/plan-review-mode-baseline.md"
+).read_text(encoding="utf-8").rstrip("\n")
+
+
+def at_baseline(body: str) -> str:
+    return with_section(body, PLAN_REVIEW_BASELINE) if section(body) is not None else body
 
 
 class RoleCompilerTests(unittest.TestCase):
@@ -67,14 +81,15 @@ class RoleCompilerTests(unittest.TestCase):
                     metadata = yaml.safe_load(header)
                     canonical = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
                     self.assertEqual(digest(canonical.encode("utf-8")), expectations["metadataSha256"])
+                    baseline_body = at_baseline(body)
                     if relative.stem not in REVIEWED_INSTRUCTIONS:
-                        self.assertEqual(digest(body.encode("utf-8")), expectations["instructionsSha256"])
+                        self.assertEqual(digest(baseline_body.encode("utf-8")), expectations["instructionsSha256"])
                     historical_roles.add(relative.stem)
                     if "codexSha256" in expectations:
                         original_codex_count += 1
                         if relative.stem not in REVIEWED_INSTRUCTIONS:
-                            generated = Path("codex/agents") / f"{relative.stem}.toml"
-                            self.assertEqual(digest(self.tracked[generated]), expectations["codexSha256"])
+                            rendered = render_agent(metadata, baseline_body, relative.name)
+                            self.assertEqual(digest(rendered.encode("utf-8")), expectations["codexSha256"])
         self.assertEqual(len(historical_roles), 49)
         self.assertEqual(original_codex_count, 35)
         self.assertTrue(REVIEWED_INSTRUCTIONS <= historical_roles)
