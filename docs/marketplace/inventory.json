@@ -6,12 +6,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-devops/.claude-plugin/plugin.json",
-          "sha256": "abba49c14269e7b2181104bd1954faebd9f73c275f0375297b6649f8b2cb61d5"
+          "sha256": "45e4db8989094cad2612fd124f0f9dc0f48a5a0518bcde37831d1881940a0438"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/plugin.json",
-          "sha256": "5421b1210ca35bce0b2df4915c228f368634db2553ba0cb5226ac10046ae436d"
+          "sha256": "155b9648201b5db04b7e15a6ec726035b356a7fd4b0251e3bd6cee4989869c63"
         },
         {
           "class": "portable",
@@ -31,7 +31,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/_shared/scripts/agents.sh",
-          "sha256": "bd81bd543592595b9265d636bd30d09e1417ade3a92f32e2de034bb6e110c744"
+          "sha256": "813ddc3832c41609edc944134effc86e2ca232dbbaac935bc2737f2c0cba3284"
         },
         {
           "class": "portable",
@@ -41,7 +41,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/_shared/scripts/detect-models.sh",
-          "sha256": "dfc26cb0a081cc556c1c4f4ee7f8665f8b1d5b7be06d2f9a8978cc4704159ebe"
+          "sha256": "712be29080bcdd0e66e2d5ede4be876575a77fdb50528cee8bf2ab3a07cadbad"
         },
         {
           "class": "portable",
@@ -851,7 +851,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "ec053629232ca04cab67eb169837a23a0aa343f59300301896b724ca87db995f"
+          "sha256": "44c3a0536cb50797f98ea6d9d944298c2df89c165b6fa3f58db6f7d350c6240c"
         },
         {
           "class": "support",
@@ -876,7 +876,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/fingerprints.sha256",
-          "sha256": "3ad89964cac96a8e7b68613b3078dcfb2afa113d54b6d61babc5748ba353ef24"
+          "sha256": "6f9e0b1c02b97375eef8fd4c3faf00a96c5f418dd1d027ecdb1ceb6e90684609"
         },
         {
           "class": "host-extension",
@@ -906,12 +906,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/cleanup.ts",
-          "sha256": "96688e8a9dcafc1c1a2e88305765cba20bf5d6538334821945dea32414b4a615"
+          "sha256": "11ad92a0db460b5f62aa3b0a477a1ad075670083e58f6d676199534b305169e9"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/collision.ts",
-          "sha256": "2afacb644ee3457c3a4acb5fb2cebabff1e5a42f9cfb8483dc0dba625dd91b7d"
+          "sha256": "40cbdcaee8aaf9da0a20c3842cc95f1ed769da59903d37e2f8da7b1519ef0c91"
         },
         {
           "class": "host-extension",
@@ -926,12 +926,17 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/guards.ts",
-          "sha256": "79fdbd36aedd71b2dae583d86bf3e5acbc709243b9b80874ae814bc1355ee111"
+          "sha256": "6ec7d6af6a4b48198d509b2c8099fbdb45432720f5eba884e223819cca283b37"
+        },
+        {
+          "class": "host-extension",
+          "path": "plugins/kodflow-hooks/hooks/mod/host.ts",
+          "sha256": "2be2a93618530260a551c5baf9536cc554298ab1e4251019301f9dacc06c659a"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/lint.ts",
-          "sha256": "ab498fd9bc3e8ead9731d806b820ab5106fce292370e1b025e6b57b4936e77df"
+          "sha256": "efe67b569ec65497e920ecd4bf939dc63969679df713f9ea5af91813d4f9524f"
         },
         {
           "class": "host-extension",
@@ -951,7 +956,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/paths.ts",
-          "sha256": "afbf31cb74a15f781e444bd89a94f9352c35c106b4e7dcbc0e2404223281ce64"
+          "sha256": "eebac3b309e7a2312334de7fc59ecc105481241d4ffa277a3b47bfec642978e3"
         },
         {
           "class": "host-extension",
@@ -966,7 +971,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/register.ts",
-          "sha256": "0b018fd57d3a4e1c20b394baaa63bea89965b68eafde820db2cbabf770e481c5"
+          "sha256": "b8c8215af4ab83462837170ad7083d7a0d8020515ff63e4b5057fba18acc52cf"
         },
         {
           "class": "host-extension",
@@ -986,7 +991,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/mod/tier.ts",
-          "sha256": "53c086a9e0d26abe5ed7f6a82cc586aadb06ea1039609e9fbff478d1b3d1978e"
+          "sha256": "4e3c696ad255bf628540791c07e72d7eba692ed8e3de0491c43ed1ad190a4326"
         },
         {
           "class": "host-extension",
@@ -1021,12 +1026,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/cleanup.sh",
-          "sha256": "6008c58d4949780f806ff4513b8776b6fc7d907bdb01ca905acdbd0cf0928239"
+          "sha256": "083a3a54e8bb6fce613d93db3536819d577fd057e3a018ebff7bb676f08ba627"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/agents.sh",
-          "sha256": "bd81bd543592595b9265d636bd30d09e1417ade3a92f32e2de034bb6e110c744"
+          "sha256": "813ddc3832c41609edc944134effc86e2ca232dbbaac935bc2737f2c0cba3284"
         },
         {
           "class": "host-extension",
@@ -1036,17 +1041,17 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/blocks.sh",
-          "sha256": "f42949a79ad39a9fecad7e5f4392ce1345b7a4473190e29b04db158fddddcd76"
+          "sha256": "71b087d90d615ac43fac9035b54b5e37885a25ddafb38adcac8de02d5e69f57d"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/coderabbit.sh",
-          "sha256": "aa340f863d04b244c43b3f13f034ef8158c443fc3359e751f8375df405838013"
+          "sha256": "d86bd8864566349689ac569b408b9cdb6bada3a2a3bb0cd6e2459cae7e1f7500"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/docs.sh",
-          "sha256": "7b69b89070d3c34e099c445728b11f7e59fbe3eaab00634f49a15f4d53244054"
+          "sha256": "cfbaa4ca584ae5243892fb44c7bdafbe2964ac0c9e4baea32046e731ac4791b5"
         },
         {
           "class": "host-extension",
@@ -1066,7 +1071,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/feedback.sh",
-          "sha256": "202ea264ec8061599371d4d3b4ecf8951fe5e833eba92a5af519f90328a7369f"
+          "sha256": "515d92de95b143ab8975ee12bb0323694440159a49f1e1bcfd2241b7be170918"
         },
         {
           "class": "host-extension",
@@ -1080,23 +1085,28 @@
         },
         {
           "class": "host-extension",
+          "path": "plugins/kodflow-hooks/hooks/scripts/lib/host.sh",
+          "sha256": "5fabd309f239a288b6fc1bdfccbb92ebad3a494fa93cb6222390a1fd05b1b2e3"
+        },
+        {
+          "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/identity.sh",
           "sha256": "2540fee702a435a00b5d0f1c56412875ab285f63ee2312d5d5c86a62f7576c3e"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/lint.sh",
-          "sha256": "bdd2c95668a60bc2df42621e30af5f07e020d286a6a7c9cf2374bc571fa6bc85"
+          "sha256": "ba264f8a7e502c9a7b0a0b8ae92d85893c7b05c1c785d0bd9e42e5f223719844"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/lock.sh",
-          "sha256": "bfcae3a712d7f9b83d73ad23c4f41fb85fc03a18b96127225a687613a985a313"
+          "sha256": "3e0433848172741203c0f9339e42bfaa594456925e316ce4d8d9063b56ae9d45"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/msg.sh",
-          "sha256": "cc537b672d4ef4376a61b2d7a18219d8bde4354791d231f078ad72a0f635026f"
+          "sha256": "176c8c08db32d9d23206b06d21756418bafa3405a3fab89dd3cf012722be4f3a"
         },
         {
           "class": "host-extension",
@@ -1106,7 +1116,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/route.sh",
-          "sha256": "edc8d0ec67707d54cde83828fbcdccb0bc26eb8366cca2e64c2299361c36d0aa"
+          "sha256": "be1e14a002993fb222de29604f8374367eae0c984d38e784278b55da7be2104b"
         },
         {
           "class": "host-extension",
@@ -1116,47 +1126,47 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/scope.sh",
-          "sha256": "2812295529d8aba897a1a801d3b2c3e5f1b8155e3069b1d923247363a931ea99"
+          "sha256": "f855710beeb8d51869399231d62d6e423a2972d45ce8f7597721f83e1af95dc4"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/tier.sh",
-          "sha256": "94fc59e976293f0bdcbab9358d78a7af4cd7ccb5ced4862964e0531418149e33"
+          "sha256": "3b6639c6004a5552614d95fd47110bfc8a5d067eebfd8a7544058838423e4359"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-agent.sh",
-          "sha256": "995531296799396eb01c49ccd59f4941cb4b3d5d5ddbd215d960c8da292201ca"
+          "sha256": "386050a041a0f3281d1d3152dc5a8ff6779c59a4d0f8998e6ee5bf5a88323a10"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-mod.sh",
-          "sha256": "1adbc8bef7cb0ff83023d8601844fe08d2d26a633cb6aebd45937d21354f915a"
+          "sha256": "cda5b61c20cba744d209fd1a33547dcb429c602098ef1009bff3399f89fc5757"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-session.sh",
-          "sha256": "c6029db397bdfb59359b50c0fcdbf64744b785d9391eeaa8fbb2f962287d2d9b"
+          "sha256": "1e264d3d9826552641de90526b861a94f43b018c3b2d300d47f9ce4f9cecad7f"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-stop.sh",
-          "sha256": "1390ce42c39238a06a51ea5d8af0e3e00ae7176c042dde174ea3c315aaf6f943"
+          "sha256": "d20a2e193b321dcfa4012a7bd3a4f37a322a13129b9583bceca4cd6883dcad91"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-tier.sh",
-          "sha256": "b18baf0e5a4acb85a9da72386b23513986a3658761c869d4cb8364531a54ee79"
+          "sha256": "646425f892e923b15b0bbde53c0f50dfc04041f89f8260aa9c511278cb13835d"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-tool.sh",
-          "sha256": "d7d83c7aab007e0e49940a099a0bb1b25fd141fca3f03ec70a62b3628b53a3f0"
+          "sha256": "8f188e4fe9bcd31db7cb94a58bb29b320c7678392b1091218467764bd283e3ee"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/on-user.sh",
-          "sha256": "5703a58a53ed9206a360b99847ef81aefa1ee007ddbdae85d9a16ba92cc72e5f"
+          "sha256": "3f356ce3eee5df7e950d56175034c5af0ef053200367d23440102d6426790503"
         },
         {
           "class": "host-extension",
@@ -1171,7 +1181,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "c9b63ef68a2ce309ec69ed01dc06798207724ec0fe791d06fc9ba14e0d3877e2"
+          "sha256": "099f551fb4541e5ef72a1b6cde1ed08c0a171a83819c90a5e6710eb421984b49"
         },
         {
           "class": "verification",
@@ -1316,7 +1326,17 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/mod/fable.test.ts",
-          "sha256": "8c143173507e3c825552b0b92f5acb124f80482017a03e2305b12db904803f9d"
+          "sha256": "41b48f3cdf69391b7c63d06d05c291ccc547468e1cb39c32dcc420c4afa50bc1"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/mod/fspath.ts",
+          "sha256": "002fcdb94e0022a6e5b42fcfe97e5d0bb6e2017554d4b7be5d2bcd3ef4c561bf"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/mod/host.test.ts",
+          "sha256": "84c48de19c986f77b2f5cd70fb187716ebf3cbc269e7b767a0f122e272bd4f6f"
         },
         {
           "class": "verification",
@@ -1331,7 +1351,7 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/mod/machine-guards.test.ts",
-          "sha256": "3819d820fb8e74a204748a3331085fd9fb31bf1305685d2fad05ba2b50e93774"
+          "sha256": "ab9feed220739812279e0a75d8994cda3b40d2f9a6d15427f4077903e3ebe375"
         },
         {
           "class": "verification",
@@ -1346,17 +1366,17 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/mod/register.test.ts",
-          "sha256": "21d5a29c21675f7dec62e748f073c9016eee9228ab764d386770dac634f12afb"
+          "sha256": "99fe3b4daa7c109286877dcf0cf9aa1dd7a6b9ec766be48eccb6c6803cb353bc"
         },
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/mod/run-node.ts",
-          "sha256": "540da311e3143e9dce1bfbecb5bd0baa664c754ca15aa9ff94a1089c310b4e08"
+          "sha256": "fb39b01ec62ea43e457f8373b49e98fb84ce8f1aaeb686112ccfeec9ea9e9899"
         },
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/mod/tasks.test.ts",
-          "sha256": "f439648c09d86f0fd0b13fcaacadd5aebd2c67a08145044745058a56e0f0b5e6"
+          "sha256": "5c311be21098ec70fd3f64151f324c4a81adb2d569f216093fef32a1fae430f1"
         },
         {
           "class": "verification",
@@ -1366,17 +1386,17 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/mod/tier.test.ts",
-          "sha256": "5c4c69b6b330a8859ee66f0193bcbc5d219de8e5a9d1fb04edbe202f85284e23"
+          "sha256": "93bcc51393f2c19f5b39fc024989b7569e2ef2d76f62c8d995ed56a679aad5cc"
         },
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/run-tests.sh",
-          "sha256": "769c980a692fd3be0cffb5a664584af8e614c76c9d99a282141d4128c1e3b9d8"
+          "sha256": "4ede4b8b3ab26071165d35792c44a95c4c1d27891643c541629a3e2a6e4a1aef"
         },
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/test_agents.sh",
-          "sha256": "ec9eca9537f937155055c0a3c0a4c4d906aa0335778e5dfadfaf46687ab26cc3"
+          "sha256": "59f77df4a403d2f8f4708e922e464c45b9f8f7725d93a7224bafef45b75335cc"
         },
         {
           "class": "verification",
@@ -1401,7 +1421,12 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/test_gomod.sh",
-          "sha256": "1530c8845941ade380c7fba394765d4eaebb99bdb4afe61dd98e9aca4fdce770"
+          "sha256": "5de6f16765a2442b3513d5d52cdd824ede50bf78baac67a719d30b5b1ce4344f"
+        },
+        {
+          "class": "verification",
+          "path": "plugins/kodflow-hooks/tests/test_host.sh",
+          "sha256": "045487c20c3afbb8e712aedeb3236092fc559a21a9db5e1a31c41fde2b321981"
         },
         {
           "class": "verification",
@@ -1411,7 +1436,7 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/test_lock.sh",
-          "sha256": "156f81720e250686ebce1c9672b3d15557650528558f2781fd7901ac4b4c4fab"
+          "sha256": "a4f5e2142c29d620b0c84c92ab122cd4fc5247bcd07887eb21e2171a7ad13d70"
         },
         {
           "class": "verification",
@@ -1456,7 +1481,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/.claude-plugin/plugin.json",
-          "sha256": "8fa1f237d45f0bf50a8ea55f6bcd1783a78785b50b61a872482cd321a59e2bc6"
+          "sha256": "d6aa637d7ff14231bc393f0e4380030591d9dc96f189e5f3745735d4c4e6a366"
         },
         {
           "class": "support",
@@ -1496,7 +1521,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/hooks/mod/docs.ts",
-          "sha256": "8f8ba1a186d89c56ad072fb2b2f2b1fa44114c5c1e1f5873101150e27a8f0f13"
+          "sha256": "17141ddb76c37cd2466b586f62c68f3e3a45d26b249fcbe6b3b4adeec798358b"
         },
         {
           "class": "host-extension",
@@ -1505,8 +1530,13 @@
         },
         {
           "class": "host-extension",
+          "path": "plugins/kodflow-hud/hooks/mod/host.ts",
+          "sha256": "2be2a93618530260a551c5baf9536cc554298ab1e4251019301f9dacc06c659a"
+        },
+        {
+          "class": "host-extension",
           "path": "plugins/kodflow-hud/hooks/mod/hunt.ts",
-          "sha256": "18cba37c74cfdf93f0c48d2c463ef41fa4132d504f223f7c91b786e7e9aeeb05"
+          "sha256": "439b1a62e460b44e48cf278b98cf09d183fa8510f6a9dd0cc6666b8ea5a42f2f"
         },
         {
           "class": "host-extension",
@@ -1526,7 +1556,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/hooks/mod/paths.ts",
-          "sha256": "6a2efc45323801dd9ec6fcb7827ace04fa61ca076995e40b3d7faa9a95aaecb4"
+          "sha256": "8001adf079b5d0c860cb78af77ec56ebed563aa58bc8df2e0121030b5ad819a4"
         },
         {
           "class": "host-extension",
@@ -1536,7 +1566,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/hooks/mod/register.tsx",
-          "sha256": "af520d739007482430dd2525bfc63f5442912bc8dd9a9ff9c90c5c4d37b95a40"
+          "sha256": "19e06dc62baa7f2f1bc1f87d42682d1ef7ba4e95c5dac87c005ea1bc04ba07b4"
         },
         {
           "class": "host-extension",
@@ -1556,7 +1586,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hud/plugin.json",
-          "sha256": "5507c23f53df552273194410b0083e4abdc66ed9e72b918fa5f1f1e3a2668698"
+          "sha256": "f4fe7ae30e174749b08fd259a2cb9a75748e900ec5fc7ce8a3d5483e394c2f30"
         },
         {
           "class": "verification",
@@ -1571,7 +1601,7 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hud/tests/fault.test.tsx",
-          "sha256": "5fe2fc18bf0cdf39b07e3921370701ced310f1cc7eb8c9042bc477def4ea4a32"
+          "sha256": "be20ac65bea25b5f224d3e264b2f5020f835eebcc3dc6172e8e07247e0cfb7de"
         },
         {
           "class": "verification",
@@ -1600,8 +1630,13 @@
         },
         {
           "class": "verification",
+          "path": "plugins/kodflow-hud/tests/fspath.ts",
+          "sha256": "002fcdb94e0022a6e5b42fcfe97e5d0bb6e2017554d4b7be5d2bcd3ef4c561bf"
+        },
+        {
+          "class": "verification",
           "path": "plugins/kodflow-hud/tests/host.ts",
-          "sha256": "f691dce15784a7b24af9702b3954622735d22440067eab528e6df6a390611d7f"
+          "sha256": "cf994ade7b1f9037d325a12a87c712adb70288263791fce94473fac031f7b175"
         },
         {
           "class": "verification",
@@ -1621,7 +1656,7 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hud/tests/pure.test.ts",
-          "sha256": "a9c6cae878271f08a3feffd186d89529db2d71afaee30fdcebd917d7db5f6f2b"
+          "sha256": "16ba2a6a065f7bbf35f6b363ff4a9652705a0274029f22b8a659e3e59d950a0c"
         },
         {
           "class": "verification",
@@ -1631,12 +1666,12 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hud/tests/tree.test.tsx",
-          "sha256": "51d6e86cc436c0e883c6df9a877ed4211a4b729a4fc9cf0c46a7e53178cfdc74"
+          "sha256": "a7f3e28a5209407209dbd7bfc39380c1417fc18f6e891675dbc22031db182a93"
         },
         {
           "class": "verification",
           "path": "plugins/kodflow-hud/tests/wiring.test.tsx",
-          "sha256": "6ced107eb8e36cbdaaacd6976a8410184b1cd740881c938263f91e07d76e94e4"
+          "sha256": "3b2157e8011679d2fb31b498ccf27c5b837d20dafd1694c6e0f983898a379d35"
         },
         {
           "class": "host-extension",
@@ -1661,7 +1696,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-ktn/.claude-plugin/plugin.json",
-          "sha256": "8e22e9ca2aa9e150af8e0fca93604abb941999310ef16e8c21c382d62f9d2277"
+          "sha256": "f96b75fced84766a9d85762a19a4559e4c369221187f9fab8951e9e2007c431e"
         },
         {
           "class": "support",
@@ -1701,7 +1736,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-ktn/hooks/mod/project.ts",
-          "sha256": "b70e9b7728f082e440d835c7093a46e992878100440381293466776830163c6a"
+          "sha256": "23f70fd19e2433c8b33723c13e08a98610cd5bb562d055613d7866963ce65cf6"
         },
         {
           "class": "host-extension",
@@ -1726,7 +1761,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-ktn/plugin.json",
-          "sha256": "de6111c70ad992790d427c2913337e453acf84026765c77f84da20d60a1f66aa"
+          "sha256": "15ec9833836f22edc204713dd50d302a4ac8b2f1e643f52a2164c6a87ec42ff5"
         },
         {
           "class": "verification",
@@ -1795,8 +1830,13 @@
         },
         {
           "class": "verification",
+          "path": "plugins/kodflow-ktn/tests/fspath.ts",
+          "sha256": "002fcdb94e0022a6e5b42fcfe97e5d0bb6e2017554d4b7be5d2bcd3ef4c561bf"
+        },
+        {
+          "class": "verification",
           "path": "plugins/kodflow-ktn/tests/host.ts",
-          "sha256": "d7a7190c58213eb52670f9ee2ba0e0aefcf02b1f2f7dd88d80feb473d34f11ce"
+          "sha256": "52ebbdd1477988104c732245f746840a17bee47a662c9d4d1c58a436241e93ea"
         },
         {
           "class": "verification",
@@ -1840,6 +1880,11 @@
         },
         {
           "class": "verification",
+          "path": "plugins/kodflow-ktn/tests/pure/windows.spec.ts",
+          "sha256": "bb3437cbebb13ad79ce68c58edf29e0ef585745a75f21c14349b6bd5e35c1dd4"
+        },
+        {
+          "class": "verification",
           "path": "plugins/kodflow-ktn/tests/pure/winpipe.spec.ts",
           "sha256": "bde6f1603dd1bcf8ebfc452f7a1179000acd8d2b1f65264d941177f74d80216d"
         },
@@ -1866,7 +1911,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-review/.claude-plugin/plugin.json",
-          "sha256": "afd54460c8cbe77546dc5ba164ae20b367e89a441be76bba629876cf1d9fdff9"
+          "sha256": "c651bc70dcaf9f828896d80ac5cf510168da94c131cd1a76245de18d19ac14a8"
         },
         {
           "class": "support",
@@ -1891,7 +1936,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/plugin.json",
-          "sha256": "40b8e94a6af6b10b1a9ffbd442ebc51e3992e055b154a3b2374c0cab1f2c233d"
+          "sha256": "6348b6450a5a3ff682bd68e5132117e31046f43b317fe4b3b0a6dde4f213ee1f"
         },
         {
           "class": "portable",
@@ -1911,7 +1956,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/_shared/scripts/agents.sh",
-          "sha256": "bd81bd543592595b9265d636bd30d09e1417ade3a92f32e2de034bb6e110c744"
+          "sha256": "813ddc3832c41609edc944134effc86e2ca232dbbaac935bc2737f2c0cba3284"
         },
         {
           "class": "portable",
@@ -1921,7 +1966,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/_shared/scripts/detect-models.sh",
-          "sha256": "dfc26cb0a081cc556c1c4f4ee7f8665f8b1d5b7be06d2f9a8978cc4704159ebe"
+          "sha256": "712be29080bcdd0e66e2d5ede4be876575a77fdb50528cee8bf2ab3a07cadbad"
         },
         {
           "class": "portable",
@@ -2031,7 +2076,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/improve/scripts/collect.py",
-          "sha256": "da83606cfa5c05e857aa74f9073b4f5ad81e1c8a956a51f1ade8930723018b47"
+          "sha256": "34d2c3ae3f1ecfdd007d326301e667364ee0c36674f4a11239ea9fa76afcc3b1"
         },
         {
           "class": "portable",
@@ -2216,7 +2261,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-shell/.claude-plugin/plugin.json",
-          "sha256": "a82a08244f5136d6a794d37a77c5b152058cb43409cc44d387874e57f509ec37"
+          "sha256": "f75ff620255405c2cfc7c0b6b7338d093548167be65154bc989660338f45298e"
         },
         {
           "class": "support",
@@ -2231,7 +2276,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-shell/bin/kodflow-permissions-setup",
-          "sha256": "a109ba25538e22c3bfb79dae45ee8332fe145987cc26b228256616db3a7bf35e"
+          "sha256": "923120f21515afcf7b28422b2106d0588e668fcf4ff89762e187f3c437ca8c6b"
         },
         {
           "class": "support",
@@ -2241,7 +2286,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-shell/bin/kodflow-statusline-setup",
-          "sha256": "4ce75a69b8624231a6c354104d8c76e92233d5c0c46b28b297278d7d9ed1c1ef"
+          "sha256": "7b8af5afc5481505339f024a909170327a38a982a1ffaca22335279068410680"
         },
         {
           "class": "support",
@@ -2266,7 +2311,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-shell/plugin.json",
-          "sha256": "6c415e671927bc5ecf15fd01f995268cb90ac8e9202b84771c23917fd363c6df"
+          "sha256": "d9cacac990a851d26d368a785ec6848fc129623ed77e6a5c9e7cabfde54a7c42"
         },
         {
           "class": "support",
@@ -2846,7 +2891,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-workflow/.claude-plugin/plugin.json",
-          "sha256": "c9d9cae5b1a8c9691148252bd660418b4544ab415a9328112157188bcbfbb4a1"
+          "sha256": "5e03081af95f1bb88286ee61087b615332ecad6dba6c64850874552a07f19bac"
         },
         {
           "class": "support",
@@ -2906,7 +2951,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/plugin.json",
-          "sha256": "14f236111d91ad400fd72520e5f42c840a0d8f2bbf928f1cb1a6ffca3c007c4c"
+          "sha256": "761490bb4571ff6081fa27584213ee56da5dfeda047a9ddb3e756d4567421cbe"
         },
         {
           "class": "portable",
@@ -2926,7 +2971,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/_shared/scripts/agents.sh",
-          "sha256": "bd81bd543592595b9265d636bd30d09e1417ade3a92f32e2de034bb6e110c744"
+          "sha256": "813ddc3832c41609edc944134effc86e2ca232dbbaac935bc2737f2c0cba3284"
         },
         {
           "class": "portable",
@@ -2936,7 +2981,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/_shared/scripts/detect-models.sh",
-          "sha256": "dfc26cb0a081cc556c1c4f4ee7f8665f8b1d5b7be06d2f9a8978cc4704159ebe"
+          "sha256": "712be29080bcdd0e66e2d5ede4be876575a77fdb50528cee8bf2ab3a07cadbad"
         },
         {
           "class": "portable",
@@ -3329,7 +3374,7 @@
   "schemaVersion": 1,
   "totals": {
     "agents": 49,
-    "files": 642,
+    "files": 651,
     "hookBundles": 5,
     "plugins": 9,
     "skills": 30

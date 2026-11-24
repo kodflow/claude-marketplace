@@ -113,7 +113,7 @@ def load_handled(path):
 def mark(path, pairs):
     path.parent.mkdir(parents=True, exist_ok=True)
     today = datetime.date.today().isoformat()
-    with path.open("a") as out:
+    with path.open("a", encoding="utf-8", newline="\n") as out:
         for pair in pairs:
             key, _, verdict = pair.partition("=")
             if not re.fullmatch(r"[0-9a-f]{12}", key) or verdict not in VERDICTS:

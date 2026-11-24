@@ -10,6 +10,7 @@
 // is doubled: it reads the index once, by name and status only.
 import { argvOf, fileText, parse, type Parsed } from "./shell.ts";
 import { scan, type Hit, type Kind, type Rules } from "./patterns.ts";
+import { isAbsolutePath, rootOf, slashed } from "./host.ts";
 
 export type GuardCtx = {
   /** Set when a subagent makes the call. */
@@ -132,7 +133,7 @@ async function specsFrom(
   file: string,
   gdir: string,
 ): Promise<string[]> {
-  const f = file === "-" || file.startsWith("/") ? file : `${gdir}/${file}`;
+  const f = file === "-" || isAbsolutePath(file) ? file : `${gdir}/${file}`;
   return (await fileText(p, k, f, ctx.read)).split("\n").filter(Boolean);
 }
 
@@ -142,10 +143,10 @@ export function modPath(
   home: string | undefined,
   configDir: string | undefined,
 ): boolean {
-  let f = path;
-  const cfg = (configDir || `${home ?? ""}/.claude`).replace(/\/+$/, "");
+  let f = slashed(path);
+  const cfg = slashed(configDir || `${home ?? ""}/.claude`).replace(/\/+$/, "");
   if (f.startsWith("~/")) f = `${home ?? ""}/${f.slice(2)}`;
-  f = `/${f.replace(/^\//, "")}`;
+  if (!rootOf(f)) f = `/${f}`;
   if (!(f.includes("/.claude/skills/") || f.startsWith(`${cfg}/skills/`)))
     return false;
   return (
@@ -258,7 +259,7 @@ async function guardGit(
     if (v === "-C") {
       // joined onto the cd directory, as git does
       const c = A[y + 1] ?? "";
-      gdir = c.startsWith("/") || !gdir ? c : `${gdir}/${c}`;
+      gdir = isAbsolutePath(c) || !gdir ? c : `${gdir}/${c}`;
       y += 2;
       continue;
     }
@@ -279,7 +280,7 @@ async function guardGit(
     y++;
   }
   if (!gdir) gdir = ctx.projectDir;
-  else if (!gdir.startsWith("/")) gdir = `${ctx.projectDir}/${gdir}`;
+  else if (!isAbsolutePath(gdir)) gdir = `${ctx.projectDir}/${gdir}`;
   const sub = A[y] ?? "";
   y++;
   const rest = A.slice(y);
@@ -744,7 +745,7 @@ export async function inspect(
       guardHttp(st, name, A);
     else if (name === "cd") {
       const d = A[1] ?? "";
-      st.gdir = d.startsWith("/") || !d || !st.gdir ? d : `${st.gdir}/${d}`;
+      st.gdir = isAbsolutePath(d) || !d || !st.gdir ? d : `${st.gdir}/${d}`;
     }
   }
   if (st.f.commit && !st.f.mcpJson) {
@@ -791,7 +792,7 @@ export async function forgeMcpJson(
   const gk = /GitKraken__git_(add|commit)$/.test(tool);
   if (!gk || (Array.isArray(input.files) && input.files.length)) return undefined;
   let dir = typeof input.directory === "string" ? input.directory : ".";
-  if (!dir.startsWith("/")) dir = `${ctx.projectDir}/${dir}`;
+  if (!isAbsolutePath(dir)) dir = `${ctx.projectDir}/${dir}`;
   if (tool.endsWith("git_add")) {
     // "XY path", the old path after a rename; Y is the working tree
     const w = (

@@ -61,6 +61,15 @@ import { MAIN, parseBoard, parseTasks, type Ctx } from "./board.ts";
 import { alertsFor, trimKeys } from "./alerts.ts";
 import { CI_EVERY_MS, ciState, prsToCheck } from "./ci.ts";
 import { configDir, sessionDir, tasksFile } from "./paths.ts";
+import {
+  bashCandidates,
+  homeOf,
+  hostArgv,
+  isAbsolutePath,
+  isWindows,
+  NO_GIT_BASH,
+  type HostVars,
+} from "./host.ts";
 import { buildTree } from "./tree.ts";
 import { draw, initialUi } from "./layout.tsx";
 import { NO_FAULT, onFault, resting } from "./fault.ts";
@@ -355,6 +364,25 @@ async function pollSide($: any, tasks: string): Promise<void> {
   }
 }
 
+// Git Bash by its path on Windows, where `mv` is its and may not be on
+// PATH; undefined on macOS, Linux and WSL (host.ts, kodflow-hooks' copy).
+let hostBash: Promise<string | undefined> | undefined;
+function bashOf($: any): Promise<string | undefined> {
+  return (hostBash ??= (async () => {
+    const vars: HostVars = {
+      OS: await $.env.get("OS"),
+      CLAUDE_CODE_GIT_BASH_PATH: await $.env.get("CLAUDE_CODE_GIT_BASH_PATH"),
+      ProgramFiles: await $.env.get("ProgramFiles"),
+      LOCALAPPDATA: await $.env.get("LOCALAPPDATA"),
+    };
+    if (!isWindows(vars)) return undefined;
+    for (const c of bashCandidates(vars))
+      if (await $.fs.exists(c).catch(() => false)) return c;
+    // None found: refused rather than a bare "bash" (WSL's, maybe)
+    return NO_GIT_BASH;
+  })().catch(() => undefined));
+}
+
 /**
  * Writes `text` to `path` whole or not at all: a file beside it, then `mv`
  * over it (a rename, atomic on one file system).
@@ -362,7 +390,9 @@ async function pollSide($: any, tasks: string): Promise<void> {
 async function writeWhole($: any, path: string, text: string): Promise<void> {
   const tmp = `${path}.kodflow-hud.tmp`;
   await $.fs.write(tmp, text);
-  const r = await $.process.run(["mv", "-f", tmp, path], { timeoutMs: 5_000 });
+  const r = await $.process.run(hostArgv(["mv", "-f", tmp, path], await bashOf($)), {
+    timeoutMs: 5_000,
+  });
   if (r.exitCode !== 0) throw new Error(r.stderr || `mv: ${r.exitCode}`);
 }
 
@@ -643,7 +673,7 @@ async function openTasks($: any): Promise<boolean> {
 /** Write what the pane would draw to KODFLOW_HUD_TRACE, when it is set. */
 async function trace($: any): Promise<void> {
   const path = await $.env.get("KODFLOW_HUD_TRACE");
-  if (!path || !path.startsWith("/")) return;
+  if (!isAbsolutePath(path)) return;
   await poll($, settings.silentMs, false);
   const dump = {
     board: await read($, boardAtom),
@@ -668,7 +698,8 @@ export const register: Register = (on, options) => {
   const autoOpen = options.autoOpen !== false;
 
   on("session.start", async ($, e, next) => {
-    home = await $.env.get("HOME");
+    home = homeOf(await $.env.get("HOME"), await $.env.get("USERPROFILE"));
+    hostBash = undefined;
     huntEnvOff = huntOff(await $.env.get("KODFLOW_HUD_HUNT"));
     huntText = "";
     await $.command.register({

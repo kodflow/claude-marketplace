@@ -32,16 +32,16 @@ def section(text):
     return text[i:j if j >= 0 else len(text)].strip()
 
 
-canon = section(SPEC.read_text())
+canon = section(SPEC.read_text(encoding="utf-8"))
 check("canonical section exists in specialists.md", canon is not None)
 for field in ("severity", "claim", "evidence", "remedy", "consulted", "unverified"):
     check(f"canonical text names {field}", canon is not None and f"`{field}`" in canon)
 
-routed = sorted(set(re.findall(r"^\|.*\| `([a-z0-9-]+)` \|", SPEC.read_text(), re.M)))
+routed = sorted(set(re.findall(r"^\|.*\| `([a-z0-9-]+)` \|", SPEC.read_text(encoding="utf-8"), re.M)))
 routed = [a for a in routed if (AGENTS / f"{a}.md").exists()]
 check("routing table yields agents", len(routed) >= 20, f"{len(routed)} found")
 for a in routed:
-    got = section((AGENTS / f"{a}.md").read_text())
+    got = section((AGENTS / f"{a}.md").read_text(encoding="utf-8"))
     check(f"{a} carries the section", got is not None)
     if got is not None:
         check(f"{a} copy is identical", got == canon)
@@ -53,12 +53,12 @@ for plugin in ("kodflow-gamedev",):
     files = sorted((ROOT / "plugins" / plugin / "agents").glob("*.md"))
     check(f"{plugin} has agents", len(files) > 0, "none found")
     for f in files:
-        got = section(f.read_text())
+        got = section(f.read_text(encoding="utf-8"))
         check(f"{plugin}:{f.stem} carries the section", got is not None)
         if got is not None:
             check(f"{plugin}:{f.stem} copy is identical", got == canon)
 
-brief = DEBATE.read_text()
+brief = DEBATE.read_text(encoding="utf-8")
 check("debate.md brief uses the Plan review mode marker", "Plan review\nmode" in brief or "Plan review mode" in brief)
 check("debate.md names the six fields", all(f in brief for f in ("severity", "claim", "evidence", "remedy", "consulted", "unverified")))
 
@@ -125,14 +125,14 @@ check("canonical text judges round N from the brief, not from history",
       canon is not None and "Never rebuild the earlier state from conversation history" in canon)
 check("canonical text lets an agent section give a no-scratch fallback",
       canon is not None and "unless a section of this file gives a fallback for that case" in canon)
-proto = (AGENTS / "developer-specialist-protobuf.md").read_text()
+proto = (AGENTS / "developer-specialist-protobuf.md").read_text(encoding="utf-8")
 check("protobuf gives the mktemp fallback and its limits",
       "## Checks without a named scratch directory" in proto and "`mktemp -d` outside every repository" in proto
       and "When the brief forbids running anything, write nothing" in proto)
-node = (AGENTS / "developer-specialist-nodejs.md").read_text()
+node = (AGENTS / "developer-specialist-nodejs.md").read_text(encoding="utf-8")
 check("nodejs runs a measurement script under the brief's scratch directory",
       "`node <scratch>/x.mjs`" in node and "symlink `node_modules`" in node)
-rust = (AGENTS / "developer-specialist-rust.md").read_text()
+rust = (AGENTS / "developer-specialist-rust.md").read_text(encoding="utf-8")
 check("rust reads GitHub through read-only gh and cites clippy at the toolchain tag",
       "`Bash(gh issue view:*)`" in rust and "GET only" in rust and "rust-lang/rust-clippy:<path>@rust-1.NN.0" in rust)
 # kodflow/claude-marketplace#113 and #126: what the brief says about paths,
@@ -157,7 +157,7 @@ check("debate.md gives each reviewer its own scratch subdirectory",
 check("debate.md runs a named measurement only in a sandbox or with explicit approval",
       "Where its\noutput goes is not enough." in brief and "makes\nno network request that changes state" in brief
       and "enforced read-only sandbox" in brief and "explicit approval of that command" in brief)
-spec = SPEC.read_text()
+spec = SPEC.read_text(encoding="utf-8")
 check("specialists.md names the identity file the hook reads",
       "`KODFLOW_COMMIT_IDENTITY` names" in spec and "`KODFLOW_COMMIT_IDENTITY=off`" in spec)
 check("specialists.md asks for literal paths and the commit identity",
@@ -191,9 +191,9 @@ check("canonical text cites a measurement with its revision and defers verdict f
       and "in the verdict format the brief gives" in canon)
 OLD_GIT = "The git commands stay read-only: never pass an option"
 for a in sorted(AGENTS.glob("*.md")):
-    check(f"{a.stem} keeps no git rule of its own", OLD_GIT not in a.read_text())
-check("docker lists no buildx family (it is `docker buildx`)", "`Bash(buildx:*)`" not in (AGENTS / "devops-specialist-docker.md").read_text())
-py = (AGENTS / "developer-specialist-python.md").read_text()
+    check(f"{a.stem} keeps no git rule of its own", OLD_GIT not in a.read_text(encoding="utf-8"))
+check("docker lists no buildx family (it is `docker buildx`)", "`Bash(buildx:*)`" not in (AGENTS / "devops-specialist-docker.md").read_text(encoding="utf-8"))
+py = (AGENTS / "developer-specialist-python.md").read_text(encoding="utf-8")
 check("python reads GitHub through read-only gh, on rust's model",
       "`Bash(gh issue view:*)`" in py and "write through gh" in py and "use gh/make" not in py)
 check("specialists.md keeps one delivery rule, computed, not listed",

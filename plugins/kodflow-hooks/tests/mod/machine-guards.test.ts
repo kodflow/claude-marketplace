@@ -2,6 +2,7 @@
 // plugin test`: the wiring through register.ts with the host in memory, and
 // the pure decisions beside it.
 import { test, expect, mock } from "claude-code/testing";
+import { px } from "./fspath.ts";
 import {
   decision,
   judge,
@@ -79,15 +80,15 @@ function host(on: any, env: Record<string, string>): Host {
   });
   on("ui.log", async () => ({ value: undefined }));
   on("fs.write", async (_$: any, e: any) => {
-    h.files.set(e.path, e.text);
+    h.files.set(px(e.path), e.text);
     return { value: undefined };
   });
   on("fs.read", async (_$: any, e: any) => {
-    const text = h.files.get(e.path);
+    const text = h.files.get(px(e.path));
     return text === undefined ? { deny: "ENOENT" } : { value: text };
   });
   on("fs.list", async (_$: any, e: any) => {
-    const prefix = `${e.path}/`;
+    const prefix = `${px(e.path)}/`;
     const names = new Set<string>();
     for (const k of h.files.keys())
       if (k.startsWith(prefix))

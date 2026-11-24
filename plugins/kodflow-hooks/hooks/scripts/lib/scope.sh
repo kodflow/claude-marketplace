@@ -36,7 +36,7 @@
 #
 # macOS /bin/bash 3.2: no associative arrays, mapfile or ${v,,}.
 
-KF_SCOPE_LIB=${BASH_SOURCE[0]%/*}
+KF_SCOPE_LIB=${BASH_SOURCE[0]%[/\\]*}
 
 kf_scope_families() {
     KF_SCOPE_FAM="" KF_SCOPE_HAS=0 KF_SCOPE_REVIEW=0

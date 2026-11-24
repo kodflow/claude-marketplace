@@ -66,7 +66,9 @@ test("a Client that fails is born again under a new key, on the tree", async ($,
   expect(await ui.find({ in: "tree-1", text: /Task 1/ })).toBeTruthy();
 });
 
-test("a fourth fault within a minute: drawn still for five minutes, then the Client again", async ($, on) => {
+// Four Client faults on a 400-line Refus view: past the 5 s default on a
+// Windows runner, hence a budget of its own.
+test("a fourth fault within a minute: drawn still for five minutes, then the Client again", { timeoutMs: 30_000 }, async ($, on) => {
   const { clock, ui } = await seeded($, on);
   for (const key of ["tree", "tree-1", "tree-2"]) {
     await fail(ui, key);

@@ -13,7 +13,7 @@ metadata:
   generated-from: plugins/*/skills/flow
   argument-hint: '[<skill>] [--path|--artifacts|--hooks|--agents|--all] [--ascii] [--check]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re61d6d4f6f77`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rba7e8596e1b0`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /flow — The Workflow, Drawn
@@ -115,7 +115,7 @@ Hand-laid-out means they can fall behind the plugins. This is the other half of
 that bargain.
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re61d6d4f6f77"/skills/flow/scripts/flow-inventory.sh --names-only
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rba7e8596e1b0"/skills/flow/scripts/flow-inventory.sh --names-only
 ```
 
 Compare that list against the skill names appearing in `reference.md`:

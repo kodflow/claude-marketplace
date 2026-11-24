@@ -20,6 +20,7 @@ fi
 bash test_root_gate.sh
 bash test_agents.sh
 bash test_lock.sh
+bash test_host.sh
 bash test_zsh_safe.sh
 bash test_gomod.sh
 bash test_cleanup.sh

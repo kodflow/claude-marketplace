@@ -10,6 +10,9 @@ import {
 } from "../hooks/mod/board.ts";
 import { alertsFor } from "../hooks/mod/alerts.ts";
 import { ciState, prsToCheck } from "../hooks/mod/ci.ts";
+import { configDir } from "../hooks/mod/paths.ts";
+import { huntRoot } from "../hooks/mod/hunt.ts";
+import { manifestPath } from "../hooks/mod/docs.ts";
 
 const HOME = "/u/dev";
 const NOW = 1_800_000_000_000; // ms
@@ -269,4 +272,19 @@ test("the group under no epic is kept the same 30 minutes, last, work left or no
     { ...done("3", 1, 0), status: "pending" },
   ]);
   expect(parseBoard(g, NOW).epics.map((e) => e.id)).toEqual([1, 0, 2]);
+});
+
+test("paths: a Windows drive or share is as absolute as /", () => {
+  expect(configDir(undefined, "/u/dev/")).toBe("/u/dev/.claude");
+  expect(configDir(undefined, "C:\\Profiles\\dev")).toBe("C:/Profiles/dev/.claude");
+  expect(configDir("\\\\srv\\share\\cfg\\", undefined)).toBe("//srv/share/cfg");
+  expect(configDir(undefined, "~")).toBeUndefined();
+  expect(huntRoot("C:\\Profiles\\dev")).toBe("C:/Profiles/dev/.local/state/hunt");
+  expect(huntRoot("/u/dev")).toBe("/u/dev/.local/state/hunt");
+  expect(huntRoot("rel")).toBeUndefined();
+  const docs = (root: string, manifest?: string) => ({ root, manifest, docs: [] }) as any;
+  expect(manifestPath(docs("C:\\src\\x"))).toBe("C:/src/x/docs/manifest.json");
+  expect(manifestPath(docs("C:/src/x", "docs\\..\\..\\evil.json"))).toBeUndefined();
+  expect(manifestPath(docs("C:/src/x", "D:\\evil.json"))).toBeUndefined();
+  expect(manifestPath(docs("/r"))).toBe("/r/docs/manifest.json");
 });

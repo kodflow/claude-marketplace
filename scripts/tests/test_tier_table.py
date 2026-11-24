@@ -28,8 +28,8 @@ def fixture(edit=None, drop=False):
     p = root / SRC
     p.parent.mkdir(parents=True)
     if not drop:
-        text = (ROOT / SRC).read_text()
-        p.write_text(edit(text) if edit else text)
+        text = (ROOT / SRC).read_text(encoding="utf-8")
+        p.write_text(edit(text) if edit else text, encoding="utf-8")
     return root
 
 
@@ -40,10 +40,10 @@ def run(root, *args):
 # The committed copies are current, identical, and in the documented shape
 r = run(ROOT, "--check")
 check("committed copies match model-policy.md", r.returncode == 0, r.stderr.strip())
-a, b = ((ROOT / o).read_text() for o in OUTS)
+a, b = ((ROOT / o).read_text(encoding="utf-8") for o in OUTS)
 check("the two copies are byte-identical", a == b)
 mirrors = [ROOT / f"plugins/{p}/skills/_shared/tier-table.tsv" for p in ("kodflow-devops", "kodflow-review")]
-check("the _shared mirrors carry the same bytes", all(m.is_file() and m.read_text() == a for m in mirrors))
+check("the _shared mirrors carry the same bytes", all(m.is_file() and m.read_text(encoding="utf-8") == a for m in mirrors))
 lines = a.splitlines()
 import hashlib
 want = "# sha256 " + hashlib.sha256((ROOT / SRC).read_bytes()).hexdigest()
@@ -93,7 +93,7 @@ root = fixture()
 r = run(root)
 check("generation writes both copies", r.returncode == 0 and all((root / o).is_file() for o in OUTS), r.stderr)
 check("--check passes right after", run(root, "--check").returncode == 0)
-(root / OUTS[0]).write_text((root / OUTS[0]).read_text().replace("sonnet", "opus", 1))
+(root / OUTS[0]).write_text((root / OUTS[0]).read_text(encoding="utf-8").replace("sonnet", "opus", 1))
 r = run(root, "--check")
 check("drifted committed file: --check exits 1", r.returncode == 1 and "stale" in r.stderr, r.stderr)
 (root / OUTS[0]).unlink()

@@ -6,19 +6,23 @@
 # SessionEnd hooks share a 1.5 s budget that plugin timeouts cannot raise, so
 # that branch does one append and leaves.
 set +e
+# Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
+. "${BASH_SOURCE[0]%[/\\]*}/lib/host.sh"
+
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") SOURCE=\(.source // "") FILE=\(.file_path // "") MODEL=\(.model // "")"' 2>/dev/null)" || exit 0
+kf_unixpath CWD FILE NB SCRATCH
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}
-LIB=${BASH_SOURCE[0]%/*}/lib
+LIB=${BASH_SOURCE[0]%[/\\]*}/lib
 
 _branch() {
     local g=$PROJECT_DIR/.git head
-    if [ -f "$g" ]; then read -r head < "$g"; g=${head#gitdir: }; [[ $g = /* ]] || g=$PROJECT_DIR/$g; fi
+    if [ -f "$g" ]; then read -r head < "$g"; g=${head#gitdir: }; [[ $g = /* || $g = [A-Za-z]:[\\/]* ]] || g=$PROJECT_DIR/$g; fi
     if [ -f "$g/HEAD" ]; then
         read -r head < "$g/HEAD"
         case "$head" in "ref: refs/heads/"*) BRANCH=${head#ref: refs/heads/} ;; *) BRANCH=detached ;; esac
@@ -54,7 +58,7 @@ _sha256() { { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else
 # fingerprint shipped with this copy, and one when this copy's fingerprints
 # differ from the marketplace's (an update pending, or a modified install).
 _fingerprints() {
-    local hd=${BASH_SOURCE[0]%/*}/.. fp h p got pub
+    local hd=${BASH_SOURCE[0]%[/\\]*}/.. fp h p got pub
     fp=$hd/fingerprints.sha256
     if [ ! -f "$fp" ]; then
         printf '\n%s' "- hooks/fingerprints.sha256 is missing from the installed kodflow-hooks: the guards cannot be checked."

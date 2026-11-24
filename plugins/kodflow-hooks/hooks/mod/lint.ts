@@ -20,6 +20,8 @@
 // The binary is `ktn-linter`. `project-linter`, its old name, is only a
 // fallback when ktn-linter is not on PATH.
 
+import { isAbsolutePath, joinPath, rootOf, trimSlash } from "./host.ts";
+
 export type RunResult = { exitCode: number; stdout: string; stderr: string };
 
 export type LintPort = {
@@ -47,13 +49,14 @@ export type LintPort = {
   root: string;
 };
 
+// Paths in forward slashes, rooted at / or, on Windows, at C:/ (host.ts)
 const parent = (p: string): string => {
+  const root = rootOf(p) ?? "/";
   const cut = p.lastIndexOf("/");
-  return cut <= 0 ? "/" : p.slice(0, cut);
+  return cut < root.length ? root : p.slice(0, cut);
 };
 
-const trimSlash = (p: string): string =>
-  p.length > 1 ? p.replace(/\/+$/, "") : p;
+const isRoot = (p: string): boolean => rootOf(p) === p;
 
 /**
  * The directory of the go.mod nearest `path` (a file, or a directory when
@@ -66,15 +69,15 @@ export async function goModuleOf(
   exists: (p: string) => Promise<boolean>,
   isDir = false,
 ): Promise<string | undefined> {
+  if (!isAbsolutePath(root) || !isAbsolutePath(path)) return undefined;
   const top = trimSlash(root);
   const p = trimSlash(path);
-  if (!top.startsWith("/") || !p.startsWith("/")) return undefined;
-  if (p !== top && !p.startsWith(top === "/" ? "/" : `${top}/`))
+  if (p !== top && !p.startsWith(isRoot(top) ? top : `${top}/`))
     return undefined;
   let d = isDir ? p : parent(p);
   for (;;) {
-    if (await exists(`${d === "/" ? "" : d}/go.mod`)) return d;
-    if (d === top || d === "/") return undefined;
+    if (await exists(`${isRoot(d) ? d.slice(0, -1) : d}/go.mod`)) return d;
+    if (d === top || isRoot(d)) return undefined;
     d = parent(d);
   }
 }
@@ -192,9 +195,9 @@ export async function lintSetup(io: LintPort, args: string): Promise<string> {
   const wanted = args.trim();
   const target = !wanted
     ? root
-    : wanted.startsWith("/")
+    : isAbsolutePath(wanted)
       ? trimSlash(wanted)
-      : `${root === "/" ? "" : root}/${wanted.replace(/^\.\/+/, "")}`;
+      : joinPath(root, wanted.replace(/^\.\/+/, ""));
   const dir = await io.isDir(target);
   const module = await goModuleOf(target, root, (p) => io.exists(p), dir);
   if (!module) {

@@ -160,7 +160,7 @@ def check(root):
 
     for kind, files in (("agents", agents), ("skills", skills)):
         for _, f in files:
-            text = f.read_text()
+            text = f.read_text(encoding="utf-8")
             fm = frontmatter(text)
             if kind == "agents" and not (pinned(fm, "model") and pinned(fm, "effort")):
                 missing = [k for k in ("model", "effort") if not pinned(fm, k)]
@@ -191,7 +191,7 @@ def check(root):
 
     for _, f in skills:
         rel = str(f.relative_to(root))
-        size = len(f.read_text())
+        size = len(f.read_text(encoding="utf-8"))
         if size > SKILL_SIZE_BUDGET and rel not in SKILL_SIZE_ALLOWLIST:
             add("skill_size", f, f"{size} characters (budget {SKILL_SIZE_BUDGET})")
 
@@ -201,7 +201,7 @@ def check(root):
             found.append(("skill_size", rel, "allowlisted without a 'YYYY-MM-DD: reason' entry"))
         elif not path.is_file():
             found.append(("skill_size", rel, "allowlisted but the file is gone"))
-        elif len(path.read_text()) <= SKILL_SIZE_BUDGET:
+        elif len(path.read_text(encoding="utf-8")) <= SKILL_SIZE_BUDGET:
             found.append(("skill_size", rel, "allowlisted but already under budget — drop the entry"))
 
     # A bare `debug` in a kodflow-workflow skill resolves to whatever `debug`
@@ -210,7 +210,7 @@ def check(root):
     # Agent bodies are read into a session the same way and name each other the
     # same way, so the rule that only covered skills left half the tree unread.
     for pname, f in agents + skills:
-        text, seen = f.read_text(), set()
+        text, seen = f.read_text(encoding="utf-8"), set()
         for token in code_tokens(text):
             if m := PREFIXED.match(token):
                 prefix, name = m.groups()

@@ -171,7 +171,7 @@ def main(argv):
     except ValueError as e:
         print(f"tier table: {e}", file=sys.stderr)
         return 1
-    stale = [o for o in OUTPUTS if not (root / o).is_file() or (root / o).read_text() != want]
+    stale = [o for o in OUTPUTS if not (root / o).is_file() or (root / o).read_text(encoding="utf-8") != want]
     if check:
         if not stale:
             print("tier table up to date")
@@ -180,7 +180,7 @@ def main(argv):
         return 1
     for o in OUTPUTS:
         (root / o).parent.mkdir(parents=True, exist_ok=True)
-        (root / o).write_text(want)
+        (root / o).write_text(want, encoding="utf-8", newline="\n")
     print(f"wrote {len(OUTPUTS)} copies ({want.count(chr(10)) - 1 - len(PREAMBLE)} rows)")
     return 0
 

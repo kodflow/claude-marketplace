@@ -27,6 +27,16 @@
 # commit of this checkout (it must be clean) and the installer verifies the
 # pinned revision afterwards.
 set -uo pipefail
+# Git for Windows: a native jq.exe writes CRLF unless --binary, and every name
+# read back would end in \r (`name\r@kodflow` is a plugin nobody publishes).
+# Only over a jq that is there, so `command -v jq` still sends a machine with
+# none to manifest_walk; jq before 1.7 has no -b and gets its \r cut instead.
+case "${OSTYPE:-}" in msys*|cygwin*)
+  if type -P jq >/dev/null 2>&1; then
+    if command jq -b -n 1 >/dev/null 2>&1; then jq() { command jq -b "$@"; }
+    else jq() { command jq "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }; fi
+  fi ;;
+esac
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MARKET_URL="https://github.com/kodflow/claude-marketplace.git"
@@ -76,7 +86,8 @@ nodefault_names() {
 # plugin is the object at depth 2, its own keys sit at that depth, nested
 # objects (author, source) are deeper and ignored.
 manifest_walk() {
-  sed -e 's/{/\n{\n/g' -e 's/}/\n}\n/g' -e 's/,/\n/g' "$1" 2>/dev/null | awk -v mode="$2" '
+  # awk, not sed: BSD sed (macOS) writes a literal n for \n in a replacement
+  awk '{ gsub(/{/, "\n{\n"); gsub(/}/, "\n}\n"); gsub(/,/, "\n"); print }' "$1" 2>/dev/null | awk -v mode="$2" '
     /^[[:space:]]*\{[[:space:]]*$/ { depth++; if (depth == 2) { name = ""; off = 0 } next }
     /^[[:space:]]*\}[[:space:]]*$/ {
       if (depth == 2 && name != "" && (mode == "names" || (mode == "nodefault" && off))) print name
@@ -132,14 +143,16 @@ if [ "$EXPLICIT" -eq 1 ]; then
     echo "--codex was requested but the codex CLI is not on PATH (npm i -g @openai/codex)" >&2; exit 1
   fi
 fi
-if command -v python3 >/dev/null 2>&1; then
+# Run, not just found: on Windows python3 is often the Microsoft Store stub,
+# which exits non-zero and would read as a failed secret scan.
+if python3 -c '' >/dev/null 2>&1; then
   python3 "$HERE/scripts/sanitize.py" "$HERE" >/dev/null || {
     echo "refusing to install: the tree failed its own secret scan" >&2; exit 1; }
   say "secret scan: clean"
 elif [ "$CHECK" -eq 1 ]; then
-  say "secret scan: skipped, python3 is missing (an install would refuse to run)"
+  say "secret scan: skipped, python3 is missing or not runnable (an install would refuse to run)"
 else
-  echo "refusing to install: python3 is required for the secret scan and is missing" >&2; exit 1
+  echo "refusing to install: python3 is required for the secret scan and is missing or not runnable" >&2; exit 1
 fi
 
 # ------------------------------------------------------------------- Claude

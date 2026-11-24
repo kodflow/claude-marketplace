@@ -27,7 +27,7 @@ A = "plugins/kodflow-alpha/agents/"
 
 def write(p, text):
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text)
+    p.write_text(text, encoding="utf-8")
 
 
 def fixture():

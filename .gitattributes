@@ -1,0 +1,7 @@
+# Every file here is read by bash, jq, grep or node, which take a carriage
+# return as part of the line: a CRLF checkout (Git for Windows defaults to
+# core.autocrlf=true) turns each hook into a silent no-op (they fail open)
+# and every guard pattern into one that never matches. Claude Code installs a
+# plugin with a git clone, so the cache inherits that checkout too. LF on
+# every platform, whatever the clone's own setting.
+* text=auto eol=lf

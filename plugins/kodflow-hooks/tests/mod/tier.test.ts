@@ -3,6 +3,7 @@
 // the host in memory, the inputs shaped as tests/fixtures/tier-*.jsonl
 // recorded them (T0-FINDINGS.md), and the shared vectors beside them.
 import { test, expect, mock } from "claude-code/testing";
+import { px } from "./fspath.ts";
 import { TIER_VECTORS_JSONL } from "./tier-vectors.ts";
 import {
   definitionPins,
@@ -85,7 +86,7 @@ function host(on: any, env: Record<string, string>, opts: { noRealPath?: boolean
   on(
     "fs.write",
     async (_$: any, e: any) => (
-      h.files.set(e.path, e.text),
+      h.files.set(px(e.path), e.text),
       { value: undefined }
     ),
   );
@@ -95,16 +96,16 @@ function host(on: any, env: Record<string, string>, opts: { noRealPath?: boolean
       ([k]) => k.startsWith("*/") && path.endsWith(k.slice(1)),
     )?.[1];
   on("fs.read", async (_$: any, e: any) => {
-    const text = find(e.path);
+    const text = find(px(e.path));
     return text === undefined ? { deny: "ENOENT" } : { value: text };
   });
   on("fs.exists", async (_$: any, e: any) => ({
-    value: find(e.path) !== undefined,
+    value: find(px(e.path)) !== undefined,
   }));
   on("fs.stat", async (_$: any, e: any) => {
     // A key "link:<path>" is a symlink to its value
-    const target = h.files.get(`link:${e.path}`);
-    const real = target ?? e.path;
+    const target = h.files.get(`link:${px(e.path)}`);
+    const real = target ?? px(e.path);
     const text = find(real);
     const dir = [...h.files.keys()].some((k) => k.startsWith(`${real}/`));
     if (text === undefined && !dir) return { deny: "ENOENT" };

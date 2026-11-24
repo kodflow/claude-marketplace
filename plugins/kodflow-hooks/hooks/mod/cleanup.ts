@@ -17,6 +17,7 @@
 // clean, and it is neither the main worktree nor the default branch.
 import { lock, unique, unlock, type Port } from "./store.ts";
 import { MAIN, type Data } from "./tasks.ts";
+import { isAbsolutePath, trimSlash } from "./host.ts";
 
 export const worktreesFile = (dir: string): string => `${dir}/worktrees.json`;
 export const noticesFile = (dir: string): string => `${dir}/cleanup-notices`;
@@ -34,16 +35,22 @@ export const WRITING_TOOLS: ReadonlySet<string> = new Set([
 // first component under .worktrees/. A relative path is not read: it says
 // nothing without the directory it was relative to.
 const SEG = "[^\\s'\"`;|&()<>\\\\/]";
+// A Windows drive (C:) opens an absolute path as / does.
 const PATH = new RegExp(
-  `(?<=^|[\\s'"=(:;&|])(~|\\$\\{HOME\\}|\\$HOME)?((?:/${SEG}+)*)/\\.worktrees/(${SEG}+)`,
+  `(?<=^|[\\s'"=(:;&|])(~|\\$\\{HOME\\}|\\$HOME|[A-Za-z]:)?((?:/${SEG}+)*)/\\.worktrees/(${SEG}+)`,
   "g",
 );
 
+// A drive path in backslashes (a Windows tool argument, doubled once more
+// in JSON) read in forward slashes, the only spelling PATH matches.
+const DRIVE_PATH = /[A-Za-z]:(?:\\\\|\\)[^\s'"`;|&()<>]*/g;
+
 /** The worktree roots a command or an argument names, each once. */
 export function worktreePaths(
-  text: string,
+  raw: string,
   home: string | undefined,
 ): string[] {
+  const text = raw.replace(DRIVE_PATH, (m) => m.replace(/\\\\|\\/g, "/"));
   if (!text.includes(".worktrees/")) return [];
   const out: string[] = [];
   for (const m of text.matchAll(PATH)) {
@@ -51,9 +58,10 @@ export function worktreePaths(
     if (name === "." || name === "..") continue;
     if (parent!.split("/").some((s) => s === "." || s === "..")) continue;
     let base = parent!;
-    if (from) {
-      if (!home || !home.startsWith("/")) continue;
-      base = home.replace(/\/+$/, "") + parent;
+    if (from && /^[A-Za-z]:$/.test(from)) base = from + parent;
+    else if (from) {
+      if (!isAbsolutePath(home)) continue;
+      base = trimSlash(home).replace(/\/$/, "") + parent;
     }
     const p = `${base}/.worktrees/${name}`;
     if (!out.includes(p)) out.push(p);

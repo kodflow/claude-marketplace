@@ -28,11 +28,11 @@ def run(files):
     with tempfile.TemporaryDirectory() as d:
         root = pathlib.Path(d)
         (root / "plugins/kodflow-specialists/agents").mkdir(parents=True)
-        (root / "plugins/kodflow-specialists/agents/developer-specialist-go.md").write_text("x")
+        (root / "plugins/kodflow-specialists/agents/developer-specialist-go.md").write_text("x", encoding="utf-8")
         for rel, text in files.items():
             p = root / "plugins" / rel
             p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(text)
+            p.write_text(text, encoding="utf-8")
         return cdt.scan(root)
 
 
@@ -99,7 +99,7 @@ many = "\n\n".join("Launch `Explore` [tier-exempt: r%d]." % i for i in range(cdt
 with tempfile.TemporaryDirectory() as d:
     p = pathlib.Path(d) / "plugins/kodflow-workflow/skills/x"
     p.mkdir(parents=True)
-    (p / "SKILL.md").write_text(many)
+    (p / "SKILL.md").write_text(many, encoding="utf-8")
     check("more markers than the cap fails", cdt.main([d]) == 1)
 
 # the repository itself

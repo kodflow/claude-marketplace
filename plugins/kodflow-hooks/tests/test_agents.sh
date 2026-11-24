@@ -452,6 +452,23 @@ gi "$ISO/third"
 run on-tool.sh "$(iso "$P and $ISO/third/x, $ISO/other/y")" CLAUDE_PROJECT_DIR="$ISO/sess"
 ISOC=$(cd "$ISO" && pwd -P)   # macOS: /var is /private/var
 printf '%s' "$ERR" | grep -qF "($ISOC/other, $ISOC/third)" && ok "two other repositories: both named, once each" || bad "iso two" "${ERR:0:300}"
+# A Windows path that does not exist, on any host: the walk up to an existing
+# directory used to cut at / alone and never ended on C:\nope\newrepo
+# Its own watchdog, not timeout(1) (absent from macOS): a hang is a failure
+# reported after 15 s, never a suite that blocks.
+wjson=$(iso 'Start C:\nope\newrepo, then Z:\missing')
+printf '%s' "$wjson" | env CLAUDE_PROJECT_DIR="$ISO/sess" "${HOOK_SHELL:-bash}" "$S/on-tool.sh" \
+    >"$T/wd.out" 2>"$T/wd.err" &
+wpid=$!; n=0
+while kill -0 "$wpid" 2>/dev/null && [ "$n" -lt 15 ]; do sleep 1; n=$((n + 1)); done
+if kill -0 "$wpid" 2>/dev/null; then
+    command -v pkill >/dev/null 2>&1 && pkill -TERM -P "$wpid" 2>/dev/null
+    kill -TERM "$wpid" 2>/dev/null; wait "$wpid" 2>/dev/null
+    bad "iso drive path" "on-tool.sh still running after 15 s: the walk up the path never ended"
+else
+    wait "$wpid"; RC=$?
+    [ "$RC" -eq 0 ] && ok "a missing drive path ends the walk and passes" || bad "iso drive path" "rc=$RC $(head -c 300 "$T/wd.err")"
+fi
 run on-tool.sh "$(iso "$P" "")" CLAUDE_PROJECT_DIR="$ISO/sess"
 expect_rc "the same prompt without isolation passes" 0
 run on-tool.sh "$(iso "Edit $ISO/sess/README.md and $ISO/sess/.claude/worktrees/agent-1/a.txt")" CLAUDE_PROJECT_DIR="$ISO/sess"

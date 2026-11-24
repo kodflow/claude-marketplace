@@ -19,17 +19,21 @@
 #
 # macOS /bin/bash 3.2: no associative arrays, mapfile or ${v,,}.
 set +e
+# Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
+. "${BASH_SOURCE[0]%[/\\]*}/lib/host.sh"
+
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") AGENT=\(.agent_type // "") AID=\(.agent_id // "")"' 2>/dev/null)" || exit 0
+kf_unixpath CWD FILE NB SCRATCH
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 AID=${AID//[^A-Za-z0-9_-]/}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 CONFIG=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 SDIR=$CONFIG/kodflow/sessions/$SID
-HERE=${BASH_SOURCE[0]%/*}
+HERE=${BASH_SOURCE[0]%[/\\]*}
 TABLE=${CLAUDE_PLUGIN_ROOT:-$HERE/../..}/hooks/tier-table.tsv
 LIMIT=10000
 

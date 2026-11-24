@@ -57,19 +57,19 @@ def with_section(text, canon):
 def targets(root):
     """The agent files that carry the section."""
     for f in sorted(root.glob("plugins/*/agents/*.md")):
-        if span(f.read_text()) is not None:
+        if span(f.read_text(encoding="utf-8")) is not None:
             yield f
 
 
 def plan(root):
     """[(path, wanted text)] for every file this script owns."""
     root = pathlib.Path(root)
-    src = (root / CANON).read_text()
+    src = (root / CANON).read_text(encoding="utf-8")
     canon = section(src)
     if canon is None:
         raise ValueError(f"{CANON} has no {HEAD.strip()} section")
     out = [(root / m, src) for m in MIRRORS if (root / m).parent.is_dir()]
-    out += [(f, with_section(f.read_text(), canon)) for f in targets(root)]
+    out += [(f, with_section(f.read_text(encoding="utf-8"), canon)) for f in targets(root)]
     return out
 
 
@@ -82,7 +82,7 @@ def main(argv):
     except (OSError, ValueError) as e:
         print(f"sync_plan_review_mode: {e}", file=sys.stderr)
         return 1
-    stale = [p for p, want in todo if not p.is_file() or p.read_text() != want]
+    stale = [p for p, want in todo if not p.is_file() or p.read_text(encoding="utf-8") != want]
     if check:
         for p in stale:
             print(f"stale: {p.relative_to(root)}", file=sys.stderr)
@@ -92,7 +92,7 @@ def main(argv):
         print(f"plan review mode in sync ({len(todo)} files)")
         return 0
     for p in stale:
-        p.write_text(dict(todo)[p])
+        p.write_text(dict(todo)[p], encoding="utf-8", newline="\n")
     print(f"wrote {len(stale)} of {len(todo)} files")
     return 0
 

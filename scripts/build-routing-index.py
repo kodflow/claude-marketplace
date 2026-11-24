@@ -87,14 +87,14 @@ def rows(text):
 
 def build(root):
     root = pathlib.Path(root)
-    text = (root / SOURCE).read_text()
+    text = (root / SOURCE).read_text(encoding="utf-8")
     out, faults = set(), []
     for agent, words in rows(text):
         if agent in BUILTINS:
             target, how = agent, "reviews"
         elif (root / AGENTS / f"{agent}.md").is_file():
             target = f"{PLUGIN}:{agent}"
-            how = "delivers" if delivers((root / AGENTS / f"{agent}.md").read_text()) else "reviews"
+            how = "delivers" if delivers((root / AGENTS / f"{agent}.md").read_text(encoding="utf-8")) else "reviews"
         else:
             faults.append(f"{agent}: no {AGENTS}/{agent}.md and not a built-in")
             continue
@@ -127,12 +127,12 @@ def main(argv):
         return 1
     path = root / INDEX
     if check:
-        if path.is_file() and path.read_text() == want:
+        if path.is_file() and path.read_text(encoding="utf-8") == want:
             print("routing index up to date")
             return 0
         print(f"{INDEX} is stale: run python3 scripts/build-routing-index.py", file=sys.stderr)
         return 1
-    path.write_text(want)
+    path.write_text(want, encoding="utf-8", newline="\n")
     print(f"wrote {INDEX} ({want.count(chr(10)) - 1} keywords)")
     return 0
 

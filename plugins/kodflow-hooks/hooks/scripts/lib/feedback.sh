@@ -14,7 +14,7 @@
 
 kf_feedback() {
     local input=$1 sid=$2 aid=$3 type=$4 project=$5
-    local lib=${BASH_SOURCE[0]%/*} cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude} dir model="" source=unknown line key
+    local lib=${BASH_SOURCE[0]%[/\\]*} cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude} dir model="" source=unknown line key
     [ "${KODFLOW_FEEDBACK:-}" != off ] && [ -n "$aid" ] || return 0
     case "$input" in *[Aa]gent[\ _]feedback*) ;; *) return 0 ;; esac
     dir=$cfg/kodflow/sessions/$sid

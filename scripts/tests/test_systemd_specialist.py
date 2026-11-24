@@ -42,7 +42,7 @@ RULES = {
     "a checksum in consulted": "sha256",
 }
 
-fm, _, body = AGENT.read_text().partition("\n---\n")
+fm, _, body = AGENT.read_text(encoding="utf-8").partition("\n---\n")
 check("model is opus", "\nmodel: opus\n" in fm + "\n")
 check("effort is high", "\neffort: high\n" in fm + "\n")
 tools = next((l for l in fm.splitlines() if l.startswith("tools:")), "")
@@ -60,23 +60,23 @@ for form in forms:
     check(f"the Command scope grants `{form}`", f"`{form}" in scope)
 
 if TOML.is_file():
-    gen = TOML.read_text()
+    gen = TOML.read_text(encoding="utf-8")
     for name, text in RULES.items():
         check(f"codex copy carries {name}", text in gen)
 else:
     check("codex copy exists", False, f"no {TOML.relative_to(ROOT)} - run scripts/build-codex.py")
 
-check("the Linux router hands systemd semantics back", "`domain-specialist-systemd`" in LINUX.read_text())
+check("the Linux router hands systemd semantics back", "`domain-specialist-systemd`" in LINUX.read_text(encoding="utf-8"))
 # The DevOps orchestrator dispatches by file pattern: unit files go to the
 # systemd specialist, never to the Linux router.
-orch = ORCH.read_text()
+orch = ORCH.read_text(encoding="utf-8")
 linux_rule = next((l for l in orch.splitlines() if l.strip().startswith("linux:")), "")
 check("the orchestrator no longer sends *.service to the Linux router", ".service" not in linux_rule, linux_rule)
 check("the orchestrator sends unit files to the systemd specialist",
       any(l.strip().startswith("systemd:") and "*.service" in l and "domain-specialist-systemd" in l
           for l in orch.splitlines()))
 
-rows = [l.split("\t") for l in INDEX.read_text().splitlines()[1:]]
+rows = [l.split("\t") for l in INDEX.read_text(encoding="utf-8").splitlines()[1:]]
 owners = {}
 for kw, _, agent, *_ in rows:
     owners.setdefault(kw, set()).add(agent)

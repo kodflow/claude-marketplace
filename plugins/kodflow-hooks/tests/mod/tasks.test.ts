@@ -131,6 +131,13 @@ test("paths: absolute only, safe ids", () => {
   expect(configDir("rel", "/h")).toBeUndefined();
   expect(configDir(undefined, "~")).toBeUndefined();
   expect(configDir(undefined, undefined)).toBeUndefined();
+  // Windows: a drive or UNC path is absolute, kept in forward slashes
+  expect(configDir(undefined, "C:\\Profiles\\dev")).toBe("C:/Profiles/dev/.claude");
+  expect(configDir(undefined, "C:/Profiles/dev/")).toBe("C:/Profiles/dev/.claude");
+  expect(configDir("D:\\cfg\\", "C:\\Profiles\\dev")).toBe("D:/cfg");
+  expect(configDir("\\\\srv\\share\\cfg", undefined)).toBe("//srv/share/cfg");
+  expect(configDir(undefined, "C:")).toBeUndefined();
+  expect(configDir(undefined, "Profiles\\dev")).toBeUndefined();
   expect(safe("a/b c.d")).toBe("a-b-c-d");
   expect(safe("z".repeat(200)).length).toBe(128);
   expect(safe("")).toBe("default");

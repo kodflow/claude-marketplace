@@ -11,7 +11,7 @@ metadata:
   generated-from: plugins/*/skills/lint
   argument-hint: '[path] [--fix] [--strict]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rba4d9f0187f5`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r26313b440f4f`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /lint - Multi-Language Intelligent Linting (RLM Architecture)
@@ -38,7 +38,7 @@ No arguments. No flags. Auto-detects language and tools.
 **Run `detect-project.sh` to get languages, tools, and build system in ONE call:**
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rba4d9f0187f5"/skills/_shared/scripts/detect-project.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r26313b440f4f"/skills/_shared/scripts/detect-project.sh
 ```
 
 This returns JSON with `languages[]`, `build_system.targets[]`, `tools{}`, `project_type`.

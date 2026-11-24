@@ -3,6 +3,7 @@
 // inputs shaped as tests/fixtures/agent-spawn.jsonl and agent-mod-events.jsonl
 // recorded them, and the pure decisions of fable.ts beside them.
 import { test, expect, mock } from "claude-code/testing";
+import { px } from "./fspath.ts";
 import {
   candidate,
   definitionPaths,
@@ -61,14 +62,14 @@ function host(on: any, env: Record<string, string>, opts: Opts = {}): Host {
   });
   on("ui.toast", async (_$: any, e: any) => (h.toasts.push(e.text), { value: undefined }));
   on("ui.log", async () => ({ value: undefined }));
-  on("fs.write", async (_$: any, e: any) => (h.files.set(e.path, e.text), { value: undefined }));
+  on("fs.write", async (_$: any, e: any) => (h.files.set(px(e.path), e.text), { value: undefined }));
   on("fs.read", async (_$: any, e: any) => {
     const text =
-      h.files.get(e.path) ??
-      [...h.files].find(([k]) => k.startsWith("*/") && e.path.endsWith(k.slice(1)))?.[1];
+      h.files.get(px(e.path)) ??
+      [...h.files].find(([k]) => k.startsWith("*/") && px(e.path).endsWith(k.slice(1)))?.[1];
     return text === undefined ? { deny: "ENOENT" } : { value: text };
   });
-  on("fs.exists", async (_$: any, e: any) => ({ value: h.files.has(e.path) }));
+  on("fs.exists", async (_$: any, e: any) => ({ value: h.files.has(px(e.path)) }));
   on("fs.list", async () => ({ deny: "ENOENT" }));
   on("process.run", async () => ({
     value: { exitCode: 0, stdout: "", stderr: "", isStdoutTruncated: false, isStderrTruncated: false },

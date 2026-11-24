@@ -3,7 +3,7 @@
 // agents, commands, toasts) and the clock moved by the test.
 import { test, expect } from "claude-code/testing";
 
-import { NOW, PANE, PR, SEC, T, host, start, writeTasks } from "./host.ts";
+import { NOW, PANE, PR, SEC, SID, T, host, start, tasksJson, writeTasks } from "./host.ts";
 import { capture, widths } from "./capture.ts";
 import { colorOf } from "../hooks/mod/who.ts";
 import { tasksTitle } from "../hooks/mod/register.tsx";
@@ -426,3 +426,19 @@ test("blocks.jsonl rewritten within the same millisecond is read again: the size
   await clock.advance(3_000);
   expect((await barOf($))[19]).toContain("Refus (2)");
 });
+
+// Windows 11: HOME=C:\Profiles\dev (or only USERPROFILE), no CLAUDE_CONFIG_DIR.
+// configDir refused a drive path, so the pane never found tasks.json.
+for (const env of [
+  { CLAUDE_CONFIG_DIR: "", HOME: "C:\\Profiles\\dev" },
+  { CLAUDE_CONFIG_DIR: "", HOME: "", USERPROFILE: "C:\\Profiles\\dev" },
+])
+  test(`a Windows home finds tasks.json: ${JSON.stringify(env)}`, async ($, on) => {
+    const { h, clock } = host(on, { env });
+    h.files.set(`/Profiles/dev/.claude/kodflow/sessions/${SID}/tasks.json`, {
+      text: tasksJson([T("1", "in_progress"), T("2", "completed")]),
+      mtimeMs: 1,
+    });
+    await start($, clock);
+    expect(h.panes).toEqual([{ id: "hud-tasks", title: "Tâches (1)\u2007" }]);
+  });

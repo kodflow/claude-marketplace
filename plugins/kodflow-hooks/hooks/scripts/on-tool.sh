@@ -15,6 +15,9 @@
 # Every path that is not a deliberate block exits 0. A PreToolUse hook that
 # fails by accident blocks every shell call of the session.
 set +e
+# Git for Windows: jq -b, and kf_unixpath for the paths Claude Code sends
+. "${BASH_SOURCE[0]%[/\\]*}/lib/host.sh"
+
 
 INPUT=$(cat 2>/dev/null); [ -n "$INPUT" ] || exit 0
 
@@ -86,7 +89,7 @@ _fable_sd() {
 _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
     local fa=main
     [[ $INPUT =~ \"agent_type\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]] && fa=${BASH_REMATCH[1]}
-    . "${BASH_SOURCE[0]%/*}/lib/blocks.sh" 2>/dev/null \
+    . "${BASH_SOURCE[0]%[/\\]*}/lib/blocks.sh" 2>/dev/null \
         && kf_block "$FABLE_SD" hook "${TOOL:-${fp_tool:-}}" "GATED MODEL REFUSED — $1 ($2)" fable "$fa"
     printf '═══════════════════════════════════════════════\n  ❌ %s\n═══════════════════════════════════════════════\n' "GATED MODEL REFUSED — $1 ($2)" >&2
     printf '  %s\n' "A gated model (kodflow-hooks/hooks/gated-models.txt) runs only after the user's yes, once per session." "$3" \
@@ -99,14 +102,14 @@ _fable_refuse() {   # $1 the model, $2 where it came from, $3 the way out
 # tier-mode file), see _kf_tier_mode in lib/tier.sh.
 _tier_check() {
     [ -n "${TIER_DONE:-}" ] && return 0; TIER_DONE=1
-    . "${BASH_SOURCE[0]%/*}/lib/tier.sh" 2>/dev/null || return 0
+    . "${BASH_SOURCE[0]%[/\\]*}/lib/tier.sh" 2>/dev/null || return 0
     kf_tier_check
     return 0
 }
 _fable_fast() {
     [ -n "${FABLE_DONE:-}" ] && return 0; FABLE_DONE=1
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
-    local L=${BASH_SOURCE[0]%/*}/lib sd m="" t="" why=""
+    local L=${BASH_SOURCE[0]%[/\\]*}/lib sd m="" t="" why=""
     _fable_sd; sd=$FABLE_SD
     if . "$L/beat.sh" 2>/dev/null && kf_beat "$sd"; then return 0; fi
     . "$L/agents.sh" 2>/dev/null || return 0
@@ -139,7 +142,7 @@ _fable_fast() {
 _fable_skill() {
     [ -n "${FABLE_DONE:-}" ] && return 0; FABLE_DONE=1
     case "${KODFLOW_FABLE:-}" in allow|off) return 0 ;; esac
-    local L=${BASH_SOURCE[0]%/*}/lib sk
+    local L=${BASH_SOURCE[0]%[/\\]*}/lib sk
     _fable_sd
     if . "$L/beat.sh" 2>/dev/null && kf_beat "$FABLE_SD"; then return 0; fi
     sk=${FF_SKILL#/}
@@ -207,11 +210,12 @@ command -v jq >/dev/null 2>&1 || exit 0
 # One jq call reads every field a branch below may need. @sh single-quotes
 # each value, so a crafted path or command cannot escape into this shell.
 eval "$(printf '%s' "$INPUT" | jq -r '@sh "EV=\(.hook_event_name // "") TOOL=\(.tool_name // "") SID=\(.session_id // "") CWD=\(.cwd // "") SCRATCH=\(.scratchpad_dir // "") CMD=\(.tool_input.command // "") FILE=\(.tool_input.file_path // "") ERR=\(.error // "") AID=\(.agent_id // "") ATYPE=\(.agent_type // "") PMODE=\(.permission_mode // "") NB=\(.tool_input.notebook_path // "") REASON=\(.reason // "") TUID=\(.tool_use_id // "")"' 2>/dev/null)" || exit 0
+kf_unixpath CWD FILE NB SCRATCH
 
 SID=${SID//[^A-Za-z0-9_-]/}; SID=${SID:-default}
 PROJECT_DIR=${CLAUDE_PROJECT_DIR:-${CWD:-$PWD}}
 STATE=${SCRATCH:-${TMPDIR:-/tmp}/claude-hooks-$SID}   # session-scoped state; on-stop.sh reads it
-LIB=${BASH_SOURCE[0]%/*}/lib
+LIB=${BASH_SOURCE[0]%[/\\]*}/lib
 
 # DELEGATION GATE. A PreToolUse payload carries agent_id only when the call
 # comes from inside a subagent; the main thread sends none (measured on 855
@@ -224,7 +228,7 @@ ROOT_MAIN=0
 # Branch without forking: read .git/HEAD (following a worktree's gitdir file).
 _branch() {
     local g=$PROJECT_DIR/.git head
-    if [ -f "$g" ]; then read -r head < "$g"; g=${head#gitdir: }; [[ $g = /* ]] || g=$PROJECT_DIR/$g; fi
+    if [ -f "$g" ]; then read -r head < "$g"; g=${head#gitdir: }; [[ $g = /* || $g = [A-Za-z]:[\\/]* ]] || g=$PROJECT_DIR/$g; fi
     if [ -f "$g/HEAD" ]; then
         read -r head < "$g/HEAD"
         case "$head" in "ref: refs/heads/"*) BRANCH=${head#ref: refs/heads/} ;; *) BRANCH=detached ;; esac
@@ -597,7 +601,7 @@ _p_file() {
 # vendor keywords, `leak` for a commit-only pattern naming a workflow artefact
 # (a .claude path, the Plan: footer). Leaks are tried before the keywords, so
 # `\bclaude\b` does not report `.claude/plans/x.md` as an attribution.
-PATTERNS_DIR=${BASH_SOURCE[0]%/*}/../patterns
+PATTERNS_DIR=${BASH_SOURCE[0]%[/\\]*}/../patterns
 ATTR_PATTERNS=(); COMMIT_PATTERNS=(); PATTERNS_LOADED=""
 
 # Once per call, builtins only: patterns.sh's format (one ERE a line, `#` and
@@ -740,7 +744,7 @@ _guard_git() {
     while [ $y -lt $na ]; do
         v=${A[y]}
         case "$v" in
-            -C) v=${A[y+1]:-}; case "$v" in /*) gdir=$v ;; *) gdir=${gdir:+$gdir/}$v ;; esac; y=$((y+2)); continue ;;
+            -C) v=${A[y+1]:-}; case "$v" in /*|[A-Za-z]:[\\/]*) gdir=$v ;; *) gdir=${gdir:+$gdir/}$v ;; esac; y=$((y+2)); continue ;;
             -c|--config-env)
                 lc=$(printf '%s' "${A[y+1]:-}" | tr '[:upper:]' '[:lower:]')
                 case "$lc" in core.hookspath=*) F_HOOKS=1 ;; esac
@@ -756,7 +760,7 @@ _guard_git() {
         esac
         y=$((y+1))
     done
-    case "$gdir" in /*) ;; "") gdir=$PROJECT_DIR ;; *) gdir=$PROJECT_DIR/$gdir ;; esac
+    case "$gdir" in /*|[A-Za-z]:[\\/]*) ;; "") gdir=$PROJECT_DIR ;; *) gdir=$PROJECT_DIR/$gdir ;; esac
     sub=${A[y]:-}; y=$((y+1))
     case "$sub" in
         commit|push|rebase|cherry-pick|merge|am|apply|revert)
@@ -1315,7 +1319,7 @@ pre_bash() {
     # The CodeRabbit capacity hint (lib/coderabbit.sh), in the one JSON document
     # of this hook: the identity notice, when there is one, rides with it.
     local note ctx="" cwd=${GDIR:-$PROJECT_DIR}
-    [[ $cwd = /* ]] || cwd=$PROJECT_DIR/$cwd
+    [[ $cwd = /* || $cwd = [A-Za-z]:[\\/]* ]] || cwd=$PROJECT_DIR/$cwd
     note=$(_ident_notice)
     if [ "$F_CRM" -gt 1 ] && [ -z "$AID" ] && [ "${KODFLOW_CODERABBIT:-}" != off ]; then
         _cr_deny "Plusieurs fusions sur une ligne ($F_CRM) : lance une fusion par commande, pour que la couverture CodeRabbit de chaque PR soit vérifiée avant sa fusion." "$note"
@@ -1820,11 +1824,16 @@ post_failure() {
 # nearest existing directory, on stdout; 1 when it is in none.
 _git_common() {
     local d=$1 c
-    while [ -n "$d" ] && [ ! -d "$d" ]; do d=${d%/*}; done
+    # Up to the nearest existing directory; a value with no / left to cut
+    # (C:\x off Windows, a bare word) is in no repository
+    while [ -n "$d" ] && [ ! -d "$d" ]; do
+        case "$d" in */*) d=${d%/*} ;; *) return 1 ;; esac
+    done
     [ -n "$d" ] || d=/
     c=$(unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE; git -C "$d" rev-parse --git-common-dir 2>/dev/null) || return 1
     [ -n "$c" ] || return 1
-    case "$c" in /*) ;; *) c=$d/$c ;; esac
+    # Git for Windows answers C:/x/.git
+    case "$c" in /*|[A-Za-z]:[\\/]*) ;; *) c=$d/$c ;; esac
     (cd "$c" 2>/dev/null && pwd -P)
 }
 
@@ -1843,12 +1852,13 @@ _isolation_gate() {
         case "$seen" in *$'\n'"$p"$'\n'*) continue ;; esac
         seen="$seen"$'\n'"$p"$'\n'
         n=$((n+1)); [ $n -gt 16 ] && break
+        kf_unixpath p   # Git Bash: C:\x read as /c/x
         c=$(_git_common "$p") || continue
         [ "$c" = "$own" ] && continue
         c=${c%/.git}
         case "$others" in *"[$c]"*) ;; *) others="$others[$c]" ;; esac
     done <<EOF
-$(printf '%s' "$text" | tr -s ' \t\r"'"'"'`()<>,;=|&*[]{}' '\n' | grep -E '^(/|~/|~$)')
+$(printf '%s' "$text" | tr -s ' \t\r"'"'"'`()<>,;=|&*[]{}' '\n' | grep -E '^(/|~/|~$|[A-Za-z]:[\\/])')
 EOF
     [ -n "$others" ] || return 0
     others=${others#[}; others=${others%]}

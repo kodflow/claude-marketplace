@@ -29,7 +29,7 @@
 #
 # macOS /bin/bash 3.2: no associative arrays, mapfile or ${v,,}.
 
-KF_TIER_LIB=${BASH_SOURCE[0]%/*}
+KF_TIER_LIB=${BASH_SOURCE[0]%[/\\]*}
 KF_TIER_BREAKER_N=${KF_TIER_BREAKER_N:-3}
 
 # Characters a journal value may hold: it is written by printf, not by jq.

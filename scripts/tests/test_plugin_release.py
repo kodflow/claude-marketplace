@@ -72,4 +72,4 @@ class ReleaseProfileTests(unittest.TestCase):
             )
             staged = directory / "artifacts"
             render(snapshot, SHA, staged)
-            self.assertEqual(f"snapshot:{SHA}", (staged / "snapshot.txt").read_text())
+            self.assertEqual(f"snapshot:{SHA}", (staged / "snapshot.txt").read_text(encoding="utf-8"))

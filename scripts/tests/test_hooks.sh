@@ -7,6 +7,8 @@
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 S=$ROOT/plugins/kodflow-hooks/hooks/scripts
+# jq -b under Git Bash (a native jq.exe writes CRLF), as the hooks have it
+. "$S/lib/host.sh"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 export CLAUDE_PROJECT_DIR=$T/repo HOME=$T/home TMPDIR=$T/tmp CLAUDE_CONFIG_DIR=$T/home/.claude
 unset CLAUDE_CODE_ENABLE_TODO_TOOLS CLAUDE_CODE_TASK_LIST_ID   # inherited values would change what is asserted
@@ -87,7 +89,9 @@ printf '{}\n' > "$T/repo/mymcp.json"; git -C "$T/repo" add mymcp.json
 bash_cmd 'git commit -m "feat: x"';                                    expect_rc "mymcp.json staged allowed" 0
 git -C "$T/repo" rm -q --cached mymcp.json; rm -f "$T/repo/mymcp.json"
 git -C "$T/repo" rm -q --cached sub/servers.json; rm -rf "$T/repo/sub"
-git -C "$T/repo" config core.excludesFile /dev/null
+# an empty file, not /dev/null: Git for Windows is handed `nul` for it and
+# refuses that as an exclude file, which fails every `git add` that follows
+: > "$T/empty-excludes"; git -C "$T/repo" config core.excludesFile "$T/empty-excludes"
 forge mcp__GitKraken__git_add '{"directory":"."}';                     expect_mj "GitKraken git_add of every file with an untracked .mcp.json blocked"
 rm -f "$T/repo/.mcp.json"
 forge mcp__GitKraken__git_add '{"directory":"."}';                     expect_rc "GitKraken git_add of every file without one allowed" 0
@@ -998,7 +1002,10 @@ for t in bash jq cat sort grep head tail cut awk date cksum mkdir touch rm mv wc
     p=$(command -v "$t" 2>/dev/null) && ln -sf "$p" "$T/nokt/$t"
 done
 ln -sf "$FB/ktn-linter" "$T/nokt/ktn-linter"; printf '5\n' > "$T/lint.sleep"; ljson 1 2 KTN-SLOW
-for lp in "$FB:$PATH" "$T/nokt"; do
+# Git Bash always has timeout(1), and a PATH of links to MSYS programs does
+# not start them all: the no-timeout(1) branch is macOS' and is held there.
+lps=("$FB:$PATH" "$T/nokt"); case "${OSTYPE:-}" in msys*|cygwin*) lps=("$FB:$PATH") ;; esac
+for lp in "${lps[@]}"; do
     t0=$(date +%s); LPATH=$lp KF_LINT_TIMEOUT=1 ledit "$GM/cmd/x/main.go"; t1=$(date +%s)
     [ $((t1 - t0)) -lt 4 ] && [ "$RC" -eq 0 ] && [ -z "$(lctx)" ] && ok "post-edit: a slow run is cut and silent ($( [ "$lp" = "$T/nokt" ] && echo 'no timeout(1)' || echo 'timeout(1) if present'))" || bad "post timeout $lp" "$((t1 - t0)) s, $OUT"
 done

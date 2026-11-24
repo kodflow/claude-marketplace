@@ -62,13 +62,13 @@ MUST_PASS = {
 def git_file_ignored() -> bool:
     # In a worktree `.git` is a file holding the clone's absolute path.
     with tempfile.TemporaryDirectory() as d:
-        (pathlib.Path(d) / ".git").write_text("gitdir: /home/" + "someone/clone/.git\n")
+        (pathlib.Path(d) / ".git").write_text("gitdir: /home/" + "someone/clone/.git\n", encoding="utf-8")
         return subprocess.run([sys.executable, str(SANITIZE), d],
                               capture_output=True).returncode == 0
 
 def blocked(content: str) -> bool:
     with tempfile.TemporaryDirectory() as d:
-        (pathlib.Path(d) / "case.txt").write_text(content + "\n")
+        (pathlib.Path(d) / "case.txt").write_text(content + "\n", encoding="utf-8")
         return subprocess.run([sys.executable, str(SANITIZE), d],
                               capture_output=True).returncode != 0
 
@@ -80,6 +80,16 @@ def main() -> int:
         if blocked(c): fails.append(f"BLOCKED (should pass): {name}")
 
     if not git_file_ignored(): fails.append("worktree .git file was scanned")
+    # A text file that is not UTF-8 (a Latin-1 é) was once skipped as binary
+    for name, c in list(MUST_BLOCK.items())[:3]:
+        with tempfile.TemporaryDirectory() as d:
+            (pathlib.Path(d) / "latin1.txt").write_bytes("r\xe9sum\xe9\n".encode("latin-1") + c.encode() + b"\n")
+            if subprocess.run([sys.executable, str(SANITIZE), d], capture_output=True).returncode == 0:
+                fails.append(f"NOT BLOCKED in a Latin-1 file: {name}")
+    with tempfile.TemporaryDirectory() as d:
+        (pathlib.Path(d) / "blob.bin").write_bytes(b"\x00\x01" + PAT.encode())
+        if subprocess.run([sys.executable, str(SANITIZE), d], capture_output=True).returncode != 0:
+            fails.append("a binary file (NUL in its head) was scanned")
 
     total = len(MUST_BLOCK) + len(MUST_PASS)
     if fails:

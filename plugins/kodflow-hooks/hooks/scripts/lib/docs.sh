@@ -19,7 +19,7 @@
 # Everything here fails open: a missing jq, an unreadable manifest or an
 # unwritable directory leaves no file and no line, never an error.
 
-KF_DOCS_CATALOG=${BASH_SOURCE[0]%/*}/../../docs-catalog.json
+KF_DOCS_CATALOG=${BASH_SOURCE[0]%[/\\]*}/../../docs-catalog.json
 
 # $1 a directory → KF_DOCS_TOP the nearest ancestor holding .git (a directory,
 # or a worktree's file); 1 when there is none.

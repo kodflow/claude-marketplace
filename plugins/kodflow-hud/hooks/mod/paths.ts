@@ -5,15 +5,20 @@
 // a sibling plugin is broken for every consumer. They must agree, since this
 // mod reads the tasks.json that one writes.
 
-/** CLAUDE_CONFIG_DIR, else ~/.claude; undefined unless absolute. */
+import { isAbsolutePath, joinPath, trimSlash } from "./host.ts";
+
+/**
+ * CLAUDE_CONFIG_DIR, else ~/.claude; undefined unless absolute, on any host
+ * (`C:\Profiles\dev` included), in forward slashes.
+ */
 export function configDir(
   claudeConfigDir: string | undefined,
   home: string | undefined,
 ): string | undefined {
   const pick =
-    claudeConfigDir || (home ? `${home.replace(/\/+$/, "")}/.claude` : "");
-  if (!pick.startsWith("/")) return undefined;
-  return pick.length > 1 ? pick.replace(/\/+$/, "") : pick;
+    claudeConfigDir || (isAbsolutePath(home) ? joinPath(home, ".claude") : "");
+  if (!isAbsolutePath(pick)) return undefined;
+  return trimSlash(pick);
 }
 
 /** An identifier usable as a single path component (tasks.py's safe). */

@@ -14,7 +14,7 @@
 #   kf_route_fresh OUT [CFG]      0 when OUT was built from this index and installed_plugins.json
 #   kf_route_match OUT DESC       one `agent<TAB>keyword,…<TAB>delivery` line per agent named
 
-KF_ROUTE_INDEX=${BASH_SOURCE[0]%/*}/../../routing-index.tsv
+KF_ROUTE_INDEX=${BASH_SOURCE[0]%[/\\]*}/../../routing-index.tsv
 
 # What a session index was built from: the checksums of the shipped index
 # and of installed_plugins.json. Compared by content, never by mtime: test

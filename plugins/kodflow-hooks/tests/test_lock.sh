@@ -33,7 +33,7 @@ rmdir "$L"
 # uutils' mkdir (Ubuntu 26.04) exits 0 for the caller that lost the race
 # for the directory; this one says so of every directory already there
 ( kf_lock "$L" 1 && [ -L "$L/owner" ] ) && ok "the lock carries its owner" || bad "owner" "no owner link"
-mkdir "$L"; ln -s held "$L/owner"
+mkdir "$L"; MSYS="${MSYS:+$MSYS }winsymlinks:sys" ln -s held "$L/owner"   # dangling, as lock.sh makes it
 # shellcheck disable=SC2329  # called by kf_lock
 ( mkdir() { command mkdir "$@" 2>/dev/null; [ -d "${!#}" ]; }
   KF_LOCK_STALE=3600 kf_lock "$L" 1 ) && bad "lying mkdir" "a held lock was taken" || ok "a held lock is refused to a mkdir that lies about the race"

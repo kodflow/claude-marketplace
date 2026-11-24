@@ -38,7 +38,7 @@ kf_coderabbit_policy_dir() {
 kf_coderabbit_merge_gate() {
     local cwd=$1 repo=${2:-} target=${3:-} match=${4:-} probe policy wait=${KODFLOW_CR_MERGE_WAIT_MINUTES:-30}
     [ "${KODFLOW_CODERABBIT:-}" = off ] && return 0
-    probe=${KODFLOW_CODERABBIT_PROBE:-${BASH_SOURCE[0]%/*}/../../coderabbit/probe.py}
+    probe=${KODFLOW_CODERABBIT_PROBE:-${BASH_SOURCE[0]%[/\\]*}/../../coderabbit/probe.py}
     [ -f "$probe" ] || return 0
     command -v python3 >/dev/null 2>&1 || return 0
     [[ $wait =~ ^[0-9]+$ ]] || wait=30
@@ -65,7 +65,7 @@ kf_coderabbit_merge_gate() {
 kf_coderabbit_hint() {
     local action=$1 cwd=$2 repo=${3:-} probe out
     [ "${KODFLOW_CODERABBIT:-}" = off ] && return 0
-    probe=${KODFLOW_CODERABBIT_PROBE:-${BASH_SOURCE[0]%/*}/../../coderabbit/probe.py}
+    probe=${KODFLOW_CODERABBIT_PROBE:-${BASH_SOURCE[0]%[/\\]*}/../../coderabbit/probe.py}
     [ -f "$probe" ] || return 0
     command -v python3 >/dev/null 2>&1 || return 0
     command -v jq >/dev/null 2>&1 || return 0

@@ -86,7 +86,7 @@ def cmd_validate(args):
     report_path = args[args.index("--report") + 1] if "--report" in args else None
     report = run_validate(plugin)
     if report_path:
-        with open(report_path, "w") as f:
+        with open(report_path, "w", encoding="utf-8", newline="\n") as f:
             json.dump(report, f, indent=1)
     bad = problems(report)
     for item in bad:
@@ -103,7 +103,7 @@ def cmd_validate(args):
         print("::error::tool hooks registered: %s" % tools)
         bad.append("tools")
     if baseline:
-        want = json.load(open(baseline))
+        want = json.load(open(baseline, encoding="utf-8"))
         got = surface_value(report)
         if got != want:
             print("::error::the mod's surface moved: rewrite %s (scripts/mod-surface.py surface)" % baseline)
@@ -115,15 +115,15 @@ def cmd_validate(args):
 
 
 def cmd_surface(args):
-    print(json.dumps(surface_value(json.load(open(args[0]))), indent=2))
+    print(json.dumps(surface_value(json.load(open(args[0], encoding="utf-8"))), indent=2))
     return 0
 
 
 def cmd_gap(args):
-    baseline, verdict = json.load(open(args[1])), args[2]
+    baseline, verdict = json.load(open(args[1], encoding="utf-8")), args[2]
     lines = []
     try:
-        report = json.load(open(args[0]))
+        report = json.load(open(args[0], encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         report = {}
         lines.append("validator wrote no JSON report")

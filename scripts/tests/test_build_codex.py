@@ -16,7 +16,7 @@ AGENT = "---\nname: {n}\ndescription: An agent named {n}.\nmodel: sonnet\n---\n\
 
 def write(p, text):
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text)
+    p.write_text(text, encoding="utf-8")
 
 def main():
     root = pathlib.Path(tempfile.mkdtemp())
@@ -76,7 +76,7 @@ def main():
             print(f"FAIL {label}\n  {path} exists={path.exists()}, expected {want}")
 
     # The marker is what the installer keys on to retire a file it produced.
-    marker = (codex / "agents" / "keeper.toml").read_text().splitlines()[0]
+    marker = (codex / "agents" / "keeper.toml").read_text(encoding="utf-8").splitlines()[0]
     if marker.startswith("# generated-from: plugins/*/agents/"):
         ok += 1
     else:
@@ -84,7 +84,7 @@ def main():
 
     efforts = [("deep", "xhigh"), ("maxed", "xhigh"), ("cheap", "medium"), ("keeper", "medium")]
     for name, want in efforts:
-        text = (codex / "agents" / f"{name}.toml").read_text()
+        text = (codex / "agents" / f"{name}.toml").read_text(encoding="utf-8")
         if f'model_reasoning_effort = "{want}"' in text:
             ok += 1
         else:

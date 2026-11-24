@@ -23,6 +23,7 @@
 // come back to neutral — passes, logged under its reason.
 
 import { frontmatterField } from "./fable.ts";
+import { rootOf, slashed, trimSlash } from "./host.ts";
 
 export type TierMode = "off" | "warn" | "enforce";
 export type ModeSource =
@@ -647,17 +648,24 @@ export function scriptRoots(where: {
             `^${escapeRe(`${where.config}/projects/${slug.slice(0, SLUG_MAX)}-`)}[0-9a-z]+/${escapeRe(where.session)}/`,
           ),
         ];
-  if (where.project) roots.push(`${where.project.replace(/\/+$/, "")}/`);
-  if (where.cwd !== where.project)
-    roots.push(`${where.cwd.replace(/\/+$/, "")}/`);
+  // In forward slashes, as insideRoots compares them (a Windows cwd is C:\x)
+  const dirOf = (p: string): string => `${trimSlash(p).replace(/\/$/, "")}/`;
+  if (where.project) roots.push(dirOf(where.project));
+  if (where.cwd !== where.project) roots.push(dirOf(where.cwd));
   return roots;
 }
 
-/** The scratchpad of a session: <tmp>/claude-<uid>/<slug>/<session>/scratchpad/ */
-export const isScratchpad = (real: string, session: string): boolean =>
-  new RegExp(
-    `^(/private)?/tmp/claude-[0-9]+/[^/]+/${session.replace(/[^A-Za-z0-9-]/g, "\\$&")}/scratchpad/`,
-  ).test(real);
+/**
+ * The scratchpad of a session: <tmp>/claude-<uid>/<slug>/<session>/scratchpad/,
+ * or on Windows %TEMP%\claude\<slug>\<session>\scratchpad\ (no uid there).
+ */
+export const isScratchpad = (real: string, session: string): boolean => {
+  const sid = session.replace(/[^A-Za-z0-9-]/g, "\\$&");
+  return (
+    new RegExp(`^(/private)?/tmp/claude-[0-9]+/[^/]+/${sid}/scratchpad/`).test(real) ||
+    new RegExp(`^[A-Za-z]:/(?:[^/]+/)+claude/[^/]+/${sid}/scratchpad/`).test(slashed(real))
+  );
+};
 
 /** A directory prefix, or a pattern for a session directory under a long slug */
 export type Root = string | RegExp;
@@ -667,16 +675,25 @@ export const insideRoots = (
   roots: Root[],
   session: string,
 ): boolean =>
-  roots.some((r) => (typeof r === "string" ? real.startsWith(r) : r.test(real))) ||
-  isScratchpad(real, session);
+  roots.some((r) =>
+    typeof r === "string" ? slashed(real).startsWith(r) : r.test(slashed(real)),
+  ) || isScratchpad(real, session);
 
 /**
  * A path judged by its spelling alone: absolute, no `.` or `..` segment, no
  * empty segment. Symlinks are not resolved here; the caller also checks the
  * real path when the host gives one.
  */
-export const plainPath = (path: string): boolean =>
-  path.startsWith("/") && !path.slice(1).split("/").some((seg) => seg === "" || seg === "." || seg === "..");
+export const plainPath = (path: string): boolean => {
+  const root = rootOf(path);
+  return (
+    root !== undefined &&
+    !slashed(path)
+      .slice(root.length)
+      .split("/")
+      .some((seg) => seg === "" || seg === "." || seg === "..")
+  );
+};
 
 export type SourcePort = {
   /** the real path and size of a file; undefined when it cannot be stat'd */

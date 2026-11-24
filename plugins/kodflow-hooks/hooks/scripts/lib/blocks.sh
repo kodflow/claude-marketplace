@@ -32,7 +32,7 @@ kf_block() {
     (
         mkdir -p "$sd" 2>/dev/null || exit 0
         # shellcheck source=lock.sh
-        . "${BASH_SOURCE[0]%/*}/lock.sh" 2>/dev/null && kf_lock "$sd/.blocks.lock.d" 1
+        . "${BASH_SOURCE[0]%[/\\]*}/lock.sh" 2>/dev/null && kf_lock "$sd/.blocks.lock.d" 1
         f=$sd/blocks.jsonl
         if [ -n "$id" ]; then
             grep -qxF -- "$id" "$sd/blocks.seen" 2>/dev/null && exit 0

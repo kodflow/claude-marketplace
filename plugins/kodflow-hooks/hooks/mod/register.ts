@@ -1,4 +1,4 @@
-// register.ts — kodflow-hooks' function hooks: wiring only.
+// register.ts â€” kodflow-hooks' function hooks: wiring only.
 //
 // One `on` per event, each a few lines that read `$` and hand the work to the
 // pure modules beside this file (tasks.ts, store.ts, calls.ts, paths.ts).
@@ -85,6 +85,16 @@ import {
   type GuardCtx,
 } from "./guards.ts";
 import { loadRules, type Rules } from "./patterns.ts";
+import {
+  bashCandidates,
+  homeOf,
+  hostArgv,
+  isWindows,
+  joinPath,
+  NO_GIT_BASH,
+  slashed,
+  type HostVars,
+} from "./host.ts";
 import { filterResult } from "./filter.ts";
 import { veilResult } from "./veil.ts";
 import { appendArgv, shapeLine, shapeOf, shapesFile } from "./mcp-probe.ts";
@@ -148,17 +158,44 @@ const present = () => {
 
 // Read once a session: the credential variables' values.
 let secrets: Promise<string[]> | undefined;
-// The vendored §5 rules; a failed read stays undefined and is tried again.
+// The vendored Â§5 rules; a failed read stays undefined and is tried again.
 let rules: Rules | undefined;
 
 const off = async ($: any): Promise<boolean> =>
   isOff(await $.env.get("KODFLOW_MOD"));
 
+// HOME, else USERPROFILE: Windows always sets the latter, the former only
+// when someone did. In forward slashes, absolute, or undefined.
+async function home($: any): Promise<string | undefined> {
+  return homeOf(await $.env.get("HOME"), await $.env.get("USERPROFILE"));
+}
+
 async function config($: any): Promise<string | undefined> {
-  return configDir(
-    await $.env.get("CLAUDE_CONFIG_DIR"),
-    await $.env.get("HOME"),
-  );
+  return configDir(await $.env.get("CLAUDE_CONFIG_DIR"), await home($));
+}
+
+// Git Bash by its path on Windows, found once a module load; undefined on
+// macOS, Linux and WSL, where argv runs as it is (host.ts).
+let hostBash: Promise<string | undefined> | undefined;
+function bashOf($: any): Promise<string | undefined> {
+  return (hostBash ??= (async () => {
+    const vars: HostVars = {
+      OS: await $.env.get("OS"),
+      CLAUDE_CODE_GIT_BASH_PATH: await $.env.get("CLAUDE_CODE_GIT_BASH_PATH"),
+      ProgramFiles: await $.env.get("ProgramFiles"),
+      LOCALAPPDATA: await $.env.get("LOCALAPPDATA"),
+    };
+    if (!isWindows(vars)) return undefined;
+    for (const c of bashCandidates(vars))
+      if (await $.fs.exists(c).catch(() => false)) return c;
+    // None found: refused rather than a bare "bash" (WSL's, maybe)
+    return NO_GIT_BASH;
+  })().catch(() => undefined));
+}
+
+/** `$.process.run`, with argv as the host can start it (host.ts). */
+async function run($: any, argv: readonly string[], init?: any): Promise<any> {
+  return $.process.run(hostArgv(argv, await bashOf($)), init);
 }
 
 async function ensureTools($: any): Promise<void> {
@@ -207,7 +244,7 @@ async function lintPort($: any): Promise<LintPort> {
         () => undefined,
       ),
     run: (argv, timeoutMs) =>
-      $.process.run(argv, { timeoutMs }).catch(() => undefined),
+      run($, argv, { timeoutMs }).catch(() => undefined),
     ask: (question, options) =>
       $.ui.ask(question, options).catch(() => undefined),
     vars: {
@@ -226,7 +263,7 @@ function port($: any): Port {
         () => undefined,
       ),
     write: (path, text) => $.fs.write(path, text),
-    run: (argv) => $.process.run(argv, { timeoutMs: 5000 }),
+    run: (argv) => run($, argv, { timeoutMs: 5000 }),
     mtime: (path) =>
       $.fs.stat(path).then(
         (s: { mtimeMs: number }) => s.mtimeMs,
@@ -245,7 +282,7 @@ async function serve(
   const cfg = await config($);
   if (!cfg)
     return {
-      deny: "kodflow task tools: no absolute CLAUDE_CONFIG_DIR or HOME to keep the list in",
+      deny: "kodflow task tools: no absolute CLAUDE_CONFIG_DIR, HOME or USERPROFILE to keep the list in",
     };
   const session = await $.session.id();
   const dir = sessionDir(cfg, session);
@@ -301,8 +338,7 @@ async function serve(
   if ("result" in answer && closing) void cleanupAfter($, dir, closing);
   // One line in .claude/logs/<branch>/session.jsonl, through lib/event.jq
   const payload = logPayload(session, await $.session.root(), e, answer);
-  await $.process
-    .run(["bash", `${$.plugin.root}/hooks/scripts/on-mod.sh`], {
+  await run($, ["bash", `${$.plugin.root}/hooks/scripts/on-mod.sh`], {
       stdin: JSON.stringify(payload),
       timeoutMs: 3000,
     })
@@ -320,7 +356,7 @@ async function probeMcp($: any, tool: string, answer: unknown): Promise<void> {
     const cfg = await config($);
     if (!cfg) return;
     const dir = sessionDir(cfg, await $.session.id());
-    await $.process.run(appendArgv(shapesFile(dir)), {
+    await run($, appendArgv(shapesFile(dir)), {
       stdin: shapeLine(shapeOf(tool, answer, Date.now())),
       timeoutMs: 3000,
     });
@@ -338,7 +374,7 @@ async function cleanupAfter($: any, dir: string, closing: Closing): Promise<void
     const io = port($);
     const paths = await claim(io, dir, closing, await io.read(agentsFile(dir)));
     if (!paths.length) return;
-    await $.process.run(
+    await run($,
       ["bash", `${$.plugin.root}/hooks/scripts/cleanup.sh`, dir, ...paths],
       { timeoutMs: 300_000 },
     );
@@ -353,7 +389,7 @@ async function noteWorktrees($: any, e: any): Promise<void> {
   try {
     const text =
       typeof e.command === "string" ? e.command : JSON.stringify(argsOf(e));
-    const paths = worktreePaths(text.slice(0, 20_000), await $.env.get("HOME"));
+    const paths = worktreePaths(text.slice(0, 20_000), await home($));
     if (!paths.length) return;
     const cfg = await config($);
     if (!cfg) return;
@@ -463,7 +499,7 @@ function journal(
     if (error !== undefined)
       payload.error = String((error as Error)?.message ?? error);
     if (block) payload.block = block;
-    await $.process.run(
+    await run($,
       ["bash", `${$.plugin.root}/hooks/scripts/on-mod.sh`],
       { stdin: JSON.stringify(payload), timeoutMs: 3000 },
     );
@@ -523,15 +559,14 @@ async function guardCtx(
     agentId,
     rootMain: !agentId && (await $.env.get("KODFLOW_ROOT")) !== "off",
     projectDir: dir,
-    home: await $.env.get("HOME"),
+    home: await home($),
     configDir: cfg,
     read: (path) =>
       $.fs
-        .read(path.startsWith("/") ? path : `${dir}/${path}`)
+        .read(joinPath(dir, path))
         .catch(() => undefined),
     git: async (gdir, args) => {
-      const r = await $.process
-        .run(["git", "-C", gdir, ...args], { timeoutMs: 5000 })
+      const r = await run($, ["git", "-C", gdir, ...args], { timeoutMs: 5000 })
         .catch(() => undefined);
       return r && r.exitCode === 0 ? r.stdout : undefined;
     },
@@ -638,8 +673,7 @@ async function tierCtx($: any): Promise<TierCtx | undefined> {
 // Appended, never rewritten: $.fs.write would overwrite the shell's lines
 async function tierJournal($: any, dir: string, lines: JournalLine[]): Promise<void> {
   if (!lines.length) return;
-  await $.process
-    .run(journalArgv(dir, journalFile(dir)), { stdin: journalText(lines), timeoutMs: 3000 })
+  await run($, journalArgv(dir, journalFile(dir)), { stdin: journalText(lines), timeoutMs: 3000 })
     .catch(() => undefined);
 }
 
@@ -665,7 +699,8 @@ async function tierSources($: any, ctx: TierCtx): Promise<SourcePort> {
   for (const r of [...roots]) {
     if (typeof r !== "string") continue;
     const real = (await stat(r.replace(/\/$/, "")))?.real;
-    if (real && !roots.includes(`${real}/`)) roots.push(`${real}/`);
+    const dir = real && `${slashed(real).replace(/\/+$/, "")}/`;
+    if (dir && !roots.includes(dir)) roots.push(dir);
   }
   return {
     stat,
@@ -707,6 +742,7 @@ function noteTierSpawn($: any, e: any): void {
 
 export const register: Register = (on) => {
   on("session.start", async ($, e, next) => {
+    hostBash = undefined; // looked up again, in this session's environment
     if (!(await off($))) {
       await ensureTools($);
       await $.command.register({

@@ -62,20 +62,30 @@ export type Budget = {
 
 const VENDOR = "vendor";
 
-/** The parent of an absolute POSIX path; "/" is its own. */
+// A Windows session's root is a drive path (C:\src\x, or C:/src/x): its
+// separators are kept as given, since the path reaches the daemon as the
+// session spelled it, and its root is the drive's (C:\), never "/".
+const DRIVE = /^[A-Za-z]:[\\/]/;
+const lastSep = (dir: string): number =>
+  DRIVE.test(dir) ? Math.max(dir.lastIndexOf("/"), dir.lastIndexOf("\\")) : dir.lastIndexOf("/");
+
+/** The parent of an absolute path; "/" and a drive root (C:\) are their own. */
 export function parentOf(dir: string): string {
-  const cut = dir.lastIndexOf("/");
+  const cut = lastSep(dir);
+  if (DRIVE.test(dir)) return cut <= 2 ? dir.slice(0, 3) : dir.slice(0, cut);
   return cut <= 0 ? "/" : dir.slice(0, cut);
 }
 
 export function baseOf(dir: string): string {
-  return dir.slice(dir.lastIndexOf("/") + 1);
+  return dir.slice(lastSep(dir) + 1);
 }
 
-/** Drops a trailing slash, keeping "/". */
+/** Drops a trailing separator, keeping "/" and a drive root. */
 export function clean(dir: string): string {
   let d = dir;
-  while (d.length > 1 && d.endsWith("/")) d = d.slice(0, -1);
+  const min = DRIVE.test(d) ? 3 : 1;
+  while (d.length > min && (d.endsWith("/") || (min === 3 && d.endsWith("\\"))))
+    d = d.slice(0, -1);
   return d;
 }
 

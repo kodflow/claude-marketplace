@@ -16,7 +16,7 @@
 #   kf_fm_effort FILE             → KF_FM_EFFORT, its frontmatter effort
 #   kf_fm_field FILE KEY          → KF_FM_FIELD, any one-line frontmatter key
 
-KF_AGENTS_LIB=${BASH_SOURCE[0]%/*}
+KF_AGENTS_LIB=${BASH_SOURCE[0]%[/\\]*}
 
 # hooks/gated-models.txt: one token a line, # and blank lines skipped. CI
 # holds it byte-identical to skills/_shared/gated-models.txt. KF_GATED_FILE

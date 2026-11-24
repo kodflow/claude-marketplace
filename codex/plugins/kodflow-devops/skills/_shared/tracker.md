@@ -10,7 +10,7 @@ the three skills cannot disagree about where a piece of work lives.
 Run the detector first. It is the only source of truth for paths and forge:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-r5c96de43c332"/skills/_shared/scripts/detect-tracker.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rf412f86c420f"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Then resolve the destination in this order. **Stop at the first that answers.**

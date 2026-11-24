@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 
@@ -25,6 +26,7 @@ from pluginlib.inventory import build_inventory, canonical_json
 from pluginlib.manifest import CLAUDE_MANIFEST, render_claude_manifest
 from pluginlib.model import Catalog, PluginPackage, TARGETS, ValidationIssue
 from pluginlib.roles import build_role_artifacts, compile_roles
+from pluginlib.sources import trust_executable_mode
 from pluginlib.validate import MODES, validate_catalog_packages, validate_package, validate_plugin
 from pluginlib.workflows import compile_projections
 
@@ -251,6 +253,22 @@ def _check_or_write(path: Path, data: bytes, check: bool) -> bool:
     return True
 
 
+def _executable(path: Path) -> bool | None:
+    """The execute bit of a projection as Git will commit it.
+
+    A checkout with core.filemode=false (Git for Windows) keeps no mode on
+    disk: there the index says. A file it does not track yet (a projection
+    just generated) has no mode to compare: None, and the check takes its
+    content alone; the commit that adds it sets the mode (git add --chmod).
+    """
+    if trust_executable_mode(ROOT):
+        return bool(path.stat().st_mode & 0o111)
+    out = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "--stage", "--", path.relative_to(ROOT).as_posix()],
+        capture_output=True, text=True,
+    ).stdout
+    return out.startswith("100755 ") if out else None
+
 def command_build(args: argparse.Namespace) -> int:
     snapshot = _verified_catalog()
     if snapshot is None:
@@ -322,7 +340,8 @@ def command_build(args: argparse.Namespace) -> int:
                 verified.append(False)
                 continue
             current = _check_or_write(path, data, True)
-            if current and path in executables and bool(path.stat().st_mode & 0o111) != executables[path]:
+            mode = _executable(path) if current and path in executables else None
+            if mode is not None and mode != executables[path]:
                 print(f"stale projection mode: {_display_path(path)}")
                 current = False
             verified.append(current)

@@ -21,7 +21,7 @@ import {
   utimesSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, delimiter } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { conformance } from "./conformance.ts";
@@ -32,6 +32,7 @@ import { decide, replay, type Row } from "./corpus.ts";
 import { forgeMcpJson } from "../../hooks/mod/guards.ts";
 import { loadRules } from "../../hooks/mod/patterns.ts";
 import { invariants } from "./invariants.ts";
+import { bashCandidates, hostArgv, isAbsolutePath } from "../../hooks/mod/host.ts";
 import { appendArgv, shapeLine, shapeOf } from "../../hooks/mod/mcp-probe.ts";
 import { judgeSpawn, judgeSwitch, parseGated, type SpawnPort } from "../../hooks/mod/fable.ts";
 import {
@@ -55,6 +56,17 @@ import {
 const run = promisify(execFile);
 const HERE = fileURLToPath(import.meta.url);
 
+// Windows: the store's mkdir, ln, mv and rm, and the probe's and the
+// journal's sh, run through Git Bash by path, as register.ts runs them
+// (host.ts). Undefined elsewhere: argv as it is.
+const WIN = process.platform === "win32";
+const BASH = bashCandidates({ ...process.env, OS: WIN ? "Windows_NT" : undefined }).find((c) =>
+  existsSync(c),
+) ?? (WIN ? "bash" : undefined);
+const hostRun = (argv: readonly string[]) => hostArgv(argv, BASH);
+// NTFS has no POSIX mode bits: node reports 0666 whatever chmod did
+const MODES = !WIN;
+
 const disk: Port = {
   read: async (p) => {
     try {
@@ -69,7 +81,8 @@ const disk: Port = {
   },
   run: async (argv) => {
     try {
-      const { stdout, stderr } = await run(argv[0]!, argv.slice(1));
+      const [cmd, ...args] = hostRun(argv);
+      const { stdout, stderr } = await run(cmd!, args);
       return { exitCode: 0, stdout, stderr };
     } catch (err: any) {
       return {
@@ -300,7 +313,7 @@ try {
     configDir: join(lab, "home", ".claude"),
     read: async (p) => {
       try {
-        return readFileSync(p.startsWith("/") ? p : join(repo, p), "utf8");
+        return readFileSync(isAbsolutePath(p) ? p : join(repo, p), "utf8");
       } catch {
         return undefined;
       }
@@ -367,7 +380,9 @@ try {
   await g("mv", "sub/servers.json", "sub/mcp.json");
   check((await bash("git commit -m 'chore: mv'")) === "mcp-json", "a rename onto mcp.json refused", "");
   await g("mv", "sub/mcp.json", "sub/servers.json");
-  await g("config", "core.excludesFile", "/dev/null");
+  // An empty file, not /dev/null: Git for Windows refuses `nul` as one
+  writeFileSync(join(repo, "..", "empty-excludes"), "");
+  await g("config", "core.excludesFile", join(repo, "..", "empty-excludes"));
   writeFileSync(join(repo, ".mcp.json"), "{}\n");
   check(
     (await forgeMcpJson("mcp__GitKraken__git_add", { directory: "." }, base))?.motif === "mcp-json",
@@ -594,8 +609,24 @@ console.log("== cleanup on close: whose worktree, when, and the script it runs")
     await note(disk, dir, "agent-9", worktreePaths(`cd ${wt} && git commit`, H));
     const paths = await claim(disk, dir, { workers: ["agent-9"], epic: 3, epicClosed: false }, undefined);
     const script = join(dirname(HERE), "..", "..", "hooks", "scripts", "cleanup.sh");
-    await run("bash", [script, dir, ...paths], { env: { ...env, PATH: `${join(T, "bin")}:${process.env.PATH}` } });
-    check(!existsSync(wt), "end to end: the worktree of a merged PR is removed");
+    await run(BASH ?? "bash", [script, dir, ...paths], {
+      // Windows spells it Path: a second PATH beside it is a coin toss
+      env: {
+        ...Object.fromEntries(Object.entries(env).filter(([k]) => k.toUpperCase() !== "PATH")),
+        PATH: `${join(T, "bin")}${delimiter}${process.env.PATH}`,
+      },
+    });
+    // Read before the traced run, which could remove it and hide this one's failure
+    const left = existsSync(wt);
+    if (left) {
+      // Why it stayed: the script traced, its last lines in the failure
+      const traced = await run(BASH ?? "bash", ["-x", script, dir, ...paths], {
+        env: { ...Object.fromEntries(Object.entries(env).filter(([k]) => k.toUpperCase() !== "PATH")), PATH: `${join(T, "bin")}${delimiter}${process.env.PATH}` },
+      }).catch((e: any) => e);
+      console.log(String(traced.stderr ?? "").split("\n").slice(-60).join("\n"));
+    }
+    const notices = (() => { try { return readFileSync(join(dir, "cleanup-notices"), "utf8"); } catch { return "(no notice)"; } })();
+    check(!left, "end to end: the worktree of a merged PR is removed", `paths ${JSON.stringify(paths)}; ${notices.trim()}`);
     const branches = (await g("-C", join(T, "remote.git"), "branch", "--list", "feat/z")).stdout.trim();
     check(branches === "", "end to end: its remote branch is deleted");
   } finally {
@@ -609,7 +640,7 @@ console.log("== the MCP probe's append, on a real file system");
   const file = join(root, "mcp-shapes.jsonl");
   const append = (text: string) =>
     new Promise<number | null>((resolve) => {
-      const [cmd, ...args] = appendArgv(file);
+      const [cmd, ...args] = hostRun(appendArgv(file));
       const p = spawn(cmd!, args, { stdio: ["pipe", "ignore", "ignore"] });
       p.on("close", resolve);
       p.stdin.end(text);
@@ -617,11 +648,11 @@ console.log("== the MCP probe's append, on a real file system");
   try {
     const line = shapeLine(shapeOf("mcp__s__t", { result: "body-of-the-result" }, Date.now()));
     check((await append(line)) === 0, "a new file is created");
-    check((statSync(file).mode & 0o777) === 0o600, "a new file is 0600");
+    if (MODES) check((statSync(file).mode & 0o777) === 0o600, "a new file is 0600");
     writeFileSync(file, readFileSync(file, "utf8"), { mode: 0o644 });
-    await run("chmod", ["644", file]);
+    if (MODES) await run("chmod", ["644", file]);
     check((await append(line)) === 0, "a second line is appended");
-    check((statSync(file).mode & 0o777) === 0o600, "a file that was 0644 comes out 0600");
+    if (MODES) check((statSync(file).mode & 0o777) === 0o600, "a file that was 0644 comes out 0600");
     const rows = readFileSync(file, "utf8").split("\n").filter(Boolean);
     check(rows.length === 2 && rows.every((r) => JSON.parse(r).form === "string"), "two lines, each a JSON object");
     check(!readFileSync(file, "utf8").includes("body-of-the-result"), "no value of the result is in the file");
@@ -682,7 +713,7 @@ console.log("== tier: the journal is appended, never rewritten");
   });
   const append = (text: string) =>
     new Promise<number | null>((resolve) => {
-      const [cmd, ...args] = journalArgv(dir, journalFile(dir));
+      const [cmd, ...args] = hostRun(journalArgv(dir, journalFile(dir)));
       const p = spawn(cmd!, args, { stdio: ["pipe", "ignore", "ignore"] });
       p.on("close", resolve);
       p.stdin.end(text);
@@ -696,7 +727,7 @@ console.log("== tier: the journal is appended, never rewritten");
       got.map((r) => r.reason ?? r.source).join(",") === "tier-unjudged,shell,tier,tier-resume",
       "the shell's line between the mod's is kept, in order",
     );
-    check((statSync(journalFile(dir)).mode & 0o077) === 0, "the journal is private (umask 077)");
+    if (MODES) check((statSync(journalFile(dir)).mode & 0o077) === 0, "the journal is private (umask 077)");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
