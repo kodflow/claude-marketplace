@@ -1526,12 +1526,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/.claude-plugin/plugin.json",
-          "sha256": "23a0bec52d0f5d1aeb6cc7c480d114cd3b86323cf7fb50782429139c59ae2e9b"
+          "sha256": "390662a2f3cdfca6e5cc111dc6689817e87d516e0afef301aaf4e60649da952b"
         },
         {
           "class": "support",
           "path": "plugins/kodflow-hud/README.md",
-          "sha256": "737ffebda92beb02a27916a001971cb17be71d5c95df5201142b403345cf6690"
+          "sha256": "764eeccd4734349dc33a281d07e5d2f0f1ecacf7af6a7672ad4253b6e93af269"
         },
         {
           "class": "host-extension",
@@ -1596,7 +1596,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/hooks/mod/register.tsx",
-          "sha256": "1075fa83ac7b897288a06318877da69fee3182cfd8c8ae476a1a29fa11c81a67"
+          "sha256": "23ab8561166d337877f77dce2548761c2c684281a04f817a941c696439bd7e03"
         },
         {
           "class": "host-extension",
@@ -1606,7 +1606,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/hooks/mod/view.ts",
-          "sha256": "16c42d20de3f887bea9bd4467c828a7192092242ef6dcff743da564500f00f1f"
+          "sha256": "9bb51318331b92567288d8eef0f15a7256950aca36dc1048e96f948934a974a9"
+        },
+        {
+          "class": "host-extension",
+          "path": "plugins/kodflow-hud/hooks/mod/vitals.ts",
+          "sha256": "52e2f48fccd8fbf9691403e003bb665554243aeabe6043aaa80c5b2b42068785"
         },
         {
           "class": "host-extension",
@@ -1621,7 +1626,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hud/plugin.json",
-          "sha256": "caed530a1d31d34be6f750067b91d2abba584775dc9d599a5463edbc2807076e"
+          "sha256": "acbfc0bdadd673b2aaee1c7313aca8bdc5ea2dfe935787687fb4f25a0a576ea5"
         },
         {
           "class": "verification",
@@ -1700,13 +1705,18 @@
         },
         {
           "class": "verification",
+          "path": "plugins/kodflow-hud/tests/vitals.test.ts",
+          "sha256": "b48c71c0cf902a82913df12fb5a6b0c818e6daac4b344240727e90afa11f8eaa"
+        },
+        {
+          "class": "verification",
           "path": "plugins/kodflow-hud/tests/wiring.test.tsx",
-          "sha256": "5084baf9d877e85b98c629bcd77fdd15a246996bdee4a27316e1b468c3733658"
+          "sha256": "27a0435db18a072eee2cc9ee57d86e81b3acefd0ada400c9ef738dcabf2bc19f"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hud/types/index.d.ts",
-          "sha256": "5e56e03a96832574c46c2805904a2f92d77c9de997e143965234e9cd81bb07fd"
+          "sha256": "8d526ff16dff7d210a80696a5fe240da758d6952c683c48e273fbfec7f9bd7e0"
         }
       ],
       "dependencies": [
@@ -3404,7 +3414,7 @@
   "schemaVersion": 1,
   "totals": {
     "agents": 49,
-    "files": 657,
+    "files": 659,
     "hookBundles": 5,
     "plugins": 9,
     "skills": 30
