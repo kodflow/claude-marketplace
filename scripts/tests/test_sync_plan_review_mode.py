@@ -43,6 +43,9 @@ none.write_text("---\nname: none\n---\n\n# None\n\n## Role\n\nNo section.\n", en
 gd = root / "plugins/kodflow-gamedev/agents"
 gd.mkdir(parents=True)
 (gd / "g.md").write_text("# G\n\n## Plan review mode\n\nOld.\n", encoding="utf-8")
+role = root / "plugins/kodflow-specialists/io.github.kodflow/roles/r/instructions.md"
+role.parent.mkdir(parents=True)
+role.write_text("# R\n\n## Plan review mode\n\nOld.\n\n## Role\n\nKept.\n", encoding="utf-8")
 
 check("--check fails before a sync", run(root, "--check").returncode == 1)
 r = run(root)
@@ -53,6 +56,8 @@ check("a section at the end is replaced, the file ending kept",
       end.read_text(encoding="utf-8") == "---\nname: end\n---\n\n# End\n\n" + NEW + "\n\n\n", repr(end.read_text(encoding="utf-8")))
 check("a file without the section is left alone", "No section." in none.read_text(encoding="utf-8") and "New rule" not in none.read_text(encoding="utf-8"))
 check("another plugin's agents are covered", sync.section((gd / "g.md").read_text(encoding="utf-8")) == NEW)
+check("a role's instructions, the agents' source, are covered",
+      role.read_text(encoding="utf-8") == "# R\n\n" + NEW + "\n\n## Role\n\nKept.\n", repr(role.read_text(encoding="utf-8")))
 check("the mirrors receive the canonical file",
       all((root / m).read_text(encoding="utf-8") == (root / sync.CANON).read_text(encoding="utf-8") for m in sync.MIRRORS))
 check("--check passes right after a sync", run(root, "--check").returncode == 0)
