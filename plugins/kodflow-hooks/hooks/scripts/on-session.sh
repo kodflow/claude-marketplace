@@ -133,7 +133,7 @@ $open"
 3. Commits: conventional messages, no AI attribution, no .claude/ path in a message. Enforced by this plugin on PreToolUse and by the repo commit-msg hook.
 4. Never commit on main/master — commit on a branch and open a PR. Never --no-verify, -n or core.hooksPath. A forced push (--force, -f, +refspec) is refused: use --force-with-lease. A subagent never merges and never pushes to the default branch; the main thread merges a PR as soon as its CI is green and it has reviewed it, without asking the user.
 5. Workflow: /project → /warmup → /search → /plan → /refine → /challenge → /goal. /feature and /fix open the tracker item and the branch; /review before merge.
-6. Before finishing: update the CLAUDE.md of every directory this session changed — warmup --update convention, only what changed, at most 1000 lines. The Stop hook reminds you once per directory.
+6. Before finishing: update the CLAUDE.md of every directory this session changed — warmup --update convention, only what changed, at most 200 lines. The Stop hook reminds you once per directory.
 7. Recover state from .claude/plans/*.md (latest = current task), .claude/goals/*.md (directives), .claude/contexts/*.md (research).
 8. Never delete anything under .claude/ or .devcontainer/ without explicit approval.
 Context was compacted: verify the task state before continuing.'

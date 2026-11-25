@@ -118,20 +118,17 @@ Usage: /warmup [options]
   --update --dry-run Preview the changes, write nothing
   --help             This help
 
-CLAUDE.md size thresholds (lines; ceiling decided by Florent, 2026-10-23):
-  IDEAL       0-500 lines     no action
-  ACCEPTABLE  501-700         fine for a busy directory
-  WARNING     701-850         review at the next pass
-  CRITICAL    851-1000        condensation mandatory
-  FORBIDDEN   1001+           must be split
-  Plus a character check (wc -m) for what loads on demand (a subdirectory
-  CLAUDE.md, a path-scoped rule): over 40 000 = "truncated on a 200K window",
-  over 150 000 = "truncated everywhere" (FORBIDDEN). Claude Code memory docs.
-  Byte budget, applied with the line table (`wc -c`; the SessionStart hook
-  warns on the same numbers): the root CLAUDE.md over 24 KB, or a
-  subdirectory one over 12 KB, is WARNING at least: --update condenses or
-  splits it whatever its line count (KODFLOW_CLAUDE_MD_ROOT_KB / _SUB_KB move
-  the numbers).
+CLAUDE.md size thresholds (official guidance, https://code.claude.com/docs/en/memory):
+  OK          0-200 lines     no action ("target under 200 lines per CLAUDE.md")
+  WARNING     201+            condense or split (--update); the SessionStart hook
+                              warns on the same figure (KODFLOW_CLAUDE_MD_LINES,
+                              default 200; KODFLOW_CLAUDE_MD_BUDGET=off lifts it)
+  FORBIDDEN   a subdirectory CLAUDE.md (loaded on demand) over 40 000 characters
+              (`wc -m`) = "truncated on a 200K window" (KODFLOW_CLAUDE_MD_TRUNC_CHARS);
+              over 150 000 = truncated on a 1M window too (200 000 on Opus 4.6
+              and Sonnet 4.6). Must be split.
+  A root CLAUDE.md is loaded whole, so it is only held to the 200 lines; above
+  4 MiB Claude Code skips it entirely (FORBIDDEN: split it).
   A file warmup creates starts from the short template; a file it moves is
   bounded by this table only.
   --update proposes a new CLAUDE.md only where no ancestor covers the
@@ -253,14 +250,14 @@ it. Source: Claude Code memory docs, <https://code.claude.com/docs/en/memory>.
 
 | Fact from the docs | Consequence here |
 |--------------------|------------------|
-| "target under 200 lines per CLAUDE.md file. Longer files consume more context and reduce adherence" | advice only, quoted to the user; not a rule warmup enforces |
+| "target under 200 lines per CLAUDE.md file. Longer files consume more context and reduce adherence" | the WARNING line of the table (--update condenses or splits) |
 | a subdirectory CLAUDE.md or a path-scoped rule is truncated past 40 000 characters (200K window) or 150 000 characters (1M window, later models; 200 000 on Opus 4.6 and Sonnet 4.6) | the character check of the table; 150 000 is the safe common bound |
 | a file over 4 MiB is skipped entirely | far above any threshold |
 | files loaded at launch (root, ancestors) are never truncated but cost tokens every turn | reported as launch cost (bytes / 4 ≈ tokens), not as truncation |
 
-The line table is a ceiling Florent chose (2026-10-23), above the doc's
-advice: it bounds what exists, it is not a budget to fill. Warmup does not
-shorten a file to reach 200 lines. A file it **creates** starts from the short
+The 200-line figure is the documented advice, applied as the warning line.
+Warmup does not shorten a file below it just to pass: it condenses or splits.
+A file it **creates** starts from the short
 template (`update.md`, Phase 2.0); a file it **moves** is only bounded by the
 table (moving never rewrites). How to split so the launch cost actually drops:
 `update.md`, Phase 3.5. A ledger that pushes `CLAUDE.md` past 250 lines (the
@@ -273,7 +270,7 @@ When a task ends — a turn that finishes the work, a worktree about to be
 merged, a session about to close — the CLAUDE.md of **every directory the task
 changed** is brought up to date, and only those. This is the `--update`
 convention applied to a scope: what changed, why, and what the next session
-must know; no history, no diff narration, under 1000 lines.
+must know; no history, no diff narration, under 200 lines.
 
 ```
 for each file edited this session

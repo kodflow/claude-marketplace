@@ -1242,7 +1242,8 @@ in CI: see `docs/marketplace/adr-lint-ci.md`.
 ## Document index (`lib/kf_docs.py`)
 
 A stdlib-only SQLite FTS5 index (BM25, no network) of the project's documents:
-`docs/adr/*.md` split by `## ` section, `docs/**/*.md` and every `CLAUDE.md`,
+`docs/adr/*.md` split by `## ` section, `docs/**/*.md`, every `CLAUDE.md` and every
+`NOTES.md` (the sibling a CLAUDE.md overflow is moved into, wherever it sits),
 in `~/.cache/kodflow/docs-index/<sha1(git root)>.db`, plus `global.db` for
 `~/.claude/docs` and `~/.claude/projects/*/memory`. The tokenizer is `unicode61`
 with `tokenchars '.-_/'`, so `0.2.57`, `ADR-0152` and `net/http1` match whole,
@@ -1268,8 +1269,11 @@ call is not wanted. SessionStart and a Write/Edit under `docs/` (or of a
 and the `amends` / `supersedes` edges; ADRs with edges come first, then the
 newest, the rest is counted. SessionStart appends it to the document index
 (headers only, 5 s bound, fails open; `KODFLOW_DOCS_INDEX=off` lifts it). It
-also adds one line when the root `CLAUDE.md` exceeds 24 KB or another one 12
-KB (`kf_docs.py budget`; `KODFLOW_CLAUDE_MD_ROOT_KB`, `KODFLOW_CLAUDE_MD_SUB_KB`
-move the numbers, `KODFLOW_CLAUDE_MD_BUDGET=off` lifts it). `kf_docs.py export
+also adds one line when a `CLAUDE.md` exceeds 200 lines, the official "target
+under 200 lines per CLAUDE.md file" ([memory docs](https://code.claude.com/docs/en/memory)),
+naming the worst files; a subdirectory one over 40 000 characters, which Claude
+Code truncates on a 200K window, is listed first. (`kf_docs.py budget`;
+`KODFLOW_CLAUDE_MD_LINES` and `KODFLOW_CLAUDE_MD_TRUNC_CHARS` move the numbers,
+`KODFLOW_CLAUDE_MD_BUDGET=off` lifts it.) `kf_docs.py export
 --obsidian DIR` writes one generated note per ADR with `[[ADR-NNNN]]` links:
 an output, never a source.

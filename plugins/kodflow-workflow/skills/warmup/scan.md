@@ -106,8 +106,8 @@ the briefing):
   Branch  : <branch>      Dirty: <n>     Tracked files: <n>
 
   CLAUDE.md hierarchy (<n> files)
-    depth 0 : /CLAUDE.md               871 l  56 KB  loaded     CRITICAL
-    depth 1 : /src/CLAUDE.md           120 l   5 KB  on demand  IDEAL
+    depth 0 : /CLAUDE.md               871 l  56 KB  loaded     WARNING
+    depth 1 : /src/CLAUDE.md           120 l   5 KB  on demand  OK
     ...
   Rules     : <n> always loaded, <n> path-scoped
   Constraints: <n> active, <n> superseded  (<ledger_path> | none)
@@ -130,7 +130,7 @@ health_checks:
       Every file at WARNING or above, with its level, and the launch cost of
       the loaded ones (bytes / 4 ≈ tokens). A file loaded on demand over
       40 000 characters (`wc -m`) is reported "truncated on a 200K window",
-      over 150 000 "truncated everywhere" (FORBIDDEN). CRITICAL or FORBIDDEN →
+      over 150 000 "truncated everywhere" (FORBIDDEN). WARNING or FORBIDDEN →
       "split with /warmup --update" (update.md, Phase 3.5).
 
   dated_state:
