@@ -15,7 +15,7 @@ reports. Neither shows in the output.
 ## 1. Resolve, never hardcode
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rc90bf358d399"/skills/_shared/scripts/detect-models.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r34964fae4afd"/skills/_shared/scripts/detect-models.sh
 ```
 
 **A hardcoded top model is wrong the day a better one ships**, and on the current

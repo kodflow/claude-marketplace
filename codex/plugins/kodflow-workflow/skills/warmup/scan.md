@@ -47,7 +47,7 @@ peek_workflow:
       # does not exist for a plugin install: start from the skill's base directory
       # (given when the skill loaded; the script is its sibling _shared/).
       D="<base directory of this skill>/../_shared/scripts"
-      [ -f "$D/detect-project.sh" ] || D="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rc90bf358d399/skills/_shared/scripts"
+      [ -f "$D/detect-project.sh" ] || D="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r34964fae4afd/skills/_shared/scripts"
       [ -f "$D/detect-project.sh" ] || D=$(dirname "$(find "$HOME/.claude/plugins" -path '*kodflow-workflow*/skills/_shared/scripts/detect-project.sh' 2>/dev/null | head -1)")
       [ -f "$D/detect-project.sh" ] && bash "$D/detect-project.sh"
       # the allowed-tools rule is Bash(bash *detect-project.sh): the literal tail matters
@@ -106,8 +106,8 @@ the briefing):
   Branch  : <branch>      Dirty: <n>     Tracked files: <n>
 
   CLAUDE.md hierarchy (<n> files)
-    depth 0 : /CLAUDE.md               871 l  56 KB  loaded     CRITICAL
-    depth 1 : /src/CLAUDE.md           120 l   5 KB  on demand  IDEAL
+    depth 0 : /CLAUDE.md               871 l  56 KB  loaded     WARNING
+    depth 1 : /src/CLAUDE.md           120 l   5 KB  on demand  OK
     ...
   Rules     : <n> always loaded, <n> path-scoped
   Constraints: <n> active, <n> superseded  (<ledger_path> | none)
@@ -130,7 +130,7 @@ health_checks:
       Every file at WARNING or above, with its level, and the launch cost of
       the loaded ones (bytes / 4 ≈ tokens). A file loaded on demand over
       40 000 characters (`wc -m`) is reported "truncated on a 200K window",
-      over 150 000 "truncated everywhere" (FORBIDDEN). CRITICAL or FORBIDDEN →
+      over 150 000 "truncated everywhere" (FORBIDDEN). WARNING or FORBIDDEN →
       "split with /warmup --update" (update.md, Phase 3.5).
 
   dated_state:

@@ -58,14 +58,18 @@ class DecisionMap(unittest.TestCase):
         self.assertEqual(self.cli("map"), "")
 
     def test_budget_thresholds_and_env(self):
-        self.put("CLAUDE.md", "x" * 25 * 1024)
+        self.put("CLAUDE.md", "x\n" * 201)
         os.makedirs(os.path.join(self.repo, "sub"))
-        self.put("sub/CLAUDE.md", "y" * 13 * 1024)
+        os.makedirs(os.path.join(self.repo, "big"))
+        self.put("sub/CLAUDE.md", "y\n" * 150)
+        self.put("big/CLAUDE.md", "z" * 41000)
         out = self.cli("budget")
         self.assertEqual(len(out.splitlines()), 1)
-        self.assertIn("CLAUDE.md 25 KB > budget 24 KB", out)
-        self.assertIn("sub/CLAUDE.md 13 KB > budget 12 KB", out)
-        env = dict(self.env, KODFLOW_CLAUDE_MD_ROOT_KB="30", KODFLOW_CLAUDE_MD_SUB_KB="20")
+        self.assertIn("CLAUDE.md 201 lines > 200", out)
+        self.assertNotIn("sub/CLAUDE.md", out)
+        self.assertIn("big/CLAUDE.md 41000 chars: truncated on a 200K window", out)
+        self.assertLess(out.index("big/CLAUDE.md"), out.index("CLAUDE.md 201"))
+        env = dict(self.env, KODFLOW_CLAUDE_MD_LINES="300", KODFLOW_CLAUDE_MD_TRUNC_CHARS="50000")
         self.assertEqual(self.cli("budget", env=env), "")
 
     def test_export_obsidian_links(self):
@@ -77,7 +81,7 @@ class DecisionMap(unittest.TestCase):
 
     def test_session_start_carries_map_and_budget(self):
         self.put("docs/adr/0002-b.md", adr(2, "new drain", "Accepted", "- Area: net\n"))
-        self.put("CLAUDE.md", "x" * 25 * 1024)
+        self.put("CLAUDE.md", "x\n" * 250)
         sp = os.path.join(self.tmp, "sp")
         os.makedirs(sp)
         env = dict(self.env, CLAUDE_PROJECT_DIR=self.repo, CLAUDE_CONFIG_DIR=os.path.join(self.tmp, ".claude"),
@@ -87,7 +91,7 @@ class DecisionMap(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("Decision map", r.stdout)
         self.assertIn("0002 new drain", r.stdout)
-        self.assertIn("CLAUDE.md budget: CLAUDE.md 25 KB > budget 24 KB", r.stdout)
+        self.assertIn("CLAUDE.md budget: CLAUDE.md 250 lines > 200", r.stdout)
         r = subprocess.run(["bash", SESSION], input=ev, capture_output=True, text=True,
                            env=dict(env, KODFLOW_DOCS_INDEX="off", KODFLOW_CLAUDE_MD_BUDGET="off"))
         self.assertNotIn("Decision map", r.stdout)

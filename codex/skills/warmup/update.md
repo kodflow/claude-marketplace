@@ -351,7 +351,7 @@ obsolete_detection:
 
 ## Phase 3.5: Split the oversized CLAUDE.md files
 
-**Trigger:** a CLAUDE.md at CRITICAL or FORBIDDEN (SKILL.md, *Size thresholds*).
+**Trigger:** a CLAUDE.md at WARNING or FORBIDDEN (SKILL.md, *Size thresholds*).
 The goal is a lower **launch** cost, so the moved text must stop loading at
 launch (Claude Code memory docs: subdirectory CLAUDE.md and path-scoped rules
 load on demand; `@imports` load with their parent and save nothing).
@@ -390,7 +390,7 @@ split_workflow:
       - "MOVE, never delete: every moved section leaves a one-line pointer"
       - "Keep the project's language and wording; no rewrite while moving"
       - "A moved ledger goes to .claude/constraints.md (SKILL.md, Phase 1.5)"
-      - "Re-measure: the source file must land at ACCEPTABLE or better (500 lines is the target, not a rewrite budget: moving never shortens text)"
+      - "Re-measure: the source file must land at OK, or the cause is named (200 lines is the official target; moving never shortens text)"
 ```
 
 ---
@@ -454,7 +454,7 @@ update_generation:
     new_file: "a created file starts from the short template (Phase 2.0), no line target"
     advice: "the docs advise under 200 lines for adherence; quote it, do not enforce it. A file warmup moves or keeps is bounded by the SKILL.md table only"
     subdirectory_limit: "over 40 000 characters (wc -m), a subdirectory CLAUDE.md is cut on a 200K window; over 150 000 everywhere (memory docs)"
-    ceiling: "the SKILL.md size table — CRITICAL means condense or split (Phase 3.5)"
+    ceiling: "the SKILL.md size table — WARNING means condense or split (Phase 3.5)"
     no_implementation_details: true
     no_obsolete_info: true
     maintain_existing_structure: true
@@ -597,7 +597,7 @@ learn_workflow:
     OK <n> patterns discovered, <n> injected
 
   Validation:
-    OK Size thresholds: 0 FORBIDDEN, 0 CRITICAL, 0 WARNING
+    OK Size thresholds: 0 FORBIDDEN, 0 WARNING
     OK Structure sections match reality
     OK No broken file references
 

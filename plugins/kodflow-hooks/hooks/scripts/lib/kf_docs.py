@@ -26,9 +26,11 @@ unless --all. KODFLOW_DOCS_CACHE overrides the cache directory.
 Area ("-" when absent), a short title and the amends / supersedes edges, at
 most --max-lines lines and --max-bytes bytes (ADRs with edges first, then the
 newest; the rest is counted, not listed). It reads the ADR headers only: no
-index, no cache. `budget` prints one line when the root CLAUDE.md exceeds
-KODFLOW_CLAUDE_MD_ROOT_KB (24) or another one KODFLOW_CLAUDE_MD_SUB_KB (12),
-nothing otherwise. `export --obsidian` writes one generated note a decision
+index, no cache. `budget` prints one line when a CLAUDE.md exceeds
+KODFLOW_CLAUDE_MD_LINES lines (200, the official "target under 200 lines",
+https://code.claude.com/docs/en/memory); a subdirectory one over
+KODFLOW_CLAUDE_MD_TRUNC_CHARS characters (40000) is flagged first as
+truncated on a 200K window. Nothing otherwise. `export --obsidian` writes one generated note a decision
 with [[ADR-NNNN]] links; the notes are an output, never a source.
 """
 import argparse
@@ -390,28 +392,34 @@ def cmd_map(a):
 def cmd_budget(a):
     root = git_root(a.root)
     try:
-        lim_root = int(os.environ.get("KODFLOW_CLAUDE_MD_ROOT_KB", "24"))
-        lim_sub = int(os.environ.get("KODFLOW_CLAUDE_MD_SUB_KB", "12"))
+        lim = int(os.environ.get("KODFLOW_CLAUDE_MD_LINES", "200"))
+        trunc = int(os.environ.get("KODFLOW_CLAUDE_MD_TRUNC_CHARS", "40000"))
     except ValueError:
         return 0
-    over = []
+    cut, over = [], []
     for f in repo_files(root):
         if os.path.basename(f) != "CLAUDE.md":
             continue
         try:
-            size = os.path.getsize(f)
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
         except OSError:
             continue
         rel = os.path.relpath(f, root)
-        lim = lim_root if rel == "CLAUDE.md" else lim_sub
-        if size > lim * 1024:
-            over.append((rel != "CLAUDE.md", -size, rel, lim))
+        n = text.count("\n") + (1 if text and not text.endswith("\n") else 0)
+        if rel != "CLAUDE.md" and len(text) > trunc:
+            cut.append((-len(text), rel, n))
+        elif n > lim:
+            over.append((-n, rel))
+    cut.sort()
     over.sort()
-    if not over:
+    if not cut and not over:
         return 0
-    bits = ["%s %d KB > budget %d KB" % (r, -n // 1024, lim) for _, n, r, lim in over[:3]]
-    more = " (+%d more)" % (len(over) - 3) if len(over) > 3 else ""
-    print("CLAUDE.md budget: %s%s. Every session loads them: trim or split (/warmup --update)." % ("; ".join(bits), more))
+    bits = ["%s %d chars: truncated on a 200K window" % (r, -c) for c, r, _ in cut[:3]]
+    bits += ["%s %d lines > %d" % (r, -n, lim) for n, r in over[: max(0, 3 - len(bits))]]
+    total = len(cut) + len(over)
+    more = " (+%d more)" % (total - len(bits)) if total > len(bits) else ""
+    print("CLAUDE.md budget: %s%s. Trim or split (/warmup --update); official target: under %d lines per file." % ("; ".join(bits), more, lim))
     return 0
 
 
