@@ -375,6 +375,16 @@ stop; ! proposes && ! printf '%s' "$OUT" | grep -q 'No file behind me' && ! prin
     && ok "but not proposed: no definition, no diff to show" || bad "nodef proposed" "$OUT"
 run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-late" | .agent_type = "kodflow-specialists:developer-specialist-go" | .last_assistant_message = "x\n## Agent feedback\nLater."')"
 stop KODFLOW_FEEDBACK=off; proposes && bad "stop off" "$OUT" || ok "KODFLOW_FEEDBACK=off: no proposal"
+stop KODFLOW_FEEDBACK=quiet; proposes && bad "stop quiet" "$OUT" || ok "KODFLOW_FEEDBACK=quiet: no proposal"
+n=$(wc -l < "$SD/agent-feedback.jsonl" | tr -d ' ')
+run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-quiet" | .agent_type = "kodflow-specialists:developer-specialist-go" | .last_assistant_message = "x\n## Agent feedback\nQuiet point."')" KODFLOW_FEEDBACK=quiet
+[ "$(wc -l < "$SD/agent-feedback.jsonl" | tr -d ' ')" = "$((n + 1))" ] && ok "KODFLOW_FEEDBACK=quiet still keeps the entry" || bad "quiet keeps" ""
+# A named agent arrives with its name as agent_type: the subagent_type the
+# parent's Agent call recorded names its definition.
+printf 'a-named\tclaude-sonnet-5-5\thigh\tkodflow-specialists:developer-specialist-go\n' >> "$SD/agent-models.tsv"
+run on-agent.sh "$(fixture "SubagentStop, frontmatter effort low under a medium session, feedback section" '.agent_id = "a-named" | .agent_type = "review-go" | .last_assistant_message = "x\n## Agent feedback\nNamed point."')"
+tail -n 1 "$SD/agent-feedback.jsonl" | jq -e --arg d "$IP/agents/developer-specialist-go.md" '.agent_id == "a-named" and .definition == $d and .owner == "kodflow"' >/dev/null 2>&1 \
+    && ok "a named agent is attributed to the subagent_type its call recorded" || bad "named agent" "$(tail -n 1 "$SD/agent-feedback.jsonl")"
 printf '%s\n' "$(( $(date +%s) - 3600 ))" > "$SD/composer-at"; rm -f "$SD/mod-beat"
 run on-user.sh "$(jq -n -c --arg sid "$SID" --arg cwd "$T/repo" --arg sp "$T/tmp/sp" '{session_id:$sid,hook_event_name:"UserPromptSubmit",cwd:$cwd,scratchpad_dir:$sp,prompt:"go on"}')" KODFLOW_MOD=off
 [ $(( $(date +%s) - $(cat "$SD/composer-at") )) -le 5 ] && ok "without the mod, a user prompt marks the user present" || bad "presence shell" "$(cat "$SD/composer-at")"

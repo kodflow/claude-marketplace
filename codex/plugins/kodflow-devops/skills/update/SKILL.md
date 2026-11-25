@@ -10,7 +10,7 @@ metadata:
   generated-from: plugins/*/skills/update
   argument-hint: '[--check] [--component plugins|hooks|lifecycle|docs|...]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rd869e6ee2c95`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rdebc4e603c41`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # Update - DevContainer Environment Update

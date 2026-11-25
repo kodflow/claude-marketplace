@@ -21,6 +21,12 @@ kf_feedback() {
     if [ -s "$dir/agent-models.tsv" ]; then
         model=$(awk -F'\t' -v id="$aid" '$1 == id { m = $2 } END { print m }' "$dir/agent-models.tsv" 2>/dev/null)
         [ -n "$model" ] && source=tool_result
+        # A named agent (a teammate, an Agent call with `name`) arrives with its
+        # name as agent_type: the subagent_type the parent's call recorded is
+        # what names its definition.
+        local recorded
+        recorded=$(awk -F'\t' -v id="$aid" '$1 == id && $4 != "" { s = $4 } END { print s }' "$dir/agent-models.tsv" 2>/dev/null)
+        [ -n "$recorded" ] && type=$recorded
     fi
     # Where the agent is defined: the change to propose is to that file, and
     # only an agent of a kodflow plugin is the marketplace's to fix.

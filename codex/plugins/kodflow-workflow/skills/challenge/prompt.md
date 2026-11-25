@@ -67,7 +67,7 @@ being true. The validator greps for them and fails the file when they appear
 inside ACCEPTANCE.
 
 **The model allocation line is mandatory.** Resolve it with
-"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re0b9503e8e7b"/skills/_shared/scripts/detect-models.sh` and write the resolved id,
+"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rc90bf358d399"/skills/_shared/scripts/detect-models.sh` and write the resolved id,
 not the placeholder. `../_shared/model-policy.md` owns the rule; the validator
 rejects a directive whose CONSTRAINTS carry no `Models:` line, because a plan
 that does not say who runs what will silently run everything on the orchestrator.
@@ -99,7 +99,7 @@ save characters defeats the entire exercise.
 Run the validator. It is a program, not a review:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re0b9503e8e7b"/skills/challenge/scripts/validate-goal-prompt.sh .claude/goals/<slug>.md
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rc90bf358d399"/skills/challenge/scripts/validate-goal-prompt.sh .claude/goals/<slug>.md
 ```
 
 It checks: character count within 400-4000 · all eight sections present · at

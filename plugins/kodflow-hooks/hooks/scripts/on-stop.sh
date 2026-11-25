@@ -289,7 +289,9 @@ done
 # An entry whose agent has no definition file (a built-in, an agent defined
 # in the session) is passed over: there is no definition to show a diff of.
 fb=$cfg/kodflow/sessions/$SID/agent-feedback.jsonl
-if [ "${KODFLOW_FEEDBACK:-}" != off ] && [ -s "$fb" ]; then
+# KODFLOW_FEEDBACK=quiet keeps collecting (rule 6, the JSONL) for
+# kodflow-review:improve, without this proposal at Stop.
+if [ "${KODFLOW_FEEDBACK:-}" != off ] && [ "${KODFLOW_FEEDBACK:-}" != quiet ] && [ -s "$fb" ]; then
     seen=0; [ -f "$STATE/feedback-seen" ] && read -r seen < "$STATE/feedback-seen"
     case "$seen" in ''|*[!0-9]*) seen=0 ;; esac
     total=$(wc -l < "$fb" 2>/dev/null | tr -d ' ')

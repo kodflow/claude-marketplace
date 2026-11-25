@@ -192,6 +192,12 @@ When `MODE == SUBAGENTS`:
 1. Use the `Task` tool with `subagent_type` parameter.
 2. Same agents, same prompts, same `task-contract v1` block in the prompt (even though no hook parses it here — future-compat).
 3. No `SendMessage`, no shared task list, no cleanup call.
+3a. A dispatcher that is itself a subagent or a teammate does not end its turn
+    while an agent it started is still running: once the spawner has stopped,
+    the child's hand-back is refused and its report lands in the main thread,
+    where nobody synthesizes it. Run the producers in the foreground, or wait on
+    their completion (or on each report file's last `status:` line) before
+    synthesizing.
 4. Output must be **functionally equivalent** to TEAMS mode:
    - Same report schema
    - Same severity semantics
