@@ -1971,7 +1971,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-review/.claude-plugin/plugin.json",
-          "sha256": "864b3345e7e5c0fa154121b2b8962a63a3698c282e1a467870f76b626073a032"
+          "sha256": "61b5ae27f26296b77261ac22b32ed895d9022107dd0bd6080a935af9194d4a55"
         },
         {
           "class": "support",
@@ -1996,7 +1996,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/plugin.json",
-          "sha256": "7971a8b61a97e17b6a5438e1012235982eb0fcb536d0ed76bb9271a3c782bb57"
+          "sha256": "518b4ffe0fb16d7909ddaa017711f0abdbfc59786229500498f21f137c3679ad"
         },
         {
           "class": "portable",
@@ -2206,7 +2206,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/SKILL.md",
-          "sha256": "9387fd07c7822274c909f3852cffcbe04267e4658cfe63454f20824ecee6c567"
+          "sha256": "a0189dea3f2f5d3818b80ace4d4034ff4ac13539beaf0a8d9cb8d840ddb287a7"
         },
         {
           "class": "portable",
@@ -2216,7 +2216,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/cyclic.md",
-          "sha256": "d8e63f4bda6e84992abb4a096898b4fbd325ae595dd1ffa73ac21afeb1ee4ae9"
+          "sha256": "7d9ec930649cac06b3f445f88f315a7a5165d45ad3beb0fa77c286a40c610858"
         },
         {
           "class": "portable",
@@ -2226,12 +2226,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/dimensions.md",
-          "sha256": "e7f67902441e6b1918ae0156227343124f19fa515e4f923b52d8d69c4318975d"
+          "sha256": "5367cab60b8f4489d1675ad9d8469fc767b05521291c3e165a2dd9b5e9305ac2"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/dispatch.md",
-          "sha256": "d5d16c15a9ee5d82f135ac390206d5bfda03b6fe4362a8babb0d983f9e3de4d5"
+          "sha256": "354542c99e72b2cccc8e44327c62c67997f2e7ffd423760eac9f6cb37b530250"
         },
         {
           "class": "portable",
@@ -2251,7 +2251,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/passes.md",
-          "sha256": "2d201b6acb1a3a22a1833729221fe03524b09999aad040641ebd281d0e694829"
+          "sha256": "81b898d757c142c1da2eef2063da08dd2d5c5638b5b45d42d025ccd6175d3ede"
         },
         {
           "class": "portable",
@@ -2286,7 +2286,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/synthesis.md",
-          "sha256": "e348a244b452f75ce022f5b25afc848e1652fa55698ffdd5c429ed00d536a25b"
+          "sha256": "8a8db348e56c1600b1a25fc625ec049ffa1821210b3f675922df66abfead6c2f"
         },
         {
           "class": "portable",
@@ -2296,7 +2296,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/triage.md",
-          "sha256": "36338af63c6134e7a582d134998c784b508afdcf3fc05b5401cc5c7f186474c3"
+          "sha256": "09b6fb05b81fcaf0cd756b207133f92a16ecb38c3a8db400739b764b80f9d151"
         },
         {
           "class": "verification",

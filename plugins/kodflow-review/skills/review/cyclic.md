@@ -73,7 +73,14 @@ cyclic_workflow:
       3_dispatch_to_goal: "/goal \"execute the review-fixes plan to 0 CRITICAL/HIGH\""
 
     iteration_2_to_N:
-      1_review_validation: "/review (re-scan post-fix)"
+      1_review_validation: |
+        /review (re-scan post-fix). The re-review narrows the INPUT, never the ROSTER:
+        every dimension owner of iteration 1 runs again (on the full diff, with the
+        since-fix diff marked as new code). Each fix is reviewed as new code AND against
+        the class of its finding (passes.md, Phase 5.3): a helper added by a fix is
+        checked on every input type and every call site it now receives, and the
+        criteria table is recomputed, since a test added by a fix may prove a
+        different path than the criterion's.
       2_check_remaining:
         if: "findings.CRITICAL + findings.HIGH > 0"
         then: "Generate new plan, continue loop"
@@ -140,8 +147,11 @@ error_handling:
     max_retries: 3
 
   agent_timeout:
-    max_wait: 60s
-    action: "Continue without this agent, report"
+    # A reasoning producer routinely runs for minutes: a fixed short wait abandons it.
+    # Its report file decides (SKILL.md, Phase 6): last status line not "complete"
+    # when the producer has stopped -> that pass is INCOMPLETE; re-brief it narrower
+    # or cover the dimension inline. Never read the silence as a clean pass.
+    action: "Wait for the producer's completion; INCOMPLETE pass when its report file is not complete"
 
   large_diff:
     threshold: 5000 lines

@@ -20,7 +20,7 @@ metadata:
   generated-from: plugins/*/skills/review
   argument-hint: '[<PR#>|<branch>|<path>] [--loop] [--plan <slug>]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-ra4727e94aae0`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /review — Brutal, Evidence-Bound Code Review (RLM Architecture)
@@ -151,7 +151,7 @@ Findings come from TWO producer classes, both real agents on disk:
 layer rather than a hand-maintained table that drifts:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-ra4727e94aae0"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
   --profile "$SCRATCH/repo-profile.json"               # reads _shared/routing-table.jsonl
 # --phase review = the /review rules (language fanout + react, postgres, protobuf); --profile = the file
 # Phase 0.5 wrote (.languages). A missing --phase or an absent profile exits 2/20 every run.
@@ -178,7 +178,7 @@ Per-extension correctness for the common stacks (corrected names — verified on
 
 Dispatch in parallel. **Execution mode**: read
 `../_shared/team-mode.md`; branch on `detect_runtime_mode` (from
-`"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-ra4727e94aae0"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
+`"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
 Teams) vs `SUBAGENTS` (Task tool). Both paths MUST be schema- and severity-equivalent.
 
 Each producer receives: the repo profile, the file's macro record, its changed
@@ -208,6 +208,28 @@ each — never inside the worktree, where the file would land as `??` in the nex
   overflow, keep the summary line plus the highest-severity finding lines first.
 
 Also brief each producer: do not spawn any agent yourself.
+
+Three more inputs, in every round:
+
+- **The acceptance criteria and the path pass** (Phase 1, `passes.md` Phase 5.3), so the
+  testing owner judges proof by the production path, not test count.
+- **The project's convention documents** the repo profile found (`dispatch.md`, Phase 2.0),
+  by path: a rule they state is a finding even when no linter enforces it.
+- **Who actually runs this round.** Name as the owner of a dimension only a producer
+  dispatched in this round; a dimension whose owner is not dispatched is given to a
+  named producer that is, never left to "its owner".
+
+**Domain specialists.** When the changed files or the linked issue carry a keyword of a
+domain row of `../_shared/specialists.md` (a protocol or standard family, a system
+semantics such as systemd), dispatch that specialist too, briefed to check conformance to
+the standard and to cite the clause and the version it checked; a clause it could not
+read is marked unverified, never asserted.
+
+**The dispatcher stays in its turn.** When this skill runs inside a subagent or a
+teammate, it does not end its turn while a producer it started is running: a producer
+whose spawner has stopped cannot hand its result back, and its report reaches the main
+thread instead. Wait on the producers' completion (or on each report file's last
+`status:` line) before Phase 7.
 
 Two-tier effort: a fast default pass; a **deep pass** (whole-repo exploration, ensemble
 over N=3 shuffled passes) only under `--deep` or for security-sensitive/cross-service/large
@@ -254,7 +276,7 @@ For high-stakes diffs run the ensemble: findings in >1 pass -> full confidence; 
 Write the coverage manifest, then hand it to the **non-LLM** verifier:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-ra4727e94aae0"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
      --base "$BASE" --head "$HEAD" --manifest "$MANIFEST"
 ```
 

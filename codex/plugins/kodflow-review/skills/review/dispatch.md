@@ -5,7 +5,7 @@
 **Run `review-context.sh` to collect ALL context in ONE call:**
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-ra4727e94aae0"/skills/_shared/scripts/review-context.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/review-context.sh
 ```
 
 Returns JSON with: `git{branch, platform, org, repo}`, `diff{files, stats}`, `repo_profile{lint_configs}`, `pr{exists, number}`.
@@ -17,7 +17,7 @@ Use this output for ALL decisions. DO NOT re-run individual git commands.
 ```yaml
 context_detection:
   1_collect:
-    command: "bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-ra4727e94aae0"/skills/_shared/scripts/review-context.sh"
+    command: "bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/review-context.sh"
     output: "JSON with git context, diff, repo profile, PR detection"
 
   1.5_platform_detection:
@@ -140,6 +140,9 @@ repo_profile:
       - "README.md"
       - "CONTRIBUTING.md"
       - "ARCHITECTURE.md"
+      - "CLAUDE.md of the root and of every touched directory"
+      - "the project's convention documents: coding style, naming, forbidden patterns, review checklist (wherever the README, CONTRIBUTING or CLAUDE.md points to them)"
+      - ".claude/skills/*/SKILL.md that the project defines (its own conventions skills)"
       - ".editorconfig"
       - ".golangci*"
       - ".eslintrc*"
@@ -190,6 +193,11 @@ intent_analysis:
   extract:
     title: string
     description: string (first 500 chars)
+    acceptance_criteria: |
+      [string] — every success or acceptance criterion of the linked issue (read the whole
+      issue, not its first 500 chars) and of the PR/MR description, verbatim. Each one is
+      traced by the path pass (passes.md, Phase 5.3) and reported in the criteria table
+      (synthesis.md). None found: say so in the report, never invent one.
     labels: [string]
     files_changed: number
     lines_added: number

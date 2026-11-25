@@ -301,6 +301,7 @@ macro:
   - "Every changed public function / new branch has corresponding test coverage; flag changed code with zero touching tests."
   - "Tests assert behavior tied to the change's intent (not merely that it runs); edge/error cases covered."
   - "Mutation signal: would existing tests catch a plausible injected bug in the changed lines? If not, coverage is theatrical."
+  - "Each acceptance criterion is proven through the production entry point and the real dependency (path pass, passes.md Phase 5.3); a proof that runs only against a double that accepts any input is double-only, a finding."
 micro:
   - "Test smells: large/duplicated assertion blocks, missing abstractions, tests asserting implementation not behavior, flaky time/network dependence."
   - "Missing negative tests, missing boundary tests, over-mocked tests that cannot fail."
