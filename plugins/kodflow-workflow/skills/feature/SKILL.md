@@ -125,6 +125,11 @@ say so and propose the smallest version that can. Then follow the user's call.
 
 ### 1.5 — Have the specialists check it
 
+**Normed domain first** (`../_shared/standards.md`): probe the normative source,
+build the conformance matrix for the clauses the feature touches, and put it in
+the issue body. A specialist on a domain row gets the clause text and the
+block of §7 in its brief.
+
 **Mandatory whenever the feature touches a technology with an installed
 specialist.** Route with `../_shared/specialists.md` and dispatch every match in
 one message.

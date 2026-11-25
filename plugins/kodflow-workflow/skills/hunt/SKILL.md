@@ -144,6 +144,7 @@ hunt does not start; nothing is half-created.
 | 8 | Toolchain pinned | `GOTOOLCHAIN=local` is in the scope's env and is set on every command; `-mod=mod` appears nowhere in the scope | refuse |
 | 9 | Not already running | `~/.local/state/hunt/active.json` — `hunt-ledger init` refuses a slug whose owner process is alive | refuse; offer `--status` |
 | 10 | Dry run done once | the ledger of some earlier hunt on this machine holds a complete cycle (finding → confirmed → fixed → integrated) with no permission prompt | warn, and do not leave the hunt unattended until one has run (`tests/e2e-dryrun.sh` proves the scripts; this check proves the permissions) |
+| 11 | Normative source, when the topic is a normed domain (`../_shared/standards.md` §1) | one probe call returning a clause of the scope at the version in force (§2) | refuse; name the source and what restores it |
 
 ### Budget — computed, fixers first
 

@@ -13,7 +13,7 @@ metadata:
   generated-from: plugins/*/skills/feature
   argument-hint: <what the feature is> [--no-branch] [--local] [--status]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /feature — open feature work, keep the trail
@@ -73,7 +73,7 @@ Chain:  /feature → /search → /challenge → /goal
 ### 0 — Locate
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b"/skills/_shared/scripts/detect-tracker.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Resolve the destination per `../_shared/tracker.md` §1, and check whether this
@@ -103,6 +103,11 @@ Ambition check, once, briefly: if the feature as described cannot be verified,
 say so and propose the smallest version that can. Then follow the user's call.
 
 ### 1.5 — Have the specialists check it
+
+**Normed domain first** (`../_shared/standards.md`): probe the normative source,
+build the conformance matrix for the clauses the feature touches, and put it in
+the issue body. A specialist on a domain row gets the clause text and the
+block of §7 in its brief.
 
 **Mandatory whenever the feature touches a technology with an installed
 specialist.** Route with `../_shared/specialists.md` and dispatch every match in

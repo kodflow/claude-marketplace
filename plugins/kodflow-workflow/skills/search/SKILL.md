@@ -225,7 +225,7 @@ record the tier used against every claim in the context file.
 
 | Tier | Sources |
 |------|---------|
-| **1 — normative** | the project's own docs and spec; RFCs (`rfc-editor.org`, `datatracker.ietf.org`); standards bodies (`w3.org`, `owasp.org`, `unicode.org`); `developer.mozilla.org` |
+| **1 — normative** | the project's declared normative source (`../_shared/standards.md` §2); the project's own docs and spec; specifications at a named version from the body that publishes them; RFCs (`rfc-editor.org`, `datatracker.ietf.org`); standards bodies (`w3.org`, `owasp.org`, `unicode.org`); `developer.mozilla.org` |
 | **2 — first-party** | the maintainer's own site, repository, `CHANGELOG`, release notes, migration guide, ADRs, `pkg.go.dev` / `docs.rs` / `docs.python.org` and equivalents |
 | **3 — corroborating** | the maintainer's issue tracker and discussions, a CVE record, a benchmark whose method is published |
 | **4 — orientation only** | blogs, Stack Overflow, tutorials, LLM-generated pages |
@@ -256,6 +256,7 @@ allowing a stale vendor page. Tier, not domain, is the test.
 | Restamp `verified` on a doc you did not actually re-check | **FORBIDDEN** |
 | Write a context file with no "Open questions" section | **FORBIDDEN** — say "none" explicitly |
 | Answer from memory when a fetch failed | **FORBIDDEN** — report the gap |
+| Answer a question on a standard with its source unreachable | **FORBIDDEN** — BLOCKED, put to the user (`../_shared/standards.md` §3) |
 
 ---
 

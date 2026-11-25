@@ -137,7 +137,10 @@ supersedes it. A superseded ADR is replaced by the one in force; a partly
 amended one is handed with its amendment, naming what of the earlier text still
 holds. Hand them to every reviewer, and treat a
 contradiction with one as a finding citing `fichier:ligne`. Every brief also
-names the reference sources per technology topic of the plan (`debate.md`).
+names the reference sources per technology topic of the plan (`debate.md`);
+on a normed topic that source is the clause text at its version, probed first
+(`../_shared/standards.md`), and an unavailable source is put to the user
+before round 1, not debated around.
 
 **If there is no plan**, do not invent one to have something to debate. Say so
 and point at `/plan`. A description given inline is acceptable: structure it into

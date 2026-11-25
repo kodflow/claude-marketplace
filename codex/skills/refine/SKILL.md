@@ -113,6 +113,14 @@ Read the project's documents that concern the slug (the `ok` entries of
 and its ADRs. A directive that contradicts one carries the contradiction in
 `# CONSTRAINTS`, with `fichier:ligne`, and the user is told before `/goal`.
 
+### Normed domain (all modes)
+
+When the work touches a normed domain (`../_shared/standards.md` §1), the
+conformance matrix feeds Phase 3: each `Missing` row becomes an acceptance
+criterion with its clause, or a stated non-goal; a BLOCKED row goes in
+`# CONSTRAINTS` with the clause it waits on, and the user is told before
+`/goal`. With no matrix and the source unavailable, refine stops at §3.
+
 ## Phase 1: AUTO lens depth — FULL mode only
 
 Read `auto.md`. AUTO picks 4-critical-lenses
