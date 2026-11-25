@@ -16,7 +16,7 @@ metadata:
   generated-from: plugins/*/skills/refine
   argument-hint: <slug> | "<description>" [--bare] [--full <slug>] [--lenses light|full]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 the arguments
@@ -111,9 +111,17 @@ resolve_mode_and_slug() {
 ### Project documents (all modes)
 
 Read the project's documents that concern the slug (the `ok` entries of
-`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b"/skills/docs/scripts/docs.sh compute`)
+`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/docs/scripts/docs.sh compute`)
 and its ADRs. A directive that contradicts one carries the contradiction in
 `# CONSTRAINTS`, with `fichier:ligne`, and the user is told before `/goal`.
+
+### Normed domain (all modes)
+
+When the work touches a normed domain (`../_shared/standards.md` §1), the
+conformance matrix feeds Phase 3: each `Missing` row becomes an acceptance
+criterion with its clause, or a stated non-goal; a BLOCKED row goes in
+`# CONSTRAINTS` with the clause it waits on, and the user is told before
+`/goal`. With no matrix and the source unavailable, refine stops at §3.
 
 ## Phase 1: AUTO lens depth — FULL mode only
 
@@ -227,7 +235,7 @@ Read `../_shared/model-policy.md` and resolve the tiers **before** writing the
 plan:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b"/skills/_shared/scripts/detect-models.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/_shared/scripts/detect-models.sh
 ```
 
 Every plan carries the allocation, in one line under its constraints:

@@ -107,6 +107,11 @@ everyone who comes after.
 
 ### 1.5 — Is it actually a defect?
 
+**Normed domain first** (`../_shared/standards.md`): "expected" is what the
+clause says at the version in force, quoted with spec, version and clause, not
+what the code did before. With the source unavailable the report is BLOCKED and
+put to the user, not filed on memory.
+
 **Mandatory whenever the defect touches a technology with an installed
 specialist.** Route with `../_shared/specialists.md`; dispatch every match in one
 message.

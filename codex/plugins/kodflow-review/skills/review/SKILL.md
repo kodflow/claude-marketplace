@@ -20,7 +20,7 @@ metadata:
   generated-from: plugins/*/skills/review
   argument-hint: '[<PR#>|<branch>|<path>] [--loop] [--plan <slug>]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /review — Brutal, Evidence-Bound Code Review (RLM Architecture)
@@ -99,6 +99,7 @@ checked, or downgrade the finding to Needs Verification.
 | 3.7 | **Change-Coupling** | git-log co-occurrence: flag missed sibling/test/doc/migration edits |
 | 4 | **Macro Pass** | Per-file architecture/layering/placement/intent + Mermaid + can_be_split |
 | 5 | **Micro Pass** | Per-function projection-simulation; per-hunk for non-function files |
+| 5.4 | **Conformance pass** | Normed domain only: standard -> code and code -> standard over the clauses the diff touches (`../_shared/standards.md`) |
 | 5.5 | **POC / A-B** | Attempt repro for bugs / benchmark for perf; else demote |
 | 5.7 | **Doc & CLAUDE.md Sync** | Compute touched-dirs+ancestors; list stale docs; emit CLAUDE.md re-sync into the plan (gated by verifier `doc-sync`) |
 | 6 | Specialist Dispatch | Cross-cutting executors + language specialist (via routing table) |
@@ -151,7 +152,7 @@ Findings come from TWO producer classes, both real agents on disk:
 layer rather than a hand-maintained table that drifts:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
   --profile "$SCRATCH/repo-profile.json"               # reads _shared/routing-table.jsonl
 # --phase review = the /review rules (language fanout + react, postgres, protobuf); --profile = the file
 # Phase 0.5 wrote (.languages). A missing --phase or an absent profile exits 2/20 every run.
@@ -178,7 +179,7 @@ Per-extension correctness for the common stacks (corrected names — verified on
 
 Dispatch in parallel. **Execution mode**: read
 `../_shared/team-mode.md`; branch on `detect_runtime_mode` (from
-`"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
+`"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
 Teams) vs `SUBAGENTS` (Task tool). Both paths MUST be schema- and severity-equivalent.
 
 Each producer receives: the repo profile, the file's macro record, its changed
@@ -221,9 +222,10 @@ Three more inputs, in every round:
 
 **Domain specialists.** When the changed files or the linked issue carry a keyword of a
 domain row of `../_shared/specialists.md` (a protocol or standard family, a system
-semantics such as systemd), dispatch that specialist too, briefed to check conformance to
-the standard and to cite the clause and the version it checked; a clause it could not
-read is marked unverified, never asserted.
+semantics such as systemd), dispatch that specialist too, briefed as
+`../_shared/standards.md` section 7 says: the clause text of the conformance pass
+(`passes.md` Phase 5.4) pasted in, the conformance matrix asked back. A clause nobody
+could read is BLOCKED (standards.md section 3), never marked unverified and passed over.
 
 **The dispatcher stays in its turn.** When this skill runs inside a subagent or a
 teammate, it does not end its turn while a producer it started is running: a producer
@@ -276,7 +278,7 @@ For high-stakes diffs run the ensemble: findings in >1 pass -> full confidence; 
 Write the coverage manifest, then hand it to the **non-LLM** verifier:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
      --base "$BASE" --head "$HEAD" --manifest "$MANIFEST"
 ```
 

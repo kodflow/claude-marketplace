@@ -46,7 +46,8 @@ when the change makes a *touched* file WORSE, not on pre-existing debt.
 
 **INCONCLUSIVE (non-APPROVE) is forced when:** verifier failed; canary failed; `--no-poc`
 was used; TRIAGE deferred micro on risk-touched files; or an applicable tier needed for a
-CRITICAL-capable dimension is absent and no manual grounding replaced it. INCONCLUSIVE is
+CRITICAL-capable dimension is absent and no manual grounding replaced it; or a clause the
+conformance pass needs is BLOCKED (`passes.md` Phase 5.4). INCONCLUSIVE is
 the honest outcome and is preferred over a fabricated green manifest.
 
 **Output discipline:** rank by severity × confidence; collapse a nitpicks bucket; cap

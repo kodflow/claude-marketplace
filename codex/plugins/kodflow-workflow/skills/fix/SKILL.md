@@ -14,7 +14,7 @@ metadata:
   generated-from: plugins/*/skills/fix
   argument-hint: <what is broken> [--no-branch] [--local] [--status]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /fix — open a defect, keep the trail
@@ -70,7 +70,7 @@ Chain:  /fix → /debug → /challenge → /goal
 ### 0 — Locate
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b"/skills/_shared/scripts/detect-tracker.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Destination per `../_shared/tracker.md` §1; existing-subject check per §3.
@@ -108,6 +108,11 @@ fix without proving one. A guess written into the issue body reads as fact to
 everyone who comes after.
 
 ### 1.5 — Is it actually a defect?
+
+**Normed domain first** (`../_shared/standards.md`): "expected" is what the
+clause says at the version in force, quoted with spec, version and clause, not
+what the code did before. With the source unavailable the report is BLOCKED and
+put to the user, not filed on memory.
 
 **Mandatory whenever the defect touches a technology with an installed
 specialist.** Route with `../_shared/specialists.md`; dispatch every match in one

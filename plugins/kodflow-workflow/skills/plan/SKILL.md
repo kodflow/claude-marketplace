@@ -211,6 +211,9 @@ Auto-grouping is the PRIMARY method. Manual `worktree: yes/no` tags in the Paral
 ## Execution Flow
 
 ```
+Phase 0.5: Normative source (normed domain only, ../_shared/standards.md)
+  → Probe the source at the version in force; unavailable → ask the user, BLOCKED
+
 Phase 1.0: Peek (RLM Pattern)
   → Recover context from .claude/contexts/
   → Scan project structure
@@ -227,6 +230,8 @@ Phase 3.0: Parallelize (RLM Pattern)
 
 Phase 4.0: Pattern Consultation
   → Consult ~/.claude/docs/ for applicable patterns
+  → Normed domain: the conformance matrix (../_shared/standards.md §4-5) into
+    the context file; every Missing row planned or explicitly out of scope
   → DTO convention reminder (if Go)
 
 Phase 5.0: Synthesize (RLM Pattern)

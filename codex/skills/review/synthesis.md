@@ -174,6 +174,15 @@ CI: {status}
 |-----------|-------|-------|
 | {criterion} | {end-to-end / double-only / none} | {test_file:line or the missing hop} |
 
+## Conformance
+> Normed domain only, from the conformance pass (passes.md, Phase 5.4). Omitted otherwise.
+
+Source: {name} @ {version} — {ok | unavailable}
+
+| Requirement | Clause | In the code | Missing | Next version | Status |
+|-------------|--------|-------------|---------|--------------|--------|
+| {quoted obligation} | {spec version clause} | {file:line or absent} | {gap or none} | {change or none} | {met / missing / broken / BLOCKED} |
+
 ## Critical Issues
 > Must fix before merge
 

@@ -52,7 +52,11 @@ costs more later. This skill forces evidence before edits.
 ### Phase 1 — Reproduce
 
 - Establish the smallest reliable reproduction (a failing test, a curl, a script).
-- Record the exact observed behaviour vs the expected behaviour.
+- Record the exact observed behaviour vs the expected behaviour. In a normed
+  domain the expected behaviour is the clause at the version in force, quoted
+  with its spec, version and clause (`../_shared/standards.md`); with the
+  source unavailable, stop and ask the user, never take the old behaviour as
+  the expected one.
 - If non-deterministic: capture the conditions (timing, concurrency, data, env)
   that change the outcome. Note the failure rate.
 - **Gate:** you have a command/test that fails on demand (or a documented

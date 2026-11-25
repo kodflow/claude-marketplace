@@ -17,7 +17,7 @@ metadata:
   generated-from: plugins/*/skills/challenge
   argument-hint: <plan slug|file|description> [--concurrency N] [--no-codex] [--dry-run]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /challenge — debate the plan, lock the directive
@@ -110,13 +110,16 @@ Resolve the argument to a plan. Read the project's constraint ledger too
 (`CLAUDE.md` and `.claude/constraints.md`) — a plan that violates a recorded
 `MUST` is wrong before any reviewer opens it, and that check costs nothing.
 Same for the project's documents (the `ok` entries of
-`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b"/skills/docs/scripts/docs.sh compute`)
+`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/docs/scripts/docs.sh compute`)
 and the ADRs that concern the plan, each checked for a later ADR that amends or
 supersedes it. A superseded ADR is replaced by the one in force; a partly
 amended one is handed with its amendment, naming what of the earlier text still
 holds. Hand them to every reviewer, and treat a
 contradiction with one as a finding citing `fichier:ligne`. Every brief also
-names the reference sources per technology topic of the plan (`debate.md`).
+names the reference sources per technology topic of the plan (`debate.md`);
+on a normed topic that source is the clause text at its version, probed first
+(`../_shared/standards.md`), and an unavailable source is put to the user
+before round 1, not debated around.
 
 **If there is no plan**, do not invent one to have something to debate. Say so
 and point at `/plan`. A description given inline is acceptable: structure it into

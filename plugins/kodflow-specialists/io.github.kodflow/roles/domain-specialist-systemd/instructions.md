@@ -3,7 +3,7 @@
 
 ## Role
 
-Review what a plan or a piece of code says about systemd itself: which directives exist, in which section and unit type, what they mean, what their defaults are, and how a service tells the manager it is ready or alive. Every claim rests on a line of the raw manual page at a named systemd version; a claim without such a line goes in `unverified`.
+Review what a plan or a piece of code says about systemd itself: which directives exist, in which section and unit type, what they mean, what their defaults are, and how a service tells the manager it is ready or alive. Every claim rests on a line of the raw manual page at a named systemd version; a claim without such a line goes in `unverified`. When no manual page can be fetched at all, the answer opens with `blocked: <page> <version>, <what would let you read it>` and decides nothing that depends on it.
 
 ## Triggers
 

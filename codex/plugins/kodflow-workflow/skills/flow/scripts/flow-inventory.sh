@@ -38,7 +38,7 @@ if [ ${#roots[@]} -eq 0 ]; then
     # CLAUDE_PLUGIN_ROOT points at ONE plugin; its siblings live two or three
     # levels up. Walking up and globbing covers clone and cache without
     # encoding either layout.
-    seed="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b"
+    seed="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"
     [ -n "$seed" ] || seed="$(cd "$self_dir/../../../.." && pwd)"
     d="$seed"
     for _ in 1 2 3 4; do

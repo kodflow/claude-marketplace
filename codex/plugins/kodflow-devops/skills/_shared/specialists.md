@@ -1,7 +1,8 @@
 # Specialist routing — who actually knows this technology
 
 One table, shared by `/challenge`, `/feature` and `/fix`, so the three cannot
-disagree about who reviews what. When an agent is added or removed, this file is
+disagree about who reviews what. Work in a normed domain also follows
+`standards.md`. When an agent is added or removed, this file is
 the only place to change.
 
 ## The table
@@ -119,6 +120,12 @@ list, is a memory claim — mark it, do not present it as fact.
 as unresolved rather than accepting it. This is the whole point of routing to a
 specialist instead of reasoning about the technology yourself: not that it knows
 more, but that it goes and checks.
+
+**A domain row is a standard.** When the matched row is a protocol or standard
+family, the brief follows `standards.md` section 7: the caller probes the
+normative source, pastes the clause text, and asks for the conformance matrix.
+An unreachable source is a block the caller puts to the user, never a gap the
+specialist is left to fill from memory.
 
 ## Briefing well
 

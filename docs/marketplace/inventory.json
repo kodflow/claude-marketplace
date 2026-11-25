@@ -6,12 +6,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-devops/.claude-plugin/plugin.json",
-          "sha256": "63cf2edf172192ece16c1dfba710fd847ce4ae20467850321fbea1647c6eb3ff"
+          "sha256": "110b9655bf553ed4581e771a10538c4767ebc614e3c4f5af5c987af1c99a9ae8"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/plugin.json",
-          "sha256": "2bea2fe94a8275e18dc1f661346dcd1709761fa71650181340ceb7b3290442df"
+          "sha256": "e189f6a2237a83b0900337d117da61e31a4a9de68f72e560e0cf663b286b063c"
         },
         {
           "class": "portable",
@@ -116,7 +116,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-devops/skills/_shared/specialists.md",
-          "sha256": "93e0545b9bbfdc40d4006ee135ffebf6bb6e305dbd72959db7b775b16526718e"
+          "sha256": "a75bf724b1e0f277590758f0e36eb60b3ee312a3728163c98c2223760d546233"
+        },
+        {
+          "class": "portable",
+          "path": "plugins/kodflow-devops/skills/_shared/standards.md",
+          "sha256": "7502fdd3fd2d093b2e5615c721271c4cda30d57b6c21dfe632128594e3427fbf"
         },
         {
           "class": "portable",
@@ -1971,7 +1976,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-review/.claude-plugin/plugin.json",
-          "sha256": "61b5ae27f26296b77261ac22b32ed895d9022107dd0bd6080a935af9194d4a55"
+          "sha256": "5db77ce93513ad26ae80d5d7db7ac6c4c85f48458a64c3075f573c8d39455287"
         },
         {
           "class": "support",
@@ -1996,7 +2001,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/plugin.json",
-          "sha256": "518b4ffe0fb16d7909ddaa017711f0abdbfc59786229500498f21f137c3679ad"
+          "sha256": "81d03ad0b9d13a771a6e0f6de641b1232a127cb5f38ccdb14a9576359276fd84"
         },
         {
           "class": "portable",
@@ -2101,7 +2106,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/_shared/specialists.md",
-          "sha256": "93e0545b9bbfdc40d4006ee135ffebf6bb6e305dbd72959db7b775b16526718e"
+          "sha256": "a75bf724b1e0f277590758f0e36eb60b3ee312a3728163c98c2223760d546233"
+        },
+        {
+          "class": "portable",
+          "path": "plugins/kodflow-review/skills/_shared/standards.md",
+          "sha256": "7502fdd3fd2d093b2e5615c721271c4cda30d57b6c21dfe632128594e3427fbf"
         },
         {
           "class": "portable",
@@ -2126,7 +2136,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/debug/SKILL.md",
-          "sha256": "23e70c9bc9a024a9891cca988293f89ead54d69432ad9c1ce8f6b91401213177"
+          "sha256": "3d7c931b8e0147f20188209acdc38f34b1cedf7502a3b325ed4b80c24155763d"
         },
         {
           "class": "portable",
@@ -2206,12 +2216,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/SKILL.md",
-          "sha256": "a0189dea3f2f5d3818b80ace4d4034ff4ac13539beaf0a8d9cb8d840ddb287a7"
+          "sha256": "2f88656e11488793a36d995888b864ec945987bbf0918707a0b294c5c6d59cd4"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/contract.md",
-          "sha256": "e5854da10479c58a050debac74562ace3de833a2d92c793250b303db6ab350b9"
+          "sha256": "87adb810bb996c993dee2c2b93592f0161e0426cc827eb7055bf5b5f05696935"
         },
         {
           "class": "portable",
@@ -2251,7 +2261,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/passes.md",
-          "sha256": "81b898d757c142c1da2eef2063da08dd2d5c5638b5b45d42d025ccd6175d3ede"
+          "sha256": "97ad34ba292a84cc94a2f269a13f15761dc658265fb5c428c66b69dc3b20edf3"
         },
         {
           "class": "portable",
@@ -2286,7 +2296,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/synthesis.md",
-          "sha256": "8a8db348e56c1600b1a25fc625ec049ffa1821210b3f675922df66abfead6c2f"
+          "sha256": "69fe9cd9e200342fd70afa3ecb2c4d60c34984c18bead7263b7af38b01460dc0"
         },
         {
           "class": "portable",
@@ -2401,7 +2411,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/.claude-plugin/plugin.json",
-          "sha256": "ac198cb36fab3cd077e25045184160d2e79cd772166eaf99a5be8c5747ef093e"
+          "sha256": "bc080f1c6c8f93fae3483cc821b42b8a401f774d1a96f5163fb3885d73e7ed2d"
         },
         {
           "class": "host-extension",
@@ -2541,12 +2551,12 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/domain-specialist-systemd.md",
-          "sha256": "1153a1b363b7d79addcf6b088c6d6391b62e2f5706b9ece2ea60eec041cf35db"
+          "sha256": "6fe5349ee076510de8ebb8d8613d0d9fa2590299f44b2e8c0d0055def1fa17e9"
         },
         {
           "class": "host-extension",
           "path": "plugins/kodflow-specialists/agents/domain-specialist-telecom.md",
-          "sha256": "fc75fdd776f941379f135b4e70b7011df27896a7f0c709541a59dbd1a65f98fa"
+          "sha256": "d52c7ccb8499427fcf517bc6cc19e8e16ec3ca1f3b660bfb2e41332a42c64987"
         },
         {
           "class": "host-extension",
@@ -2856,7 +2866,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/domain-specialist-systemd/instructions.md",
-          "sha256": "dc8cbf690390f07854a43d43329b156ff749156c098f9f79d2f63c1274a61a7a"
+          "sha256": "83e16902ece3a014a11ef21ebd08701530822c22fe95f3808469d823d992f3c1"
         },
         {
           "class": "support",
@@ -2866,7 +2876,7 @@
         {
           "class": "support",
           "path": "plugins/kodflow-specialists/io.github.kodflow/roles/domain-specialist-telecom/instructions.md",
-          "sha256": "0ce2019b57a48ea35f05f50cfaf8a69fca54e9e48f70f576fcbfb55d4cb0038a"
+          "sha256": "e3df3f35ea2e146ac1f06e4a43d8d14c9a23916c81ec94821d253c52ceea3568"
         },
         {
           "class": "support",
@@ -2936,7 +2946,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-specialists/plugin.json",
-          "sha256": "f3e4fd096e55c470b5474bc9e97b8f4f57dd7b9b2559f0d768021f90985e01c9"
+          "sha256": "b79454aa507fd15b72f0eada20c63484f4c38451b56aadce256ebc3bf056c46f"
         }
       ],
       "dependencies": [],
@@ -2951,7 +2961,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-workflow/.claude-plugin/plugin.json",
-          "sha256": "6ce94ec3f886b253c5420cff9b0e5e72e1e4cdb1417904c30a919f933e0b9873"
+          "sha256": "0ce2d5cbb3baf32b83dbe41e783529855164846d78d26642cfdb558734d8478c"
         },
         {
           "class": "support",
@@ -3011,7 +3021,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/plugin.json",
-          "sha256": "942b7132df3584a5578998d1a660794342234cc6692356373a29fe1331a44640"
+          "sha256": "808dee883e013d800e1a8f547c8c31e0299e357bd830edbe0d6d10b1507d8890"
         },
         {
           "class": "portable",
@@ -3116,7 +3126,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/_shared/specialists.md",
-          "sha256": "93e0545b9bbfdc40d4006ee135ffebf6bb6e305dbd72959db7b775b16526718e"
+          "sha256": "a75bf724b1e0f277590758f0e36eb60b3ee312a3728163c98c2223760d546233"
+        },
+        {
+          "class": "portable",
+          "path": "plugins/kodflow-workflow/skills/_shared/standards.md",
+          "sha256": "7502fdd3fd2d093b2e5615c721271c4cda30d57b6c21dfe632128594e3427fbf"
         },
         {
           "class": "portable",
@@ -3136,7 +3151,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/challenge/SKILL.md",
-          "sha256": "291e601cd2045d712d268a24b0f59d2eff41c79e0ba5afa407edb6b1c5432668"
+          "sha256": "f67c7c60bd7fdd6ab87325a2b0d08c88e5f28f6fd773632162aa538d994d1bcc"
         },
         {
           "class": "portable",
@@ -3176,12 +3191,12 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/feature/SKILL.md",
-          "sha256": "f908ec6af2ed5eed91d49dc4a12a4b899630626e5d7a7f60bf8a8785e760f69d"
+          "sha256": "6945ada47746709145e30e1fde4e24af2486c89b17cb623e74775e05a772eaeb"
         },
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/fix/SKILL.md",
-          "sha256": "2b49bc763e5a745da06ae0dd5d225eb87ea6756777b779b9fb9c9134213048f8"
+          "sha256": "39e4d8dae039d51de1a19500a4f3564570272b6847b3bef447bc36811614e45d"
         },
         {
           "class": "portable",
@@ -3206,7 +3221,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/hunt/SKILL.md",
-          "sha256": "b6a7fa454a2e5c0111e197738d333795b8ce94e9105bcc31eca223432f8209b6"
+          "sha256": "def5383aa62b2dce2968c9e19bb34a79ddba9e09478acdb6c9dcd2a98afe0e82"
         },
         {
           "class": "portable",
@@ -3286,7 +3301,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/plan/SKILL.md",
-          "sha256": "d1461599d4624516f97461a6cbe4025307f27a2822f1ff763bd2abc051220ce5"
+          "sha256": "8a0f002e9f9807c1d06d9cdf048db42ad336de99ae0c670975e28e1161aaf95c"
         },
         {
           "class": "portable",
@@ -3346,7 +3361,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/refine/SKILL.md",
-          "sha256": "0abffe2166b682be9df37dde838d7558086af2b560865b34dad572bd679f15fb"
+          "sha256": "9997cbee22c9dc3cb1f6ab53f95b8358379329c408e085f133462d47f91934a6"
         },
         {
           "class": "portable",
@@ -3371,7 +3386,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/search/SKILL.md",
-          "sha256": "da24b41a38a739351f7c83ba4d5bda4861969f486f76b9d480b946ce215aa9f5"
+          "sha256": "1ecc222e0872ce0222e61b4c2ae2c5621591412ec53a11ec0953dd0a72a90b6e"
         },
         {
           "class": "portable",
@@ -3434,7 +3449,7 @@
   "schemaVersion": 1,
   "totals": {
     "agents": 49,
-    "files": 663,
+    "files": 666,
     "hookBundles": 5,
     "plugins": 9,
     "skills": 30
