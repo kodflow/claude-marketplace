@@ -75,6 +75,18 @@ class DecisionMap(unittest.TestCase):
         env = dict(self.env, KODFLOW_CLAUDE_MD_LINES="300", KODFLOW_CLAUDE_MD_TRUNC_CHARS="50000")
         self.assertEqual(self.cli("budget", env=env), "")
 
+    def test_notes_md_is_indexed_like_claude_md(self):
+        sys.path.insert(0, os.path.dirname(SCRIPT))
+        import kf_docs
+        self.put("NOTES.md", "root notes\n")
+        os.makedirs(os.path.join(self.repo, "a", "b"))
+        self.put("a/b/NOTES.md", "deep notes\n")
+        self.put("a/b/other.md", "not indexed\n")
+        got = sorted(os.path.relpath(f, self.repo) for f in kf_docs.repo_files(self.repo))
+        self.assertIn("NOTES.md", got)
+        self.assertIn("a/b/NOTES.md", got)
+        self.assertNotIn("a/b/other.md", got)
+
     def test_export_obsidian_links(self):
         self.put("docs/adr/0002-b.md", adr(2, "new", "Accepted", "- Supersedes: 0001\n"))
         dest = os.path.join(self.tmp, "vault")

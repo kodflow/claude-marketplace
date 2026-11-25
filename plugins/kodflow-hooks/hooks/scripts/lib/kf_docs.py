@@ -12,7 +12,8 @@ SQLite FTS5 with BM25 ranking, no network, no third-party import.
   kf_docs.py export --obsidian DIR [--root DIR]
 
 Indexed per repository (~/.cache/kodflow/docs-index/<sha1(git root)>.db):
-docs/adr/*.md split by "## " section, docs/**/*.md, every CLAUDE.md. A global
+docs/adr/*.md split by "## " section, docs/**/*.md, every CLAUDE.md and NOTES.md (the overflow
+sibling of a CLAUDE.md). A global
 index (global.db) holds ~/.claude/docs and ~/.claude/projects/*/memory.
 Incremental: a file is read again only when its mtime or size changed.
 
@@ -99,7 +100,7 @@ def connect(path):
 
 
 def repo_files(root):
-    """Markdown files worth indexing: docs/**/*.md and every CLAUDE.md."""
+    """Markdown files worth indexing: docs/**/*.md, every CLAUDE.md and NOTES.md."""
     names = []
     try:
         out = subprocess.run(
@@ -121,7 +122,7 @@ def repo_files(root):
         parts = n.split("/")
         if any(p in SKIP_DIRS for p in parts[:-1]):
             continue
-        if parts[-1] == "CLAUDE.md" or parts[0] == "docs":
+        if parts[-1] in ("CLAUDE.md", "NOTES.md") or parts[0] == "docs":
             keep.append(os.path.join(root, n))
     return keep
 

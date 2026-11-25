@@ -1242,7 +1242,8 @@ in CI: see `docs/marketplace/adr-lint-ci.md`.
 ## Document index (`lib/kf_docs.py`)
 
 A stdlib-only SQLite FTS5 index (BM25, no network) of the project's documents:
-`docs/adr/*.md` split by `## ` section, `docs/**/*.md` and every `CLAUDE.md`,
+`docs/adr/*.md` split by `## ` section, `docs/**/*.md`, every `CLAUDE.md` and every
+`NOTES.md` (the sibling a CLAUDE.md overflow is moved into, wherever it sits),
 in `~/.cache/kodflow/docs-index/<sha1(git root)>.db`, plus `global.db` for
 `~/.claude/docs` and `~/.claude/projects/*/memory`. The tokenizer is `unicode61`
 with `tokenchars '.-_/'`, so `0.2.57`, `ADR-0152` and `net/http1` match whole,
