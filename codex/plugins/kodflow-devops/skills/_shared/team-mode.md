@@ -2,7 +2,7 @@
 
 > **Single source of truth** for Agent Teams behavior across all skills.
 > Every team-aware skill `@`-references this file instead of duplicating the detection logic.
-> Implementation: `"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rd869e6ee2c95"/skills/_shared/scripts/team-mode-primitives.sh`
+> Implementation: `"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rdebc4e603c41"/skills/_shared/scripts/team-mode-primitives.sh`
 > Reference: <https://code.claude.com/docs/en/agent-teams>
 
 ---
@@ -60,10 +60,10 @@ Notice: persistent `TMUX` capability can downgrade to `TEAMS_INPROCESS` runtime 
 
 ## 3. Runtime detection (canonical block)
 
-Source `"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rd869e6ee2c95"/skills/_shared/scripts/team-mode-primitives.sh` and call `detect_runtime_mode`. Every team-aware skill starts with:
+Source `"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rdebc4e603c41"/skills/_shared/scripts/team-mode-primitives.sh` and call `detect_runtime_mode`. Every team-aware skill starts with:
 
 ```bash
-source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rd869e6ee2c95/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-devops/0.0.0-rdebc4e603c41/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 case "$MODE" in
     TEAMS_TMUX|TEAMS_INPROCESS) : ;;   # go to TEAMS execution
@@ -192,6 +192,12 @@ When `MODE == SUBAGENTS`:
 1. Use the `Task` tool with `subagent_type` parameter.
 2. Same agents, same prompts, same `task-contract v1` block in the prompt (even though no hook parses it here — future-compat).
 3. No `SendMessage`, no shared task list, no cleanup call.
+3a. A dispatcher that is itself a subagent or a teammate does not end its turn
+    while an agent it started is still running: once the spawner has stopped,
+    the child's hand-back is refused and its report lands in the main thread,
+    where nobody synthesizes it. Run the producers in the foreground, or wait on
+    their completion (or on each report file's last `status:` line) before
+    synthesizing.
 4. Output must be **functionally equivalent** to TEAMS mode:
    - Same report schema
    - Same severity semantics
