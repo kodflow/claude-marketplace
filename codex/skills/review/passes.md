@@ -86,6 +86,43 @@ line>". This kills unfalsifiable check-marks.
 Full taxonomy (macro + micro checks per dimension): **read
 `dimensions.md`**.
 
+### Phase 5.3 — Path pass (per acceptance criterion, mandatory when Phase 1 found criteria)
+
+The micro pass reads one function at a time, so it cannot see what only holds along a
+whole path: a criterion proven nowhere end to end, a deadline that each step respects
+while their sum does not. For **each acceptance criterion** extracted in Phase 1, and
+for each request entry point the diff changes, trace the path from the production entry
+point (route, handler, consumer, CLI command) to the store or peer it reaches, across
+every hunk it crosses, and record:
+
+```yaml
+path_pass:
+  - criterion: "<text from the issue or PR>"
+    path: ["<entry file:line>", "<hop file:line>", "...", "<store/peer file:line>"]
+    proof: "end-to-end | double-only | none"   # which test proves it, and through what
+    proof_at: "<test_file:line>"                # empty when proof == none
+    budget: "<sum of per-step timeouts> vs <server timeout> @ <file:line>"   # when the path sets deadlines
+```
+
+- `end-to-end`: a test drives the production entry point and the real dependency
+  (or a container of it) and reads the outcome back the way the consumer will.
+- `double-only`: the only proof runs against a test double. A double that accepts any
+  input proves the caller's assumption, not the contract: the counterpart's real
+  validation must run on the same payload somewhere (a shared fixture both sides use).
+- `none`: no test reaches the criterion's outcome.
+
+A criterion at `double-only` or `none` is a finding (severity in `triage.md`), owned by
+`developer-executor-quality` (testing dimension). Per-step deadlines along one path are
+summed: a sum above the server's write timeout is a finding owned by
+`developer-executor-design` (perf/resilience), whatever each step does alone.
+
+**Report the class, not the instance.** When a finding is one site of a pattern (a value
+that must not reach a log, an unbounded client string echoed back, a missing deadline, an
+ignored error), the producer lists every site of the same pattern in the touched files
+and in their direct callers and callees, as one finding with a `sites` list. The fix
+closes the class; a re-review that finds one more site of a class already reported
+records it as a miss of that finding, not as a new discovery.
+
 ### Phase 5.5 — POC / A-B (attempt to prove; demote by default)
 
 - **Correctness** -> produce an `input -> wrong output` pair (runnable repro when

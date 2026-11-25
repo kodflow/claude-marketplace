@@ -111,7 +111,7 @@ clean_template: 'clean: "no tainted source reaches a sink; secrets/crypto/authZ 
 
 ```yaml
 dimension: idioms
-owner: developer-specialist-{lang}    # routed via "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-ra4727e94aae0"/skills/_shared/scripts/route-agent.sh (review.md Phase 6)
+owner: developer-specialist-{lang}    # routed via "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r81fbe7bd60c0"/skills/_shared/scripts/route-agent.sh (review.md Phase 6)
 counterexample: repro                  # idiom footgun -> wrong output; PURE style -> nitpick bucket, no CE
 gate: always (fire only on matching file extensions)
 why: |
@@ -301,6 +301,7 @@ macro:
   - "Every changed public function / new branch has corresponding test coverage; flag changed code with zero touching tests."
   - "Tests assert behavior tied to the change's intent (not merely that it runs); edge/error cases covered."
   - "Mutation signal: would existing tests catch a plausible injected bug in the changed lines? If not, coverage is theatrical."
+  - "Each acceptance criterion is proven through the production entry point and the real dependency (path pass, passes.md Phase 5.3); a proof that runs only against a double that accepts any input is double-only, a finding."
 micro:
   - "Test smells: large/duplicated assertion blocks, missing abstractions, tests asserting implementation not behavior, flaky time/network dependence."
   - "Missing negative tests, missing boundary tests, over-mocked tests that cannot fail."

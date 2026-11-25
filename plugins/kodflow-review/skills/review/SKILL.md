@@ -277,6 +277,28 @@ each — never inside the worktree, where the file would land as `??` in the nex
 
 Also brief each producer: do not spawn any agent yourself.
 
+Three more inputs, in every round:
+
+- **The acceptance criteria and the path pass** (Phase 1, `passes.md` Phase 5.3), so the
+  testing owner judges proof by the production path, not test count.
+- **The project's convention documents** the repo profile found (`dispatch.md`, Phase 2.0),
+  by path: a rule they state is a finding even when no linter enforces it.
+- **Who actually runs this round.** Name as the owner of a dimension only a producer
+  dispatched in this round; a dimension whose owner is not dispatched is given to a
+  named producer that is, never left to "its owner".
+
+**Domain specialists.** When the changed files or the linked issue carry a keyword of a
+domain row of `../_shared/specialists.md` (a protocol or standard family, a system
+semantics such as systemd), dispatch that specialist too, briefed to check conformance to
+the standard and to cite the clause and the version it checked; a clause it could not
+read is marked unverified, never asserted.
+
+**The dispatcher stays in its turn.** When this skill runs inside a subagent or a
+teammate, it does not end its turn while a producer it started is running: a producer
+whose spawner has stopped cannot hand its result back, and its report reaches the main
+thread instead. Wait on the producers' completion (or on each report file's last
+`status:` line) before Phase 7.
+
 Two-tier effort: a fast default pass; a **deep pass** (whole-repo exploration, ensemble
 over N=3 shuffled passes) only under `--deep` or for security-sensitive/cross-service/large
 diffs. Never promise per-subagent model selection that Task cannot guarantee. Stamp which

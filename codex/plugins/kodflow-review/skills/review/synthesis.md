@@ -165,6 +165,15 @@ output_generation:
 Mode: {NORMAL|TRIAGE}
 CI: {status}
 
+## Acceptance criteria
+> One row per criterion of Phase 1, from the path pass (passes.md, Phase 5.3).
+> This table catches what no producer finds alone: the gap between the code
+> written and what was asked.
+
+| Criterion | Proof | Where |
+|-----------|-------|-------|
+| {criterion} | {end-to-end / double-only / none} | {test_file:line or the missing hop} |
+
 ## Critical Issues
 > Must fix before merge
 

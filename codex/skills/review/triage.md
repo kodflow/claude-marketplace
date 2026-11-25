@@ -456,36 +456,39 @@ parallel_analysis:
     directive: "MANDATORY for all 5 executor agents"
     scoring_rubric:
       0: "False positive or pre-existing issue (not introduced by this change)"
-      25: "Might be real but unverified; stylistic without CLAUDE.md callout"
+      25: "Might be real but unverified; stylistic without backing in the project's convention documents"
       50: "Real but nitpick/minor, not very important relative to rest of PR"
-      75: "Verified, important, explicit in CLAUDE.md or clearly impacts functionality"
+      75: "Verified, important, explicit in the project's convention documents or clearly impacts functionality"
       100: "Absolutely certain, confirmed, frequent in practice"
     rules:
+      # Confidence never deletes a finding (contract.md, Severity & Confidence Model):
+      # below the bar, the finding keeps its severity and moves to Needs Verification.
       CRITICAL_severity:
         min_confidence: 95
-        on_below: "Downgrade to HIGH or omit if < 75%"
+        on_below: "Needs Verification, severity kept"
       HIGH_severity:
         min_confidence: 85
-        on_below: "Downgrade to MEDIUM or omit if < 75%"
+        on_below: "Needs Verification, severity kept"
       MEDIUM_severity:
         min_confidence: 75
-        on_below: "Omit finding entirely"
-      below_75_percent:
-        action: "DO NOT REPORT - insufficient confidence"
-    claudemd_double_check: |
-      For CLAUDE.md compliance issues: double-check that CLAUDE.md
-      explicitly mentions this guideline before reporting. Do not infer rules.
-    rationale: "Reduce false positives. Only report findings the agent is confident about."
+        on_below: "Needs Verification, severity kept"
+      LOW_severity:
+        on_below_75: "Nitpicks bucket, logged in the appendix"
+    conventions_double_check: |
+      For a convention finding: cite the line of the project's convention document
+      (repo profile: CLAUDE.md chain, CONTRIBUTING, coding-style or forbidden-pattern
+      documents, project skills) that states the rule. Do not infer rules.
+    rationale: "Reduce false positives without losing real defects: weak evidence lowers the tier, never the existence of the finding."
 
   false_positive_exclusions:
     directive: "DO NOT REPORT findings matching any of these patterns"
     general:
       - "Pre-existing issues not introduced by this PR/MR"
-      - "Issues on non-modified lines (unless directly caused by the change)"
+      - "Issues on non-modified lines (unless directly caused by the change, or another site of a pattern found on a modified line: report the class, passes.md Phase 5.3)"
       - "Linter/compiler-catchable issues (defer to automated tools)"
       - "Silenced violations (lint ignore comments with justification)"
       - "Intentional functionality changes (part of the PR purpose)"
-      - "Pedantic nitpicks without explicit CLAUDE.md backing"
+      - "Pedantic nitpicks without backing in the project's convention documents"
       - "Logic that looks buggy but is verified correct"
     security_specific:
       - "Denial of Service vulnerabilities (out of scope)"
@@ -507,6 +510,9 @@ parallel_analysis:
       - "Certain data loss (invariant violation)"
       - "Infinite loop (pagination bug)"
     HIGH:
+      - "Acceptance criterion of the linked issue proven nowhere through the production path (path pass: proof none or double-only)"
+      - "Test that enshrines an assumed shape: a double that accepts any input stands in for the counterpart's real validation"
+      - "Per-step deadlines of one request path summing above the server's timeout"
       - "Probable bug (null deref, race condition)"
       - "Silent failure (error swallowed)"
       - "Layering violation (domain → infra)"

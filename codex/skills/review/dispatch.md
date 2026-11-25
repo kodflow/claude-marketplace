@@ -140,6 +140,9 @@ repo_profile:
       - "README.md"
       - "CONTRIBUTING.md"
       - "ARCHITECTURE.md"
+      - "CLAUDE.md of the root and of every touched directory"
+      - "the project's convention documents: coding style, naming, forbidden patterns, review checklist (wherever the README, CONTRIBUTING or CLAUDE.md points to them)"
+      - ".claude/skills/*/SKILL.md that the project defines (its own conventions skills)"
       - ".editorconfig"
       - ".golangci*"
       - ".eslintrc*"
@@ -190,6 +193,11 @@ intent_analysis:
   extract:
     title: string
     description: string (first 500 chars)
+    acceptance_criteria: |
+      [string] — every success or acceptance criterion of the linked issue (read the whole
+      issue, not its first 500 chars) and of the PR/MR description, verbatim. Each one is
+      traced by the path pass (passes.md, Phase 5.3) and reported in the criteria table
+      (synthesis.md). None found: say so in the report, never invent one.
     labels: [string]
     files_changed: number
     lines_added: number
