@@ -851,7 +851,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "ed32bb50a5b31de80ae0b6453839f61346a15922ba52d5a9e03378e63984f702"
+          "sha256": "98f1f3157ed7e76fffd9591bf038ef3c741d0020cfaef8c2d255e1a88bcf7d0f"
         },
         {
           "class": "support",
@@ -1096,7 +1096,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/kf_docs.py",
-          "sha256": "4312def52b836dbbc3a28b9dfbde28601c0f6b18535a34062bec055862197e6d"
+          "sha256": "4061006f4e2658ea6795fd6357f99a3a7282e1a318a2a2dbbc3b2bd40876115c"
         },
         {
           "class": "host-extension",
@@ -1201,7 +1201,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "88605f33241f50a4078be99d614781e1b2a77fb079a242ace923c92cf44b6847"
+          "sha256": "44f4c696fc6de75ace9f397e27074bf77a022daee7e20c179706cbf2b0fba27d"
         },
         {
           "class": "verification",
@@ -1466,7 +1466,7 @@
         {
           "class": "verification",
           "path": "plugins/kodflow-hooks/tests/test_decision_map.py",
-          "sha256": "42d3e283ce692a258df55eac05654e2fee7526cb833b8c7f652d37619b60e80c"
+          "sha256": "cd51cd7c7677680155025296986623b1def31a045cbdf2b4f5845988482d52ca"
         },
         {
           "class": "verification",
@@ -2951,7 +2951,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-workflow/.claude-plugin/plugin.json",
-          "sha256": "41c9b9b5e1e59f8b1ad612aa53005290222b3b7d7d2de7dc7e345cc29ca18401"
+          "sha256": "6ce94ec3f886b253c5420cff9b0e5e72e1e4cdb1417904c30a919f933e0b9873"
         },
         {
           "class": "support",
@@ -3011,7 +3011,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/plugin.json",
-          "sha256": "1ee9811cad07855f515dce91f35034fd364953dd865c24d102761ca6095eb699"
+          "sha256": "942b7132df3584a5578998d1a660794342234cc6692356373a29fe1331a44640"
         },
         {
           "class": "portable",
@@ -3401,7 +3401,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/warmup/SKILL.md",
-          "sha256": "5bc221634e7b44fba0b269d1a49c42b5bc68ef25987b11630cf3c14c1eb57dd3"
+          "sha256": "db64b89596492711943da28aff89e3457ca0a8dea244181547a5bcc684aa878b"
         },
         {
           "class": "portable",

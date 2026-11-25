@@ -69,6 +69,9 @@ class DecisionMap(unittest.TestCase):
         self.assertNotIn("sub/CLAUDE.md", out)
         self.assertIn("big/CLAUDE.md 41000 chars: truncated on a 200K window", out)
         self.assertLess(out.index("big/CLAUDE.md"), out.index("CLAUDE.md 201"))
+        os.makedirs(os.path.join(self.repo, ".claude"))
+        self.put(".claude/CLAUDE.md", "w" * 41000)
+        self.assertNotIn(".claude/CLAUDE.md", self.cli("budget"))
         env = dict(self.env, KODFLOW_CLAUDE_MD_LINES="300", KODFLOW_CLAUDE_MD_TRUNC_CHARS="50000")
         self.assertEqual(self.cli("budget", env=env), "")
 

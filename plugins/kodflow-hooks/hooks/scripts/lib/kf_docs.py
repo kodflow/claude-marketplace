@@ -407,7 +407,7 @@ def cmd_budget(a):
             continue
         rel = os.path.relpath(f, root)
         n = text.count("\n") + (1 if text and not text.endswith("\n") else 0)
-        if rel != "CLAUDE.md" and len(text) > trunc:
+        if rel not in ("CLAUDE.md", ".claude/CLAUDE.md") and len(text) > trunc:
             cut.append((-len(text), rel, n))
         elif n > lim:
             over.append((-n, rel))

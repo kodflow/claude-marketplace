@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-workflow",
-  "version": "0.0.0-r34964fae4afd",
+  "version": "0.0.0-ra9f51834ea2b",
   "description": "The work loop: open a tracked piece of work, research it, plan it, argue the plan, turn it into an executable contract, ship it. Each skill hands the next exactly what it needs, and every step leaves a trail the next session can read.",
   "author": {
     "name": "kodflow",

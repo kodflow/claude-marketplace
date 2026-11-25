@@ -91,9 +91,10 @@ CLAUDE.md size thresholds (official guidance, https://code.claude.com/docs/en/me
                               default 200; KODFLOW_CLAUDE_MD_BUDGET=off lifts it)
   FORBIDDEN   a subdirectory CLAUDE.md (loaded on demand) over 40 000 characters
               (`wc -m`) = "truncated on a 200K window" (KODFLOW_CLAUDE_MD_TRUNC_CHARS);
-              over 150 000 = "truncated everywhere". Must be split.
-  A root CLAUDE.md is loaded whole (skipped entirely above 4 MiB): it is only
-  held to the 200 lines.
+              over 150 000 = truncated on a 1M window too (200 000 on Opus 4.6
+              and Sonnet 4.6). Must be split.
+  A root CLAUDE.md is loaded whole, so it is only held to the 200 lines; above
+  4 MiB Claude Code skips it entirely (FORBIDDEN: split it).
   A file warmup creates starts from the short template; a file it moves is
   bounded by this table only.
   --update proposes a new CLAUDE.md only where no ancestor covers the

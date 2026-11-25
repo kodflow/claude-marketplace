@@ -13,7 +13,7 @@ metadata:
   generated-from: plugins/*/skills/docs
   argument-hint: '[<id>[,<id>…]] [--mode ask|context|both] [--help]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r34964fae4afd`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /docs — the project's missing documents
@@ -83,7 +83,7 @@ ignored.
 ## Phase 0 — State
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r34964fae4afd"/skills/docs/scripts/docs.sh state "${CLAUDE_SESSION_ID}"
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b"/skills/docs/scripts/docs.sh state "${CLAUDE_SESSION_ID}"
 ```
 
 kodflow-hooks' `docs.json` when it exists for this repository, otherwise the
@@ -214,7 +214,7 @@ move a document; a run that only writes at default paths leaves no manifest.
 ## Phase 5 — Verify and hand off
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r34964fae4afd"/skills/docs/scripts/docs.sh compute
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b"/skills/docs/scripts/docs.sh compute
 ```
 
 Each written target must read `ok`, each ignored one `ignored`. Then print

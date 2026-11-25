@@ -14,7 +14,7 @@ metadata:
   generated-from: plugins/*/skills/hunt
   argument-hint: '"<topic>" | --resume <slug> | --status <slug> | --teardown <slug> [--force]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r34964fae4afd`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /hunt — hunt a topic's defects until a frozen pass finds none
@@ -225,7 +225,7 @@ language of each repository. Root reads the module before entering its phase.
   longer answers, a fresh agent gets a brief rebuilt from the ledger.
 - **Never use a fork** (`subagent_type: "fork"`) — preflight disables it; every
   role starts from a brief, not from root's context.
-- Resolve the plugin path once per session (`${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r34964fae4afd`) and put it in
+- Resolve the plugin path once per session (`${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-ra9f51834ea2b`) and put it in
   every brief; never persist it — it changes with each plugin update.
 - Every brief sets `HUNT_SLUG=<slug>`, `HUNT_REPO=<repo>` and `HUNT_TOKENS` for
   the role's `hunt-queue` calls.
