@@ -851,7 +851,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/.claude-plugin/plugin.json",
-          "sha256": "7091d69cbfabb9739ec8a396512f9fecab0b82696da0467c9074cc03db67db4e"
+          "sha256": "ee59a48a6e42679ccb86b084a6d4a9af2a07ac90a31b489e42dbec04dfc5b7e0"
         },
         {
           "class": "support",
@@ -1096,7 +1096,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-hooks/hooks/scripts/lib/kf_docs.py",
-          "sha256": "d2f089aeb552936eb7f33ce1caeb150465e2f4a1c2c53a7e945435148b62b7e0"
+          "sha256": "d6dfa0bdb4592617887e36e52db904b5b2a9c176142db65f094696181d28dae5"
         },
         {
           "class": "host-extension",
@@ -1201,7 +1201,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-hooks/plugin.json",
-          "sha256": "7177a9d929240f1c9db46ae46a9f1d568715b382d7b0fd56d2cb071d7de274ad"
+          "sha256": "159bf1622fdc9bdf8776d06dc5b88ad07b86f0b78b8f5dd1a1148b728f70e560"
         },
         {
           "class": "verification",

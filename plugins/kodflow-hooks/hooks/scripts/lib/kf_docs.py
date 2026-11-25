@@ -406,7 +406,7 @@ def cmd_budget(a):
                 text = fh.read()
         except OSError:
             continue
-        rel = os.path.relpath(f, root)
+        rel = os.path.relpath(f, root).replace(os.sep, "/")
         n = text.count("\n") + (1 if text and not text.endswith("\n") else 0)
         if rel not in ("CLAUDE.md", ".claude/CLAUDE.md") and len(text) > trunc:
             cut.append((-len(text), rel, n))
