@@ -14,7 +14,7 @@ metadata:
   generated-from: plugins/*/skills/fix
   argument-hint: <what is broken> [--no-branch] [--local] [--status]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re0b9503e8e7b`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rd4f4a38806e9`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /fix — open a defect, keep the trail
@@ -70,7 +70,7 @@ Chain:  /fix → /debug → /challenge → /goal
 ### 0 — Locate
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re0b9503e8e7b"/skills/_shared/scripts/detect-tracker.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rd4f4a38806e9"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Destination per `../_shared/tracker.md` §1; existing-subject check per §3.

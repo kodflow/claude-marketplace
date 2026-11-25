@@ -177,7 +177,7 @@ the shortest contract that survives, never pads to fill it.
 
 `kodflow-review` · opus lead, per-role producers · **Evidence-bound review**
 
-**Type** `/review [<PR#>|<branch>|<path>] [--loop] [--plan <slug>]`
+**Type** `/review [<PR#>|<branch>|<path>] [--loop] [--plan <slug>] [--comment] [--full [--merge]]`
 
 | | |
 |---|---|
@@ -189,7 +189,9 @@ the shortest contract that survives, never pads to fill it.
 | gate | no finding ships without `file:line` of real cited code plus a counterexample. Severity and confidence are decoupled: a high-severity low-confidence finding is routed to "Needs Verification", never dropped. |
 
 `--loop` converges on correctness, not on tone. Tool-absent is a distinct
-outcome from not-applicable.
+outcome from not-applicable. `--full` commits, opens the PR/MR, reviews, has
+the fixes delivered, watches CI, conflicts and comments until merged or closed,
+and merges only on your answer or `--merge`.
 
 ---
 

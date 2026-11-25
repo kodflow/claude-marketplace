@@ -47,7 +47,7 @@ peek_workflow:
       # does not exist for a plugin install: start from the skill's base directory
       # (given when the skill loaded; the script is its sibling _shared/).
       D="<base directory of this skill>/../_shared/scripts"
-      [ -f "$D/detect-project.sh" ] || D="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re0b9503e8e7b/skills/_shared/scripts"
+      [ -f "$D/detect-project.sh" ] || D="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rd4f4a38806e9/skills/_shared/scripts"
       [ -f "$D/detect-project.sh" ] || D=$(dirname "$(find "$HOME/.claude/plugins" -path '*kodflow-workflow*/skills/_shared/scripts/detect-project.sh' 2>/dev/null | head -1)")
       [ -f "$D/detect-project.sh" ] && bash "$D/detect-project.sh"
       # the allowed-tools rule is Bash(bash *detect-project.sh): the literal tail matters

@@ -1971,7 +1971,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-review/.claude-plugin/plugin.json",
-          "sha256": "d8c9204f50b613bb806522e8e89fee9158ac877492cd788a07d1b07dd509d817"
+          "sha256": "4430d01c3947521879350ec0e74ea8d7eb3cc577b0b0ed3998d45e1cacf1715c"
         },
         {
           "class": "support",
@@ -1996,7 +1996,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/plugin.json",
-          "sha256": "e8c2e738bc39a3d4cf04872925a7784ff92c3fa1a0e5b46cc3c66b2950476290"
+          "sha256": "d22eb12ef75fb2f7fa257f8a06c81d4eaa684b03cc1e261ff3c23fc9d03ef66d"
         },
         {
           "class": "portable",
@@ -2206,7 +2206,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/SKILL.md",
-          "sha256": "9387fd07c7822274c909f3852cffcbe04267e4658cfe63454f20824ecee6c567"
+          "sha256": "a6d583db8d1661f75585d0ccd269a608d192575b46b030ce0cf589413c72c17e"
         },
         {
           "class": "portable",
@@ -2216,7 +2216,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/cyclic.md",
-          "sha256": "d8e63f4bda6e84992abb4a096898b4fbd325ae595dd1ffa73ac21afeb1ee4ae9"
+          "sha256": "630be4fc79ba3578908e3769ac19063d72ae0675d65b426d770cb82737612498"
         },
         {
           "class": "portable",
@@ -2235,6 +2235,11 @@
         },
         {
           "class": "portable",
+          "path": "plugins/kodflow-review/skills/review/full.md",
+          "sha256": "36dc5f05294ff100c6b9b5713640b97b8f0d98a600f11316c810fcbba412295d"
+        },
+        {
+          "class": "portable",
           "path": "plugins/kodflow-review/skills/review/graph.md",
           "sha256": "628ca8fbd1cccc4752f6f7a4406d61f50d9e6b3c6a2e3aec8d146db4bd0d3efc"
         },
@@ -2246,7 +2251,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/output.md",
-          "sha256": "786ad22153c8f1ea8725ddb00ecd28cbc566774a21d36b0847702af97e4fac54"
+          "sha256": "4f7ea0059668da0fb5bfb5e7fe2ae1e8676e9cf4741106fa9dafb29bf55c1d84"
         },
         {
           "class": "portable",
@@ -2286,7 +2291,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/synthesis.md",
-          "sha256": "e348a244b452f75ce022f5b25afc848e1652fa55698ffdd5c429ed00d536a25b"
+          "sha256": "c937409f626108d11e52ab8e8fe35780f66115c0b97ab7f54c50136dbd54e5cb"
         },
         {
           "class": "portable",
@@ -2296,7 +2301,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-review/skills/review/triage.md",
-          "sha256": "36338af63c6134e7a582d134998c784b508afdcf3fc05b5401cc5c7f186474c3"
+          "sha256": "42cbf1d2c7cc404559a6d09cb92534117ad29095710062f106289f67d7ba12e7"
         },
         {
           "class": "verification",
@@ -2951,7 +2956,7 @@
         {
           "class": "host-extension",
           "path": "plugins/kodflow-workflow/.claude-plugin/plugin.json",
-          "sha256": "0c95144afa274ef92630ba832a615a8198db7dc4a37738fc7df81172126e3b1a"
+          "sha256": "74db7dbd157b8763dcf6a418b18b8710d82c103f827c247f7fcce1d5dfbf8fff"
         },
         {
           "class": "support",
@@ -3011,7 +3016,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/plugin.json",
-          "sha256": "d19d57cdef65aa1dac85fd4b9828dfcb4d50b0c150a5bf443c077d871c41ab8b"
+          "sha256": "1b611c1cad402135575300fea709c3a663407fd69c7dcd5ad9be5643f2becd06"
         },
         {
           "class": "portable",
@@ -3196,7 +3201,7 @@
         {
           "class": "portable",
           "path": "plugins/kodflow-workflow/skills/flow/reference.md",
-          "sha256": "2a1729167734d64839d92c4f5ac2039e84150ab14cc85cf614a3e7007f8233d7"
+          "sha256": "b91eb12bbb36687ebf79ba2a042bdd4ae884f3c100ccba61e792066b9cc478aa"
         },
         {
           "class": "portable",
@@ -3434,7 +3439,7 @@
   "schemaVersion": 1,
   "totals": {
     "agents": 49,
-    "files": 663,
+    "files": 664,
     "hookBundles": 5,
     "plugins": 9,
     "skills": 30

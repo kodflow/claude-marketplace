@@ -3,7 +3,7 @@
 The locator script is the only source of truth for paths:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-re0b9503e8e7b"/skills/project/scripts/locate-code-home.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rd4f4a38806e9"/skills/project/scripts/locate-code-home.sh
 ```
 
 It prints `KEY=VALUE` lines. Read them; do not re-derive any of them by hand.
