@@ -240,7 +240,7 @@ question_handling:
 
         [Post / Edit / Skip]
 
-    4_user_validates: "AskUserQuestion before posting"
+    4_user_validates: "AskUserQuestion before posting (skipped under --comment / --full, which post — output.md)"
     5_post:
       github_inline:
         preferred: "gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies -f body='{answer}'"

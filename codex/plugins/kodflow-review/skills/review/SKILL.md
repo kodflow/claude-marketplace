@@ -18,9 +18,9 @@ metadata:
   short-description: 'Brutally rigorous, evidence-bound AI code review (RLM decomposition)
     for GitHub '
   generated-from: plugins/*/skills/review
-  argument-hint: '[<PR#>|<branch>|<path>] [--loop] [--plan <slug>]'
+  argument-hint: '[<PR#>|<branch>|<path>] [--loop] [--plan <slug>] [--comment] [--full [--merge]]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r4ab4c72ea0a9`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r8dd72e7a7924`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /review — Brutal, Evidence-Bound Code Review (RLM Architecture)
@@ -93,7 +93,7 @@ checked, or downgrade the finding to Needs Verification.
 | 1 | Intent + Risk | Parse PR/MR + linked issue; risk tags; acceptance criteria |
 | 1.5 | Describe | Auto-generate PR/MR description only if missing (drafted for user) |
 | 2 | Feedback | Collect ALL comments/reviews (human vs bot) |
-| 2.5 | Questions | Draft answers to human questions (NO AI mention — delivered as DRAFTS only) |
+| 2.5 | Questions | Draft answers to human questions (NO AI mention — DRAFTS, posted only under --comment / --full) |
 | 3 | **Deterministic Tiers** | Run linters/SAST/SCA/secrets/IaC + build + existing tests; capture exit codes |
 | 3.5 | **Call/Dependency Graph** | Per changed symbol: callers/dependents (bounded blast radius) |
 | 3.7 | **Change-Coupling** | git-log co-occurrence: flag missed sibling/test/doc/migration edits |
@@ -108,6 +108,7 @@ checked, or downgrade the finding to Needs Verification.
 | 9 | Synthesis | Decoupled verdict (0–5 / INCONCLUSIVE), tiers, Needs-Verification, LOCAL report |
 | 9.5 | Fix Patches | Per actionable finding: /refine→/goal-ready patch, validated in worktree when buildable |
 | 10 | Cyclic | --loop: review -> /refine -> /goal -> re-review until correctness-clear AND verifier-green |
+| 11 | **Full lifecycle** | --full: commit, push, open PR/MR, review, fix via subagents, watch CI/conflicts/comments, merge on request (`full.md`) |
 
 **RLM:** Peek -> Decompose -> Parallelize -> Synthesize.
 
@@ -151,7 +152,7 @@ Findings come from TWO producer classes, both real agents on disk:
 layer rather than a hand-maintained table that drifts:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r4ab4c72ea0a9"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r8dd72e7a7924"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
   --profile "$SCRATCH/repo-profile.json"               # reads _shared/routing-table.jsonl
 # --phase review = the /review rules (language fanout + react, postgres, protobuf); --profile = the file
 # Phase 0.5 wrote (.languages). A missing --phase or an absent profile exits 2/20 every run.
@@ -178,7 +179,7 @@ Per-extension correctness for the common stacks (corrected names — verified on
 
 Dispatch in parallel. **Execution mode**: read
 `../_shared/team-mode.md`; branch on `detect_runtime_mode` (from
-`"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r4ab4c72ea0a9"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
+`"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r8dd72e7a7924"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
 Teams) vs `SUBAGENTS` (Task tool). Both paths MUST be schema- and severity-equivalent.
 
 Each producer receives: the repo profile, the file's macro record, its changed
@@ -254,7 +255,7 @@ For high-stakes diffs run the ensemble: findings in >1 pass -> full confidence; 
 Write the coverage manifest, then hand it to the **non-LLM** verifier:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r4ab4c72ea0a9"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r8dd72e7a7924"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
      --base "$BASE" --head "$HEAD" --manifest "$MANIFEST"
 ```
 
@@ -306,8 +307,9 @@ Cyclic details: **read `cyclic.md`**.
 
 ## Output, flags, and budget
 
-Report layout, the flag reference (`--loop`, `--plan`, `--comment`, scope
-selectors), and the budget controller for large diffs: read `output.md`.
+Report layout, the flag reference (`--loop`, `--plan`, `--comment`, `--full`,
+`--merge`, scope selectors), and the budget controller for large diffs: read
+`output.md`. Under `--full`, read `full.md` for the delivery lifecycle.
 
 ## Module Breakdown
 
@@ -329,6 +331,7 @@ Every module lives beside this file. Read one when you reach its phase.
 | `synthesis.md` | Verdict incl. INCONCLUSIVE, Needs-Verification gate, local report, `/plan` output |
 | `output.md` | Report layout, flag reference, budget controller |
 | `cyclic.md` | `--loop` correctness gate, patch-ID tracking, guardrails |
+| `full.md` | `--full` — commit, open, review, fix, watch the PR/MR, merge on request |
 
 The verdict-gating guardrails are duplicated in this file **and** in the verifier
 script, so a budget-pressured run cannot bypass them by skipping a module.
@@ -339,7 +342,7 @@ script, so a budget-pressured run cannot bypass them by skipping a module.
 
 | Action | Status |
 |--------|--------|
-| Auto-approve / auto-merge | FORBIDDEN |
+| Auto-approve; merge without the user's go | FORBIDDEN (`--full` merges on the user's answer, `--merge` or an explicit instruction — `full.md`) |
 | APPROVE without a verifier-passed coverage manifest | FORBIDDEN (invalid run) |
 | Self-attest coverage without the external verifier | FORBIDDEN |
 | Drop a high-severity finding for low confidence | FORBIDDEN (demote to gating Needs-Verification) |
@@ -353,8 +356,8 @@ script, so a budget-pressured run cannot bypass them by skipping a module.
 | Return APPROVE after --no-poc or TRIAGE micro-defer | FORBIDDEN (INCONCLUSIVE) |
 | Use `sg` for AST search | FORBIDDEN (it is newgrp) |
 | Suppress a finding without citing the justifying line | FORBIDDEN (itself a finding) |
-| Modify repo code directly | FORBIDDEN (patches go to /plan) |
-| Post comments / MR-PR replies | FORBIDDEN (drafts for user only) |
-| Mention AI in PR/MR draft responses | ABSOLUTE FORBIDDEN |
+| Modify repo code directly | FORBIDDEN (patches go to /plan; under `--full`, subagents deliver them) |
+| Post comments / MR-PR replies | only with `--comment` or `--full`; otherwise drafts for the user |
+| Mention AI, or attribute to it, in anything posted, committed or titled | ABSOLUTE FORBIDDEN |
 | Expose secrets in evidence/output | FORBIDDEN (mask AWS/PAT/JWT/PEM/Bearer) |
 | Politeness inflation / "LGTM" without proof | FORBIDDEN |

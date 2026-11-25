@@ -6,9 +6,16 @@ the findings are settled and the report is being written.
 
 ## Output
 
-LOCAL only — **never posts** review comments or MR/PR replies. Phase 2.5 answers and Phase
-1.5 descriptions are emitted as **drafts the user may choose to post** (with the NO-AI-
-mention rule applied to the draft text). Generates:
+Posting depends on the flags:
+
+| Flags | Posts on the PR/MR |
+|-------|--------------------|
+| none | nothing — LOCAL only. Phase 2.5 answers and Phase 1.5 descriptions are **drafts the user may choose to post** |
+| `--comment` | the Confirmed and Needs-Verification findings as inline comments, and the Phase 2.5 answers |
+| `--full` | the same, plus replies to every review comment (human or bot) and the resolution of the threads it fixed — `full.md` |
+
+The NO-AI-mention rule applies to everything posted, committed or titled, drafts
+included. Generates:
 - Console report: walkthrough, Mermaid (when applicable), verdict (0–5 or INCONCLUSIVE),
   Confirmed findings (by severity×confidence), **Needs-Verification tier (gating)**,
   nitpicks bucket, tier-status table (from `.out`), verifier result, coverage-manifest
@@ -25,6 +32,11 @@ Synthesis details: **read `synthesis.md`**.
 ```
 /review                     # Single review (no fix, no loop)
 /review --loop [N]          # Cyclic until correctness-clear AND verifier-green
+/review --comment           # Post the findings and answers on the PR/MR (no fix, no watch)
+/review --full [<PR#>|<branch>]   # Commit, push, open PR/MR, review, fix, watch until merged/closed (full.md)
+/review --full --merge      # Same, and merge when everything is green without asking
+                            #   (an explicit "merge it" in the prompt does the same; never for a
+                            #   third-party PR or a production deploy)
 /review --pr <n>            # GitHub PR    /review --mr <n>   # GitLab MR
 /review --staged            # Staged changes only
 /review --file <path>       # Single file (still macro+micro+manifest+verifier for it)
