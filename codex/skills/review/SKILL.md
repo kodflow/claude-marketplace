@@ -97,6 +97,7 @@ checked, or downgrade the finding to Needs Verification.
 | 3.7 | **Change-Coupling** | git-log co-occurrence: flag missed sibling/test/doc/migration edits |
 | 4 | **Macro Pass** | Per-file architecture/layering/placement/intent + Mermaid + can_be_split |
 | 5 | **Micro Pass** | Per-function projection-simulation; per-hunk for non-function files |
+| 5.4 | **Conformance pass** | Normed domain only: standard -> code and code -> standard over the clauses the diff touches (`../_shared/standards.md`) |
 | 5.5 | **POC / A-B** | Attempt repro for bugs / benchmark for perf; else demote |
 | 5.7 | **Doc & CLAUDE.md Sync** | Compute touched-dirs+ancestors; list stale docs; emit CLAUDE.md re-sync into the plan (gated by verifier `doc-sync`) |
 | 6 | Specialist Dispatch | Cross-cutting executors + language specialist (via routing table) |
@@ -219,9 +220,10 @@ Three more inputs, in every round:
 
 **Domain specialists.** When the changed files or the linked issue carry a keyword of a
 domain row of `../_shared/specialists.md` (a protocol or standard family, a system
-semantics such as systemd), dispatch that specialist too, briefed to check conformance to
-the standard and to cite the clause and the version it checked; a clause it could not
-read is marked unverified, never asserted.
+semantics such as systemd), dispatch that specialist too, briefed as
+`../_shared/standards.md` section 7 says: the clause text of the conformance pass
+(`passes.md` Phase 5.4) pasted in, the conformance matrix asked back. A clause nobody
+could read is BLOCKED (standards.md section 3), never marked unverified and passed over.
 
 **The dispatcher stays in its turn.** When this skill runs inside a subagent or a
 teammate, it does not end its turn while a producer it started is running: a producer

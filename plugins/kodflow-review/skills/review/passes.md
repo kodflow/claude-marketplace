@@ -123,6 +123,40 @@ and in their direct callers and callees, as one finding with a `sites` list. The
 closes the class; a re-review that finds one more site of a class already reported
 records it as a miss of that finding, not as a new discovery.
 
+### Phase 5.4 — Conformance pass (normed domain only, mandatory there)
+
+Applies when the diff or the linked issue is in a normed domain
+(`../_shared/standards.md` section 1). The micro pass asks whether each hunk follows its
+standard; this pass also asks what the standard requires that no hunk does.
+
+1. Probe the normative source (standards.md section 2) before anything else. Unavailable:
+   ask the user at once (section 3); the clauses it blocks are listed, and the verdict is
+   INCONCLUSIVE until they are read (`contract.md`).
+2. List the clauses the diff touches: those cited in the code, the issue or the PR, and
+   those governing each message, field, state or procedure a hunk handles, at the version
+   in force.
+3. **Standard -> code.** For each clause, enumerate every obligation it states (standards.md
+   section 5 lists what to read for) and find the `file:line` that meets it.
+4. **Code -> standard.** For each hunk on a normed element, the clause it follows or breaks.
+5. Note what the next version of each clause changes.
+
+```yaml
+conformance_pass:
+  source: "<name> @ <version> — ok | unavailable: <message>"
+  rows:
+    - requirement: "<obligation, quoted>"
+      clause: "<spec> <version> <clause>"
+      in_code: "<file:line> | absent"
+      missing: "<what is not done> | none"
+      next_version: "<change> | no change in <version checked> | not read: <why>"
+      status: "met | missing | broken | BLOCKED"
+```
+
+A `missing` or `broken` row is a finding, owned by the domain specialist dispatched in
+Phase 6 (or reviewed inline and labelled unbacked when none is installed); `missing` on an
+obligation the change was meant to deliver is at least HIGH. The rows also go in the
+report (`synthesis.md`, « Conformance »).
+
 ### Phase 5.5 — POC / A-B (attempt to prove; demote by default)
 
 - **Correctness** -> produce an `input -> wrong output` pair (runnable repro when
