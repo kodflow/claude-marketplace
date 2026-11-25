@@ -635,7 +635,7 @@ Shared vectors: `tests/fixtures/tier-vectors.jsonl` is read by
 `tests/mod/tier-vectors.ts` (`scripts/check-tier-vectors.sh --write`), by
 `tests/mod/tier.test.ts`.
 
-### Agent feedback (`KODFLOW_FEEDBACK=off`)
+### Agent feedback (`KODFLOW_FEEDBACK=off` · `quiet`)
 
 `SubagentStart` adds rule 6: end the answer with `## Agent feedback` (an
 `agent_feedback` key in JSON) naming what in the agent's own instructions was
@@ -643,7 +643,8 @@ wrong, missing or ambiguous, or nothing. `SubagentStop` (`last_assistant_message
 and `PostToolUse` `SubagentHandback` (`tool_input.message`, auto mode) both
 carry the report; its feedback is kept once per agent and text as one line of
 `<session>/agent-feedback.jsonl` (`lib/feedback.jq`): time, session, agent
-type and id, model, effort, `source` and the feedback, redacted with the log's
+type (the `subagent_type` the parent's `Agent` call recorded, else the payload's
+`agent_type`, which is the name of a named agent) and id, model, effort, `source` and the feedback, redacted with the log's
 rules, under 1 KB, written under `kf_lock`. The model is the one the parent's
 `PostToolUse Agent` recorded for that agent id (`agent-models.tsv`, `source:
 tool_result`), else the definition's frontmatter (`source: frontmatter`); the
@@ -1067,6 +1068,7 @@ path; its lock is a `mkdir`, `flock` being absent on macOS.
 | `KODFLOW_ISOLATION=off` | the isolation gate is off for the session |
 | `KODFLOW_FABLE=allow` · `off` | gated models pass (`allow`, still logged) or the gate is not evaluated (`off`), in the mod and the shell alike |
 | `KODFLOW_FEEDBACK=off` | no rule 6, nothing kept, nothing proposed |
+| `KODFLOW_FEEDBACK=quiet` | rule 6 and the JSONL as usual, for `kodflow-review:improve`; no proposal at Stop |
 | `KODFLOW_SCOPE=off` | no Command scope advice on a kodflow-specialists agent's shell call, no `scope.jsonl` (also `off` in `<config>/kodflow/scope-mode`) |
 | `KODFLOW_FORGE_BROWSER=ask` · `off` | Claude in Chrome toward a forge: each call asks the user (`ask`, the way to grant one call they agreed to) or is not checked (`off`); refused by default |
 | `KODFLOW_FORGE_HOSTS` | more forge hosts for that check, space- or comma-separated (a GitLab instance the session's directory has no remote for) |
