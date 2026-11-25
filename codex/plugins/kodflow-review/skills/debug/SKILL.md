@@ -10,7 +10,7 @@ metadata:
   generated-from: plugins/*/skills/debug
   argument-hint: <symptom> [--loop]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r4ab4c72ea0a9`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r8dd72e7a7924`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /debug - Systematic Root-Cause Debugging

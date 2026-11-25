@@ -14,7 +14,7 @@ description: 'Brutally rigorous, evidence-bound AI code review (RLM decompositio
 when_to_use: Use to review a GitHub PR, a GitLab MR, or a local diff with evidence-bound findings
   — every finding cites real code at file:line plus a counterexample, and the deterministic
   scanners actually run.
-argument-hint: '[<PR#>|<branch>|<path>] [--loop] [--plan <slug>]'
+argument-hint: '[<PR#>|<branch>|<path>] [--loop] [--plan <slug>] [--comment] [--full [--merge]]'
 model: inherit
 effort: high
 allowed-tools:
@@ -161,7 +161,7 @@ checked, or downgrade the finding to Needs Verification.
 | 1 | Intent + Risk | Parse PR/MR + linked issue; risk tags; acceptance criteria |
 | 1.5 | Describe | Auto-generate PR/MR description only if missing (drafted for user) |
 | 2 | Feedback | Collect ALL comments/reviews (human vs bot) |
-| 2.5 | Questions | Draft answers to human questions (NO AI mention — delivered as DRAFTS only) |
+| 2.5 | Questions | Draft answers to human questions (NO AI mention — DRAFTS, posted only under --comment / --full) |
 | 3 | **Deterministic Tiers** | Run linters/SAST/SCA/secrets/IaC + build + existing tests; capture exit codes |
 | 3.5 | **Call/Dependency Graph** | Per changed symbol: callers/dependents (bounded blast radius) |
 | 3.7 | **Change-Coupling** | git-log co-occurrence: flag missed sibling/test/doc/migration edits |
@@ -176,6 +176,7 @@ checked, or downgrade the finding to Needs Verification.
 | 9 | Synthesis | Decoupled verdict (0–5 / INCONCLUSIVE), tiers, Needs-Verification, LOCAL report |
 | 9.5 | Fix Patches | Per actionable finding: /refine→/goal-ready patch, validated in worktree when buildable |
 | 10 | Cyclic | --loop: review -> /refine -> /goal -> re-review until correctness-clear AND verifier-green |
+| 11 | **Full lifecycle** | --full: commit, push, open PR/MR, review, fix via subagents, watch CI/conflicts/comments, merge on request (`full.md`) |
 
 **RLM:** Peek -> Decompose -> Parallelize -> Synthesize.
 
@@ -374,8 +375,9 @@ Cyclic details: **read `cyclic.md`**.
 
 ## Output, flags, and budget
 
-Report layout, the flag reference (`--loop`, `--plan`, `--comment`, scope
-selectors), and the budget controller for large diffs: read `output.md`.
+Report layout, the flag reference (`--loop`, `--plan`, `--comment`, `--full`,
+`--merge`, scope selectors), and the budget controller for large diffs: read
+`output.md`. Under `--full`, read `full.md` for the delivery lifecycle.
 
 ## Module Breakdown
 
@@ -397,6 +399,7 @@ Every module lives beside this file. Read one when you reach its phase.
 | `synthesis.md` | Verdict incl. INCONCLUSIVE, Needs-Verification gate, local report, `/plan` output |
 | `output.md` | Report layout, flag reference, budget controller |
 | `cyclic.md` | `--loop` correctness gate, patch-ID tracking, guardrails |
+| `full.md` | `--full` — commit, open, review, fix, watch the PR/MR, merge on request |
 
 The verdict-gating guardrails are duplicated in this file **and** in the verifier
 script, so a budget-pressured run cannot bypass them by skipping a module.
@@ -407,7 +410,7 @@ script, so a budget-pressured run cannot bypass them by skipping a module.
 
 | Action | Status |
 |--------|--------|
-| Auto-approve / auto-merge | FORBIDDEN |
+| Auto-approve; merge without the user's go | FORBIDDEN (`--full` merges on the user's answer, `--merge` or an explicit instruction — `full.md`) |
 | APPROVE without a verifier-passed coverage manifest | FORBIDDEN (invalid run) |
 | Self-attest coverage without the external verifier | FORBIDDEN |
 | Drop a high-severity finding for low confidence | FORBIDDEN (demote to gating Needs-Verification) |
@@ -421,8 +424,8 @@ script, so a budget-pressured run cannot bypass them by skipping a module.
 | Return APPROVE after --no-poc or TRIAGE micro-defer | FORBIDDEN (INCONCLUSIVE) |
 | Use `sg` for AST search | FORBIDDEN (it is newgrp) |
 | Suppress a finding without citing the justifying line | FORBIDDEN (itself a finding) |
-| Modify repo code directly | FORBIDDEN (patches go to /plan) |
-| Post comments / MR-PR replies | FORBIDDEN (drafts for user only) |
-| Mention AI in PR/MR draft responses | ABSOLUTE FORBIDDEN |
+| Modify repo code directly | FORBIDDEN (patches go to /plan; under `--full`, subagents deliver them) |
+| Post comments / MR-PR replies | only with `--comment` or `--full`; otherwise drafts for the user |
+| Mention AI, or attribute to it, in anything posted, committed or titled | ABSOLUTE FORBIDDEN |
 | Expose secrets in evidence/output | FORBIDDEN (mask AWS/PAT/JWT/PEM/Bearer) |
 | Politeness inflation / "LGTM" without proof | FORBIDDEN |

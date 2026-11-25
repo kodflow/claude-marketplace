@@ -122,8 +122,8 @@ output_generation:
             items: "Same format, max 5"
 
   no_github_gitlab:
-    rule: "NEVER post comments to PR/MR"
-    reason: "Reviews are local, fixes via /refine → /goal"
+    rule: "NEVER post comments to PR/MR, except under --comment or --full (output.md)"
+    reason: "Reviews are local, fixes via /refine → /goal; --full delivers fixes through subagents (full.md)"
 
   post_review_action:
     trigger: "NOT --loop mode AND findings with HIGH+ severity exist"

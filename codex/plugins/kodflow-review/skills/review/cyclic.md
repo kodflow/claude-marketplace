@@ -103,10 +103,10 @@ cyclic_workflow:
 
 | Action | Status |
 |--------|--------|
-| Auto-approve/merge | FORBIDDEN |
+| Auto-approve; merge without the user's go | FORBIDDEN (`--full`: `full.md` §5) |
 | Skip security issues | FORBIDDEN |
-| Modify code directly | FORBIDDEN |
-| Post comment without user validation | FORBIDDEN |
+| Modify code directly | FORBIDDEN (fixes go through specialists) |
+| Post comment without user validation | FORBIDDEN, except under `--comment` / `--full` |
 | Mention AI in PR responses | **ABSOLUTE FORBIDDEN** |
 | Skip Phase 0-1 (context/intent) | FORBIDDEN |
 | Challenge without context (skip Phase 3-4) | FORBIDDEN |
