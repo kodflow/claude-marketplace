@@ -242,10 +242,9 @@ question_handling:
 
     4_user_validates: "AskUserQuestion before posting"
     5_post:
-      github_inline:
-        preferred: "gh api repos/{owner}/{repo}/pulls/{pr_number}/comments/{comment_id}/replies -f body='{answer}'"
-        fallback: "mcp__github__add_issue_comment"
-      gitlab: "mcp__gitlab__create_merge_request_note (if validated)"
+      rule: "../_shared/tracker.md §7 — drafts, one publish, a verified count per thread; never a retry loop on a POST"
+      github: "one pending review: thread replies (addPullRequestReviewThreadReply) and line comments, then submit_pending"
+      gitlab: "one draft note per discussion (in_reply_to_discussion_id), list_draft_notes, then bulk_publish_draft_notes"
 ```
 
 ---
@@ -257,7 +256,7 @@ question_handling:
 **Branch on runtime mode** (from review.md Execution Mode Detection):
 
 ```bash
-source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r1d1c008f21dc/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 

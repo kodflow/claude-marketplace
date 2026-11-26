@@ -20,7 +20,7 @@ metadata:
   generated-from: plugins/*/skills/review
   argument-hint: '[<PR#>|<branch>|<path>] [--loop] [--plan <slug>]'
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r1d1c008f21dc`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /review — Brutal, Evidence-Bound Code Review (RLM Architecture)
@@ -152,7 +152,7 @@ Findings come from TWO producer classes, both real agents on disk:
 layer rather than a hand-maintained table that drifts:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r1d1c008f21dc"/skills/_shared/scripts/route-agent.sh --skill /review --phase review \
   --profile "$SCRATCH/repo-profile.json"               # reads _shared/routing-table.jsonl
 # --phase review = the /review rules (language fanout + react, postgres, protobuf); --profile = the file
 # Phase 0.5 wrote (.languages). A missing --phase or an absent profile exits 2/20 every run.
@@ -179,7 +179,7 @@ Per-extension correctness for the common stacks (corrected names — verified on
 
 Dispatch in parallel. **Execution mode**: read
 `../_shared/team-mode.md`; branch on `detect_runtime_mode` (from
-`"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
+`"${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r1d1c008f21dc"/skills/_shared/scripts/team-mode-primitives.sh`) -> `TEAMS_TMUX`/`TEAMS_INPROCESS` (Agent
 Teams) vs `SUBAGENTS` (Task tool). Both paths MUST be schema- and severity-equivalent.
 
 Each producer receives: the repo profile, the file's macro record, its changed
@@ -278,7 +278,7 @@ For high-stakes diffs run the ensemble: findings in >1 pass -> full confidence; 
 Write the coverage manifest, then hand it to the **non-LLM** verifier:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-rb34a3ab1282c"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-review/0.0.0-r1d1c008f21dc"/skills/_shared/scripts/review-verify-manifest.sh --repo "$REPO" \
      --base "$BASE" --head "$HEAD" --manifest "$MANIFEST"
 ```
 
@@ -381,4 +381,5 @@ script, so a budget-pressured run cannot bypass them by skipping a module.
 | Post comments / MR-PR replies | FORBIDDEN (drafts for user only) |
 | Mention AI in PR/MR draft responses | ABSOLUTE FORBIDDEN |
 | Expose secrets in evidence/output | FORBIDDEN (mask AWS/PAT/JWT/PEM/Bearer) |
+| Post validated answers one by one, or retry a comment POST | FORBIDDEN (`../_shared/tracker.md` §7: drafts, one publish, count per thread) |
 | Politeness inflation / "LGTM" without proof | FORBIDDEN |
