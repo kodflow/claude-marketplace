@@ -210,6 +210,7 @@ backed by a specialist agent.
 | Delete without backup | **FORBIDDEN** |
 | Modify prod without approval | **FORBIDDEN** |
 | Ignore cost warnings >15% | **FORBIDDEN** |
+| Post several MR/PR comments one by one, or retry a comment POST | **FORBIDDEN** — draft them, publish in one call (GitLab bulk publish, GitHub pending review submitted once), then count one per thread; after an error re-read the notes (author, time, full body) before any new attempt |
 
 ## Approval Gates
 

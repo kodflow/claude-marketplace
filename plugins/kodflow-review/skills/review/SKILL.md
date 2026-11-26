@@ -449,4 +449,5 @@ script, so a budget-pressured run cannot bypass them by skipping a module.
 | Post comments / MR-PR replies | FORBIDDEN (drafts for user only) |
 | Mention AI in PR/MR draft responses | ABSOLUTE FORBIDDEN |
 | Expose secrets in evidence/output | FORBIDDEN (mask AWS/PAT/JWT/PEM/Bearer) |
+| Post validated answers one by one, or retry a comment POST | FORBIDDEN (`../_shared/tracker.md` §7: drafts, one publish, count per thread) |
 | Politeness inflation / "LGTM" without proof | FORBIDDEN |

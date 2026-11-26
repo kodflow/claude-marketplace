@@ -7,7 +7,7 @@ effort the router returns; an unrouted one passes both per the tier table
 
 ```bash
 # Route once per concept; expand to per-language specialists via agent_template
-ROUTER="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/_shared/scripts/route-agent.sh
+ROUTER="${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rf46a6f232438"/skills/_shared/scripts/route-agent.sh
 DISPATCHES=$(bash "$ROUTER" --skill /search --phase external \
   --profile .claude/state/profile.json)
 
