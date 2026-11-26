@@ -41,12 +41,23 @@ commit first and checks that `marketplace update` then `plugin update` land
 on HEAD. The `Marketplace canary` workflow runs all of this on a commit's
 release artifact before it reaches main.
 
-Codex accepts repeat registration from the same checkout. To use a different
-checkout with an existing Codex profile, inspect the current source with
-`codex plugin marketplace list`. Once you have verified the previous checkout
-is available for rollback, run `codex plugin marketplace remove kodflow` in
-that profile and rerun the installer from the new checkout. An isolated
-canary profile does not require removing any existing registration.
+Codex accepts repeat registration from the same checkout. To update a Codex
+profile, pull the repository and run `scripts/install.sh --codex` again from the
+updated checkout. A registration pinned to another commit is refused by
+`codex plugin marketplace add`, and `codex plugin marketplace upgrade` does not
+move a pinned one, so when the registered `kodflow` marketplace is a clone of
+`kodflow/claude-marketplace` the installer removes it, adds it again at the new
+commit, reinstalls every plugin and checks the version Codex reports for each.
+If the new registration cannot be added, the previous commit is registered
+again and the installer exits non-zero. Removing the registration leaves the
+plugin cache and the enabled state in place; the reinstall refreshes them.
+
+A `kodflow` marketplace registered from anything else (a local directory, another
+repository) is never replaced automatically: inspect it with
+`codex plugin marketplace list`, and once you have verified it is safe to drop,
+run `codex plugin marketplace remove kodflow` and rerun the installer. An
+isolated canary profile does not require removing any existing registration.
+`--check` prints what would be replaced and changes nothing.
 
 ## Rollback
 
