@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "kodflow-specialists",
-  "version": "0.0.0-r1545a2d71e00",
+  "version": "0.0.0-ra383355220fa",
   "description": "Language, platform and concern specialists that routing dispatches to. Each verifies an API, a default, a limit or a deprecation against documentation before asserting it, returns what it consulted and what it could not confirm, and tries to break its own finding before reporting it.",
   "author": {
     "name": "kodflow",

@@ -35,7 +35,7 @@ REVIEWED_INSTRUCTIONS = {
     "developer-specialist-cpp", "developer-specialist-nodejs", "developer-specialist-react",
     "developer-specialist-zig", "devops-executor-linux", "devops-specialist-docker",
     "devops-specialist-infrastructure", "devops-specialist-security", "os-specialist-debian",
-    "domain-specialist-systemd", "domain-specialist-telecom",
+    "domain-specialist-systemd", "domain-specialist-telecom", "devops-orchestrator",
 }
 
 
