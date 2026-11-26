@@ -10,7 +10,7 @@ metadata:
   generated-from: plugins/*/skills/plan
   argument-hint: <description> [--context[=<slug>]] [--goal [--fast]] [--auto]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rf46a6f232438`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /plan - Claude Code Planning Mode (RLM Architecture)
@@ -117,7 +117,7 @@ Examples:
 Before Phase 3.0 (Parallelize), determine runtime mode:
 
 ```bash
-source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81/skills/_shared/scripts/team-mode-primitives.sh"
+source "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rf46a6f232438/skills/_shared/scripts/team-mode-primitives.sh"
 MODE=$(detect_runtime_mode)
 ```
 
@@ -160,7 +160,7 @@ The plan file gives a short rationale for each choice, one or two lines, under a
 ## Project documents
 
 Before Phase 2, read the documents of `docs/manifest.json` (state:
-`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/docs/scripts/docs.sh compute`,
+`bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rf46a6f232438"/skills/docs/scripts/docs.sh compute`,
 the `ok` ones) that concern the subject, as well as the ADRs: requirements
 for a feature, data schema for storage, threat model for auth or secrets,
 quality and testing for the acceptance criteria. A plan that contradicts one
@@ -274,7 +274,7 @@ Read `../_shared/model-policy.md` and resolve the tiers **before** writing the
 plan:
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/_shared/scripts/detect-models.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rf46a6f232438"/skills/_shared/scripts/detect-models.sh
 ```
 
 Every plan carries the allocation, in one line under its constraints:

@@ -1,7 +1,9 @@
 # Work tracking — destination, ledger, and the comment protocol
 
 Shared by `/feature`, `/fix` and `/search`, and by `/hunt` through §6. It answers three questions once, so
-the three skills cannot disagree about where a piece of work lives.
+the three skills cannot disagree about where a piece of work lives. §7 is read
+by every skill or agent that publishes on a forge — `/review` answering review
+threads included.
 
 ---
 
@@ -180,6 +182,7 @@ Preconditions, checked before switching:
 | Build a GitLab project path with a greedy regex | **FORBIDDEN** — subgroups vanish |
 | Create a branch over a dirty tree | **FORBIDDEN** |
 | Open an issue without showing the user the title and body first | **FORBIDDEN** |
+| Retry a comment POST, or post several comments one by one | **FORBIDDEN** — §7 |
 
 ---
 
@@ -205,3 +208,45 @@ Forgejo the scope names the **variable** that holds the token, never the token,
 one variable per forge: `GITLAB_PERSONAL_ACCESS_TOKEN` for GitLab (the same as
 §1), `FORGEJO_TOKEN` for Forgejo; GitHub goes through `gh`. The token reaches
 `curl` through `-K` from a process substitution, never in argv.
+
+---
+
+## 7. Publishing on a forge — drafts, one publish, verified
+
+Every comment notifies a human. Replying to review threads, or posting several
+comments on one pull or merge request, goes through drafts and **one** publish,
+so the reviewer gets one notification instead of one per comment, and no answer
+lands twice.
+
+1. **Draft every answer.** GitLab: one draft note per thread
+   (the GitLab tool with `in_reply_to_discussion_id`, or
+   `POST …/merge_requests/:iid/draft_notes`). GitHub: one pending review — the
+   review tool with `method: create` and no `event` — then each line comment
+   added to it; a reply to an existing thread joins the same pending review
+   through the GraphQL mutation `addPullRequestReviewThreadReply` given the
+   pending review's `pullRequestReviewId` (the REST `…/comments/<id>/replies`
+   endpoint publishes at once, so it is not used here).
+2. **List the drafts** (the GitLab tool, or the pending review's
+   comments) and check there is exactly one per thread to answer: a missing one
+   is drafted, a duplicate deleted, before anything is published.
+3. **Publish in one call.** GitLab: the GitLab tool
+   (`POST …/draft_notes/bulk_publish`). GitHub: submit the pending review
+   (`method: submit_pending`, event `COMMENT`).
+4. **Verify.** After publishing, count the comments of each thread by the
+   author since the run started: one new answer per thread. Only then say
+   « posted ».
+
+A single comment (an issue comment of §3) skips the drafts, not the rest: it is
+sent once and verified.
+
+**No retry loop on a POST.** A write that fails or times out may still have
+landed. Before any new attempt, re-read the state — the drafts, or the notes of
+the thread — and match on author, creation time after the run started, and the
+**full** body. Never decide « already posted » on a prefix, and never compare a
+prefix cut in bytes to one cut in characters: on any non-ASCII text they differ,
+the check never matches, and the loop posts again. When the state cannot be
+read, stop and report; do not post blind.
+
+Same rule for every send that notifies a human — a review, a mention, a
+re-request of review, an issue: it goes out once, and its effect is read back
+before it is announced.

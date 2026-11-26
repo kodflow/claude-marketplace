@@ -13,7 +13,7 @@ metadata:
   generated-from: plugins/*/skills/feature
   argument-hint: <what the feature is> [--no-branch] [--local] [--status]
 ---
-> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
+> Paths below are rooted at `${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rf46a6f232438`, where Codex installs this plugin. If that directory is missing, the plugin root is the directory two levels above this SKILL.md.
 
 
 # /feature — open feature work, keep the trail
@@ -73,7 +73,7 @@ Chain:  /feature → /search → /challenge → /goal
 ### 0 — Locate
 
 ```bash
-bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-r0a930a347b81"/skills/_shared/scripts/detect-tracker.sh
+bash "${CODEX_HOME:-$HOME/.codex}/plugins/cache/kodflow/kodflow-workflow/0.0.0-rf46a6f232438"/skills/_shared/scripts/detect-tracker.sh
 ```
 
 Resolve the destination per `../_shared/tracker.md` §1, and check whether this
